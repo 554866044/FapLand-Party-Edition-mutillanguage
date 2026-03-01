@@ -203,6 +203,12 @@ export type PerkDefinition = {
   application?: "persistent" | "immediate";
   effects: GameEffect[];
   requiresHandy?: boolean;
+  requiresMoaning?: boolean;
+};
+
+export type RoundAudioEffect = {
+  kind: "continuousMoaning";
+  sourcePerkId: string;
 };
 
 export type InventoryItem = {
@@ -353,6 +359,8 @@ export type GameState = {
   antiPerkProbability: number;
   queuedRound: ActiveRound | null;
   activeRound: ActiveRound | null;
+  queuedRoundAudioEffect: RoundAudioEffect | null;
+  activeRoundAudioEffect: RoundAudioEffect | null;
   pendingPathChoice: PendingPathChoice | null;
   pendingPerkSelection: PendingPerkSelection | null;
   lastTraversalPathNodeIds: string[];

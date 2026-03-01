@@ -37,6 +37,7 @@ type RoundVideoOverlaySessionConfig = Pick<
   | "boardSequence"
   | "idleBoardSequence"
   | "onCompleteBoardSequence"
+  | "continuousMoaningActive"
 >;
 
 type RoundVideoOverlayShellConfig = Pick<
@@ -84,6 +85,7 @@ export function buildRoundVideoOverlayProps({
     boardSequence: session?.boardSequence,
     idleBoardSequence: session?.idleBoardSequence,
     onCompleteBoardSequence: session?.onCompleteBoardSequence,
+    continuousMoaningActive: session?.continuousMoaningActive,
   };
 }
 
@@ -146,6 +148,7 @@ export type GameplayRoundVideoOverlayLaunchConfig = {
   boardSequence?: "milker" | "jackhammer" | null;
   idleBoardSequence?: "no-rest" | null;
   onCompleteBoardSequence?: (perkId: "milker" | "jackhammer") => void;
+  continuousMoaningActive?: boolean;
   extraModifiers?: PlaybackModifier[];
   onFunscriptFrame?: (payload: { timeMs: number; position: number | null }) => void;
 };
@@ -184,6 +187,7 @@ export function buildGameplayRoundVideoOverlayProps(
       boardSequence: config.boardSequence,
       idleBoardSequence: config.idleBoardSequence,
       onCompleteBoardSequence: config.onCompleteBoardSequence,
+      continuousMoaningActive: config.continuousMoaningActive,
       extraModifiers: config.extraModifiers,
       onFunscriptFrame: config.onFunscriptFrame,
     },

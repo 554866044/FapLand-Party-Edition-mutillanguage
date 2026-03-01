@@ -721,7 +721,7 @@ function FirstStartPage() {
                         <div className="flex gap-2">
                           <input
                             type="url"
-                            placeholder="https://www.youtube.com/watch?v=... or playlist URL"
+                            placeholder="https://example.com/video-or-playlist"
                             value={urlInput}
                             onChange={(e) => {
                               setUrlInput(e.target.value);

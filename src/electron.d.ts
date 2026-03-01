@@ -14,10 +14,19 @@ declare global {
         selectPlaylistExportDirectory: (defaultName?: string) => Promise<string | null>;
         selectWebsiteVideoCacheDirectory: () => Promise<string | null>;
         selectMusicCacheDirectory: () => Promise<string | null>;
+        selectMoaningCacheDirectory: () => Promise<string | null>;
         selectConverterVideoFile: () => Promise<string | null>;
         selectMusicFiles: () => Promise<string[]>;
+        selectMoaningFiles: () => Promise<string[]>;
         addMusicFromUrl: (url: string) => Promise<{ filePath: string; title: string }>;
         addMusicPlaylistFromUrl: (url: string) => Promise<{
+          playlistTitle: string;
+          totalTracks: number;
+          tracks: { filePath: string; title: string }[];
+          errors: { url: string; error: string }[];
+        }>;
+        addMoaningFromUrl: (url: string) => Promise<{ filePath: string; title: string }>;
+        addMoaningPlaylistFromUrl: (url: string) => Promise<{
           playlistTitle: string;
           totalTracks: number;
           tracks: { filePath: string; title: string }[];

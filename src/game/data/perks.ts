@@ -367,6 +367,21 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     effects: [{ kind: "probabilityDelta", stat: "intermediaryProbability", amount: 0.2, min: 0 }],
   },
   {
+    id: "moaning-loop",
+    name: "Moaning Loop",
+    description:
+      "Anti-perk: next round plays continuous random moaning during the round, intermediary, and interjection.",
+    iconKey: "panicLoop",
+    cost: 280,
+    rarity: "epic",
+    kind: "antiPerk",
+    target: "self",
+    durationRounds: 2,
+    application: "persistent",
+    effects: [],
+    requiresMoaning: true,
+  },
+  {
     id: "dry-spell",
     name: "Dry Spell",
     description: "Anti-perk: decrease random perk offer chance by 15%.",
@@ -466,6 +481,10 @@ export function getPerksRequiringHandy(): Set<string> {
   return new Set(PERK_LIBRARY.filter((perk) => perk.requiresHandy).map((perk) => perk.id));
 }
 
+export function getPerksRequiringMoaning(): Set<string> {
+  return new Set(PERK_LIBRARY.filter((perk) => perk.requiresMoaning).map((perk) => perk.id));
+}
+
 export function filterPerkIdsByHandyConnection(
   perkIds: string[],
   handyConnected: boolean
@@ -473,4 +492,14 @@ export function filterPerkIdsByHandyConnection(
   if (handyConnected) return perkIds;
   const requiresHandy = getPerksRequiringHandy();
   return perkIds.filter((id) => !requiresHandy.has(id));
+}
+
+export function filterPerkIdsByGameplayCapabilities(
+  perkIds: string[],
+  input: { handyConnected: boolean; moaningAvailable: boolean }
+): string[] {
+  const afterHandy = filterPerkIdsByHandyConnection(perkIds, input.handyConnected);
+  if (input.moaningAvailable) return afterHandy;
+  const requiresMoaning = getPerksRequiringMoaning();
+  return afterHandy.filter((id) => !requiresMoaning.has(id));
 }

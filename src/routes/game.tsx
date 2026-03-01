@@ -9,7 +9,7 @@ import {
   setMapEditorTestSession,
 } from "../features/map-editor/testSession";
 import { createInitialGameState } from "../game/engine";
-import { filterPerkIdsByHandyConnection } from "../game/data/perks";
+import { filterPerkIdsByGameplayCapabilities } from "../game/data/perks";
 import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
 import { ZSinglePlayerRunSaveSnapshot, type SinglePlayerRunSaveSnapshot } from "../game/saveSchema";
 import type { GameConfig, GameState } from "../game/types";
@@ -34,6 +34,12 @@ import {
 } from "../constants/experimentalFeatures";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 import { useHandy } from "../contexts/HandyContext";
+import {
+  DEFAULT_MOANING_ENABLED,
+  MOANING_ENABLED_KEY,
+  MOANING_QUEUE_KEY,
+  normalizeMoaningQueue,
+} from "../constants/moaningSettings";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
@@ -195,6 +201,20 @@ const getApplyPerkDirectly = async (): Promise<boolean> => {
   }
 };
 
+const getMoaningAvailability = async (): Promise<boolean> => {
+  try {
+    const [rawEnabled, rawQueue] = await Promise.all([
+      trpc.store.get.query({ key: MOANING_ENABLED_KEY }),
+      trpc.store.get.query({ key: MOANING_QUEUE_KEY }),
+    ]);
+    const enabled = typeof rawEnabled === "boolean" ? rawEnabled : DEFAULT_MOANING_ENABLED;
+    return enabled && normalizeMoaningQueue(rawQueue).length > 0;
+  } catch (error) {
+    console.warn("Failed to read moaning availability from store", error);
+    return false;
+  }
+};
+
 function getCheckpointNodeId(state: GameState): string | null {
   const player = state.players[state.currentPlayerIndex];
   if (!player) return null;
@@ -251,6 +271,7 @@ export const Route = createFileRoute("/game")({
       antiPerkBeatbarEnabled,
       cheatModeEnabled,
       initialApplyPerkDirectly,
+      moaningAvailable,
       activePlaylist,
     ] = await Promise.all([
       getInstalledRounds(),
@@ -263,6 +284,7 @@ export const Route = createFileRoute("/game")({
       getAntiPerkBeatbarEnabled(),
       getCheatModeEnabled(),
       getApplyPerkDirectly(),
+      getMoaningAvailability(),
       deps.playlistId ? playlists.getById(deps.playlistId) : playlists.getActive(),
     ]);
 
@@ -311,6 +333,7 @@ export const Route = createFileRoute("/game")({
       antiPerkBeatbarEnabled,
       cheatModeEnabled,
       initialApplyPerkDirectly,
+      moaningAvailable,
       activePlaylist,
       playedByPool,
       savedSnapshot,
@@ -333,6 +356,7 @@ function GameRoute() {
     antiPerkBeatbarEnabled,
     cheatModeEnabled,
     initialApplyPerkDirectly,
+    moaningAvailable,
     activePlaylist,
     playedByPool,
     savedSnapshot,
@@ -364,22 +388,29 @@ function GameRoute() {
         ...economyOverrides,
       },
       perkPool: {
-        enabledPerkIds: filterPerkIdsByHandyConnection(
+        enabledPerkIds: filterPerkIdsByGameplayCapabilities(
           baseConfig.perkPool.enabledPerkIds,
-          handyConnected
+          { handyConnected, moaningAvailable }
         ),
-        enabledAntiPerkIds: filterPerkIdsByHandyConnection(
+        enabledAntiPerkIds: filterPerkIdsByGameplayCapabilities(
           baseConfig.perkPool.enabledAntiPerkIds,
-          handyConnected
+          { handyConnected, moaningAvailable }
         ),
       },
     };
-  }, [activePlaylist.config, economyOverrides, handyConnected, installedRounds]);
+  }, [activePlaylist.config, economyOverrides, handyConnected, installedRounds, moaningAvailable]);
 
   const initialState = useMemo(
     () =>
-      savedSnapshot?.gameState ??
-      createInitialGameState(config, { initialHighscore, playedRoundIdsByPool: playedByPool }),
+      savedSnapshot
+        ? {
+            ...savedSnapshot.gameState,
+            config: {
+              ...savedSnapshot.gameState.config,
+              perkPool: config.perkPool,
+            },
+          }
+        : createInitialGameState(config, { initialHighscore, playedRoundIdsByPool: playedByPool }),
     [config, initialHighscore, playedByPool, savedSnapshot]
   );
 

@@ -76,8 +76,10 @@ describe("GlobalMusicOverlay", () => {
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
         selectMusicCacheDirectory: vi.fn(),
+        selectMoaningCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => ["/music/three.mp3"]),
+        selectMoaningFiles: vi.fn(async () => []),
         addMusicFromUrl: vi.fn(async () => ({
           filePath: "/music-cache/test/audio.mp3",
           title: "Test Track",
@@ -91,6 +93,8 @@ describe("GlobalMusicOverlay", () => {
           ],
           errors: [],
         })),
+        addMoaningFromUrl: vi.fn(),
+        addMoaningPlaylistFromUrl: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {

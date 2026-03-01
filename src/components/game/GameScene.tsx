@@ -1518,6 +1518,16 @@ export const GameScene = memo(function GameScene({
   const [completedElapsedSec, setCompletedElapsedSec] = useState<number | null>(null);
   const [controllerPerkSelectionIndex, setControllerPerkSelectionIndex] = useState(0);
   const [highlightedPathEdgeId, setHighlightedPathEdgeId] = useState<string | null>(null);
+  const handleRoundPreviewStateChange = useCallback(
+    (nextState: { active: boolean; loading: boolean }) => {
+      setRoundPreviewState((previous) =>
+        previous.active === nextState.active && previous.loading === nextState.loading
+          ? previous
+          : nextState
+      );
+    },
+    []
+  );
   const highlightedPathEdgeIdRef = useRef<string | null>(highlightedPathEdgeId);
   highlightedPathEdgeIdRef.current = highlightedPathEdgeId;
   const nowMsRef = useRef(nowMs);
@@ -4239,13 +4249,14 @@ export const GameScene = memo(function GameScene({
           showCumRoundOutcomeMenuOnCumRequest: isLastCumRoundActive,
           onOpenOptions: () => setShowOptionsMenu(true),
           onUiVisibilityChange: onRoundOverlayUiVisibilityChange,
-          onPreviewStateChange: setRoundPreviewState,
+          onPreviewStateChange: handleRoundPreviewStateChange,
           initialShowProgressBarAlways,
           initialShowAntiPerkBeatbar,
           allowDebugRoundControls,
           lastLogMessage: state.log[0],
           boardSequence: boardAntiPerkSequence,
           idleBoardSequence,
+          continuousMoaningActive: state.activeRoundAudioEffect?.kind === "continuousMoaning",
           onCompleteBoardSequence: (perkId) => {
             if (!currentPlayer) return;
             handleConsumeAntiPerkById({
@@ -4285,6 +4296,7 @@ export const GameScene = memo(function GameScene({
             count={currentPlayerInventory.length}
             isOpen={showPerkInventoryMenu}
             onClick={() => setShowPerkInventoryMenu(true)}
+            position={boardAntiPerkSequence || idleBoardSequence ? "video-view" : "default"}
           />
         )}
       {!state.activeRound &&

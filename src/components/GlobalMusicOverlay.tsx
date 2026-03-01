@@ -485,7 +485,7 @@ export function GlobalMusicOverlay() {
                   <div className="space-y-3 rounded-xl border border-white/[0.06] bg-black/20 p-4">
                     <div>
                       <p className="text-xs font-semibold text-white">
-                        Add from YouTube or SoundCloud URL
+                        Add from any yt-dlp-supported URL
                       </p>
                       <p className="mt-0.5 text-[10px] text-zinc-500">
                         The audio will be downloaded as MP3 via yt-dlp and added to your queue
@@ -530,8 +530,8 @@ export function GlobalMusicOverlay() {
                         type="url"
                         placeholder={
                           urlMode === "playlist"
-                            ? "https://www.youtube.com/playlist?list=..."
-                            : "https://www.youtube.com/watch?v=..."
+                            ? "https://example.com/playlist-or-collection"
+                            : "https://example.com/video-or-audio"
                         }
                         value={urlInput}
                         onChange={(e) => {

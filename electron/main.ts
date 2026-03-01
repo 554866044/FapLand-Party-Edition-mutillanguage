@@ -698,6 +698,23 @@ function registerDialogIpc() {
     return result.filePaths[0] ?? null;
   });
 
+  ipcMain.handle("dialog:selectMoaningCacheDirectory", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose moaning cache folder",
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.handle("dialog:selectConverterVideoFile", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -732,13 +749,30 @@ function registerDialogIpc() {
     return result.filePaths;
   });
 
+  ipcMain.handle("dialog:selectMoaningFiles", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Select Moaning Files",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Audio Files", extensions: ["mp3", "m4a", "aac", "ogg", "wav", "flac"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled) return [] as string[];
+    return result.filePaths;
+  });
+
   ipcMain.handle("music:addFromUrl", async (_event, url: string) => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
       throw new Error("URL is required.");
     }
     if (!isSupportedMusicUrl(trimmedUrl)) {
-      throw new Error("Unsupported URL. Only YouTube and SoundCloud URLs are supported.");
+      throw new Error("Unsupported URL. Only HTTP(S) URLs supported by yt-dlp are allowed.");
     }
     const result = await downloadMusicFromUrl(trimmedUrl);
     return { filePath: result.filePath, title: result.title };
@@ -750,7 +784,36 @@ function registerDialogIpc() {
       throw new Error("URL is required.");
     }
     if (!isSupportedMusicUrl(trimmedUrl)) {
-      throw new Error("Unsupported URL. Only YouTube and SoundCloud URLs are supported.");
+      throw new Error("Unsupported URL. Only HTTP(S) URLs supported by yt-dlp are allowed.");
+    }
+    const result = await downloadPlaylistFromUrl(trimmedUrl);
+    return {
+      playlistTitle: result.playlistTitle,
+      totalTracks: result.totalTracks,
+      tracks: result.tracks,
+      errors: result.errors,
+    };
+  });
+
+  ipcMain.handle("moaning:addFromUrl", async (_event, url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      throw new Error("URL is required.");
+    }
+    if (!isSupportedMusicUrl(trimmedUrl)) {
+      throw new Error("Unsupported URL. Only HTTP(S) URLs supported by yt-dlp are allowed.");
+    }
+    const result = await downloadMusicFromUrl(trimmedUrl);
+    return { filePath: result.filePath, title: result.title };
+  });
+
+  ipcMain.handle("moaning:addPlaylistFromUrl", async (_event, url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      throw new Error("URL is required.");
+    }
+    if (!isSupportedMusicUrl(trimmedUrl)) {
+      throw new Error("Unsupported URL. Only HTTP(S) URLs supported by yt-dlp are allowed.");
     }
     const result = await downloadPlaylistFromUrl(trimmedUrl);
     return {

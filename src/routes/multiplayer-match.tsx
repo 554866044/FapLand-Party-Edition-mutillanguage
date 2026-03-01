@@ -11,7 +11,7 @@ import {
   useMultiplayerSfwRedirect,
 } from "../hooks/useMultiplayerSfwGuard";
 import { createInitialGameState } from "../game/engine";
-import { getPerkById, filterPerkIdsByHandyConnection } from "../game/data/perks";
+import { getPerkById, filterPerkIdsByGameplayCapabilities } from "../game/data/perks";
 import {
   PERK_RARITY_META,
   fallbackRarityFromCost,
@@ -61,6 +61,12 @@ import {
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 import { useHandy } from "../contexts/HandyContext";
 import { MultiplayerUpdateGuard } from "../components/multiplayer/MultiplayerUpdateGuard";
+import {
+  DEFAULT_MOANING_ENABLED,
+  MOANING_ENABLED_KEY,
+  MOANING_QUEUE_KEY,
+  normalizeMoaningQueue,
+} from "../constants/moaningSettings";
 
 const MatchSearchSchema = z.object({
   lobbyId: z.string().min(1),
@@ -74,6 +80,20 @@ const MULTIPLAYER_APPLY_DIRECTLY_KEY = "game.multiplayer.applyDirectly";
 const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
 const EMPTY_PROGRESS_BY_PLAYER_ID: MultiplayerLobbySnapshot["progressByPlayerId"] = {};
+
+async function getMoaningAvailability(): Promise<boolean> {
+  try {
+    const [rawEnabled, rawQueue] = await Promise.all([
+      trpc.store.get.query({ key: MOANING_ENABLED_KEY }),
+      trpc.store.get.query({ key: MOANING_QUEUE_KEY }),
+    ]);
+    const enabled = typeof rawEnabled === "boolean" ? rawEnabled : DEFAULT_MOANING_ENABLED;
+    return enabled && normalizeMoaningQueue(rawQueue).length > 0;
+  } catch (error) {
+    console.warn("Failed to read moaning availability from store", error);
+    return false;
+  }
+}
 
 function toFinalPlayerState(reason: GameCompletionReason | null): "finished" | "came" {
   if (reason === "self_reported_cum" || reason === "cum_instruction_failed") {
@@ -325,6 +345,7 @@ export const Route = createFileRoute("/multiplayer-match")({
       installedRounds,
       intermediarySettings,
       initialApplyDirectly,
+      moaningAvailable,
     ] = await Promise.all([
       getLobbySnapshot(search.lobbyId),
       getOwnLobbyPlayer(search.lobbyId),
@@ -332,6 +353,7 @@ export const Route = createFileRoute("/multiplayer-match")({
       db.round.findInstalled(),
       getIntermediarySettings(),
       getApplyDirectlySetting(),
+      getMoaningAvailability(),
     ]);
 
     if (!snapshot || !ownPlayer) {
@@ -353,6 +375,7 @@ export const Route = createFileRoute("/multiplayer-match")({
       initialAntiPerkFeed,
       installedRounds,
       initialApplyDirectly,
+      moaningAvailable,
       ...intermediarySettings,
     };
   },
@@ -374,6 +397,7 @@ function MultiplayerMatchRoute() {
     intermediaryLoadingDurationSec,
     intermediaryReturnPauseSec,
     roundProgressBarAlwaysVisible,
+    moaningAvailable,
   } = Route.useLoaderData();
 
   if (sfwModeEnabled) {
@@ -383,24 +407,23 @@ function MultiplayerMatchRoute() {
   const { connected: handyConnected } = useHandy();
 
   const filteredInitialState = useMemo(() => {
-    if (handyConnected) return initialState;
     return {
       ...initialState,
       config: {
         ...initialState.config,
         perkPool: {
-          enabledPerkIds: filterPerkIdsByHandyConnection(
+          enabledPerkIds: filterPerkIdsByGameplayCapabilities(
             initialState.config.perkPool.enabledPerkIds,
-            false
+            { handyConnected, moaningAvailable }
           ),
-          enabledAntiPerkIds: filterPerkIdsByHandyConnection(
+          enabledAntiPerkIds: filterPerkIdsByGameplayCapabilities(
             initialState.config.perkPool.enabledAntiPerkIds,
-            false
+            { handyConnected, moaningAvailable }
           ),
         },
       },
     };
-  }, [initialState, handyConnected]);
+  }, [initialState, handyConnected, moaningAvailable]);
 
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);
   const [ownPlayerId, setOwnPlayerId] = useState(ownPlayer.id);

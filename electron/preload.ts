@@ -27,13 +27,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("dialog:selectWebsiteVideoCacheDirectory") as Promise<string | null>,
     selectMusicCacheDirectory: () =>
       ipcRenderer.invoke("dialog:selectMusicCacheDirectory") as Promise<string | null>,
+    selectMoaningCacheDirectory: () =>
+      ipcRenderer.invoke("dialog:selectMoaningCacheDirectory") as Promise<string | null>,
     selectConverterVideoFile: () =>
       ipcRenderer.invoke("dialog:selectConverterVideoFile") as Promise<string | null>,
     selectMusicFiles: () => ipcRenderer.invoke("dialog:selectMusicFiles") as Promise<string[]>,
+    selectMoaningFiles: () => ipcRenderer.invoke("dialog:selectMoaningFiles") as Promise<string[]>,
     addMusicFromUrl: (url: string) =>
       ipcRenderer.invoke("music:addFromUrl", url) as Promise<{ filePath: string; title: string }>,
     addMusicPlaylistFromUrl: (url: string) =>
       ipcRenderer.invoke("music:addPlaylistFromUrl", url) as Promise<{
+        playlistTitle: string;
+        totalTracks: number;
+        tracks: { filePath: string; title: string }[];
+        errors: { url: string; error: string }[];
+      }>,
+    addMoaningFromUrl: (url: string) =>
+      ipcRenderer.invoke("moaning:addFromUrl", url) as Promise<{
+        filePath: string;
+        title: string;
+      }>,
+    addMoaningPlaylistFromUrl: (url: string) =>
+      ipcRenderer.invoke("moaning:addPlaylistFromUrl", url) as Promise<{
         playlistTitle: string;
         totalTracks: number;
         tracks: { filePath: string; title: string }[];

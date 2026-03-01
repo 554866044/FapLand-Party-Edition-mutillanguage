@@ -17,12 +17,14 @@ const {
   pixiDisplayObjects,
   pointerTapHandlers,
   rafCallbacks,
+  inventoryDockButtonProps,
   handyMock,
 } = vi.hoisted(() => ({
   mockedUseGameAnimation: vi.fn(),
   pixiDisplayObjects: [] as PixiDisplayObject[],
   pointerTapHandlers: [] as Array<() => void>,
   rafCallbacks: [] as FrameRequestCallback[],
+  inventoryDockButtonProps: [] as Array<Record<string, unknown>>,
   handyMock: {
     connected: false,
     manuallyStopped: false,
@@ -215,7 +217,10 @@ vi.mock("./RoundStartTransition", () => ({
 }));
 
 vi.mock("./InventoryDockButton", () => ({
-  InventoryDockButton: () => null,
+  InventoryDockButton: (props: Record<string, unknown>) => {
+    inventoryDockButtonProps.push(props);
+    return null;
+  },
 }));
 
 vi.mock("./PerkInventoryPanel", () => ({
@@ -305,6 +310,20 @@ function withPendingPerkSelection(
         effects: [],
       })),
     },
+  };
+}
+
+function withAntiPerk(base: GameState, perkId: "milker" | "jackhammer" | "no-rest"): GameState {
+  return {
+    ...base,
+    players: base.players.map((player, index) =>
+      index === base.currentPlayerIndex
+        ? {
+            ...player,
+            antiPerks: [...player.antiPerks, perkId],
+          }
+        : player
+    ),
   };
 }
 
@@ -415,6 +434,7 @@ describe("GameScene keyboard perk selection", () => {
     handleUseRoundControl.mockReset();
     handleConsumeAntiPerkById.mockReset();
     tickAnim.mockClear();
+    inventoryDockButtonProps.length = 0;
   });
 
   afterEach(() => {
@@ -580,5 +600,15 @@ describe("GameScene keyboard perk selection", () => {
     tapHandler?.();
 
     expect(handleSkipPerk).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves the inventory dock away from the anti-perk prompt during board sequences", async () => {
+    currentState = withAntiPerk(createInitialGameState(makeConfig()), "milker");
+
+    await renderScene();
+
+    const inventoryProps = inventoryDockButtonProps.at(-1);
+    expect(inventoryProps).toBeDefined();
+    expect(inventoryProps?.position).toBe("video-view");
   });
 });

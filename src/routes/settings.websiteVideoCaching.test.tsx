@@ -159,6 +159,28 @@ vi.mock("../hooks/useGlobalMusic", () => ({
   useGlobalMusic: () => mocks.globalMusic,
 }));
 
+vi.mock("../hooks/useGameplayMoaning", () => ({
+  useGameplayMoaning: () => ({
+    enabled: true,
+    queue: [],
+    volume: 0.3,
+    isAvailableForGameplay: false,
+    setEnabled: vi.fn(async () => {}),
+    setVolume: vi.fn(async () => {}),
+    addTracks: vi.fn(async () => {}),
+    addTrackFromUrl: vi.fn(async () => {}),
+    addPlaylistFromUrl: vi.fn(async () => ({ addedCount: 0, errorCount: 0 })),
+    removeTrack: vi.fn(async () => {}),
+    moveTrack: vi.fn(async () => {}),
+    clearQueue: vi.fn(async () => {}),
+    previewTrack: vi.fn(async () => {}),
+    stopPreview: vi.fn(),
+    playRandomOneShot: vi.fn(async () => {}),
+    startContinuousLoop: vi.fn(async () => {}),
+    stopContinuousLoop: vi.fn(),
+  }),
+}));
+
 vi.mock("../contexts/HandyContext", () => ({
   useHandy: () => mocks.handy,
 }));
@@ -186,10 +208,14 @@ describe("Settings website video caching", () => {
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
         selectMusicCacheDirectory: vi.fn(),
+        selectMoaningCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => []),
+        selectMoaningFiles: vi.fn(async () => []),
         addMusicFromUrl: vi.fn(),
         addMusicPlaylistFromUrl: vi.fn(),
+        addMoaningFromUrl: vi.fn(),
+        addMoaningPlaylistFromUrl: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {

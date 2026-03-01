@@ -20,6 +20,7 @@ import {
   usePlayableVideoFallback,
   isLocalVideoUriForFallback,
 } from "../../hooks/usePlayableVideoFallback";
+import { useGameplayMoaning } from "../../hooks/useGameplayMoaning";
 import { useHandy } from "../../contexts/HandyContext";
 import {
   buildIntermediaryQueue,
@@ -81,6 +82,7 @@ export type RoundVideoOverlayProps = {
   boardSequence?: "milker" | "jackhammer" | null;
   idleBoardSequence?: "no-rest" | null;
   onCompleteBoardSequence?: (perkId: "milker" | "jackhammer") => void;
+  continuousMoaningActive?: boolean;
   allowAutomaticIntermediaries?: boolean;
   showCloseButton?: boolean;
   onClose?: () => void;
@@ -105,19 +107,19 @@ export type RoundVideoOverlayProps = {
 type LoadingMediaItem =
   | BooruMediaItem
   | {
-    id: string;
-    source: "fallback";
-    url: string;
-    previewUrl?: string | null;
-  };
+      id: string;
+      source: "fallback";
+      url: string;
+      previewUrl?: string | null;
+    };
 
 type SegmentState =
   | { kind: "main" }
   | {
-    kind: "intermediary";
-    trigger: IntermediaryTrigger;
-    resumeAtSec: number;
-  };
+      kind: "intermediary";
+      trigger: IntermediaryTrigger;
+      resumeAtSec: number;
+    };
 
 type TransitionPlan = {
   nextSegment: SegmentState;
@@ -147,6 +149,7 @@ const HANDY_REAUTH_MARGIN_MS = 30_000;
 const HANDY_SYNC_STALE_MS = 4_000;
 const MAIN_WINDOW_SEEK_EPSILON_SEC = 0.05;
 const MAIN_WINDOW_END_TOLERANCE_SEC = 0.04;
+const INTERMEDIARY_WINDOW_SEEK_EPSILON_SEC = 0.05;
 const MANUAL_PAUSE_DURATION_MS = 15_000;
 const ANTI_PERK_BEATBAR_LEAD_MS = 1_800;
 const ANTI_PERK_BEATBAR_TRAIL_MS = 300;
@@ -178,6 +181,38 @@ function isWebsiteVideoProxySrc(uri: string | null | undefined): boolean {
     typeof uri === "string" &&
     (uri.startsWith("app://external/web-url?") || uri.startsWith("app://external/stash?"))
   );
+}
+
+function toFiniteNonNegativeSec(valueMs: number | null | undefined): number {
+  return typeof valueMs === "number" && Number.isFinite(valueMs) ? Math.max(0, valueMs / 1000) : 0;
+}
+
+function resolvePlaybackWindowForDuration(
+  resource: Pick<PlaybackResource, "startTime" | "endTime"> | null | undefined,
+  durationSec: number
+) {
+  const hasFiniteDuration = Number.isFinite(durationSec) && durationSec > 0;
+  const startSec = toFiniteNonNegativeSec(resource?.startTime);
+  const rawEndSec =
+    typeof resource?.endTime === "number" && Number.isFinite(resource.endTime)
+      ? Math.max(0, resource.endTime / 1000)
+      : null;
+  const boundedStartSec = hasFiniteDuration ? Math.min(startSec, durationSec) : startSec;
+  let boundedEndSec = rawEndSec;
+  if (boundedEndSec !== null && hasFiniteDuration) {
+    boundedEndSec = Math.min(boundedEndSec, durationSec);
+  }
+  if (boundedEndSec !== null && boundedEndSec <= boundedStartSec + 0.001) {
+    boundedEndSec = null;
+  }
+  return { startSec: boundedStartSec, endSec: boundedEndSec };
+}
+
+function clampToPlaybackWindow(
+  valueSec: number,
+  window: { startSec: number; endSec: number | null }
+): number {
+  return Math.max(window.startSec, Math.min(valueSec, window.endSec ?? valueSec));
 }
 
 function AntiPerkBeatbar({
@@ -303,6 +338,7 @@ export function RoundVideoOverlay({
   boardSequence = null,
   idleBoardSequence = null,
   onCompleteBoardSequence,
+  continuousMoaningActive = false,
   allowAutomaticIntermediaries = true,
   showCloseButton = false,
   onClose,
@@ -323,6 +359,7 @@ export function RoundVideoOverlay({
   initialShowAntiPerkBeatbar = DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
   lastLogMessage,
 }: RoundVideoOverlayProps) {
+  const { playRandomOneShot, startContinuousLoop, stopContinuousLoop } = useGameplayMoaning();
   const {
     connectionKey,
     appApiKey,
@@ -346,6 +383,8 @@ export function RoundVideoOverlay({
   );
   const initializedRoundKeyRef = useRef<string | null>(null);
   const forceHandySyncMsRef = useRef<number | null>(null);
+  const pendingVideoSeekSecRef = useRef<number | null>(null);
+  const mainResumePositionSecRef = useRef<number | null>(null);
   const allowPauseRef = useRef(false);
   const firedTriggersRef = useRef(new Set<string>());
   const sessionStartedAtRef = useRef(0);
@@ -368,6 +407,7 @@ export function RoundVideoOverlay({
   onUiVisibilityChangeRef.current = onUiVisibilityChange;
   const onPreviewStateChangeRef = useRef(onPreviewStateChange);
   onPreviewStateChangeRef.current = onPreviewStateChange;
+  const lastPreviewStateRef = useRef<{ active: boolean; loading: boolean } | null>(null);
   const antiPerkBeatAnimationFrameRef = useRef<number | null>(null);
   const lastMouseMoveAtRef = useRef(0);
 
@@ -462,6 +502,17 @@ export function RoundVideoOverlay({
   }, [onCompleteBoardSequence]);
 
   useEffect(() => {
+    if (!continuousMoaningActive) {
+      stopContinuousLoop();
+      return;
+    }
+    void startContinuousLoop();
+    return () => {
+      stopContinuousLoop();
+    };
+  }, [continuousMoaningActive, startContinuousLoop, stopContinuousLoop]);
+
+  useEffect(() => {
     handySyncStateRef.current = handySyncState;
   }, [handySyncState]);
 
@@ -476,7 +527,12 @@ export function RoundVideoOverlay({
   const resolvedMainResource = useMemo<PlaybackResource | null>(() => {
     const resource = resolvedRound?.resources[0];
     if (!resource) return null;
-    return { videoUri: resource.videoUri, funscriptUri: resource.funscriptUri };
+    return {
+      videoUri: resource.videoUri,
+      funscriptUri: resource.funscriptUri,
+      startTime: resolvedRound?.startTime,
+      endTime: resolvedRound?.endTime,
+    };
   }, [resolvedRound]);
 
   const intermediaryVideoUri =
@@ -485,22 +541,6 @@ export function RoundVideoOverlay({
   useEffect(() => {
     setFailedVideoUri(null);
   }, [resolvedMainResource?.videoUri, intermediaryVideoUri]);
-
-  const mainPlaybackWindowSec = useMemo(() => {
-    const startMs =
-      typeof resolvedRound?.startTime === "number" && Number.isFinite(resolvedRound.startTime)
-        ? Math.max(0, resolvedRound.startTime)
-        : 0;
-    const rawEndMs =
-      typeof resolvedRound?.endTime === "number" && Number.isFinite(resolvedRound.endTime)
-        ? Math.max(0, resolvedRound.endTime)
-        : null;
-    const endMs = rawEndMs !== null && rawEndMs > startMs ? rawEndMs : null;
-    return {
-      startSec: startMs / 1000,
-      endSec: endMs === null ? null : endMs / 1000,
-    };
-  }, [resolvedRound?.endTime, resolvedRound?.startTime]);
 
   const mainResourceDurationSec = useMemo(() => {
     const durationMs = resolvedRound?.resources[0]?.durationMs;
@@ -511,32 +551,24 @@ export function RoundVideoOverlay({
   }, [resolvedRound]);
 
   const resolveMainWindowForDuration = useCallback(
-    (durationSec: number) => {
-      const hasFiniteDuration = Number.isFinite(durationSec) && durationSec > 0;
-      const boundedStartSec = hasFiniteDuration
-        ? Math.min(mainPlaybackWindowSec.startSec, durationSec)
-        : mainPlaybackWindowSec.startSec;
-      let boundedEndSec = mainPlaybackWindowSec.endSec;
-      if (boundedEndSec !== null && hasFiniteDuration) {
-        boundedEndSec = Math.min(boundedEndSec, durationSec);
-      }
-      if (boundedEndSec !== null && boundedEndSec <= boundedStartSec + 0.001) {
-        boundedEndSec = null;
-      }
-      return { startSec: boundedStartSec, endSec: boundedEndSec };
-    },
-    [mainPlaybackWindowSec.endSec, mainPlaybackWindowSec.startSec]
+    (durationSec: number) => resolvePlaybackWindowForDuration(resolvedMainResource, durationSec),
+    [resolvedMainResource]
   );
 
   const intermediaryResourcePool = useMemo<PlaybackResource[]>(() => {
     const pool = installedRounds
       .filter((round) => round.type === "Interjection")
-      .map((round) => round.resources[0])
-      .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource))
-      .map((resource) => ({
-        videoUri: resource.videoUri,
-        funscriptUri: resource.funscriptUri,
-      }));
+      .map((round) => {
+        const resource = round.resources[0];
+        if (!resource) return null;
+        return {
+          videoUri: resource.videoUri,
+          funscriptUri: resource.funscriptUri,
+          startTime: round.startTime,
+          endTime: round.endTime,
+        } satisfies PlaybackResource;
+      })
+      .filter((resource): resource is PlaybackResource => Boolean(resource));
 
     if (!resolvedMainResource) return pool;
     return pool.filter((resource) => resource.videoUri !== resolvedMainResource.videoUri);
@@ -928,6 +960,15 @@ export function RoundVideoOverlay({
       let syncInFlight = false;
       let queuedElapsedMs: number | null = null;
 
+      const getCurrentElapsedMs = () => {
+        const rawElapsedMs = Math.max(0, Math.floor(performance.now() - input.startedAtMs));
+        return input.loop
+          ? input.durationMs > 0
+            ? rawElapsedMs % input.durationMs
+            : 0
+          : Math.max(0, Math.min(input.durationMs, rawElapsedMs));
+      };
+
       const runSync = (elapsedMs: number) => {
         if (generatedSequenceSyncTokenRef.current !== syncToken) return;
         if (syncInFlight) {
@@ -942,6 +983,17 @@ export function RoundVideoOverlay({
             if (!session || generatedSequenceSyncTokenRef.current !== syncToken) return;
             if (!preloadStarted) {
               preloadStarted = true;
+              if (
+                session.loadedScriptId !== null ||
+                session.activeScriptId !== null ||
+                session.streamedPoints !== null
+              ) {
+                await stopHandyPlayback(
+                  { connectionKey: connKey, appApiKey: appKey },
+                  session
+                );
+                if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+              }
               await preloadHspScript(
                 { connectionKey: connKey, appApiKey: appKey },
                 session,
@@ -951,7 +1003,7 @@ export function RoundVideoOverlay({
               );
               if (generatedSequenceSyncTokenRef.current !== syncToken) return;
             }
-            const effectiveElapsedMs = applyHandyOffsetMs(elapsedMs);
+            const effectiveElapsedMs = getCurrentElapsedMs();
             await sendHspSync(
               { connectionKey: connKey, appApiKey: appKey },
               session,
@@ -990,12 +1042,7 @@ export function RoundVideoOverlay({
       };
 
       const tick = () => {
-        const rawElapsedMs = Math.max(0, Math.floor(performance.now() - input.startedAtMs));
-        const elapsedMs = input.loop
-          ? input.durationMs > 0
-            ? rawElapsedMs % input.durationMs
-            : 0
-          : Math.max(0, Math.min(input.durationMs, rawElapsedMs));
+        const elapsedMs = getCurrentElapsedMs();
         runSync(elapsedMs);
       };
 
@@ -1003,7 +1050,6 @@ export function RoundVideoOverlay({
       generatedSequenceTimerRef.current = window.setInterval(tick, HANDY_PUSH_INTERVAL_MS);
     },
     [
-      applyHandyOffsetMs,
       appApiKey,
       clearGeneratedSequenceTimer,
       connectionKey,
@@ -1015,10 +1061,10 @@ export function RoundVideoOverlay({
 
   const applySegmentSwitch = useCallback(
     (plan: TransitionPlan) => {
-      forceHandySyncMsRef.current =
-        plan.pendingSeekSec === null || plan.pendingSeekSec === undefined
-          ? null
-          : Math.max(0, plan.pendingSeekSec * 1000);
+      const seekSec = plan.pendingSeekSec;
+      const hasSeekTarget = seekSec != null && seekSec !== undefined;
+      forceHandySyncMsRef.current = hasSeekTarget ? Math.max(0, seekSec * 1000) : null;
+      pendingVideoSeekSecRef.current = hasSeekTarget ? Math.max(0, seekSec) : null;
 
       setSegment(plan.nextSegment);
       activateVideoUri(plan.nextVideoUri);
@@ -1249,6 +1295,7 @@ export function RoundVideoOverlay({
   const startIntermediary = useCallback(
     (trigger: IntermediaryTrigger, resumeAtSec: number, statusText: string) => {
       firedTriggersRef.current.add(trigger.id);
+      mainResumePositionSecRef.current = Math.max(0, resumeAtSec);
       runSegmentTransition({
         label: "LOADING INTERMEDIARY",
         countdownSec: intermediaryLoadingDurationSec,
@@ -1268,6 +1315,16 @@ export function RoundVideoOverlay({
     (statusText = "Returning to main round video.") => {
       if (!resolvedMainResource) return;
       if (segment.kind !== "intermediary") return;
+      const knownDurationSec =
+        Number.isFinite(mainVideoRef.current?.duration) && (mainVideoRef.current?.duration ?? 0) > 0
+          ? (mainVideoRef.current?.duration ?? 0)
+          : (mainResourceDurationSec ?? Number.NaN);
+      const mainWindow = resolveMainWindowForDuration(knownDurationSec);
+      const resumeAtSec = clampToPlaybackWindow(
+        mainResumePositionSecRef.current ?? segment.resumeAtSec,
+        mainWindow
+      );
+      mainResumePositionSecRef.current = resumeAtSec;
 
       runSegmentTransition({
         label: "RETURNING TO MAIN",
@@ -1278,11 +1335,18 @@ export function RoundVideoOverlay({
           nextSegment: { kind: "main" },
           nextVideoUri: resolvedMainResource.videoUri,
           status: statusText,
-          pendingSeekSec: segment.resumeAtSec,
+          pendingSeekSec: resumeAtSec,
         },
       });
     },
-    [intermediaryReturnPauseSec, resolvedMainResource, runSegmentTransition, segment]
+    [
+      intermediaryReturnPauseSec,
+      mainResourceDurationSec,
+      resolveMainWindowForDuration,
+      resolvedMainResource,
+      runSegmentTransition,
+      segment,
+    ]
   );
 
   const triggerTestIntermediary = useCallback(() => {
@@ -1632,6 +1696,7 @@ export function RoundVideoOverlay({
     if (!boardSequence) return;
     if (activeRound) return;
     if (activeGeneratedSequenceRef.current === boardSequence) return;
+    void playRandomOneShot();
 
     clearCountdownTimer();
     clearLoadingMediaTimers();
@@ -1728,6 +1793,7 @@ export function RoundVideoOverlay({
     createActiveAntiPerkSequenceUi,
     fallbackLoadingMedia,
     pauseHandyIfNeeded,
+    playRandomOneShot,
     startGeneratedSequenceSync,
   ]);
 
@@ -1833,6 +1899,8 @@ export function RoundVideoOverlay({
       finishRequestedRef.current = false;
       needsMainWindowSeekRef.current = false;
       forceHandySyncMsRef.current = null;
+      pendingVideoSeekSecRef.current = null;
+      mainResumePositionSecRef.current = null;
       handyBootstrapKeyRef.current = null;
       handyBootstrapInFlightRef.current = null;
       pendingVideoActivationTokenRef.current += 1;
@@ -1869,6 +1937,8 @@ export function RoundVideoOverlay({
     needsMainWindowSeekRef.current = true;
 
     forceHandySyncMsRef.current = null;
+    pendingVideoSeekSecRef.current = null;
+    mainResumePositionSecRef.current = null;
     handyBootstrapKeyRef.current = null;
     handyBootstrapInFlightRef.current = null;
     allowPauseRef.current = false;
@@ -1965,11 +2035,18 @@ export function RoundVideoOverlay({
     if (activeGeneratedSequenceRef.current === sequenceType) return;
     firedTriggersRef.current.add(triggerId);
     activeGeneratedSequenceRef.current = sequenceType;
+    void playRandomOneShot();
     clearAntiPerkBeatUi();
     const sequence = createActiveAntiPerkSequenceUi(sequenceType);
-    const resumeAtSec = Math.max(0, mainVideoRef.current?.currentTime ?? 0);
-
     const video = mainVideoRef.current;
+    const knownDurationSec =
+      Number.isFinite(video?.duration) && (video?.duration ?? 0) > 0
+        ? (video?.duration ?? 0)
+        : (mainResourceDurationSec ?? Number.NaN);
+    const mainWindow = resolveMainWindowForDuration(knownDurationSec);
+    const resumeAtSec = clampToPlaybackWindow(Math.max(0, video?.currentTime ?? 0), mainWindow);
+    mainResumePositionSecRef.current = resumeAtSec;
+
     if (video && !video.paused) {
       allowPauseRef.current = true;
       video.pause();
@@ -2008,7 +2085,10 @@ export function RoundVideoOverlay({
     currentPlayer,
     createActiveAntiPerkSequenceUi,
     isIntermediaryScreenActive,
+    mainResourceDurationSec,
     pauseHandyIfNeeded,
+    playRandomOneShot,
+    resolveMainWindowForDuration,
     resolvedMainResource,
     runSegmentTransition,
     segment.kind,
@@ -2022,11 +2102,17 @@ export function RoundVideoOverlay({
     const video = mainVideoRef.current;
     if (!video || video.readyState < HTMLMediaElement.HAVE_METADATA) return;
 
-    const { startSec } = resolveMainWindowForDuration(video.duration);
-    if (Math.abs(video.currentTime - startSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
-      video.currentTime = startSec;
+    const mainWindow = resolveMainWindowForDuration(video.duration);
+    const pendingSeek = pendingVideoSeekSecRef.current;
+    const targetSec =
+      pendingSeek != null ? clampToPlaybackWindow(pendingSeek, mainWindow) : mainWindow.startSec;
+    if (Math.abs(video.currentTime - targetSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
+      video.currentTime = targetSec;
     }
     needsMainWindowSeekRef.current = false;
+    if (pendingSeek != null) {
+      pendingVideoSeekSecRef.current = null;
+    }
   }, [activeRound, isIntermediaryScreenActive, resolveMainWindowForDuration, segment.kind]);
 
   useEffect(() => {
@@ -2162,20 +2248,42 @@ export function RoundVideoOverlay({
         );
 
         if (nextTrigger) {
-          const resumeAtSec = Math.max(
-            startSec,
-            Math.min(mainCurrentTimeSec, endSec ?? mainCurrentTimeSec)
-          );
+          const resumeAtSec = clampToPlaybackWindow(mainCurrentTimeSec, { startSec, endSec });
           allowPauseRef.current = true;
           video.pause();
           startIntermediary(nextTrigger, resumeAtSec, "Intermediary clip spawned.");
         }
       } else {
-        const nextTimeLabel = `${formatDurationLabel(video.currentTime)} / ${formatDurationLabel(video.duration)}`;
+        const knownDurationSec =
+          Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+        const { startSec, endSec } = resolvePlaybackWindowForDuration(
+          activeSegmentResource,
+          knownDurationSec
+        );
+        if (video.currentTime < startSec - INTERMEDIARY_WINDOW_SEEK_EPSILON_SEC) {
+          video.currentTime = startSec;
+        }
+
+        const intermediaryCurrentTimeSec = Math.max(video.currentTime, startSec);
+        if (endSec !== null && intermediaryCurrentTimeSec >= endSec - MAIN_WINDOW_END_TOLERANCE_SEC) {
+          allowPauseRef.current = true;
+          video.pause();
+          endIntermediaryAndResume();
+          return;
+        }
+
+        const boundedDurationSec =
+          endSec !== null
+            ? Math.max(0, endSec - startSec)
+            : knownDurationSec > startSec
+              ? Math.max(0, knownDurationSec - startSec)
+              : 0;
+        const elapsedInWindowSec = Math.max(0, intermediaryCurrentTimeSec - startSec);
+        const nextTimeLabel = `${formatDurationLabel(elapsedInWindowSec)} / ${formatDurationLabel(boundedDurationSec)}`;
         setPlaybackTimeLabel((current) => (current === nextTimeLabel ? current : nextTimeLabel));
         const nextProgress =
-          Number.isFinite(video.duration) && video.duration > 0
-            ? Math.max(0, Math.min(1, video.currentTime / video.duration))
+          boundedDurationSec > 0
+            ? Math.max(0, Math.min(1, elapsedInWindowSec / boundedDurationSec))
             : 0;
         setPlaybackProgress((current) =>
           Math.abs(current - nextProgress) < 0.002 ? current : nextProgress
@@ -2202,6 +2310,8 @@ export function RoundVideoOverlay({
     activeRound,
     activeVideoUri,
     applyHandyOffsetMs,
+    activeSegmentResource,
+    endIntermediaryAndResume,
     fullIntermediaryQueue,
     isIntermediaryScreenActive,
     onFunscriptFrame,
@@ -2289,7 +2399,17 @@ export function RoundVideoOverlay({
     const mainActions = mainTimeline?.actions ?? [];
     if (mainActions.length === 0) return;
 
-    const resumeMs = segment.kind === "intermediary" ? segment.resumeAtSec * 1000 : 0;
+    const knownDurationSec =
+      Number.isFinite(mainVideoRef.current?.duration) && (mainVideoRef.current?.duration ?? 0) > 0
+        ? (mainVideoRef.current?.duration ?? 0)
+        : (mainResourceDurationSec ?? Number.NaN);
+    const resumeMs =
+      segment.kind === "intermediary"
+        ? clampToPlaybackWindow(
+            mainResumePositionSecRef.current ?? segment.resumeAtSec,
+            resolveMainWindowForDuration(knownDurationSec)
+          ) * 1000
+        : 0;
 
     let cancelled = false;
     void (async () => {
@@ -2327,7 +2447,9 @@ export function RoundVideoOverlay({
     ensureHandySession,
     isIntermediaryScreenActive,
     loadingLabel,
+    mainResourceDurationSec,
     resolvedMainResource,
+    resolveMainWindowForDuration,
     segment,
     shouldUseHandySync,
   ]);
@@ -2346,12 +2468,12 @@ export function RoundVideoOverlay({
     const activeBootstrapKey =
       activeRound && activeVideoUri
         ? [
-          activeRound.roundId,
-          activeRound.fieldId,
-          segment.kind,
-          activeVideoUri,
-          timelineUri ?? activeSegmentResource?.funscriptUri ?? "",
-        ].join(":")
+            activeRound.roundId,
+            activeRound.fieldId,
+            segment.kind,
+            activeVideoUri,
+            timelineUri ?? activeSegmentResource?.funscriptUri ?? "",
+          ].join(":")
         : null;
 
     if (!activeBootstrapKey) {
@@ -2541,6 +2663,16 @@ export function RoundVideoOverlay({
     if (isIntermediaryScreenActive) return;
     const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
     if (!video) return;
+
+    const pendingSeek = pendingVideoSeekSecRef.current;
+    if (pendingSeek != null && segment.kind === "main") {
+      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        video.currentTime = pendingSeek;
+        pendingVideoSeekSecRef.current = null;
+        return;
+      }
+    }
+
     video.load();
   }, [
     activeRound?.fieldId,
@@ -2625,13 +2757,22 @@ export function RoundVideoOverlay({
     !isWaitingForHandyStart;
 
   useEffect(() => {
-    onPreviewStateChangeRef.current?.({
+    const nextPreviewState = {
       active: Boolean(activeRound),
       loading: Boolean(
         activeRound &&
         (loadingCountdown !== null || showRemoteLoadingIndicator || isWaitingForHandyStart)
       ),
-    });
+    };
+    const previousPreviewState = lastPreviewStateRef.current;
+    if (
+      previousPreviewState?.active === nextPreviewState.active &&
+      previousPreviewState.loading === nextPreviewState.loading
+    ) {
+      return;
+    }
+    lastPreviewStateRef.current = nextPreviewState;
+    onPreviewStateChangeRef.current?.(nextPreviewState);
   }, [activeRound, isWaitingForHandyStart, loadingCountdown, showRemoteLoadingIndicator]);
 
   const handleUsePauseControl = useCallback(() => {
@@ -2685,15 +2826,15 @@ export function RoundVideoOverlay({
       ? undefined
       : onClose
         ? () => {
-          void stopHandyIfNeeded();
-          onClose();
-          return true;
-        }
-        : onOpenOptions
-          ? () => {
-            onOpenOptions();
+            void stopHandyIfNeeded();
+            onClose();
             return true;
           }
+        : onOpenOptions
+          ? () => {
+              onOpenOptions();
+              return true;
+            }
           : undefined,
     onUnhandledAction: (action) => {
       showUiTemporarily(UI_SHOW_AFTER_MOUSEMOVE_MS);
@@ -3030,10 +3171,11 @@ export function RoundVideoOverlay({
             <span>{status}</span>
 
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
-                ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                canResyncHandy
+                  ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+              }`}
               disabled={!canResyncHandy}
               onClick={() => {
                 playSelectSound();
@@ -3060,10 +3202,11 @@ export function RoundVideoOverlay({
             {canUseRoundControls && (
               <>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.pauseCharges ?? 0) > 0
-                    ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
-                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.pauseCharges ?? 0) > 0
+                      ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
+                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={(roundControl?.pauseCharges ?? 0) <= 0 || isIntermediaryScreenActive}
                   onClick={() => {
                     playSelectSound();
@@ -3076,10 +3219,11 @@ export function RoundVideoOverlay({
                   Pause {roundControl?.pauseCharges ?? 0}
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.skipCharges ?? 0) > 0
-                    ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
-                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.skipCharges ?? 0) > 0
+                      ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
+                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={(roundControl?.skipCharges ?? 0) <= 0}
                   onClick={() => {
                     playSelectSound();
@@ -3108,10 +3252,11 @@ export function RoundVideoOverlay({
               </button>
             )}
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
-                ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                showProgressBarAlways
+                  ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
+              }`}
               onClick={() => {
                 playSelectSound();
                 setShowProgressBarAlways((current) => !current);
@@ -3123,10 +3268,11 @@ export function RoundVideoOverlay({
               Bar {showProgressBarAlways ? "Pinned" : "Auto"}
             </button>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
-                ? "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                handyConnected
+                  ? "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+              }`}
               disabled={!handyConnected}
               onClick={() => {
                 playSelectSound();
@@ -3195,10 +3341,11 @@ export function RoundVideoOverlay({
                   Test Intermediary (I)
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${segment.kind === "intermediary"
-                    ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                    : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    segment.kind === "intermediary"
+                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                      : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {
                     playSelectSound();
@@ -3269,15 +3416,22 @@ export function RoundVideoOverlay({
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
                 const video = mainVideoRef.current;
                 if (video) {
-                  const { startSec } = resolveMainWindowForDuration(video.duration);
+                  const mainWindow = resolveMainWindowForDuration(video.duration);
+                  const pendingSeek = pendingVideoSeekSecRef.current;
+                  const targetSec =
+                    pendingSeek != null
+                      ? clampToPlaybackWindow(pendingSeek, mainWindow)
+                      : mainWindow.startSec;
                   if (
                     needsMainWindowSeekRef.current ||
-                    video.currentTime < startSec - MAIN_WINDOW_SEEK_EPSILON_SEC
+                    pendingSeek != null ||
+                    video.currentTime < mainWindow.startSec - MAIN_WINDOW_SEEK_EPSILON_SEC
                   ) {
-                    if (Math.abs(video.currentTime - startSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
-                      video.currentTime = startSec;
+                    if (Math.abs(video.currentTime - targetSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
+                      video.currentTime = targetSec;
                     }
                     needsMainWindowSeekRef.current = false;
+                    pendingVideoSeekSecRef.current = null;
                   }
                 }
                 void bootstrapHandySyncIfReady();
@@ -3288,15 +3442,22 @@ export function RoundVideoOverlay({
                 void ensurePlayableVideo(resolvedMainResource.videoUri);
                 const video = mainVideoRef.current;
                 if (video) {
-                  const { startSec } = resolveMainWindowForDuration(video.duration);
+                  const mainWindow = resolveMainWindowForDuration(video.duration);
+                  const pendingSeek = pendingVideoSeekSecRef.current;
+                  const targetSec =
+                    pendingSeek != null
+                      ? clampToPlaybackWindow(pendingSeek, mainWindow)
+                      : mainWindow.startSec;
                   if (
                     needsMainWindowSeekRef.current ||
-                    video.currentTime < startSec - MAIN_WINDOW_SEEK_EPSILON_SEC
+                    pendingSeek != null ||
+                    video.currentTime < mainWindow.startSec - MAIN_WINDOW_SEEK_EPSILON_SEC
                   ) {
-                    if (Math.abs(video.currentTime - startSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
-                      video.currentTime = startSec;
+                    if (Math.abs(video.currentTime - targetSec) > MAIN_WINDOW_SEEK_EPSILON_SEC) {
+                      video.currentTime = targetSec;
                     }
                     needsMainWindowSeekRef.current = false;
+                    pendingVideoSeekSecRef.current = null;
                   }
                 }
                 void bootstrapHandySyncIfReady();
@@ -3369,11 +3530,37 @@ export function RoundVideoOverlay({
               }}
               onCanPlay={() => {
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                const video = intermediaryVideoRef.current;
+                if (video) {
+                  const windowBounds = resolvePlaybackWindowForDuration(
+                    segment.trigger.resource,
+                    video.duration
+                  );
+                  if (
+                    video.currentTime <
+                    windowBounds.startSec - INTERMEDIARY_WINDOW_SEEK_EPSILON_SEC
+                  ) {
+                    video.currentTime = windowBounds.startSec;
+                  }
+                }
                 void bootstrapHandySyncIfReady();
                 tryPlayVideo();
               }}
               onLoadedMetadata={() => {
                 void ensurePlayableVideo(segment.trigger.resource.videoUri);
+                const video = intermediaryVideoRef.current;
+                if (video) {
+                  const windowBounds = resolvePlaybackWindowForDuration(
+                    segment.trigger.resource,
+                    video.duration
+                  );
+                  if (
+                    video.currentTime <
+                    windowBounds.startSec - INTERMEDIARY_WINDOW_SEEK_EPSILON_SEC
+                  ) {
+                    video.currentTime = windowBounds.startSec;
+                  }
+                }
                 void bootstrapHandySyncIfReady();
                 tryPlayVideo();
               }}
@@ -3689,12 +3876,13 @@ export function RoundVideoOverlay({
                 )}
                 <div className="flex items-center gap-1.5">
                   <div
-                    className={`h-1.5 w-1.5 rounded-full ${handyManuallyStopped
-                      ? "bg-rose-400"
-                      : handySyncState === "error" || handySyncState === "missing-key"
-                        ? "bg-amber-400"
-                        : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]"
-                      }`}
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      handyManuallyStopped
+                        ? "bg-rose-400"
+                        : handySyncState === "error" || handySyncState === "missing-key"
+                          ? "bg-amber-400"
+                          : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]"
+                    }`}
                   />
                   <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tabular-nums tracking-wider text-white/55">
                     {formatHandyOffsetLabel(offsetMs)}

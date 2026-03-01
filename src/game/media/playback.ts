@@ -5,7 +5,10 @@ import {
 } from "../../constants/funscriptSettings";
 import { trpc } from "../../services/trpc";
 
-export type PlaybackResource = Pick<Resource, "videoUri" | "funscriptUri">;
+export type PlaybackResource = Pick<Resource, "videoUri" | "funscriptUri"> & {
+  startTime?: number | null;
+  endTime?: number | null;
+};
 
 export type FunscriptAction = {
   at: number;

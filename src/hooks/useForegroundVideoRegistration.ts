@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useForegroundMedia } from "../contexts/ForegroundMediaContext";
 
 export function useForegroundVideoRegistration(id: string) {
@@ -15,16 +15,25 @@ export function useForegroundVideoRegistration(id: string) {
     setPlaying(id, playing);
   }, [id, setPlaying]);
 
-  return {
-    markPlaying,
-    handlePlay: useCallback(() => {
-      setPlaying(id, true);
-    }, [id, setPlaying]),
-    handlePause: useCallback(() => {
-      setPlaying(id, false);
-    }, [id, setPlaying]),
-    handleEnded: useCallback(() => {
-      setPlaying(id, false);
-    }, [id, setPlaying]),
-  };
+  const handlePlay = useCallback(() => {
+    setPlaying(id, true);
+  }, [id, setPlaying]);
+
+  const handlePause = useCallback(() => {
+    setPlaying(id, false);
+  }, [id, setPlaying]);
+
+  const handleEnded = useCallback(() => {
+    setPlaying(id, false);
+  }, [id, setPlaying]);
+
+  return useMemo(
+    () => ({
+      markPlaying,
+      handlePlay,
+      handlePause,
+      handleEnded,
+    }),
+    [handleEnded, handlePause, handlePlay, markPlaying]
+  );
 }

@@ -437,6 +437,8 @@ function applyEffect(state: GameState, effect: GameEffect, sourcePlayerId: strin
   if (effect.kind === "cleanseAntiPerks") {
     return {
       ...state,
+      queuedRoundAudioEffect: null,
+      activeRoundAudioEffect: null,
       players: updatePlayer(state.players, sourcePlayerId, (player) => {
         if (
           player.antiPerks.length === 0 &&
@@ -541,9 +543,12 @@ function applyPerkToPlayer(
   const remainingRounds = isImmediate ? 0 : (perk.durationRounds ?? null);
   const kind: PerkKind = perk.kind;
   const effectsToStore = isImmediate ? perk.effects : persistentEffects;
-
-  return {
+  const finalState: GameState = {
     ...nextState,
+    queuedRoundAudioEffect:
+      kind === "antiPerk" && perk.id === "moaning-loop"
+        ? { kind: "continuousMoaning", sourcePerkId: perk.id }
+        : nextState.queuedRoundAudioEffect,
     players: updatePlayer(nextState.players, sourcePlayerId, (player) => ({
       ...player,
       perks: kind === "perk" ? [perk.id, ...player.perks] : player.perks,
@@ -562,6 +567,8 @@ function applyPerkToPlayer(
       ],
     })),
   };
+
+  return finalState;
 }
 
 function queueCumRound(state: GameState, installedRounds: InstalledRound[]): GameState {
@@ -1340,6 +1347,8 @@ export function createInitialGameState(
     ),
     queuedRound: null,
     activeRound: null,
+    queuedRoundAudioEffect: null,
+    activeRoundAudioEffect: null,
     pendingPathChoice: null,
     pendingPerkSelection: null,
     lastTraversalPathNodeIds: [startNodeId],
@@ -1358,6 +1367,8 @@ export function reportPlayerCum(state: GameState): GameState {
     completionReason: "self_reported_cum",
     queuedRound: null,
     activeRound: null,
+    queuedRoundAudioEffect: null,
+    activeRoundAudioEffect: null,
     pendingPathChoice: null,
     pendingPerkSelection: null,
     log: ["Run ended: player confirmed cum.", ...state.log].slice(0, 40),
@@ -1457,7 +1468,9 @@ export function triggerQueuedRound(state: GameState): GameState {
   return {
     ...withResolvedNoRest,
     activeRound: state.queuedRound,
+    activeRoundAudioEffect: withResolvedNoRest.queuedRoundAudioEffect,
     queuedRound: null,
+    queuedRoundAudioEffect: null,
     log: [`${state.queuedRound.roundName} started.`, ...withResolvedNoRest.log].slice(0, 40),
   };
 }
@@ -1559,6 +1572,7 @@ export function completeRound(
     players: nextPlayers,
     highscore: nextHighscore,
     activeRound: null,
+    activeRoundAudioEffect: null,
     intermediaryProbability: nextIntermediaryProbability,
     antiPerkProbability: nextAntiPerkProbability,
     log: [
@@ -1566,6 +1580,14 @@ export function completeRound(
       ...state.log,
     ].slice(0, 40),
   };
+
+  if (state.activeRoundAudioEffect?.sourcePerkId && currentPlayer) {
+    next = consumeAntiPerkById(next, {
+      playerId: currentPlayer.id,
+      perkId: state.activeRoundAudioEffect.sourcePerkId,
+      reason: `${state.activeRoundAudioEffect.sourcePerkId} finished after the round ended.`,
+    });
+  }
 
   const currentNodeId = next.players[next.currentPlayerIndex]?.currentNodeId;
   const outgoing = currentNodeId
@@ -1776,6 +1798,10 @@ export function consumeAntiPerkById(
   const reason = input.reason?.trim() || `${input.perkId} resolved.`;
   return {
     ...state,
+    queuedRoundAudioEffect:
+      state.queuedRoundAudioEffect?.sourcePerkId === input.perkId ? null : state.queuedRoundAudioEffect,
+    activeRoundAudioEffect:
+      state.activeRoundAudioEffect?.sourcePerkId === input.perkId ? null : state.activeRoundAudioEffect,
     players: updatePlayer(state.players, input.playerId, (entry) => ({
       ...entry,
       stats: normalizeDice(nextStats),

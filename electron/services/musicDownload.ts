@@ -157,28 +157,7 @@ async function inspectAudioInfo(url: string): Promise<YtDlpMusicInfo> {
 export function isPlaylistUrl(url: string): boolean {
   try {
     const parsed = new URL(url.trim());
-    const hostname = parsed.hostname.toLowerCase();
-    const pathname = parsed.pathname.toLowerCase();
-    const search = parsed.search.toLowerCase();
-
-    if (
-      hostname === "youtube.com" ||
-      hostname === "www.youtube.com" ||
-      hostname === "m.youtube.com" ||
-      hostname === "music.youtube.com"
-    ) {
-      return search.includes("list=");
-    }
-
-    if (
-      hostname === "soundcloud.com" ||
-      hostname === "www.soundcloud.com" ||
-      hostname === "m.soundcloud.com"
-    ) {
-      return pathname.includes("/sets/");
-    }
-
-    return false;
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
   }
@@ -236,19 +215,7 @@ export function isYouTubeUrl(url: string): boolean {
 export function isSupportedMusicUrl(url: string): boolean {
   try {
     const parsed = new URL(url.trim());
-    const hostname = parsed.hostname.toLowerCase();
-    return (
-      hostname === "youtube.com" ||
-      hostname === "www.youtube.com" ||
-      hostname === "m.youtube.com" ||
-      hostname === "music.youtube.com" ||
-      hostname === "youtu.be" ||
-      hostname.endsWith(".youtube.com") ||
-      hostname === "soundcloud.com" ||
-      hostname === "www.soundcloud.com" ||
-      hostname === "m.soundcloud.com" ||
-      hostname.endsWith(".soundcloud.com")
-    );
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
   }
@@ -334,9 +301,24 @@ export async function downloadMusicFromUrl(url: string): Promise<MusicDownloadRe
       }
     );
   } catch (error) {
-    downloadProgressByUrl.delete(trimmedUrl);
-    const message = error instanceof Error ? error.message : "yt-dlp download failed.";
-    throw new Error(`Failed to download audio: ${message}`);
+    try {
+      const fallbackFile = await fallbackDownloadAudioViaMedia(trimmedUrl, paths.cacheDir);
+      downloadProgressByUrl.delete(trimmedUrl);
+      const info = await inspectAudioInfo(trimmedUrl);
+      return {
+        filePath: fallbackFile,
+        title: (typeof info.title === "string" && info.title.trim()) || "Unknown Track",
+      };
+    } catch (fallbackError) {
+      downloadProgressByUrl.delete(trimmedUrl);
+      const message =
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : error instanceof Error
+            ? error.message
+            : "yt-dlp download failed.";
+      throw new Error(`Failed to download audio: ${message}`);
+    }
   }
 
   downloadProgressByUrl.delete(trimmedUrl);
@@ -368,6 +350,76 @@ async function findDownloadedAudio(cacheDir: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function findDownloadedMedia(cacheDir: string): Promise<string | null> {
+  try {
+    const entries = await fs.readdir(cacheDir);
+    const mediaFiles = entries.filter((entry) => {
+      const ext = path.extname(entry).toLowerCase();
+      return ext.length > 0 && ![".part", ".tmp", ".temp", ".ytdl"].includes(ext);
+    });
+    if (mediaFiles.length === 0) return null;
+    return path.join(cacheDir, mediaFiles[0]!);
+  } catch {
+    return null;
+  }
+}
+
+async function extractAudioFromDownloadedMedia(inputPath: string, outputPath: string): Promise<void> {
+  const binaries = await resolvePhashBinaries();
+  await runCommand(
+    binaries.ffmpegPath,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-nostdin",
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-acodec",
+      "libmp3lame",
+      "-q:a",
+      "5",
+      outputPath,
+    ],
+    { timeoutMs: 600_000 }
+  );
+}
+
+async function fallbackDownloadAudioViaMedia(url: string, cacheDir: string): Promise<string> {
+  const binary = await resolveYtDlpBinary();
+  const env = await getBinaryEnv();
+  const outputTemplate = path.join(cacheDir, "source.%(ext)s");
+
+  await runCommand(
+    binary.ytDlpPath,
+    [
+      "-f",
+      "bestaudio/best",
+      "--no-playlist",
+      "--no-warnings",
+      "--newline",
+      "--output",
+      outputTemplate,
+      url,
+    ],
+    { env, timeoutMs: 600_000 }
+  );
+
+  const downloadedMedia = await findDownloadedMedia(cacheDir);
+  if (!downloadedMedia || !(await isNonEmptyFile(downloadedMedia))) {
+    throw new Error("Fallback media download completed but no media file was found.");
+  }
+
+  const outputPath = path.join(cacheDir, "audio.mp3");
+  await extractAudioFromDownloadedMedia(downloadedMedia, outputPath);
+  if (!(await isNonEmptyFile(outputPath))) {
+    throw new Error("Fallback ffmpeg extraction produced an empty audio file.");
+  }
+  return outputPath;
 }
 
 export function __resetMusicDownloadProgressForTests(): void {

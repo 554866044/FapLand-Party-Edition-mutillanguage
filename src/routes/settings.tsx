@@ -16,8 +16,10 @@ import {
   DEFAULT_MUSIC_VOLUME,
   type MusicLoopMode,
 } from "../constants/musicSettings";
+import { DEFAULT_MOANING_VOLUME } from "../constants/moaningSettings";
 import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
+import { useGameplayMoaning } from "../hooks/useGameplayMoaning";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { useSfwMode } from "../hooks/useSfwMode";
 import { ensureBooruMediaCache } from "../services/booru";
@@ -1307,6 +1309,7 @@ export function SettingsPage() {
               ) : activeSection && activeSection.id === "audio" ? (
                 <>
                   <MusicSettingsCard />
+                  <MoaningSettingsCard />
                 </>
               ) : activeSection && activeSection.id === "security-privacy" ? (
                 <>
@@ -2767,7 +2770,7 @@ function MusicSettingsCard() {
           {showUrlInput && (
             <div className="mb-3 space-y-2 rounded-lg border border-violet-300/15 bg-black/20 p-3">
               <p className="text-xs text-zinc-400">
-                Add from YouTube or SoundCloud URL (downloaded as MP3 via yt-dlp)
+                Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)
               </p>
               <div className="flex gap-1.5">
                 <button
@@ -2808,8 +2811,8 @@ function MusicSettingsCard() {
                   type="url"
                   placeholder={
                     urlMode === "playlist"
-                      ? "https://www.youtube.com/playlist?list=..."
-                      : "https://www.youtube.com/watch?v=..."
+                      ? "https://example.com/playlist-or-collection"
+                      : "https://example.com/video-or-audio"
                   }
                   value={urlInput}
                   onChange={(e) => {
@@ -2915,6 +2918,374 @@ function MusicSettingsCard() {
                   </div>
                 );
               })
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MoaningSettingsCard() {
+  const {
+    enabled,
+    queue,
+    volume,
+    setEnabled,
+    setVolume,
+    addTracks,
+    addTrackFromUrl,
+    addPlaylistFromUrl,
+    removeTrack,
+    moveTrack,
+    clearQueue,
+    previewTrack,
+    stopPreview,
+  } = useGameplayMoaning();
+  const [isAddingTracks, setIsAddingTracks] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isAddingFromUrl, setIsAddingFromUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlMode, setUrlMode] = useState<"track" | "playlist">("track");
+  const [urlResult, setUrlResult] = useState<{ added: number; errors: number } | null>(null);
+  const [volumeDraft, setVolumeDraft] = useState(() => Math.round(DEFAULT_MOANING_VOLUME * 100));
+
+  useEffect(() => {
+    setVolumeDraft(Math.round(volume * 100));
+  }, [volume]);
+
+  const commitVolumeDraft = async () => {
+    await setVolume(volumeDraft / 100);
+  };
+
+  const addSelectedTracks = async () => {
+    if (isAddingTracks) return;
+    setIsAddingTracks(true);
+    try {
+      const filePaths = await window.electronAPI.dialog.selectMoaningFiles();
+      if (filePaths.length === 0) return;
+      await addTracks(filePaths);
+    } catch (error) {
+      console.error("Failed to add moaning tracks", error);
+    } finally {
+      setIsAddingTracks(false);
+    }
+  };
+
+  const handleAddFromUrl = async () => {
+    if (isAddingFromUrl) return;
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setUrlError("Please enter a URL");
+      return;
+    }
+    try {
+      new URL(trimmed);
+    } catch {
+      setUrlError("Invalid URL format");
+      return;
+    }
+    setUrlError(null);
+    setIsAddingFromUrl(true);
+    setUrlResult(null);
+    try {
+      if (urlMode === "playlist") {
+        const result = await addPlaylistFromUrl(trimmed);
+        setUrlResult({ added: result.addedCount, errors: result.errorCount });
+        if (result.addedCount > 0) {
+          setUrlInput("");
+          setShowUrlInput(false);
+        }
+      } else {
+        await addTrackFromUrl(trimmed);
+        setUrlInput("");
+        setShowUrlInput(false);
+      }
+    } catch (error) {
+      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+    } finally {
+      setIsAddingFromUrl(false);
+    }
+  };
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-rose-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-rose-100">Moaning</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Manage the gameplay moaning library used by perks and anti-perks. Add local audio files
+          or download them from supported URLs via yt-dlp.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rose-300/15 pb-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              aria-label="Toggle Enable Moaning"
+              role="switch"
+              aria-checked={enabled}
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void setEnabled(!enabled);
+              }}
+              className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-rose-300/80 bg-rose-500/50 shadow-[0_0_20px_rgba(251,113,133,0.35)]" : "border-zinc-600 bg-zinc-800"}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
+              />
+            </button>
+            <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
+              Moaning {enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-zinc-400">Volume:</span>
+            <input
+              aria-label="Moaning volume"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={volumeDraft}
+              onChange={(event) => setVolumeDraft(Number(event.target.value))}
+              onMouseUp={() => void commitVolumeDraft()}
+              onTouchEnd={() => void commitVolumeDraft()}
+              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-rose-400"
+            />
+            <span className="w-8 text-zinc-300">{volumeDraft}%</span>
+          </label>
+        </div>
+
+        <div className="border-t border-rose-300/15 pt-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-zinc-100">Library ({queue.length} files)</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={queue.length === 0}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void previewTrack(queue[0]!.id);
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  queue.length === 0
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/35"
+                }`}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  stopPreview();
+                }}
+                className="rounded-lg border border-zinc-500 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-100 transition-all duration-200 hover:border-zinc-300"
+              >
+                Stop
+              </button>
+              <button
+                type="button"
+                disabled={isAddingTracks}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void addSelectedTracks();
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  isAddingTracks
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
+                }`}
+              >
+                {isAddingTracks ? "Adding..." : "Add Files"}
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  setShowUrlInput((current) => !current);
+                  setUrlError(null);
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  showUrlInput
+                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                    : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
+                }`}
+              >
+                {showUrlInput ? "Cancel" : "Add from URL"}
+              </button>
+              <button
+                type="button"
+                disabled={queue.length === 0}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void clearQueue();
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  queue.length === 0
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-zinc-500 bg-zinc-800 text-zinc-100 hover:border-zinc-300"
+                }`}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {showUrlInput && (
+            <div className="mb-3 space-y-2 rounded-lg border border-rose-300/15 bg-black/20 p-3">
+              <p className="text-xs text-zinc-400">
+                Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setUrlMode("track");
+                    setUrlResult(null);
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                    urlMode === "track"
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  }`}
+                >
+                  Single Track
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setUrlMode("playlist");
+                    setUrlResult(null);
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                    urlMode === "playlist"
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  }`}
+                >
+                  Playlist
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder={
+                    urlMode === "playlist"
+                      ? "https://example.com/playlist-or-collection"
+                      : "https://example.com/video-or-audio"
+                  }
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    setUrlError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void handleAddFromUrl();
+                    }
+                  }}
+                  disabled={isAddingFromUrl}
+                  className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${
+                    urlError
+                      ? "border-rose-400/40 focus:border-rose-400/60"
+                      : "border-rose-300/30 focus:border-cyan-400/60"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => void handleAddFromUrl()}
+                  disabled={isAddingFromUrl}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                    isAddingFromUrl
+                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                      : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
+                  }`}
+                >
+                  {isAddingFromUrl ? "Downloading..." : "Add"}
+                </button>
+              </div>
+              {urlResult && (
+                <p className="text-xs text-emerald-300">
+                  Added {urlResult.added} file{urlResult.added !== 1 ? "s" : ""}
+                  {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
+                </p>
+              )}
+              {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+            </div>
+          )}
+
+          <div className="divide-y divide-rose-300/10">
+            {queue.length === 0 ? (
+              <div className="py-3 text-sm text-zinc-400">No moaning files configured.</div>
+            ) : (
+              queue.map((entry, index) => (
+                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{entry.name}</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSelectSound();
+                        void previewTrack(entry.id);
+                      }}
+                      className="rounded px-2 py-0.5 text-xs text-cyan-300 hover:text-cyan-200"
+                    >
+                      ▶
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => {
+                        playSelectSound();
+                        void moveTrack(entry.id, "up");
+                      }}
+                      className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === queue.length - 1}
+                      onClick={() => {
+                        playSelectSound();
+                        void moveTrack(entry.id, "down");
+                      }}
+                      className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSelectSound();
+                        void removeTrack(entry.id);
+                      }}
+                      className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>

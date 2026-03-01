@@ -199,6 +199,11 @@ const ZActiveRound = z.object({
   campaignIndex: z.number().int().nullable(),
 });
 
+const ZRoundAudioEffect = z.object({
+  kind: z.literal("continuousMoaning"),
+  sourcePerkId: z.string().min(1),
+});
+
 const ZPendingPathChoice = z.object({
   playerId: z.string().min(1),
   fromNodeId: z.string().min(1),
@@ -232,6 +237,7 @@ const ZPendingPerkSelection = z.object({
       application: z.enum(["persistent", "immediate"]).optional(),
       effects: z.array(ZGameEffect),
       requiresHandy: z.boolean().optional(),
+      requiresMoaning: z.boolean().optional(),
     })
   ),
 });
@@ -249,6 +255,8 @@ export const ZPersistedGameState = z.object({
   antiPerkProbability: z.number(),
   queuedRound: ZActiveRound.nullable(),
   activeRound: ZActiveRound.nullable(),
+  queuedRoundAudioEffect: ZRoundAudioEffect.nullable().optional().transform((value) => value ?? null),
+  activeRoundAudioEffect: ZRoundAudioEffect.nullable().optional().transform((value) => value ?? null),
   pendingPathChoice: ZPendingPathChoice.nullable(),
   pendingPerkSelection: ZPendingPerkSelection.nullable(),
   lastTraversalPathNodeIds: z.array(z.string()),

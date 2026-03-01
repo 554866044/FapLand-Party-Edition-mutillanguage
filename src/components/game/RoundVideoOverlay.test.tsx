@@ -102,26 +102,69 @@ vi.mock("../../hooks/useSfwMode", () => ({
   useSfwMode: () => mocks.sfwMode,
 }));
 
+vi.mock("../../hooks/useGameplayMoaning", () => ({
+  useGameplayMoaning: () => ({
+    enabled: true,
+    queue: [{ id: "m1", filePath: "/moan.mp3", name: "moan.mp3" }],
+    volume: 0.3,
+    isAvailableForGameplay: true,
+    setEnabled: vi.fn(async () => {}),
+    setVolume: vi.fn(async () => {}),
+    addTracks: vi.fn(async () => {}),
+    addTrackFromUrl: vi.fn(async () => {}),
+    addPlaylistFromUrl: vi.fn(async () => ({ addedCount: 0, errorCount: 0 })),
+    removeTrack: vi.fn(async () => {}),
+    moveTrack: vi.fn(async () => {}),
+    clearQueue: vi.fn(async () => {}),
+    previewTrack: vi.fn(async () => {}),
+    stopPreview: vi.fn(),
+    playRandomOneShot: vi.fn(async () => {}),
+    startContinuousLoop: vi.fn(async () => {}),
+    stopContinuousLoop: vi.fn(),
+  }),
+}));
+
 import { RoundVideoOverlay } from "./RoundVideoOverlay";
 
 function createInstalledRound(
   roundId = "round-1",
-  funscriptUri: string | null = null
+  funscriptUri: string | null = null,
+  overrides?: Partial<InstalledRound> & {
+    videoUri?: string;
+    durationMs?: number;
+  }
 ): InstalledRound {
+  const defaultResource = {
+    videoUri: overrides?.videoUri ?? "/video.mp4",
+    funscriptUri,
+    durationMs: overrides?.durationMs,
+  };
   return {
     id: roundId,
-    name: "Round 1",
-    type: "Main",
-    startTime: 0,
-    endTime: 30_000,
+    name: overrides?.name ?? "Round 1",
+    type: overrides?.type ?? "Main",
+    startTime: overrides?.startTime ?? 0,
+    endTime: overrides?.endTime ?? 30_000,
     previewImage: null,
-    resources: [
-      {
-        videoUri: "/video.mp4",
-        funscriptUri,
-      },
-    ],
+    resources: overrides?.resources ?? [defaultResource],
   } as unknown as InstalledRound;
+}
+
+function createIntermediaryRound(
+  roundId = "intermediary-1",
+  funscriptUri: string | null = null,
+  overrides?: Partial<InstalledRound> & {
+    videoUri?: string;
+    durationMs?: number;
+  }
+): InstalledRound {
+  return createInstalledRound(roundId, funscriptUri, {
+    type: "Interjection",
+    videoUri: "/intermediary.mp4",
+    startTime: 7_000,
+    endTime: 12_000,
+    ...overrides,
+  });
 }
 
 function createActiveRound(roundId = "round-1"): ActiveRound {
@@ -159,8 +202,14 @@ function createHandySession(): handyRuntime.HandySession {
 
 function primeVideoElement(
   video: HTMLVideoElement,
-  options?: { duration?: number; currentTime?: number }
+  options?: {
+    duration?: number;
+    currentTime?: number;
+    currentTimeRef?: { value: number };
+    onSetCurrentTime?: (value: number) => void;
+  }
 ) {
+  const currentTimeRef = options?.currentTimeRef ?? { value: options?.currentTime ?? 0 };
   Object.defineProperty(video, "readyState", {
     configurable: true,
     get: () => HTMLMediaElement.HAVE_METADATA,
@@ -171,9 +220,13 @@ function primeVideoElement(
   });
   Object.defineProperty(video, "currentTime", {
     configurable: true,
-    get: () => options?.currentTime ?? 0,
-    set: vi.fn(),
+    get: () => currentTimeRef.value,
+    set: (value: number) => {
+      currentTimeRef.value = value;
+      options?.onSetCurrentTime?.(value);
+    },
   });
+  return currentTimeRef;
 }
 
 function renderOverlay({
@@ -185,6 +238,9 @@ function renderOverlay({
   allowDebugRoundControls = false,
   initialShowAntiPerkBeatbar = true,
   onCompleteBoardSequence,
+  intermediaryLoadingDurationSec = 10,
+  intermediaryReturnPauseSec = 4,
+  onFinishRound = vi.fn(),
 }: {
   activeRound?: ActiveRound | null;
   installedRounds?: InstalledRound[];
@@ -194,6 +250,9 @@ function renderOverlay({
   allowDebugRoundControls?: boolean;
   initialShowAntiPerkBeatbar?: boolean;
   onCompleteBoardSequence?: ((perkId: "milker" | "jackhammer") => void) | undefined;
+  intermediaryLoadingDurationSec?: number;
+  intermediaryReturnPauseSec?: number;
+  onFinishRound?: ReturnType<typeof vi.fn>;
 } = {}) {
   return render(
     <RoundVideoOverlay
@@ -202,9 +261,9 @@ function renderOverlay({
       currentPlayer={currentPlayer}
       intermediaryProbability={0}
       booruSearchPrompt="animated gif webm"
-      intermediaryLoadingDurationSec={10}
-      intermediaryReturnPauseSec={4}
-      onFinishRound={vi.fn()}
+      intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
+      intermediaryReturnPauseSec={intermediaryReturnPauseSec}
+      onFinishRound={onFinishRound}
       boardSequence={boardSequence}
       idleBoardSequence={idleBoardSequence}
       onCompleteBoardSequence={onCompleteBoardSequence}
@@ -820,6 +879,148 @@ describe("RoundVideoOverlay", () => {
     expect(root?.className).not.toContain("bg-black");
   });
 
+  it("seeks main rounds to their trim start and finishes when trim end is reached", async () => {
+    const onFinishRound = vi.fn();
+    const mainRound = createInstalledRound("round-1", null, {
+      startTime: 5_000,
+      endTime: 25_000,
+      durationMs: 30_000,
+    });
+    const mainTime = { value: 0 };
+    const { container } = renderOverlay({
+      installedRounds: [mainRound],
+      onFinishRound,
+    });
+
+    const video = await waitFor(() => {
+      const candidate = container.querySelector('video[src="/video.mp4"]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(video, { duration: 30, currentTimeRef: mainTime });
+
+    fireEvent.loadedMetadata(video);
+
+    await waitFor(() => {
+      expect(mainTime.value).toBe(5);
+    });
+
+    mainTime.value = 25;
+
+    await waitFor(() => {
+      expect(onFinishRound).toHaveBeenCalledWith({
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+      });
+    });
+  });
+
+  it("starts intermediary rounds at their trim start and shows trim-relative timing", async () => {
+    const mainRound = createInstalledRound("round-1", null, {
+      startTime: 5_000,
+      endTime: 25_000,
+    });
+    const intermediaryRound = createIntermediaryRound("intermediary-1", null, {
+      videoUri: "/intermediary.mp4",
+      startTime: 7_000,
+      endTime: 12_000,
+    });
+    const mainTime = { value: 5 };
+    const intermediaryTime = { value: 0 };
+    const { container } = renderOverlay({
+      installedRounds: [mainRound, intermediaryRound],
+      allowDebugRoundControls: true,
+      intermediaryLoadingDurationSec: 0,
+      intermediaryReturnPauseSec: 0,
+    });
+
+    const mainVideo = await waitFor(() => {
+      const candidate = container.querySelector('video[src="/video.mp4"]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(mainVideo, { duration: 30, currentTimeRef: mainTime });
+    fireEvent.loadedMetadata(mainVideo);
+
+    mainTime.value = 12;
+    fireEvent.click(await screen.findByRole("button", { name: "Test Intermediary (I)" }));
+
+    const intermediaryVideo = await waitFor(() => {
+      const candidate = container.querySelector('video[src="/intermediary.mp4"]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(intermediaryVideo, { duration: 30, currentTimeRef: intermediaryTime });
+
+    fireEvent.loadedMetadata(intermediaryVideo);
+
+    await waitFor(() => {
+      expect(intermediaryTime.value).toBe(7);
+      expect(screen.getByText("Segment: Intermediary")).not.toBeNull();
+    });
+
+    intermediaryTime.value = 9;
+
+    await waitFor(() => {
+      expect(screen.getByTestId("round-playback-timer").textContent).toContain("0:02 / 0:05");
+    });
+  });
+
+  it("returns from an intermediary trim end and resumes the main round where it paused", async () => {
+    const mainRound = createInstalledRound("round-1", null, {
+      startTime: 5_000,
+      endTime: 25_000,
+    });
+    const intermediaryRound = createIntermediaryRound("intermediary-1", null, {
+      videoUri: "/intermediary.mp4",
+      startTime: 7_000,
+      endTime: 12_000,
+    });
+    const mainTime = { value: 0 };
+    const intermediaryTime = { value: 0 };
+    const { container } = renderOverlay({
+      installedRounds: [mainRound, intermediaryRound],
+      allowDebugRoundControls: true,
+      intermediaryLoadingDurationSec: 0,
+      intermediaryReturnPauseSec: 0,
+    });
+
+    const mainVideo = await waitFor(() => {
+      const candidate = container.querySelector('video[src="/video.mp4"]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(mainVideo, { duration: 30, currentTimeRef: mainTime });
+    fireEvent.loadedMetadata(mainVideo);
+
+    await waitFor(() => {
+      expect(mainTime.value).toBe(5);
+    });
+
+    mainTime.value = 12;
+    fireEvent.click(await screen.findByRole("button", { name: "Test Intermediary (I)" }));
+
+    const intermediaryVideo = await waitFor(() => {
+      const candidate = container.querySelector('video[src="/intermediary.mp4"]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(intermediaryVideo, { duration: 30, currentTimeRef: intermediaryTime });
+    fireEvent.loadedMetadata(intermediaryVideo);
+
+    await waitFor(() => {
+      expect(screen.getByText("Segment: Intermediary")).not.toBeNull();
+      expect(intermediaryTime.value).toBe(7);
+    });
+
+    intermediaryTime.value = 12.05;
+
+    await waitFor(() => {
+      expect(screen.getByText("Segment: Main")).not.toBeNull();
+      expect(mainTime.value).toBe(12);
+    });
+  });
+
   it("keeps the board visible during board-only anti-perk sequences", () => {
     const { container } = renderOverlay({ activeRound: null, boardSequence: "milker" });
     const root = container.firstChild as HTMLElement | null;
@@ -983,6 +1184,82 @@ describe("RoundVideoOverlay", () => {
     await waitFor(() => {
       expect(vi.mocked(handyRuntime.preloadHspScript)).toHaveBeenCalled();
       expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalled();
+    });
+  });
+
+  it("resets an existing Handy script before starting a generated anti-perk sequence", async () => {
+    mocks.handy.connectionKey = "conn-key";
+    mocks.handy.appApiKey = "app-key";
+    mocks.handy.connected = true;
+    vi.mocked(handyRuntime.issueHandySession).mockResolvedValue({
+      ...createHandySession(),
+      loadedScriptId: "/video.mp4:main:120:0:30000",
+      activeScriptId: "/video.mp4:main:120:0:30000",
+      streamedPoints: [{ t: 0, x: 20 }],
+      hspModeActive: true,
+    });
+
+    renderOverlay({ activeRound: null, boardSequence: "milker" });
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.stopHandyPlayback)).toHaveBeenCalledWith(
+        { connectionKey: "conn-key", appApiKey: "app-key" },
+        expect.objectContaining({
+          loadedScriptId: "/video.mp4:main:120:0:30000",
+          activeScriptId: "/video.mp4:main:120:0:30000",
+        })
+      );
+      expect(vi.mocked(handyRuntime.preloadHspScript)).toHaveBeenCalled();
+      expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalled();
+    });
+  });
+
+  it("does not apply the persisted Handy offset to generated anti-perk sync", async () => {
+    vi.spyOn(performance, "now").mockImplementation(() => 1_000);
+
+    mocks.handy.connectionKey = "conn-key";
+    mocks.handy.appApiKey = "app-key";
+    mocks.handy.offsetMs = 125;
+    mocks.handy.connected = true;
+    vi.mocked(handyRuntime.issueHandySession).mockResolvedValue(createHandySession());
+
+    renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        0,
+        1,
+        expect.stringMatching(/^anti-jackhammer-/),
+        expect.any(Array)
+      );
+    });
+  });
+
+  it("recomputes generated anti-perk elapsed time after preload completes", async () => {
+    let nowMs = 1_000;
+    vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+
+    mocks.handy.connectionKey = "conn-key";
+    mocks.handy.appApiKey = "app-key";
+    mocks.handy.connected = true;
+    vi.mocked(handyRuntime.issueHandySession).mockResolvedValue(createHandySession());
+    vi.mocked(handyRuntime.preloadHspScript).mockImplementation(async () => {
+      nowMs = 1_280;
+    });
+
+    renderOverlay({ activeRound: null, boardSequence: "milker" });
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        280,
+        1,
+        expect.stringMatching(/^anti-milker-/),
+        expect.any(Array)
+      );
     });
   });
 

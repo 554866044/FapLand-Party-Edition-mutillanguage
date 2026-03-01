@@ -8,7 +8,7 @@ import {
   selectPerk,
   triggerQueuedRound,
 } from "./engine";
-import { getPerkById } from "./data/perks";
+import { filterPerkIdsByGameplayCapabilities, getPerkById } from "./data/perks";
 import type { GameConfig, GameState, PendingPerkSelection } from "./types";
 
 afterEach(() => {
@@ -216,6 +216,60 @@ describe("engine new perks", () => {
       sourceLabel: "test",
     });
     expect(withVirusMax.intermediaryProbability).toBeCloseTo(withVirusMax.config.probabilityScaling.maxIntermediaryProbability);
+  });
+
+  it("arms moaning loop for the next round and consumes it after round completion", () => {
+    const base = createInitialGameState(makeConfig());
+    const playerId = base.players[base.currentPlayerIndex]!.id;
+    const applied = applyPerkByIdToPlayer(base, {
+      targetPlayerId: playerId,
+      perkId: "moaning-loop",
+      sourceLabel: "test",
+    });
+    expect(applied.queuedRoundAudioEffect).toEqual({
+      kind: "continuousMoaning",
+      sourcePerkId: "moaning-loop",
+    });
+
+    const withQueuedRound: GameState = {
+      ...applied,
+      queuedRound: {
+        fieldId: "path-1",
+        nodeId: "path-1",
+        roundId: "round-1",
+        roundName: "Round 1",
+        selectionKind: "fixed",
+        poolId: null,
+        phaseKind: "normal",
+        campaignIndex: 1,
+      },
+    };
+    const started = triggerQueuedRound(withQueuedRound);
+    expect(started.activeRoundAudioEffect).toEqual({
+      kind: "continuousMoaning",
+      sourcePerkId: "moaning-loop",
+    });
+    expect(started.queuedRoundAudioEffect).toBeNull();
+
+    const completed = completeRound(started, undefined, []);
+    const player = completed.players[completed.currentPlayerIndex]!;
+    expect(completed.activeRoundAudioEffect).toBeNull();
+    expect(player.antiPerks).not.toContain("moaning-loop");
+  });
+
+  it("filters moaning-only anti-perks when gameplay moaning is unavailable", () => {
+    expect(
+      filterPerkIdsByGameplayCapabilities(["moaning-loop", "panic-loop"], {
+        handyConnected: true,
+        moaningAvailable: false,
+      })
+    ).toEqual(["panic-loop"]);
+    expect(
+      filterPerkIdsByGameplayCapabilities(["moaning-loop", "panic-loop"], {
+        handyConnected: true,
+        moaningAvailable: true,
+      })
+    ).toEqual(["moaning-loop", "panic-loop"]);
   });
 
   it("keeps highspeed active after one turn advance", () => {
