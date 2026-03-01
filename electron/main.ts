@@ -9,6 +9,9 @@ import {
   type OpenDialogOptions,
 } from "electron";
 import path from "node:path";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { createIPCHandler } from "trpc-electron/main";
 import { config as loadDotenv } from "dotenv";
