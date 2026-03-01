@@ -27,7 +27,7 @@ import "../styles.css";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 const BUG_REPORT_URL =
-  "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/7";
+  "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/";
 
 type OverallHighscore = {
   score: number;
