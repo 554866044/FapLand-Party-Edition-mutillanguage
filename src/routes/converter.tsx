@@ -162,6 +162,7 @@ function ConverterPage() {
               <div className="settings-panel-enter" key={`content-${activeSection.id}`}>
                 <ConverterSourcePicker
                   section={activeSectionId}
+                  localFunscriptUri={state.funscriptUri}
                   onSelectRound={(roundId) => void state.selectRoundAndEdit(roundId)}
                   onSelectHero={(heroId) => void state.selectHeroAndEdit(heroId)}
                   onSelectLocalVideo={() => void state.selectLocalAndEdit()}
@@ -219,6 +220,7 @@ function ConverterPage() {
           <ConverterHeader
             {...pickConverterHeaderProps(state)}
             onGoToSelect={() => state.goToSelectStep()}
+            onAttachFunscript={() => void state.attachLocalFunscript()}
             onShowHotkeys={state.showHotkeysOverlay}
             onHideHotkeys={state.hideHotkeysOverlay}
           />

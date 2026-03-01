@@ -67,6 +67,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     setFullscreen: (value: boolean) =>
       ipcRenderer.invoke("window:setFullscreen", value) as Promise<boolean>,
     toggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen") as Promise<boolean>,
+    getZoomPercent: () => ipcRenderer.invoke("window:getZoomPercent") as Promise<number>,
+    zoomIn: () => ipcRenderer.invoke("window:zoomIn") as Promise<number>,
+    zoomOut: () => ipcRenderer.invoke("window:zoomOut") as Promise<number>,
+    resetZoom: () => ipcRenderer.invoke("window:resetZoom") as Promise<number>,
+    subscribeToZoom: (callback: (zoomPercent: number) => void) => {
+      const listener = (_event: unknown, zoomPercent: number) => {
+        callback(zoomPercent);
+      };
+      ipcRenderer.on("window:zoom-changed", listener);
+      return () => {
+        ipcRenderer.off("window:zoom-changed", listener);
+      };
+    },
     close: () => ipcRenderer.invoke("window:close") as Promise<boolean>,
   },
   updates: {

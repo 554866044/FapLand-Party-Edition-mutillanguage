@@ -65,6 +65,20 @@ const ACTIVE_LAYOUT: BoardLayout = "snake";
 // ─── Tile geometry ────────────────────────────────────────────────────────────
 const TILE_W = 108;
 const TILE_H = 108;
+const PERK_CARD_W = 240;
+const PERK_CARD_H = 164;
+const PERK_CARD_GAP = 24;
+const PERK_CARD_PADDING_X = 18;
+const PERK_NAME_FONT_SIZE = 17;
+const PERK_DESC_FONT_SIZE = 13;
+const PERK_EFFECT_FONT_SIZE = 12;
+const PERK_BADGE_FONT_SIZE = 10;
+const PERK_HEADER_FONT_SIZE = 23;
+const PERK_SKIP_FONT_SIZE = 14;
+const PERK_SKIP_BTN_W = 340;
+const PERK_SKIP_BTN_H = 50;
+const PERK_MIN_CARD_SCALE = 0.86;
+const PERK_VIEWPORT_SIDE_PAD = 64;
 
 // Vertical layout spacing
 const TILE_STEP_V = 122;
@@ -3086,7 +3100,7 @@ export const GameScene = memo(function GameScene({
           text: i18n._({ id: "game.perk.header", message: "✦ PICK A PERK ✦" }),
           style: new TextStyle({
             fontFamily: "Inter,sans-serif",
-            fontSize: 18,
+            fontSize: PERK_HEADER_FONT_SIZE,
             fill: 0xf0b0ff,
             fontWeight: "800",
             letterSpacing: 3,
@@ -3114,7 +3128,7 @@ export const GameScene = memo(function GameScene({
         for (let pi = 0; pi < MAX_PERKS; pi++) {
           const pc = new Container();
           pc.eventMode = "static";
-          pc.hitArea = new Rectangle(0, 0, 200, 130);
+          pc.hitArea = new Rectangle(0, 0, PERK_CARD_W, PERK_CARD_H);
           pc.cursor = "pointer";
           pc.visible = false;
           stage.addChild(pc);
@@ -3128,15 +3142,15 @@ export const GameScene = memo(function GameScene({
             text: "",
             style: new TextStyle({
               fontFamily: "Inter,sans-serif",
-              fontSize: 13,
+              fontSize: PERK_NAME_FONT_SIZE,
               fill: 0xffffff,
               fontWeight: "700",
               wordWrap: true,
-              wordWrapWidth: 170,
+              wordWrapWidth: PERK_CARD_W - PERK_CARD_PADDING_X * 2,
             }),
           });
-          pnt.x = 16;
-          pnt.y = 16;
+          pnt.x = PERK_CARD_PADDING_X;
+          pnt.y = 18;
           pc.addChild(pnt);
           perkNameTs.push(pnt);
 
@@ -3144,13 +3158,13 @@ export const GameScene = memo(function GameScene({
             text: "",
             style: new TextStyle({
               fontFamily: "Inter,sans-serif",
-              fontSize: 10,
+              fontSize: PERK_DESC_FONT_SIZE,
               fill: 0xddddee,
               wordWrap: true,
-              wordWrapWidth: 170,
+              wordWrapWidth: PERK_CARD_W - PERK_CARD_PADDING_X * 2,
             }),
           });
-          pdt.x = 16;
+          pdt.x = PERK_CARD_PADDING_X;
           pdt.y = 38;
           pc.addChild(pdt);
           perkDescTs.push(pdt);
@@ -3159,11 +3173,13 @@ export const GameScene = memo(function GameScene({
             text: "",
             style: new TextStyle({
               fontFamily: "JetBrains Mono,monospace",
-              fontSize: 9,
+              fontSize: PERK_EFFECT_FONT_SIZE,
               fill: 0xd0a0ff,
+              wordWrap: true,
+              wordWrapWidth: PERK_CARD_W - PERK_CARD_PADDING_X * 2,
             }),
           });
-          pet.x = 16;
+          pet.x = PERK_CARD_PADDING_X;
           pet.y = 26; // will be placed after desc
           pc.addChild(pet);
           perkEffectTs.push(pet);
@@ -3172,7 +3188,7 @@ export const GameScene = memo(function GameScene({
             text: "",
             style: new TextStyle({
               fontFamily: "JetBrains Mono,monospace",
-              fontSize: 8,
+              fontSize: PERK_BADGE_FONT_SIZE,
               fill: 0xffffff,
               fontWeight: "800",
               letterSpacing: 1,
@@ -3210,7 +3226,7 @@ export const GameScene = memo(function GameScene({
           text: i18n._({ id: "game.perk.skip", message: "DON'T BUY ANY PERKS" }),
           style: new TextStyle({
             fontFamily: "JetBrains Mono,monospace",
-            fontSize: 11,
+            fontSize: PERK_SKIP_FONT_SIZE,
             fill: 0xffe4f1,
             fontWeight: "700",
             letterSpacing: 1.2,
@@ -4092,9 +4108,17 @@ export const GameScene = memo(function GameScene({
 
             const perkOptions = s.pendingPerkSelection?.options ?? [];
             const numPerks = perkOptions.length;
-            const CARD_W = 200;
-            const CARD_H = 130;
-            const totalPerkW = numPerks * CARD_W + (numPerks - 1) * 20;
+            const naturalPerkW =
+              numPerks * PERK_CARD_W + Math.max(0, numPerks - 1) * PERK_CARD_GAP;
+            const availablePerkW = Math.max(0, W - PERK_VIEWPORT_SIDE_PAD);
+            const perkCardScale =
+              naturalPerkW > 0
+                ? Math.max(PERK_MIN_CARD_SCALE, Math.min(1, availablePerkW / naturalPerkW))
+                : 1;
+            const scaledCardW = PERK_CARD_W * perkCardScale;
+            const scaledCardGap = PERK_CARD_GAP * perkCardScale;
+            const totalPerkW =
+              numPerks * scaledCardW + Math.max(0, numPerks - 1) * scaledCardGap;
             const perkStartX = W / 2 - totalPerkW / 2;
             const perkY = H * 0.32;
 
@@ -4117,8 +4141,9 @@ export const GameScene = memo(function GameScene({
               }
 
               card.visible = true;
+              card.scale.set(perkCardScale);
               perkCardOptionIds[pi] = perk.id;
-              const cardX = perkStartX + pi * (CARD_W + 20);
+              const cardX = perkStartX + pi * (scaledCardW + scaledCardGap);
               const slideY = lerp(-60, 0, easeOutBack(perkRevealT));
               card.x = cardX;
               card.y = perkY + slideY;
@@ -4131,17 +4156,17 @@ export const GameScene = memo(function GameScene({
               card.eventMode = canAfford ? "static" : "none";
 
               cardG.clear();
-              cardG.roundRect(0, 0, CARD_W, CARD_H, 14);
+              cardG.roundRect(0, 0, PERK_CARD_W, PERK_CARD_H, 14);
               cardG.fill({ color: 0x0d0d2e, alpha: 0.97 });
               cardG.stroke({ color: rarityMeta.pixi.stroke, alpha: 0.86, width: 2 });
 
               if (isControllerSelected) {
-                cardG.roundRect(-8, -8, CARD_W + 16, CARD_H + 16, 20);
+                cardG.roundRect(-8, -8, PERK_CARD_W + 16, PERK_CARD_H + 16, 20);
                 cardG.stroke({ color: 0xe5f9ff, alpha: 0.95, width: 3.2 });
               }
 
               // Subtle glow
-              cardG.roundRect(-4, -4, CARD_W + 8, CARD_H + 8, 18);
+              cardG.roundRect(-4, -4, PERK_CARD_W + 8, PERK_CARD_H + 8, 18);
               cardG.fill({ color: rarityMeta.pixi.glow, alpha: 0.2 });
 
               const nameT = perkNameTs[pi];
@@ -4153,10 +4178,10 @@ export const GameScene = memo(function GameScene({
               nameT.text = `${getPerkIconGlyph(perk.iconKey)} ${getPerkDisplayName(perk.id)}`;
               nameT.style.fill = rarityMeta.pixi.nameText;
 
-              descT.y = nameT.y + nameT.height + 6;
+              descT.y = nameT.y + nameT.height + 8;
 
               effectT.text = `⚡ ${describePerkEffects(perk)}`;
-              effectT.y = CARD_H - 42;
+              effectT.y = PERK_CARD_H - 48;
               effectT.style.fill = rarityMeta.pixi.effectText;
 
               const directLabel =
@@ -4169,11 +4194,11 @@ export const GameScene = memo(function GameScene({
 
               rarityT.text = getRarityLabel(rarity);
               rarityT.style.fill = rarityMeta.pixi.badgeText;
-              const badgePaddingX = 7;
-              const badgePaddingY = 3;
+              const badgePaddingX = 8;
+              const badgePaddingY = 4;
               const badgeWidth = rarityT.width + badgePaddingX * 2;
               const badgeHeight = rarityT.height + badgePaddingY * 2;
-              const badgeX = CARD_W - badgeWidth - 12;
+              const badgeX = PERK_CARD_W - badgeWidth - 12;
               const badgeY = 12;
               cardG.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 7);
               cardG.fill({ color: rarityMeta.pixi.badgeFill, alpha: 0.9 });
@@ -4183,10 +4208,10 @@ export const GameScene = memo(function GameScene({
               rarityT.y = badgeY + badgeHeight / 2;
             }
 
-            const skipBtnW = 280;
-            const skipBtnH = 42;
+            const skipBtnW = Math.min(PERK_SKIP_BTN_W, Math.max(220, W - PERK_VIEWPORT_SIDE_PAD));
+            const skipBtnH = PERK_SKIP_BTN_H;
             const skipBtnX = W / 2 - skipBtnW / 2;
-            const skipBtnY = perkY + CARD_H + 26;
+            const skipBtnY = perkY + PERK_CARD_H * perkCardScale + 26;
             const skipSelected = controllerPerkSelectionIndexRef.current >= numPerks;
             skipPerkBtn.clear();
             skipPerkBtn.roundRect(skipBtnX, skipBtnY, skipBtnW, skipBtnH, 12);

@@ -36,7 +36,7 @@ export function InventoryDockButton({
           strokeLinecap="round"
         />
       </svg>
-      <span className="absolute -right-1 -top-1 min-w-5 rounded-full border border-cyan-200/65 bg-cyan-500/30 px-1 text-[10px] font-bold text-cyan-50">
+      <span className="absolute -right-1 -top-1 min-w-6 rounded-full border border-cyan-200/65 bg-cyan-500/30 px-1.5 text-xs font-bold text-cyan-50">
         {count}
       </span>
     </button>

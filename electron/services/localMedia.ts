@@ -1,4 +1,5 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeUserDataSuffix, resolvePortableMovedDataPath } from "./portable";
 
@@ -40,6 +41,28 @@ export function fromLocalMediaUri(uri: string): string | null {
   } catch {
     return null;
   }
+}
+
+function tryDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+export function resolveExistingLocalMediaPath(filePath: string): string {
+  if (!/%[0-9a-f]{2}/iu.test(filePath)) return filePath;
+  if (existsSync(filePath)) return filePath;
+
+  const decoded = tryDecodeURIComponent(filePath);
+  if (!decoded || decoded === filePath) return filePath;
+
+  const normalized =
+    process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
+      ? path.normalize(decoded.slice(1))
+      : path.normalize(decoded);
+  return existsSync(normalized) ? normalized : filePath;
 }
 
 export function isLocalMediaUri(uri: string): boolean {

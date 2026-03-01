@@ -23,6 +23,7 @@ type HeroSummary = {
 
 type ConverterSourcePickerProps = {
   section: SourceSection;
+  localFunscriptUri: string | null;
   onSelectRound: (roundId: string) => void;
   onSelectHero: (heroId: string) => void;
   onSelectLocalVideo: () => void;
@@ -43,9 +44,21 @@ function normalizeHttpUrl(value: string): string | null {
   }
 }
 
+function getUriFilename(uri: string): string {
+  try {
+    const parsed = new URL(uri);
+    const decodedPath = decodeURIComponent(parsed.pathname);
+    const filename = decodedPath.split(/[/\\]/).filter(Boolean).pop();
+    return filename ?? uri;
+  } catch {
+    return uri.split(/[/\\]/).pop() ?? uri;
+  }
+}
+
 export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React.memo(
   ({
     section,
+    localFunscriptUri,
     onSelectRound,
     onSelectHero,
     onSelectLocalVideo,
@@ -187,8 +200,17 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               }}
               className="mt-4 rounded-xl border border-cyan-300/60 bg-cyan-500/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition-all duration-200 hover:border-cyan-200/80 hover:bg-cyan-500/45"
             >
-              <Trans>Select Funscript File</Trans>
+              {localFunscriptUri ? (
+                <Trans>Replace Funscript</Trans>
+              ) : (
+                <Trans>Select Funscript File</Trans>
+              )}
             </button>
+            {localFunscriptUri ? (
+              <div className="mt-3 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+                {t`Local funscript attached: ${getUriFilename(localFunscriptUri)}`}
+              </div>
+            ) : null}
           </div>
         </div>
       );
@@ -209,11 +231,16 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
             </p>
 
             <div className="mt-4 space-y-3">
-              <label className="block">
+              <label
+                className="block"
+                htmlFor="converter-website-video-url"
+                aria-label={t`Video URL`}
+              >
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
                   <Trans>Video URL</Trans>
                 </span>
                 <input
+                  id="converter-website-video-url"
                   type="url"
                   value={websiteVideoUrl}
                   onChange={(event) => {
@@ -226,11 +253,16 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               </label>
 
               {installWebFunscriptUrlEnabled && (
-                <label className="block">
+                <label
+                  className="block"
+                  htmlFor="converter-website-funscript-url"
+                  aria-label={t`Funscript URL`}
+                >
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
                     <Trans>Funscript URL</Trans>
                   </span>
                   <input
+                    id="converter-website-funscript-url"
                     type="url"
                     value={websiteFunscriptUrl}
                     onChange={(event) => {

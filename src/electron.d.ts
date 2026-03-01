@@ -40,6 +40,11 @@ declare global {
         isFullscreen: () => Promise<boolean>;
         setFullscreen: (value: boolean) => Promise<boolean>;
         toggleFullscreen: () => Promise<boolean>;
+        getZoomPercent?: () => Promise<number>;
+        zoomIn?: () => Promise<number>;
+        zoomOut?: () => Promise<number>;
+        resetZoom?: () => Promise<number>;
+        subscribeToZoom?: (callback: (zoomPercent: number) => void) => UpdateUnsubscribe;
         close: () => Promise<boolean>;
       };
       updates: {

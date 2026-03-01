@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   selectConverterVideoFile: vi.fn(),
   selectConverterFunscriptFile: vi.fn(),
   file: {
-    convertFileSrc: vi.fn((path: string) => `converted://${path}`),
+    convertFileSrc: vi.fn((path: string) => `app://media/${encodeURIComponent(path)}`),
   },
 }));
 
@@ -67,7 +67,9 @@ vi.mock("../components/AnimatedBackground", () => ({
 
 vi.mock("../components/MenuButton", () => ({
   MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>{label}</button>
+    <button type="button" onClick={onClick}>
+      {label}
+    </button>
   ),
 }));
 
@@ -129,7 +131,9 @@ vi.mock("../features/converter/Timeline", () => ({
 }));
 
 vi.mock("../features/converter/AutoDetectionPanel", () => ({
-  AutoDetectionPanel: () => <div data-testid="auto-detection-panel" />,
+  AutoDetectionPanel: ({ funscriptUri }: { funscriptUri: string | null }) => (
+    <div data-testid="auto-detection-panel" data-funscript-uri={funscriptUri ?? ""} />
+  ),
   pickAutoDetectionPanelProps: (state: unknown) => state,
 }));
 
@@ -176,7 +180,9 @@ vi.mock("../features/converter/ConverterHeader", () => ({
       </button>
     </div>
   ),
-  pickConverterHeaderProps: (state: { selectedSourceInfo?: { kind: string; id: string; name: string } | null }) => ({
+  pickConverterHeaderProps: (state: {
+    selectedSourceInfo?: { kind: string; id: string; name: string } | null;
+  }) => ({
     selectedSourceInfo: state.selectedSourceInfo ?? null,
   }),
 }));
@@ -201,7 +207,7 @@ function makeRound(
     createdAt: Date;
     updatedAt: Date;
     previewImage: string | null;
-  }> = {},
+  }> = {}
 ) {
   return {
     id,
@@ -596,6 +602,34 @@ describe("ConverterPage", () => {
       });
 
       expect(screen.getByText("local-video.mp4")).toBeDefined();
+    });
+
+    it("keeps a funscript attached before selecting a local video file", async () => {
+      mocks.selectConverterFunscriptFile.mockResolvedValue("/path/to/local-video.funscript");
+      mocks.selectConverterVideoFile.mockResolvedValue("/path/to/local-video.mp4");
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From File/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Select Funscript File" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Local funscript attached: local-video.funscript")).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Select Video File" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      expect(screen.getByTestId("auto-detection-panel").getAttribute("data-funscript-uri")).toBe(
+        "app://media/%2Fpath%2Fto%2Flocal-video.funscript"
+      );
+      expect(screen.getByTestId("video-preview").getAttribute("data-video-uri")).toBe(
+        "app://media/%2Fpath%2Fto%2Flocal-video.mp4"
+      );
     });
 
     it("transitions to edit mode when submitting a website video url", async () => {

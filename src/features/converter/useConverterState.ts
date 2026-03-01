@@ -336,7 +336,6 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setSelectedInstalledId("");
     setSourceRoundIdsToReplace([]);
     setVideoUri(converted);
-    setFunscriptUri(null);
     setHeroName("");
     setHeroAuthor("");
     setHeroDescription("");
@@ -1515,9 +1514,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
           sourceRoundId: sourceMode === "installed" ? selectedInstalledId || null : null,
           sourceRoundIds: sourceMode === "installed" ? sourceRoundIdsToReplace : [],
           removeSourceRound:
-            sourceMode === "installed" &&
-            sourceRoundIdsToReplace.length > 0 &&
-            deleteSourceRound,
+            sourceMode === "installed" && sourceRoundIdsToReplace.length > 0 && deleteSourceRound,
         },
         segments: segmentsToSave.map((segment) => ({
           startTimeMs: segment.startTimeMs,
@@ -1529,8 +1526,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
         })),
       });
 
-      const removedSourceCount =
-        result.stats.removedSources ?? (result.removedSourceRound ? 1 : 0);
+      const removedSourceCount = result.stats.removedSources ?? (result.removedSourceRound ? 1 : 0);
       const removedSourceText =
         removedSourceCount === 0
           ? "."

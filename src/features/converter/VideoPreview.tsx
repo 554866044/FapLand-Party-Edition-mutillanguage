@@ -62,13 +62,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
 
     return (
       <div>
-        <div className="relative overflow-hidden rounded-2xl border border-violet-300/25 bg-black/45">
+        <div className="relative aspect-video overflow-hidden rounded-2xl border border-violet-300/25 bg-black/45">
           {videoUri ? (
             <SfwGuard>
               <video
                 ref={videoRef}
                 src={getVideoSrc(videoUri)}
-                className="aspect-video w-full bg-black object-contain"
+                className="h-full w-full bg-black object-contain"
                 preload="metadata"
                 controls
                 onPlay={foregroundVideo.handlePlay}
@@ -88,7 +88,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
               </div>
             </SfwGuard>
           ) : (
-            <div className="flex aspect-video flex-col items-center justify-center gap-3 text-zinc-500">
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-500">
               <span className="text-4xl opacity-30">🎬</span>
               <span className="text-sm">{t`Select a source video to start editing.`}</span>
             </div>

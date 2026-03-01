@@ -142,6 +142,39 @@ describe("useConverterState", () => {
     });
   });
 
+  it("keeps a funscript attached before selecting a local video file", async () => {
+    window.electronAPI = {
+      file: {
+        convertFileSrc: vi.fn((path: string) => `app://media/${encodeURIComponent(path)}`),
+      },
+      dialog: {
+        selectConverterVideoFile: vi.fn().mockResolvedValue("/tmp/source.mp4"),
+        selectConverterFunscriptFile: vi.fn().mockResolvedValue("/tmp/source.funscript"),
+      },
+    } as unknown as typeof window.electronAPI;
+
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    await act(async () => {
+      await result.current.attachLocalFunscript();
+    });
+
+    expect(result.current.funscriptUri).toBe("app://media/%2Ftmp%2Fsource.funscript");
+
+    await act(async () => {
+      await result.current.selectLocalAndEdit();
+    });
+
+    expect(result.current.step).toBe("edit");
+    expect(result.current.videoUri).toBe("app://media/%2Ftmp%2Fsource.mp4");
+    expect(result.current.funscriptUri).toBe("app://media/%2Ftmp%2Fsource.funscript");
+    expect(result.current.message).toBe("Local video loaded. Add funscript for auto-detection.");
+  });
+
   it("splits the segment under the playhead when pressing k", async () => {
     const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
 

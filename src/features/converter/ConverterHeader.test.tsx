@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConverterHeader } from "./ConverterHeader";
 
 vi.mock("../../utils/audio", () => ({
@@ -8,6 +8,10 @@ vi.mock("../../utils/audio", () => ({
 }));
 
 describe("ConverterHeader", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders explicit shortcut visibility controls", () => {
     const onShowHotkeys = vi.fn();
     const onHideHotkeys = vi.fn();
@@ -20,6 +24,7 @@ describe("ConverterHeader", () => {
         sourceSummary="Local file"
         showHotkeys
         onGoToSelect={() => {}}
+        onAttachFunscript={() => {}}
         onShowHotkeys={onShowHotkeys}
         onHideHotkeys={onHideHotkeys}
       />
@@ -36,6 +41,7 @@ describe("ConverterHeader", () => {
         sourceSummary="Local file"
         showHotkeys={false}
         onGoToSelect={() => {}}
+        onAttachFunscript={() => {}}
         onShowHotkeys={onShowHotkeys}
         onHideHotkeys={onHideHotkeys}
       />
@@ -43,5 +49,26 @@ describe("ConverterHeader", () => {
 
     fireEvent.click(screen.getByText("Show Shortcuts"));
     expect(onShowHotkeys).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a top-level funscript attach action while editing", () => {
+    const onAttachFunscript = vi.fn();
+
+    const { getByText } = render(
+      <ConverterHeader
+        step="edit"
+        selectedSourceInfo={{ kind: "local", id: "source-1", name: "Editor" }}
+        segmentCount={0}
+        sourceSummary="Local file"
+        showHotkeys={false}
+        onGoToSelect={() => {}}
+        onAttachFunscript={onAttachFunscript}
+        onShowHotkeys={() => {}}
+        onHideHotkeys={() => {}}
+      />
+    );
+
+    fireEvent.click(getByText("Attach Funscript"));
+    expect(onAttachFunscript).toHaveBeenCalledTimes(1);
   });
 });

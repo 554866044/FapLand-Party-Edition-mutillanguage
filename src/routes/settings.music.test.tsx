@@ -257,6 +257,11 @@ describe("Settings music section", () => {
         isFullscreen: vi.fn(async () => false),
         setFullscreen: vi.fn(async () => false),
         toggleFullscreen: vi.fn(),
+        getZoomPercent: vi.fn(async () => 100),
+        zoomIn: vi.fn(async () => 110),
+        zoomOut: vi.fn(async () => 90),
+        resetZoom: vi.fn(async () => 100),
+        subscribeToZoom: vi.fn(() => () => {}),
         close: vi.fn(),
       },
       updates: {
@@ -406,6 +411,36 @@ describe("Settings music section", () => {
         })
       ).toBeDefined();
       expect(screen.queryByText("Language / Language")).toBeNull();
+    });
+  });
+
+  it("renders and applies app zoom controls in general settings", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(window.electronAPI.window.getZoomPercent).toHaveBeenCalled();
+      expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.window.zoomIn).toHaveBeenCalled();
+      expect(screen.getByText("110%")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.window.zoomOut).toHaveBeenCalled();
+      expect(screen.getByText("90%")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset zoom" }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.window.resetZoom).toHaveBeenCalled();
+      expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
     });
   });
 

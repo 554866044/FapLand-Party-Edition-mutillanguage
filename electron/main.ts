@@ -29,6 +29,7 @@ import {
   normalizeUserDataSuffix,
   resolvePortableMovedDataPath,
 } from "./services/portable";
+import { resolveExistingLocalMediaPath } from "./services/localMedia";
 import { initializePortableStorageDefaults } from "./services/storagePaths";
 import { proxyExternalRequest } from "./services/integrations";
 import { startContinuousPhashScan } from "./services/phashScanService";
@@ -49,6 +50,26 @@ let appOpenRendererReady = false;
 let mainWindowRef: BrowserWindow | null = null;
 let rendererDevToolsWindowRef: BrowserWindow | null = null;
 let trpcIpcHandler: { attachWindow: (window: BrowserWindow) => void } | null = null;
+const WINDOW_ZOOM_STEP = 0.5;
+
+function getWindowZoomPercent(win: BrowserWindow): number {
+  return Math.round(win.webContents.getZoomFactor() * 100);
+}
+
+function notifyWindowZoomChanged(win: BrowserWindow): number {
+  const zoomPercent = getWindowZoomPercent(win);
+  win.webContents.send("window:zoom-changed", zoomPercent);
+  return zoomPercent;
+}
+
+function setWindowZoomLevel(win: BrowserWindow, zoomLevel: number): number {
+  win.webContents.setZoomLevel(zoomLevel);
+  return notifyWindowZoomChanged(win);
+}
+
+function changeWindowZoomLevel(win: BrowserWindow, delta: number): number {
+  return setWindowZoomLevel(win, win.webContents.getZoomLevel() + delta);
+}
 
 function reportFatalStartupError(error: unknown): void {
   const message =
@@ -571,9 +592,10 @@ function registerFileProtocol(): void {
         process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
           ? path.normalize(decoded.slice(1))
           : path.normalize(decoded);
+      const portablePath = resolvePortableMovedDataPath(normalizedPath, userDataSuffix);
 
       return createMediaResponse(
-        resolvePortableMovedDataPath(normalizedPath, userDataSuffix) ?? normalizedPath,
+        resolveExistingLocalMediaPath(portablePath ?? normalizedPath),
         request,
         url.searchParams
       );
@@ -701,15 +723,14 @@ async function createWindow(): Promise<BrowserWindow> {
     }
 
     if (input.control || input.meta) {
-      const currentZoom = mainWindow.webContents.getZoomLevel();
       if (input.key === "=" || input.key === "+") {
-        mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+        changeWindowZoomLevel(mainWindow, WINDOW_ZOOM_STEP);
         event.preventDefault();
       } else if (input.key === "-") {
-        mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+        changeWindowZoomLevel(mainWindow, -WINDOW_ZOOM_STEP);
         event.preventDefault();
       } else if (input.key.toLowerCase() === "o" || input.key === "0") {
-        mainWindow.webContents.setZoomLevel(0);
+        setWindowZoomLevel(mainWindow, 0);
         event.preventDefault();
       }
     }
@@ -786,6 +807,30 @@ function registerWindowControlsIpc() {
     if (!win) return false;
     win.setFullScreen(!win.isFullScreen());
     return win.isFullScreen();
+  });
+
+  ipcMain.handle("window:getZoomPercent", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return 100;
+    return getWindowZoomPercent(win);
+  });
+
+  ipcMain.handle("window:zoomIn", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return 100;
+    return changeWindowZoomLevel(win, WINDOW_ZOOM_STEP);
+  });
+
+  ipcMain.handle("window:zoomOut", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return 100;
+    return changeWindowZoomLevel(win, -WINDOW_ZOOM_STEP);
+  });
+
+  ipcMain.handle("window:resetZoom", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return 100;
+    return setWindowZoomLevel(win, 0);
   });
 
   ipcMain.handle("window:close", (event) => {

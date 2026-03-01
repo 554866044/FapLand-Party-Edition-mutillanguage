@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
-import { fromLocalMediaUri, isLocalMediaUri, toLocalMediaUri } from "./localMedia";
+import {
+  fromLocalMediaUri,
+  isLocalMediaUri,
+  resolveExistingLocalMediaPath,
+  toLocalMediaUri,
+} from "./localMedia";
 import { PLAYABLE_VIDEO_CACHE_RELATIVE_PATH, resolveDefaultStoragePath } from "./storagePaths";
 import {
   buildWebsiteVideoProxyUri,
@@ -308,10 +313,11 @@ export async function resolvePlayableVideoUri(
     };
   }
 
-  const localPath = toLocalVideoPath(videoUri);
-  if (!localPath) {
+  const parsedLocalPath = toLocalVideoPath(videoUri);
+  if (!parsedLocalPath) {
     throw new Error("Invalid local video URI.");
   }
+  const localPath = resolveExistingLocalMediaPath(parsedLocalPath);
 
   const sourceStat = await fs.stat(localPath);
   if (!sourceStat.isFile()) {

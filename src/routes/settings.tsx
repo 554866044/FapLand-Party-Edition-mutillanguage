@@ -396,6 +396,8 @@ export function SettingsPage() {
   const appUpdate = useAppUpdate();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingFullscreen, setIsLoadingFullscreen] = useState(true);
+  const [zoomPercent, setZoomPercent] = useState<number | null>(null);
+  const [isLoadingZoom, setIsLoadingZoom] = useState(true);
   const [intermediaryLoadingPrompt, setIntermediaryLoadingPrompt] = useState(
     DEFAULT_INTERMEDIARY_LOADING_PROMPT
   );
@@ -719,6 +721,40 @@ export function SettingsPage() {
       }
     });
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const zoomApi = window.electronAPI.window;
+
+    if (!zoomApi.getZoomPercent || !zoomApi.subscribeToZoom) {
+      setZoomPercent(100);
+      setIsLoadingZoom(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    zoomApi
+      .getZoomPercent()
+      .then((value) => {
+        if (mounted) setZoomPercent(value);
+      })
+      .catch((error) => {
+        console.error("Failed to read app zoom", error);
+      })
+      .finally(() => {
+        if (mounted) setIsLoadingZoom(false);
+      });
+
+    const unsubscribe = zoomApi.subscribeToZoom((value) => {
+      setZoomPercent(value);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const sections: SettingsSection[] = useMemo(
@@ -1552,6 +1588,18 @@ export function SettingsPage() {
     }
   };
 
+  const runZoomAction = async (action: () => Promise<number>) => {
+    setIsLoadingZoom(true);
+    try {
+      const nextZoomPercent = await action();
+      setZoomPercent(nextZoomPercent);
+    } catch (error) {
+      console.error("Failed to update app zoom", error);
+    } finally {
+      setIsLoadingZoom(false);
+    }
+  };
+
   const clearData = async () => {
     if (isClearingData) return;
 
@@ -1693,6 +1741,34 @@ export function SettingsPage() {
                   <SettingsSectionCard
                     section={activeSection}
                     loading={isLoadingFullscreen || isLoadingBackgroundVideoEnabled}
+                  />
+                  <AppZoomCard
+                    zoomPercent={zoomPercent}
+                    isLoading={isLoadingZoom}
+                    onZoomIn={() => {
+                      playSelectSound();
+                      void runZoomAction(
+                        () =>
+                          window.electronAPI.window.zoomIn?.() ??
+                          Promise.resolve(zoomPercent ?? 100)
+                      );
+                    }}
+                    onZoomOut={() => {
+                      playSelectSound();
+                      void runZoomAction(
+                        () =>
+                          window.electronAPI.window.zoomOut?.() ??
+                          Promise.resolve(zoomPercent ?? 100)
+                      );
+                    }}
+                    onResetZoom={() => {
+                      playSelectSound();
+                      void runZoomAction(
+                        () =>
+                          window.electronAPI.window.resetZoom?.() ??
+                          Promise.resolve(zoomPercent ?? 100)
+                      );
+                    }}
                   />
                   <OnboardingCard />
                 </>
@@ -5183,6 +5259,91 @@ function SettingsSectionCard({ section, loading }: { section: SettingsSection; l
         {section.settings.map((setting) => (
           <SettingRow key={setting.id} setting={setting} disabled={loading} />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function AppZoomCard({
+  zoomPercent,
+  isLoading,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+}: {
+  zoomPercent: number | null;
+  isLoading: boolean;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onResetZoom: () => void;
+}) {
+  const { t } = useLingui();
+  const displayZoom = zoomPercent === null ? t`Loading...` : `${zoomPercent}%`;
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          <Trans>App Zoom</Trans>
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          <Trans>Adjust the window zoom level used by the whole app.</Trans>
+        </p>
+      </div>
+
+      <div
+        className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+        onMouseEnter={playHoverSound}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-zinc-100">
+              <Trans>Current Zoom</Trans>
+            </p>
+            <p className="mt-1 font-[family-name:var(--font-jetbrains-mono)] text-2xl font-black text-violet-100">
+              {displayZoom}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              aria-label={t`Zoom out`}
+              title={t`Zoom out`}
+              disabled={isLoading}
+              onMouseEnter={playHoverSound}
+              onClick={onZoomOut}
+              className="grid h-11 w-11 place-items-center rounded-xl border border-violet-300/60 bg-violet-500/30 text-xl font-black text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              aria-label={t`Reset zoom`}
+              title={t`Reset zoom`}
+              disabled={isLoading}
+              onMouseEnter={playHoverSound}
+              onClick={onResetZoom}
+              className="grid h-11 w-16 place-items-center rounded-xl border border-zinc-500/60 bg-zinc-700/40 font-[family-name:var(--font-jetbrains-mono)] text-sm font-black text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              100%
+            </button>
+            <button
+              type="button"
+              aria-label={t`Zoom in`}
+              title={t`Zoom in`}
+              disabled={isLoading}
+              onMouseEnter={playHoverSound}
+              onClick={onZoomIn}
+              className="grid h-11 w-11 place-items-center rounded-xl border border-violet-300/60 bg-violet-500/30 text-xl font-black text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              +
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   );

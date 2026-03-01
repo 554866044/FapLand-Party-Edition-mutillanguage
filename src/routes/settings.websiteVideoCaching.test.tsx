@@ -242,6 +242,11 @@ describe("Settings website video caching", () => {
         isFullscreen: vi.fn(async () => false),
         setFullscreen: vi.fn(async () => false),
         toggleFullscreen: vi.fn(),
+        getZoomPercent: vi.fn(async () => 100),
+        zoomIn: vi.fn(async () => 110),
+        zoomOut: vi.fn(async () => 90),
+        resetZoom: vi.fn(async () => 100),
+        subscribeToZoom: vi.fn(() => () => {}),
         close: vi.fn(),
       },
       updates: {
