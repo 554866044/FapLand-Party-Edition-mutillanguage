@@ -38,6 +38,7 @@ type WebsiteVideoCandidateRow = {
   resourceId: string;
   roundId: string;
   roundName: string;
+  installSourceKey: string | null;
   videoUri: string;
 };
 
@@ -129,6 +130,7 @@ async function findUncachedWebsiteVideos(): Promise<PendingWebsiteVideo[]> {
       resourceId: resource.id,
       roundId: round.id,
       roundName: round.name,
+      installSourceKey: round.installSourceKey,
       videoUri: resource.videoUri,
     })
     .from(round)
@@ -138,6 +140,8 @@ async function findUncachedWebsiteVideos(): Promise<PendingWebsiteVideo[]> {
   const deduped = new Map<string, PendingWebsiteVideo>();
 
   for (const row of rows as WebsiteVideoCandidateRow[]) {
+    if (row.installSourceKey?.startsWith("stash:")) continue;
+
     const normalizedTargetUrl = getWebsiteVideoTargetUrl(row.videoUri);
     if (!normalizedTargetUrl) continue;
     if (deduped.has(normalizedTargetUrl)) continue;

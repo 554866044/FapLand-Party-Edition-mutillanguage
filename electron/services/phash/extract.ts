@@ -11,7 +11,7 @@ type CommandResult = {
 export async function runCommand(
   command: string,
   args: string[],
-  options?: { lowPriority?: boolean }
+  options?: { lowPriority?: boolean; onLine?: (line: string) => void }
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -30,7 +30,19 @@ export async function runCommand(
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
-    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    let stdoutRemainder = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+      if (options?.onLine) {
+        const text = stdoutRemainder + chunk.toString("utf8");
+        const lines = text.split(/\r?\n/);
+        stdoutRemainder = lines.pop() ?? "";
+        for (const line of lines) {
+          options.onLine(line);
+        }
+      }
+    });
+
     child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
     child.on("error", (error) => {
@@ -38,6 +50,10 @@ export async function runCommand(
     });
 
     child.on("close", (code, signal) => {
+      if (options?.onLine && stdoutRemainder) {
+        options.onLine(stdoutRemainder);
+      }
+
       const stdout = Buffer.concat(stdoutChunks);
       const stderr = Buffer.concat(stderrChunks);
       if (code === 0) {

@@ -9,9 +9,12 @@ import { fromLocalMediaUri, isLocalMediaUri, toLocalMediaUri } from "./localMedi
 import {
   buildWebsiteVideoProxyUri,
   getCachedWebsiteVideoLocalPath,
+  isStashProxyUri,
+  parseStashProxyUri,
   isWebsiteVideoResolvableUri,
   warmWebsiteVideoCache,
 } from "./webVideo";
+import { resolveMediaUri } from "./integrations";
 
 export type ResolvePlayableVideoUriResult = {
   videoUri: string;
@@ -51,6 +54,7 @@ export function isLocalPlayableVideoUri(videoUri: string): boolean {
 export function toLocalVideoPath(videoUri: string): string | null {
   return fromLocalMediaUri(videoUri);
 }
+
 
 function resolveCacheRootPath(): string {
   try {
@@ -178,6 +182,35 @@ async function transcodeToPlayableMp4(input: {
 }
 
 export async function resolvePlayableVideoUri(videoUri: string): Promise<ResolvePlayableVideoUriResult> {
+  if (isStashProxyUri(videoUri)) {
+    const hasSourceId = videoUri.includes("sourceId=");
+    if (hasSourceId) {
+      return {
+        videoUri,
+        transcoded: false,
+        cacheHit: true,
+      };
+    }
+
+    const parsed = parseStashProxyUri(videoUri);
+    if (parsed?.targetUrl) {
+      const resolved = resolveMediaUri(parsed.targetUrl, "video");
+      if (resolved !== videoUri) {
+        return {
+          videoUri: resolved,
+          transcoded: false,
+          cacheHit: true,
+        };
+      }
+    }
+
+    return {
+      videoUri,
+      transcoded: false,
+      cacheHit: true,
+    };
+  }
+
   if (isWebsiteVideoResolvableUri(videoUri)) {
     const cachedLocalPath = await getCachedWebsiteVideoLocalPath(videoUri);
     if (cachedLocalPath) {
@@ -195,15 +228,25 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
       });
     }
     return {
-      videoUri: videoUri.startsWith("http://") || videoUri.startsWith("https://")
-        ? buildWebsiteVideoProxyUri(videoUri)
-        : videoUri,
+      videoUri:
+        videoUri.startsWith("http://") || videoUri.startsWith("https://")
+          ? buildWebsiteVideoProxyUri(videoUri)
+          : videoUri,
       transcoded: false,
       cacheHit: false,
     };
   }
 
   if (!isLocalPlayableVideoUri(videoUri)) {
+    const resolvedExternal = resolveMediaUri(videoUri, "video");
+    if (resolvedExternal !== videoUri) {
+      return {
+        videoUri: resolvedExternal,
+        transcoded: false,
+        cacheHit: true,
+      };
+    }
+
     return {
       videoUri,
       transcoded: false,

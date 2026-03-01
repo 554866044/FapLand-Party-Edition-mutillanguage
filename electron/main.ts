@@ -387,12 +387,14 @@ function createWindow(): BrowserWindow {
     trpcIpcHandler.attachWindow(mainWindow);
   }
 
-  // Forward renderer console logs to terminal
-  mainWindow.webContents.on("console-message", (details) => {
-    console.log(
-      `[Renderer Console] ${details.sourceId}:${details.lineNumber} - ${details.message}`
-    );
-  });
+  // Forward renderer console logs to terminal during development
+  if (isDevServerEnabled) {
+    mainWindow.webContents.on("console-message", (details) => {
+      console.log(
+        `[Renderer Console] ${details.sourceId}:${details.lineNumber} - ${details.message}`
+      );
+    });
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) {

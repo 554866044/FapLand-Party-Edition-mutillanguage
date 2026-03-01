@@ -102,19 +102,19 @@ type RoundVideoOverlayProps = {
 type LoadingMediaItem =
   | BooruMediaItem
   | {
-      id: string;
-      source: "fallback";
-      url: string;
-      previewUrl?: string | null;
-    };
+    id: string;
+    source: "fallback";
+    url: string;
+    previewUrl?: string | null;
+  };
 
 type SegmentState =
   | { kind: "main" }
   | {
-      kind: "intermediary";
-      trigger: IntermediaryTrigger;
-      resumeAtSec: number;
-    };
+    kind: "intermediary";
+    trigger: IntermediaryTrigger;
+    resumeAtSec: number;
+  };
 
 type TransitionPlan = {
   nextSegment: SegmentState;
@@ -172,7 +172,10 @@ function isIgnorableVideoPlayError(error: unknown): boolean {
 }
 
 function isWebsiteVideoProxySrc(uri: string | null | undefined): boolean {
-  return typeof uri === "string" && uri.startsWith("app://external/web-url?");
+  return (
+    typeof uri === "string" &&
+    (uri.startsWith("app://external/web-url?") || uri.startsWith("app://external/stash?"))
+  );
 }
 
 function AntiPerkBeatbar({
@@ -555,7 +558,10 @@ export function RoundVideoOverlay({
     ? getVideoSrc(activeSegmentResource.videoUri) ?? null
     : null;
   const isRemoteVideoUri = useMemo(
-    () => Boolean(activeVideoUri && /^https?:\/\//i.test(activeVideoUri)),
+    () =>
+      Boolean(
+        activeVideoUri && (/^https?:\/\//i.test(activeVideoUri) || activeVideoUri.startsWith("app://external/"))
+      ),
     [activeVideoUri]
   );
 
@@ -2335,15 +2341,15 @@ export function RoundVideoOverlay({
       ? undefined
       : onClose
         ? () => {
-            void stopHandyIfNeeded();
-            onClose();
-            return true;
-          }
+          void stopHandyIfNeeded();
+          onClose();
+          return true;
+        }
         : onOpenOptions
           ? () => {
-              onOpenOptions();
-              return true;
-            }
+            onOpenOptions();
+            return true;
+          }
           : undefined,
     onUnhandledAction: (action) => {
       showUiTemporarily(UI_SHOW_AFTER_MOUSEMOVE_MS);
@@ -2657,11 +2663,10 @@ export function RoundVideoOverlay({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span>{status}</span>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                handyConnected
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
                   ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-              }`}
+                }`}
               disabled={!handyConnected}
               onClick={() => {
                 playSelectSound();
@@ -2687,11 +2692,10 @@ export function RoundVideoOverlay({
               {handyManuallyStopped ? "Resume Handy" : "Force Stop"}
             </button>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                canResyncHandy
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
                   ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-              }`}
+                }`}
               disabled={!canResyncHandy}
               onClick={() => {
                 playSelectSound();
@@ -2706,11 +2710,10 @@ export function RoundVideoOverlay({
             {canUseRoundControls && (
               <>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    (roundControl?.pauseCharges ?? 0) > 0
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.pauseCharges ?? 0) > 0
                       ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
                       : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                  }`}
+                    }`}
                   disabled={(roundControl?.pauseCharges ?? 0) <= 0 || isIntermediaryScreenActive}
                   onClick={() => {
                     playSelectSound();
@@ -2723,11 +2726,10 @@ export function RoundVideoOverlay({
                   Pause {roundControl?.pauseCharges ?? 0}
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    (roundControl?.skipCharges ?? 0) > 0
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.skipCharges ?? 0) > 0
                       ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
                       : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                  }`}
+                    }`}
                   disabled={(roundControl?.skipCharges ?? 0) <= 0}
                   onClick={() => {
                     playSelectSound();
@@ -2756,11 +2758,10 @@ export function RoundVideoOverlay({
               </button>
             )}
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                showProgressBarAlways
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
                   ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
-              }`}
+                }`}
               onClick={() => {
                 playSelectSound();
                 setShowProgressBarAlways((current) => !current);
@@ -2815,11 +2816,10 @@ export function RoundVideoOverlay({
                   Test Intermediary (I)
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    segment.kind === "intermediary"
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${segment.kind === "intermediary"
                       ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
                       : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
-                  }`}
+                    }`}
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {
                     playSelectSound();

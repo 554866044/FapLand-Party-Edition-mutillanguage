@@ -16,5 +16,8 @@
 				"updatedAt": "2026-03-29T18:01:11.572Z"
 			}
 		]
+	},
+	"security": {
+		"mode": "block"
 	}
 }

@@ -114,7 +114,7 @@ export default defineConfig(({ command, mode }) => {
       viteReact(),
       electron({
         main: {
-          entry: "electron/main.ts",
+          entry: ["electron/main.ts", "electron/phashWorker.ts"],
           vite: {
             define: defines,
             build: {

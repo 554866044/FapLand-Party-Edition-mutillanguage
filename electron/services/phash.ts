@@ -1,10 +1,9 @@
 import { resolvePhashBinaries } from "./phash/binaries";
-import { decodeBmpFrame } from "./phash/bmp";
-import { extractSpriteBmp } from "./phash/extract";
-import { generateSpritePhashHex } from "./phash/phash";
-import { probeVideoDurationMs } from "./phash/probe";
 import { normalizeVideoHashRange, toVideoHashRangeCacheKey } from "./phash/range";
 import type { NormalizedVideoHashRange } from "./phash/types";
+import { probeVideoDurationMs } from "./phash/probe";
+
+import { computePhashInWorker } from "./phashWorkerClient";
 
 export type { NormalizedVideoHashRange };
 export { resolvePhashBinaries, toVideoHashRangeCacheKey };
@@ -26,10 +25,12 @@ export async function generateVideoPhashForNormalizedRange(
 ): Promise<string> {
   const binaries = await resolvePhashBinaries();
 
-  const spriteBmp = await extractSpriteBmp(binaries.ffmpegPath, videoPath, range, options);
-
-  const sprite = decodeBmpFrame(spriteBmp);
-  return generateSpritePhashHex(sprite);
+  return computePhashInWorker(
+    binaries.ffmpegPath,
+    videoPath,
+    range,
+    options
+  );
 }
 
 export async function generateVideoPhash(
@@ -38,7 +39,6 @@ export async function generateVideoPhash(
   endTime?: number,
   options?: { lowPriority?: boolean }
 ): Promise<string> {
-  console.log("generateVideoPhash", path, startTime, endTime);
   const normalizedRange = await getNormalizedVideoHashRange(path, startTime, endTime);
   return generateVideoPhashForNormalizedRange(path, normalizedRange, options);
 }

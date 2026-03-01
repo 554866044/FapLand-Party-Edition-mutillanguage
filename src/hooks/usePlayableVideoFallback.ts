@@ -15,19 +15,38 @@ const defaultPlayableResolver: PlayableResolver = async (videoUri) => {
 };
 
 function isRawWebsiteVideoPageUri(videoUri: string): boolean {
-  return (videoUri.startsWith("http://") || videoUri.startsWith("https://")) && !isLikelyVideoUrl(videoUri);
+  if (videoUri.startsWith("http://") || videoUri.startsWith("https://")) {
+    if (isLikelyVideoUrl(videoUri)) {
+      if (videoUri.includes("/scene/") && videoUri.includes("/stream")) {
+        return true;
+      }
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 function isWebsiteVideoUri(videoUri: string): boolean {
-  return isRawWebsiteVideoPageUri(videoUri) || videoUri.startsWith("app://external/web-url?");
+  return (
+    isRawWebsiteVideoPageUri(videoUri) ||
+    videoUri.startsWith("app://external/web-url?") ||
+    videoUri.startsWith("app://external/stash?")
+  );
 }
 
 function toWebsiteVideoProxyUri(videoUri: string): string {
+  if (videoUri.includes("/scene/") && videoUri.includes("/stream")) {
+    return `app://external/stash?target=${encodeURIComponent(videoUri)}`;
+  }
   return `app://external/web-url?target=${encodeURIComponent(videoUri)}`;
 }
 
 function getDefaultVideoSrc(originalUri: string): string | undefined {
   if (isRawWebsiteVideoPageUri(originalUri)) {
+    if (originalUri.includes("/scene/") && originalUri.includes("/stream")) {
+      return originalUri;
+    }
     return toWebsiteVideoProxyUri(originalUri);
   }
   return originalUri;
@@ -39,7 +58,7 @@ export function isLocalVideoUriForFallback(videoUri: string): boolean {
   return (
     videoUri.startsWith("app://media/")
     || videoUri.startsWith("file://")
-    || videoUri.startsWith("app://external/web-url?")
+    || videoUri.startsWith("app://external/")
   );
 }
 

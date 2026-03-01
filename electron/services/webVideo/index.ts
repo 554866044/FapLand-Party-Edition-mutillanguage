@@ -296,6 +296,10 @@ export function isWebsiteVideoProxyUri(uri: string): boolean {
   return uri.startsWith(WEBSITE_VIDEO_PROXY_PREFIX);
 }
 
+export function isStashProxyUri(uri: string): boolean {
+  return uri.startsWith("app://external/stash?");
+}
+
 export function buildWebsiteVideoProxyUri(targetUrl: string): string {
   const normalizedUrl = normalizeHttpUrl(targetUrl);
   const params = new URLSearchParams({ target: normalizedUrl });
@@ -307,6 +311,19 @@ export function parseWebsiteVideoProxyUri(uri: string): { targetUrl: string } | 
     const parsed = new URL(uri);
     if (parsed.protocol !== "app:" || parsed.hostname !== "external") return null;
     if (parsed.pathname.replace(/^\/+/, "") !== "web-url") return null;
+    const targetUrl = normalizeNullableString(parsed.searchParams.get("target"));
+    if (!targetUrl) return null;
+    return { targetUrl: normalizeHttpUrl(targetUrl) };
+  } catch {
+    return null;
+  }
+}
+
+export function parseStashProxyUri(uri: string): { targetUrl: string } | null {
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== "app:" || parsed.hostname !== "external") return null;
+    if (parsed.pathname.replace(/^\/+/, "") !== "stash") return null;
     const targetUrl = normalizeNullableString(parsed.searchParams.get("target"));
     if (!targetUrl) return null;
     return { targetUrl: normalizeHttpUrl(targetUrl) };
@@ -331,12 +348,15 @@ export function isWebsiteVideoCandidateUri(uri: string): boolean {
 }
 
 export function isWebsiteVideoResolvableUri(uri: string): boolean {
-  return isWebsiteVideoProxyUri(uri) || isWebsiteVideoCandidateUri(uri);
+  return isWebsiteVideoProxyUri(uri) || isStashProxyUri(uri) || isWebsiteVideoCandidateUri(uri);
 }
 
 export function getWebsiteVideoTargetUrl(uri: string): string | null {
   if (isWebsiteVideoProxyUri(uri)) {
     return parseWebsiteVideoProxyUri(uri)?.targetUrl ?? null;
+  }
+  if (isStashProxyUri(uri)) {
+    return parseStashProxyUri(uri)?.targetUrl ?? null;
   }
   if (isWebsiteVideoCandidateUri(uri)) {
     return normalizeHttpUrl(uri);
@@ -626,13 +646,13 @@ async function inspectWebsiteVideo(url: string): Promise<WebsiteVideoStreamResol
       ...baseMetadata,
       headers:
         browserPlayableCandidate?.url === directUrl &&
-        Object.keys(browserPlayableCandidate.headers).length > 0
+          Object.keys(browserPlayableCandidate.headers).length > 0
           ? browserPlayableCandidate.headers
           : baseMetadata.headers,
       contentType: browserPlayableCandidate?.contentType ?? directUrlContentType,
       playbackStrategy,
     };
-  } catch {}
+  } catch { }
 
   const htmlFallback = await resolveWebsiteVideoFromHtml(url).catch(() => null);
   if (htmlFallback) {
@@ -657,7 +677,7 @@ async function downloadWebsiteVideo(
 
   await resetIncompleteCache(paths);
   await writeInProgressMarker(paths);
-  console.info(`[webVideo] Cache started: ${paths.normalizedUrl}`);
+
 
   downloadProgressByUrl.set(paths.normalizedUrl, {
     url: paths.normalizedUrl,
@@ -674,34 +694,20 @@ async function downloadWebsiteVideo(
   const outputTemplate = path.join(paths.cacheDir, `${DOWNLOADED_VIDEO_BASENAME}.%(ext)s`);
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        binary.ytDlpPath,
-        [
-          "--no-playlist",
-          "--no-warnings",
-          "--newline",
-          "--output",
-          outputTemplate,
-          paths.normalizedUrl,
-        ],
-        { stdio: ["ignore", "pipe", "pipe"], windowsHide: true }
-      );
-
-      let stderr = "";
-      let settled = false;
-
-      const settle = (fn: () => void) => {
-        if (settled) return;
-        settled = true;
-        fn();
-      };
-
-      child.stdout.on("data", (chunk: Buffer) => {
-        const text = chunk.toString("utf8");
-        for (const line of text.split(/\r?\n/)) {
+    await runCommand(
+      binary.ytDlpPath,
+      [
+        "--no-playlist",
+        "--no-warnings",
+        "--newline",
+        "--output",
+        outputTemplate,
+        paths.normalizedUrl,
+      ],
+      {
+        onLine: (line) => {
           const parsed = parseYtDlpProgressLine(line, paths.normalizedUrl);
-          if (!parsed) continue;
+          if (!parsed) return;
           const existing = downloadProgressByUrl.get(paths.normalizedUrl);
           if (existing) {
             downloadProgressByUrl.set(paths.normalizedUrl, {
@@ -709,27 +715,9 @@ async function downloadWebsiteVideo(
               ...parsed,
             } as VideoDownloadProgress);
           }
-        }
-      });
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      child.on("error", (error) => {
-        settle(() => reject(error));
-      });
-
-      child.on("close", (code) => {
-        settle(() => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
-          }
-        });
-      });
-    });
+        },
+      }
+    );
   } catch (error) {
     downloadProgressByUrl.delete(paths.normalizedUrl);
     await resetIncompleteCache(paths);
@@ -763,7 +751,7 @@ async function downloadWebsiteVideo(
 
   await writeMetadata(paths, metadata);
   await removeInProgressMarker(paths);
-  console.info(`[webVideo] Cache finished: ${paths.normalizedUrl}`);
+
   return metadata;
 }
 
@@ -822,6 +810,10 @@ export async function getCachedWebsiteVideoLocalPath(urlOrUri: string): Promise<
 }
 
 export async function getWebsiteVideoCacheState(urlOrUri: string): Promise<WebsiteVideoCacheState> {
+  if (isStashProxyUri(urlOrUri) || (urlOrUri.includes("/scene/") && urlOrUri.includes("/stream"))) {
+    return "cached";
+  }
+
   const targetUrl = getWebsiteVideoTargetUrl(urlOrUri);
   if (!targetUrl) {
     return "not_applicable";
@@ -832,6 +824,19 @@ export async function getWebsiteVideoCacheState(urlOrUri: string): Promise<Websi
 export async function ensureWebsiteVideoCached(
   urlOrUri: string
 ): Promise<WebsiteVideoCacheMetadata> {
+  if (isStashProxyUri(urlOrUri) || (urlOrUri.includes("/scene/") && urlOrUri.includes("/stream"))) {
+    return {
+      url: urlOrUri,
+      normalizedUrl: urlOrUri,
+      title: "Stash Stream",
+      description: null,
+      duration: null,
+      thumbnail: null,
+      cachedAt: new Date().toISOString(),
+      format: "stash-stream",
+    } as any;
+  }
+
   const targetUrl = getWebsiteVideoTargetUrl(urlOrUri);
   if (!targetUrl) {
     throw new Error("Website video URL is invalid or not eligible for yt-dlp resolution.");

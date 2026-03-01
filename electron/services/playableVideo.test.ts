@@ -38,17 +38,32 @@ vi.mock("./phash/extract", () => ({
 vi.mock("./webVideo", () => ({
   buildWebsiteVideoProxyUri: vi.fn((videoUri: string) => `app://external/web-url?target=${encodeURIComponent(videoUri)}`),
   getCachedWebsiteVideoLocalPath: vi.fn(async () => null),
-  isWebsiteVideoResolvableUri: vi.fn(() => false),
+  isWebsiteVideoResolvableUri: vi.fn((uri: string) => uri.startsWith("app://external/")),
+  isStashProxyUri: vi.fn((uri: string) => uri.startsWith("app://external/stash?")),
+  parseStashProxyUri: vi.fn((uri: string) => {
+    try {
+      const url = new URL(uri);
+      return { targetUrl: url.searchParams.get("target") };
+    } catch {
+      return null;
+    }
+  }),
   warmWebsiteVideoCache: vi.fn(() => null),
+}));
+
+vi.mock("./integrations", () => ({
+  resolveMediaUri: vi.fn((uri: string) => uri),
 }));
 
 import fs from "node:fs/promises";
 import { runCommand } from "./phash/extract";
 import {
   getCachedWebsiteVideoLocalPath,
+  isStashProxyUri,
   isWebsiteVideoResolvableUri,
   warmWebsiteVideoCache,
 } from "./webVideo";
+import { resolveMediaUri } from "./integrations";
 import {
   __resetPlayableVideoCachesForTests,
   buildTranscodeCacheKey,
@@ -62,7 +77,17 @@ describe("playableVideo", () => {
     vi.clearAllMocks();
     vi.mocked(getCachedWebsiteVideoLocalPath).mockResolvedValue(null);
     vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(false);
+    vi.mocked(isStashProxyUri).mockImplementation((uri: string) => uri.startsWith("app://external/stash?"));
     vi.mocked(warmWebsiteVideoCache).mockReturnValue(null);
+    vi.mocked(resolveMediaUri).mockImplementation((uri: string) => uri);
+
+    // Default stat mock: return a successful file stat by default
+    vi.mocked(fs.stat).mockResolvedValue({
+      isFile: () => true,
+      size: 1000,
+      mtimeMs: 2000,
+    } as any);
+
     __resetPlayableVideoCachesForTests();
   });
 
@@ -98,6 +123,7 @@ describe("playableVideo", () => {
       transcoded: false,
       cacheHit: false,
     });
+    // In this test, it calls getCachedWebsiteVideoLocalPath, which returns null, so it warms cache.
     expect(getCachedWebsiteVideoLocalPath).toHaveBeenCalledWith(uri);
     expect(warmWebsiteVideoCache).toHaveBeenCalledWith(uri);
   });
@@ -127,11 +153,7 @@ describe("playableVideo", () => {
   it("returns the cached local website video when one already exists", async () => {
     vi.mocked(isWebsiteVideoResolvableUri).mockImplementation((uri) => uri.startsWith("app://external/web-url?"));
     vi.mocked(getCachedWebsiteVideoLocalPath).mockResolvedValue("/tmp/cached-website.mp4");
-    vi.mocked(fs.stat).mockResolvedValue({
-      isFile: () => true,
-      size: 1000,
-      mtimeMs: 2000,
-    } as any);
+
     vi.mocked(runCommand).mockImplementation(async (_command, args) => {
       if (args.includes("-show_entries")) {
         return {
@@ -152,12 +174,14 @@ describe("playableVideo", () => {
   });
 
   it("resolves local uris and transcodes on cache miss", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({
-      isFile: () => true,
-      size: 1000,
-      mtimeMs: 2000,
-    } as any);
     let outputExists = false;
+    vi.mocked(fs.stat).mockImplementation(async (targetPath?: any) => {
+      // Simulate cache miss for output path
+      if (typeof targetPath === "string" && targetPath.includes("video-playback-cache") && !outputExists) {
+        throw new Error("File not found");
+      }
+      return { isFile: () => true, size: 1000, mtimeMs: 2000 } as any;
+    });
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(runCommand).mockImplementation(async (_command, args) => {
@@ -182,11 +206,6 @@ describe("playableVideo", () => {
   });
 
   it("reuses cached output when it exists", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({
-      isFile: () => true,
-      size: 1000,
-      mtimeMs: 2000,
-    } as any);
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.access).mockResolvedValue(undefined);
 
@@ -208,14 +227,14 @@ describe("playableVideo", () => {
 
   it("drops empty cached transcodes and rebuilds them", async () => {
     vi.mocked(fs.stat).mockImplementation(async (targetPath?: any) => {
-      if (String(targetPath).endsWith(".hevc")) {
+      if (typeof targetPath === "string" && targetPath.endsWith(".hevc")) {
         return {
           isFile: () => true,
           size: 1000,
           mtimeMs: 2000,
         } as any;
       }
-
+      // Simulate existing empty output file
       return {
         isFile: () => true,
         size: 0,
@@ -248,16 +267,17 @@ describe("playableVideo", () => {
   });
 
   it("deduplicates concurrent transcode requests for same source", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({
-      isFile: () => true,
-      size: 1000,
-      mtimeMs: 2000,
-    } as any);
+    let outputExists = false;
+    vi.mocked(fs.stat).mockImplementation(async (targetPath?: any) => {
+      if (typeof targetPath === "string" && targetPath.includes("video-playback-cache") && !outputExists) {
+        throw new Error("File not found");
+      }
+      return { isFile: () => true, size: 1000, mtimeMs: 2000 } as any;
+    });
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.rm).mockResolvedValue(undefined);
 
-    let outputExists = false;
-    let resolveRun: (() => void) | null = null;
+    let resolveRun: (() => void) | undefined;
     const runPromise = new Promise<void>((resolve) => {
       resolveRun = resolve;
     });
@@ -297,18 +317,24 @@ describe("playableVideo", () => {
   });
 
   it("retranscodes when source fingerprint changes", async () => {
-    const stats = [
+    const statsArray = [
       { isFile: () => true, size: 1000, mtimeMs: 2000 },
       { isFile: () => true, size: 1000, mtimeMs: 3000 },
     ];
-    vi.mocked(fs.stat).mockImplementation(async () => stats.shift() as any);
+    let outputExists = false;
+    vi.mocked(fs.stat).mockImplementation(async (targetPath?: any) => {
+      if (typeof targetPath === "string" && targetPath.includes("video.hevc")) {
+        return statsArray.shift() as any;
+      }
+      if (typeof targetPath === "string" && targetPath.includes("video-playback-cache") && !outputExists) {
+        throw new Error("File not found");
+      }
+      return { isFile: () => true, size: 1000, mtimeMs: 2000 } as any;
+    });
+
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.rm).mockResolvedValue(undefined);
 
-    let outputExists = false;
-    vi.mocked(fs.access).mockImplementation(async () => {
-      if (!outputExists) throw new Error("missing");
-    });
     vi.mocked(runCommand).mockImplementation(async (_command, args) => {
       if (args.includes("-show_entries")) {
         return {
@@ -319,6 +345,9 @@ describe("playableVideo", () => {
       outputExists = true;
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
     });
+    vi.mocked(fs.access).mockImplementation(async () => {
+      if (!outputExists) throw new Error("missing");
+    });
 
     await resolvePlayableVideoUri("app://media/%2Ftmp%2Fvideo.hevc");
     outputExists = false;
@@ -328,11 +357,6 @@ describe("playableVideo", () => {
   });
 
   it("keeps codec-compatible local videos unchanged", async () => {
-    vi.mocked(fs.stat).mockResolvedValue({
-      isFile: () => true,
-      size: 1000,
-      mtimeMs: 2000,
-    } as any);
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(runCommand).mockImplementation(async (_command, args) => {
       if (args.includes("-show_entries")) {
@@ -380,5 +404,54 @@ describe("playableVideo", () => {
     expect(isLocalPlayableVideoUri("app://media/%2Ftmp%2Fvideo.mp4")).toBe(true);
     expect(isLocalPlayableVideoUri("https://example.com/video.mp4")).toBe(false);
     expect(toLocalVideoPath("app://media/%2Ftmp%2Fvideo.mp4")).toBe("/tmp/video.mp4");
+  });
+
+  it("resolves raw stash urls using the stash proxy", async () => {
+    const rawStashUrl = "http://localhost:9999/scene/123/stream";
+    const proxiedStashUri = "app://external/stash?sourceId=source-123&purpose=video&target=http%3A%2F%2Flocalhost%3A9999%2Fscene%2F123%2Fstream";
+
+    vi.mocked(resolveMediaUri).mockReturnValue(proxiedStashUri);
+
+    const result = await resolvePlayableVideoUri(rawStashUrl);
+    expect(result).toEqual({
+      videoUri: proxiedStashUri,
+      transcoded: false,
+      cacheHit: true,
+    });
+    expect(resolveMediaUri).toHaveBeenCalledWith(rawStashUrl, "video");
+  });
+
+  it("returns already-proxied stash uris with cacheHit: true", async () => {
+    const proxiedStashUri = "app://external/stash?sourceId=source-123&purpose=video&target=http%3A%2F%2Flocalhost%3A9999%2Fscene%2F123%2Fstream";
+    vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(true);
+    vi.mocked(isStashProxyUri).mockReturnValue(true);
+
+    const result = await resolvePlayableVideoUri(proxiedStashUri);
+    expect(result).toEqual({
+      videoUri: proxiedStashUri,
+      transcoded: false,
+      cacheHit: true,
+    });
+  });
+
+  it("repairs a Stash proxy URI missing sourceId", async () => {
+    const { isWebsiteVideoResolvableUri, isStashProxyUri, parseStashProxyUri } = await import("./webVideo");
+    vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(true);
+    vi.mocked(isStashProxyUri).mockReturnValue(true);
+    vi.mocked(parseStashProxyUri).mockReturnValue({ targetUrl: "http://localhost:9999/scene/123/stream" });
+
+    const partialUri = "app://external/stash?target=http%3A%2F%2Flocalhost%3A9999%2Fscene%2F123%2Fstream";
+    const fullUri = "app://external/stash?sourceId=source-123&purpose=video&target=http%3A%2F%2Flocalhost%3A9999%2Fscene%2F123%2Fstream";
+
+    vi.mocked(resolveMediaUri).mockReturnValue(fullUri);
+
+    const result = await resolvePlayableVideoUri(partialUri);
+
+    expect(result).toEqual({
+      videoUri: fullUri,
+      transcoded: false,
+      cacheHit: true,
+    });
+    expect(resolveMediaUri).toHaveBeenCalledWith("http://localhost:9999/scene/123/stream", "video");
   });
 });

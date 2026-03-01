@@ -1,12 +1,21 @@
-// @vitest-environment node
-
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { generateVideoPhash } from "../phash";
 import { resolvePhashBinaries } from "./binaries";
 import { runCommand } from "./extract";
+import { extractSpriteBmp } from "./extract";
+import { decodeBmpFrame } from "./bmp";
+import { generateSpritePhashHex } from "./phash";
+
+vi.mock("../phashWorkerClient", () => ({
+    computePhashInWorker: async (ffmpegPath: string, videoPath: string, range: any, options?: any) => {
+        const spriteBmp = await extractSpriteBmp(ffmpegPath, videoPath, range, options);
+        const sprite = decodeBmpFrame(spriteBmp);
+        return generateSpritePhashHex(sprite);
+    }
+}));
 
 async function createFixtureVideo(ffmpegPath: string, outputPath: string): Promise<void> {
     await runCommand(ffmpegPath, [
