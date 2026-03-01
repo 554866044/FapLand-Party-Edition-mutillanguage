@@ -20,6 +20,7 @@ import { StatusBar } from "../features/converter/StatusBar";
 import { HotkeyOverlay } from "../features/converter/HotkeyOverlay";
 import { ConverterSourcePicker } from "../features/converter/ConverterSourcePicker";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { EroScriptsFunscriptSearchDialog } from "../components/EroScriptsFunscriptSearchDialog";
 
 type SourceSection = "round" | "hero" | "file" | "url";
 
@@ -64,6 +65,7 @@ function ConverterPage() {
     ];
   const state = useConverterState({ sourceRoundId, heroName });
   const [activeSectionId, setActiveSectionId] = useState<SourceSection>("round");
+  const [eroscriptsOpen, setEroScriptsOpen] = useState(false);
 
   const goBack = () => {
     if (window.history.length > 1) {
@@ -167,6 +169,7 @@ function ConverterPage() {
                   onSelectWebsiteSource={(videoUri, funscriptUri) =>
                     void state.selectWebsiteAndEdit(videoUri, funscriptUri)
                   }
+                  onSearchEroScripts={() => setEroScriptsOpen(true)}
                 />
               </div>
 
@@ -194,6 +197,15 @@ function ConverterPage() {
             />
           )}
         </AnimatePresence>
+        <EroScriptsFunscriptSearchDialog
+          open={eroscriptsOpen}
+          initialQuery={heroName || ""}
+          onClose={() => setEroScriptsOpen(false)}
+          onInstallRound={async (input) => {
+            await state.selectWebsiteAndEdit(input.videoUri, input.funscriptUri);
+            setEroScriptsOpen(false);
+          }}
+        />
       </div>
     );
   }

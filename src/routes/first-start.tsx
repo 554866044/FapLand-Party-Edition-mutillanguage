@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
+import { EROSCRIPTS_CACHE_ROOT_PATH_KEY } from "../constants/eroscriptsSettings";
 import { FPACK_EXTRACTION_PATH_KEY } from "../constants/fpackSettings";
 import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
 import {
@@ -20,8 +21,16 @@ import { importOpenedFile } from "../services/openedFiles";
 import { trpc } from "../services/trpc";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { abbreviateNsfwText } from "../utils/sfwText";
+import { formatStoragePathDisplay, isStoragePathResettable } from "../utils/storagePath";
 import { i18n } from "../i18n";
 import { useLocale } from "../i18n/useLocale";
+
+const PORTABLE_DEFAULTS: ReadonlyMap<string, string> = new Map([
+  [WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY, "web-video-cache"],
+  [MUSIC_CACHE_ROOT_PATH_KEY, "music-cache"],
+  [EROSCRIPTS_CACHE_ROOT_PATH_KEY, "eroscripts-cache"],
+  [FPACK_EXTRACTION_PATH_KEY, "fpacks"],
+]);
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
@@ -36,14 +45,14 @@ type StepDefinition = {
   id: string;
   icon: string;
   interactive?:
-  | "language"
-  | "music"
-  | "moaning"
-  | "round-packs"
-  | "storage"
-  | "booru"
-  | "handy"
-  | "phash";
+    | "language"
+    | "music"
+    | "moaning"
+    | "round-packs"
+    | "storage"
+    | "booru"
+    | "handy"
+    | "phash";
 };
 
 function getSteps(): StepDefinition[] {
@@ -448,6 +457,11 @@ function getStepDetails(id: string): string[] {
         i18n._({
           id: "first-start.step.storage.detail.4",
           message:
+            "EroScripts extraction location stores videos and funscripts extracted from .fpack files for the EroScripts service.",
+        }),
+        i18n._({
+          id: "first-start.step.storage.detail.5",
+          message:
             "You can skip this and change any of these later in Settings under Data & Storage.",
         }),
       ];
@@ -560,11 +574,12 @@ function FirstStartPage() {
   const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
   const [musicCacheRootPath, setMusicCacheRootPath] = useState<string | null>(null);
   const [fpackExtractionPath, setFpackExtractionPath] = useState<string | null>(null);
+  const [eroscriptsCacheRootPath, setEroscriptsCacheRootPath] = useState<string | null>(null);
   const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
     useState(true);
   const [isLoadingStorageSettings, setIsLoadingStorageSettings] = useState(true);
   const [updatingStorageTarget, setUpdatingStorageTarget] = useState<
-    "music-cache" | "website-video-cache" | "fpack-extraction" | null
+    "music-cache" | "website-video-cache" | "fpack-extraction" | "eroscripts-cache" | null
   >(null);
   const [isSkipping, setIsSkipping] = useState(false);
   const [contentKey, setContentKey] = useState(0);
@@ -620,26 +635,40 @@ function FirstStartPage() {
       trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
       trpc.store.get.query({ key: MUSIC_CACHE_ROOT_PATH_KEY }),
       trpc.store.get.query({ key: FPACK_EXTRACTION_PATH_KEY }),
+      trpc.store.get.query({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY }),
     ])
-      .then(([rawWebsiteVideoCacheRootPath, rawMusicCacheRootPath, rawFpackExtractionPath]) => {
-        if (cancelled) return;
-        setWebsiteVideoCacheRootPath(
-          typeof rawWebsiteVideoCacheRootPath === "string" &&
-            rawWebsiteVideoCacheRootPath.trim().length > 0
-            ? rawWebsiteVideoCacheRootPath.trim()
-            : null
-        );
-        setMusicCacheRootPath(
-          typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
-            ? rawMusicCacheRootPath.trim()
-            : null
-        );
-        setFpackExtractionPath(
-          typeof rawFpackExtractionPath === "string" && rawFpackExtractionPath.trim().length > 0
-            ? rawFpackExtractionPath.trim()
-            : null
-        );
-      })
+      .then(
+        ([
+          rawWebsiteVideoCacheRootPath,
+          rawMusicCacheRootPath,
+          rawFpackExtractionPath,
+          rawEroscriptsCacheRootPath,
+        ]) => {
+          if (cancelled) return;
+          setWebsiteVideoCacheRootPath(
+            typeof rawWebsiteVideoCacheRootPath === "string" &&
+              rawWebsiteVideoCacheRootPath.trim().length > 0
+              ? rawWebsiteVideoCacheRootPath.trim()
+              : null
+          );
+          setMusicCacheRootPath(
+            typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
+              ? rawMusicCacheRootPath.trim()
+              : null
+          );
+          setFpackExtractionPath(
+            typeof rawFpackExtractionPath === "string" && rawFpackExtractionPath.trim().length > 0
+              ? rawFpackExtractionPath.trim()
+              : null
+          );
+          setEroscriptsCacheRootPath(
+            typeof rawEroscriptsCacheRootPath === "string" &&
+              rawEroscriptsCacheRootPath.trim().length > 0
+              ? rawEroscriptsCacheRootPath.trim()
+              : null
+          );
+        }
+      )
       .catch((error) => {
         console.error("Failed to load onboarding storage settings", error);
       })
@@ -920,7 +949,7 @@ function FirstStartPage() {
   };
 
   const updateStoragePath = async (
-    target: "music-cache" | "website-video-cache" | "fpack-extraction"
+    target: "music-cache" | "website-video-cache" | "fpack-extraction" | "eroscripts-cache"
   ) => {
     if (isBusy || updatingStorageTarget) return;
     setUpdatingStorageTarget(target);
@@ -943,11 +972,20 @@ function FirstStartPage() {
         return;
       }
 
-      const selected = await window.electronAPI.dialog.selectFpackExtractionDirectory();
+      if (target === "fpack-extraction") {
+        const selected = await window.electronAPI.dialog.selectFpackExtractionDirectory();
+        if (!selected) return;
+        const value = selected.trim();
+        await trpc.store.set.mutate({ key: FPACK_EXTRACTION_PATH_KEY, value });
+        setFpackExtractionPath(value);
+        return;
+      }
+
+      const selected = await window.electronAPI.dialog.selectEroScriptsCacheDirectory();
       if (!selected) return;
       const value = selected.trim();
-      await trpc.store.set.mutate({ key: FPACK_EXTRACTION_PATH_KEY, value });
-      setFpackExtractionPath(value);
+      await trpc.store.set.mutate({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY, value });
+      setEroscriptsCacheRootPath(value);
     } catch (error) {
       console.error("Failed to update onboarding storage path", error);
     } finally {
@@ -956,7 +994,7 @@ function FirstStartPage() {
   };
 
   const resetStoragePath = async (
-    target: "music-cache" | "website-video-cache" | "fpack-extraction"
+    target: "music-cache" | "website-video-cache" | "fpack-extraction" | "eroscripts-cache"
   ) => {
     if (isBusy || updatingStorageTarget) return;
     setUpdatingStorageTarget(target);
@@ -971,8 +1009,13 @@ function FirstStartPage() {
         setWebsiteVideoCacheRootPath(null);
         return;
       }
-      await trpc.store.set.mutate({ key: FPACK_EXTRACTION_PATH_KEY, value: null });
-      setFpackExtractionPath(null);
+      if (target === "fpack-extraction") {
+        await trpc.store.set.mutate({ key: FPACK_EXTRACTION_PATH_KEY, value: null });
+        setFpackExtractionPath(null);
+        return;
+      }
+      await trpc.store.set.mutate({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY, value: null });
+      setEroscriptsCacheRootPath(null);
     } catch (error) {
       console.error("Failed to reset onboarding storage path", error);
     } finally {
@@ -1025,10 +1068,11 @@ function FirstStartPage() {
                 playSelectSound();
                 void skip();
               }}
-              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${isSkipping
-                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
-                }`}
+              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${
+                isSkipping
+                  ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                  : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
+              }`}
               style={{ animationDelay: "0.4s" }}
             >
               <span className="absolute inset-0 rounded-xl opacity-0 transition-opacity group-hover:opacity-100 bg-gradient-to-r from-violet-500/5 to-indigo-500/5" />
@@ -1096,21 +1140,23 @@ function FirstStartPage() {
                           playSelectSound();
                           setStepIndex(index);
                         }}
-                        className={`relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${active
-                          ? "bg-violet-500/15 text-white"
-                          : complete
-                            ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                            : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
-                          }`}
+                        className={`relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${
+                          active
+                            ? "bg-violet-500/15 text-white"
+                            : complete
+                              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                              : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
+                        }`}
                       >
                         {/* Step Indicator */}
                         <span
-                          className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition-all ${active
-                            ? "bg-violet-500/30 ring-2 ring-violet-400/50 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
-                            : complete
-                              ? "bg-emerald-500/20 ring-1 ring-emerald-400/30"
-                              : "bg-zinc-800 ring-1 ring-zinc-700"
-                            }`}
+                          className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition-all ${
+                            active
+                              ? "bg-violet-500/30 ring-2 ring-violet-400/50 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
+                              : complete
+                                ? "bg-emerald-500/20 ring-1 ring-emerald-400/30"
+                                : "bg-zinc-800 ring-1 ring-zinc-700"
+                          }`}
                         >
                           {complete ? (
                             <span className="text-emerald-400">✓</span>
@@ -1121,12 +1167,13 @@ function FirstStartPage() {
 
                         {/* Step Label */}
                         <span
-                          className={`text-xs font-medium transition-all ${active
-                            ? "text-violet-100"
-                            : complete
-                              ? "text-zinc-300"
-                              : "text-zinc-500"
-                            }`}
+                          className={`text-xs font-medium transition-all ${
+                            active
+                              ? "text-violet-100"
+                              : complete
+                                ? "text-zinc-300"
+                                : "text-zinc-500"
+                          }`}
                         >
                           {getStepShortLabel(step.id)}
                         </span>
@@ -1213,10 +1260,11 @@ function FirstStartPage() {
                               playSelectSound();
                               void setLocale(entry.code);
                             }}
-                            className={`rounded-xl border px-4 py-3 text-left transition-all ${selected
-                              ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.18)]"
-                              : "border-white/10 bg-black/20 text-zinc-200 hover:border-emerald-400/40 hover:bg-emerald-500/10"
-                              }`}
+                            className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                              selected
+                                ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.18)]"
+                                : "border-white/10 bg-black/20 text-zinc-200 hover:border-emerald-400/40 hover:bg-emerald-500/10"
+                            }`}
                           >
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold">{entry.label}</span>
@@ -1268,10 +1316,11 @@ function FirstStartPage() {
                           playSelectSound();
                           void addMusicTracks();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                        }`}
                       >
                         {isBusy ? (
                           <>
@@ -1298,10 +1347,11 @@ function FirstStartPage() {
                           setShowUrlInput((current) => !current);
                           setUrlError(null);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showUrlInput
-                          ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                          : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          showUrlInput
+                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                            : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                        }`}
                       >
                         <span>⊕</span>
                         <span>
@@ -1333,20 +1383,22 @@ function FirstStartPage() {
                               }
                             }}
                             disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
-                              ? "border-rose-400/40 focus:border-rose-400/60"
-                              : "border-white/10 focus:border-violet-400/60"
-                              }`}
+                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
+                              urlError
+                                ? "border-rose-400/40 focus:border-rose-400/60"
+                                : "border-white/10 focus:border-violet-400/60"
+                            }`}
                           />
                           <button
                             type="button"
                             onMouseEnter={playHoverSound}
                             onClick={() => void addMusicFromUrl()}
                             disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
-                              ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                              : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                              }`}
+                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                              isBusy
+                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                            }`}
                           >
                             {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
                           </button>
@@ -1357,10 +1409,11 @@ function FirstStartPage() {
 
                     {musicMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${musicMessageWasAdded
-                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                          }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                          musicMessageWasAdded
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                        }`}
                       >
                         <span>{musicMessageWasAdded ? "✓" : "ℹ"}</span>
                         <span>{musicMessage}</span>
@@ -1424,10 +1477,11 @@ function FirstStartPage() {
                           playSelectSound();
                           void addMoaningFiles();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
+                        }`}
                       >
                         {isBusy ? (
                           <>
@@ -1453,10 +1507,11 @@ function FirstStartPage() {
                           playSelectSound();
                           void previewMoaningTrack(moaningQueue[0]!.id);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy || moaningQueue.length === 0
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy || moaningQueue.length === 0
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
+                        }`}
                       >
                         <span>▶</span>
                         <span>
@@ -1486,10 +1541,11 @@ function FirstStartPage() {
                           setShowMoaningUrlInput((current) => !current);
                           setMoaningUrlError(null);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showMoaningUrlInput
-                          ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                          : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          showMoaningUrlInput
+                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                            : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
+                        }`}
                       >
                         <span>⊕</span>
                         <span>
@@ -1514,10 +1570,11 @@ function FirstStartPage() {
                               playSelectSound();
                               setMoaningUrlMode("track");
                             }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "track"
-                              ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                              : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                              }`}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                              moaningUrlMode === "track"
+                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                            }`}
                           >
                             <Trans>Single Track</Trans>
                           </button>
@@ -1528,10 +1585,11 @@ function FirstStartPage() {
                               playSelectSound();
                               setMoaningUrlMode("playlist");
                             }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "playlist"
-                              ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                              : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                              }`}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                              moaningUrlMode === "playlist"
+                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                            }`}
                           >
                             <Trans>Playlist</Trans>
                           </button>
@@ -1555,20 +1613,22 @@ function FirstStartPage() {
                               }
                             }}
                             disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${moaningUrlError
-                              ? "border-rose-400/40 focus:border-rose-400/60"
-                              : "border-white/10 focus:border-rose-400/60"
-                              }`}
+                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
+                              moaningUrlError
+                                ? "border-rose-400/40 focus:border-rose-400/60"
+                                : "border-white/10 focus:border-rose-400/60"
+                            }`}
                           />
                           <button
                             type="button"
                             onMouseEnter={playHoverSound}
                             onClick={() => void addMoaningFromUrl()}
                             disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
-                              ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                              : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                              }`}
+                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                              isBusy
+                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                            }`}
                           >
                             {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
                           </button>
@@ -1581,10 +1641,11 @@ function FirstStartPage() {
 
                     {moaningMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${moaningMessageWasAdded
-                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                          }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                          moaningMessageWasAdded
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                        }`}
                       >
                         <span>{moaningMessageWasAdded ? "✓" : "ℹ"}</span>
                         <span>{moaningMessage}</span>
@@ -1617,10 +1678,11 @@ function FirstStartPage() {
                           playSelectSound();
                           void addRoundFolder();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                        }`}
                       >
                         {isBusy ? (
                           <>
@@ -1646,10 +1708,11 @@ function FirstStartPage() {
                           playSelectSound();
                           void importHeroOrRound();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                          }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                        }`}
                       >
                         {isBusy ? (
                           <>
@@ -1670,10 +1733,11 @@ function FirstStartPage() {
                     </div>
                     {roundMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${roundMessageWasImported
-                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                          }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                          roundMessageWasImported
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                        }`}
                       >
                         <span>{roundMessageWasImported ? "✓" : "ℹ"}</span>
                         <span>{roundMessage}</span>
@@ -1697,6 +1761,7 @@ function FirstStartPage() {
                       {[
                         {
                           id: "music-cache" as const,
+                          storeKey: MUSIC_CACHE_ROOT_PATH_KEY,
                           title: t`Music Cache`,
                           description: t`Downloaded menu music and imported YouTube audio.`,
                           value: musicCacheRootPath,
@@ -1704,6 +1769,7 @@ function FirstStartPage() {
                         },
                         {
                           id: "website-video-cache" as const,
+                          storeKey: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
                           title: t`Website Video Cache`,
                           description: t`Downloaded website videos and cache files.`,
                           value: websiteVideoCacheRootPath,
@@ -1711,9 +1777,18 @@ function FirstStartPage() {
                         },
                         {
                           id: "fpack-extraction" as const,
+                          storeKey: FPACK_EXTRACTION_PATH_KEY,
                           title: t`.fpack Extraction`,
                           description: t`Persistent extracted contents from imported .fpack files.`,
                           value: fpackExtractionPath,
+                          fallback: t`Default app data folder`,
+                        },
+                        {
+                          id: "eroscripts-cache" as const,
+                          storeKey: EROSCRIPTS_CACHE_ROOT_PATH_KEY,
+                          title: t`EroScripts Extraction`,
+                          description: t`Extracted videos and funscripts for the EroScripts service.`,
+                          value: eroscriptsCacheRootPath,
                           fallback: t`Default app data folder`,
                         },
                       ].map((location) => {
@@ -1731,7 +1806,7 @@ function FirstStartPage() {
                               {isLoadingStorageSettings ? (
                                 <Trans>Loading...</Trans>
                               ) : (
-                                (location.value ?? location.fallback)
+                                formatStoragePathDisplay(location.value, location.fallback)
                               )}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -1754,7 +1829,12 @@ function FirstStartPage() {
                               <button
                                 type="button"
                                 disabled={
-                                  isLoadingStorageSettings || isPending || location.value === null
+                                  isLoadingStorageSettings ||
+                                  isPending ||
+                                  !isStoragePathResettable(
+                                    location.value,
+                                    PORTABLE_DEFAULTS.get(location.storeKey) ?? null
+                                  )
                                 }
                                 onMouseEnter={playHoverSound}
                                 onClick={() => {
@@ -1908,12 +1988,13 @@ function FirstStartPage() {
                         playSelectSound();
                         void handleHandyConnect();
                       }}
-                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${handyIsConnecting
-                        ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                        : handyConnected
-                          ? "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30"
-                          : "border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                        }`}
+                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                        handyIsConnecting
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : handyConnected
+                            ? "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30"
+                            : "border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                      }`}
                     >
                       {handyIsConnecting ? (
                         <>
@@ -1952,10 +2033,11 @@ function FirstStartPage() {
                     playSelectSound();
                     setStepIndex((current) => Math.max(0, current - 1));
                   }}
-                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${stepIndex === 0
-                    ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
-                    : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
-                    }`}
+                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                    stepIndex === 0
+                      ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
+                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
+                  }`}
                 >
                   <span
                     className={`transition-transform ${stepIndex === 0 ? "" : "group-hover:-translate-x-1"}`}
@@ -1976,10 +2058,11 @@ function FirstStartPage() {
                       playSelectSound();
                       void skip();
                     }}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isSkipping
-                      ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
-                      }`}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                      isSkipping
+                        ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                        : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
+                    }`}
                   >
                     <span>⏭</span>
                     <span>
@@ -1994,10 +2077,11 @@ function FirstStartPage() {
                       playSelectSound();
                       void goNext();
                     }}
-                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${isContinueDisabled
-                      ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
-                      : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
-                      }`}
+                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${
+                      isContinueDisabled
+                        ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                        : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
+                    }`}
                   >
                     <span className="absolute inset-0 bg-gradient-to-r from-violet-500/0 via-white/10 to-violet-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     <span>

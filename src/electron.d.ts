@@ -13,6 +13,7 @@ declare global {
         selectPlaylistExportPath: (defaultName: string) => Promise<string | null>;
         selectPlaylistExportDirectory: (defaultName?: string) => Promise<string | null>;
         selectWebsiteVideoCacheDirectory: () => Promise<string | null>;
+        selectEroScriptsCacheDirectory: () => Promise<string | null>;
         selectMusicCacheDirectory: () => Promise<string | null>;
         selectMoaningCacheDirectory: () => Promise<string | null>;
         selectConverterVideoFile: () => Promise<string | null>;

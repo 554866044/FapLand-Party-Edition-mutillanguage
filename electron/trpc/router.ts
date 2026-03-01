@@ -10,19 +10,21 @@ import { machineIdRouter } from "./routers/machineId";
 import { mediaRouter } from "./routers/media";
 import { updaterRouter } from "./routers/updater";
 import { securityRouter } from "./routers/security";
+import { eroscriptsRouter } from "./routers/eroscripts";
 
 export const appRouter = router({
-    db: dbRouter,
-    store: storeRouter,
-    phash: phashRouter,
-    booru: booruRouter,
-    playlist: playlistRouter,
-    integration: integrationRouter,
-    converter: converterRouter,
-    machineId: machineIdRouter,
-    media: mediaRouter,
-    updater: updaterRouter,
-    security: securityRouter,
+  db: dbRouter,
+  store: storeRouter,
+  phash: phashRouter,
+  booru: booruRouter,
+  playlist: playlistRouter,
+  integration: integrationRouter,
+  converter: converterRouter,
+  machineId: machineIdRouter,
+  media: mediaRouter,
+  updater: updaterRouter,
+  security: securityRouter,
+  eroscripts: eroscriptsRouter,
 });
 
 export type AppRouter = typeof appRouter;

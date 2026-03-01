@@ -225,6 +225,7 @@ describe("Settings website video caching", () => {
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectEroScriptsCacheDirectory: vi.fn(),
         selectMusicCacheDirectory: vi.fn(),
         selectMoaningCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),

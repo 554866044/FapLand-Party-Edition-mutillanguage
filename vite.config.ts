@@ -98,6 +98,7 @@ export default defineConfig(({ command, mode }) => {
   };
 
   return {
+    base: "./",
     define: defines,
     plugins: [
       viteTsConfigPaths({

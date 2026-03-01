@@ -22,9 +22,10 @@ import { SUPPORTED_VIDEO_EXTENSIONS } from "../src/constants/videoFormats";
 import { approveDialogPath } from "./services/dialogPathApproval";
 import { normalizeMultiplayerAuthCallback } from "./services/authCallback";
 import { ensureAppDatabaseReady } from "./services/db";
-import { initStore } from "./services/store";
+import { initStore, getStore } from "./services/store";
 import { scanInstallSources } from "./services/installer";
 import { getPortableDataRoot, normalizeUserDataSuffix } from "./services/portable";
+import { initializePortableStorageDefaults } from "./services/storagePaths";
 import { proxyExternalRequest } from "./services/integrations";
 import { startContinuousPhashScan } from "./services/phashScanService";
 import { startContinuousWebsiteVideoScan } from "./services/webVideoScanService";
@@ -933,6 +934,23 @@ function registerDialogIpc() {
     return result.filePaths[0] ?? null;
   });
 
+  ipcMain.handle("dialog:selectEroScriptsCacheDirectory", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose EroScripts download cache folder",
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.handle("dialog:selectMusicCacheDirectory", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -1121,6 +1139,7 @@ app
 
     app.setAsDefaultProtocolClient("fland");
     await initStore();
+    initializePortableStorageDefaults(getStore());
     await ensureAppDatabaseReady();
     registerFileProtocol();
     registerWindowControlsIpc();

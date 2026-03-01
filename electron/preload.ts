@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       >,
     selectWebsiteVideoCacheDirectory: () =>
       ipcRenderer.invoke("dialog:selectWebsiteVideoCacheDirectory") as Promise<string | null>,
+    selectEroScriptsCacheDirectory: () =>
+      ipcRenderer.invoke("dialog:selectEroScriptsCacheDirectory") as Promise<string | null>,
     selectMusicCacheDirectory: () =>
       ipcRenderer.invoke("dialog:selectMusicCacheDirectory") as Promise<string | null>,
     selectMoaningCacheDirectory: () =>

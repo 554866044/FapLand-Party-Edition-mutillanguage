@@ -109,9 +109,18 @@ import {
   normalizeBackgroundPhashScanningEnabled,
 } from "../constants/phashSettings";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
+import { EROSCRIPTS_CACHE_ROOT_PATH_KEY } from "../constants/eroscriptsSettings";
 import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
 import { FPACK_EXTRACTION_PATH_KEY } from "../constants/fpackSettings";
 import { CONVERTER_SHORTCUTS } from "../features/converter/shortcuts";
+import { formatStoragePathDisplay, isStoragePathResettable } from "../utils/storagePath";
+
+const PORTABLE_DEFAULTS: ReadonlyMap<string, string> = new Map([
+  [WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY, "web-video-cache"],
+  [MUSIC_CACHE_ROOT_PATH_KEY, "music-cache"],
+  [EROSCRIPTS_CACHE_ROOT_PATH_KEY, "eroscripts-cache"],
+  [FPACK_EXTRACTION_PATH_KEY, "fpacks"],
+]);
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
@@ -123,6 +132,7 @@ const DEFAULT_APPLY_PERK_DIRECTLY = true;
 const ACTIVE_STASH_VERSION = "30.1";
 const LEGACY_LOGIN_AUTH_VALUE = "__legacy_login__";
 const HANDY_USER_PORTAL_URL = "https://user.handyfeeling.com";
+type EroScriptsLoginStatus = Awaited<ReturnType<typeof trpc.eroscripts.getLoginStatus.query>>;
 const SETTINGS_SECTION_IDS = [
   "general",
   "gameplay",
@@ -411,6 +421,11 @@ export function SettingsPage() {
     DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
   );
   const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
+  const [eroscriptsCacheRootPath, setEroScriptsCacheRootPath] = useState<string | null>(null);
+  const [eroscriptsLoginStatus, setEroScriptsLoginStatus] = useState<EroScriptsLoginStatus | null>(
+    null
+  );
+  const [eroscriptsAuthMessage, setEroScriptsAuthMessage] = useState<string | null>(null);
   const [musicCacheRootPath, setMusicCacheRootPath] = useState<string | null>(null);
   const [fpackExtractionPath, setFpackExtractionPath] = useState<string | null>(null);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
@@ -429,14 +444,18 @@ export function SettingsPage() {
     useState(true);
   const [isLoadingWebsiteVideoCacheRootPath, setIsLoadingWebsiteVideoCacheRootPath] =
     useState(true);
+  const [isLoadingEroScriptsCacheRootPath, setIsLoadingEroScriptsCacheRootPath] = useState(true);
+  const [isLoadingEroScriptsAuth, setIsLoadingEroScriptsAuth] = useState(true);
   const [isLoadingMusicCacheRootPath, setIsLoadingMusicCacheRootPath] = useState(true);
   const [isLoadingFpackExtractionPath, setIsLoadingFpackExtractionPath] = useState(true);
   const [isUpdatingWebsiteVideoCacheRootPath, setIsUpdatingWebsiteVideoCacheRootPath] =
     useState(false);
+  const [isUpdatingEroScriptsCacheRootPath, setIsUpdatingEroScriptsCacheRootPath] = useState(false);
+  const [isSavingEroScriptsAuth, setIsSavingEroScriptsAuth] = useState(false);
   const [isUpdatingMusicCacheRootPath, setIsUpdatingMusicCacheRootPath] = useState(false);
   const [isUpdatingFpackExtractionPath, setIsUpdatingFpackExtractionPath] = useState(false);
   const [openingPathTarget, setOpeningPathTarget] = useState<
-    "website-video-cache" | "music-cache" | "fpack-extraction" | null
+    "website-video-cache" | "music-cache" | "fpack-extraction" | "eroscripts-cache" | null
   >(null);
   const [autoScanFolders, setAutoScanFolders] = useState<string[]>([]);
   const [isLoadingAutoScanFolders, setIsLoadingAutoScanFolders] = useState(true);
@@ -456,6 +475,7 @@ export function SettingsPage() {
     videoCache: true,
     musicCache: true,
     fpackExtraction: true,
+    eroscriptsCache: true,
     settings: true,
   });
 
@@ -485,6 +505,8 @@ export function SettingsPage() {
           rawPlaylistCacheOngoingRestrictionDisabled,
           rawStartupSafeModeShortcutEnabled,
           rawWebsiteVideoCacheRootPath,
+          rawEroScriptsCacheRootPath,
+          rawEroScriptsLoginStatus,
           rawMusicCacheRootPath,
           rawFpackExtractionPath,
           folders,
@@ -510,6 +532,8 @@ export function SettingsPage() {
           trpc.store.get.query({ key: PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY }),
           trpc.store.get.query({ key: STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY }),
           trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
+          trpc.store.get.query({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY }),
+          trpc.eroscripts.getLoginStatus.query(),
           trpc.store.get.query({ key: MUSIC_CACHE_ROOT_PATH_KEY }),
           trpc.store.get.query({ key: FPACK_EXTRACTION_PATH_KEY }),
           db.install.getAutoScanFolders(),
@@ -577,6 +601,13 @@ export function SettingsPage() {
               ? rawWebsiteVideoCacheRootPath.trim()
               : null
           );
+          setEroScriptsCacheRootPath(
+            typeof rawEroScriptsCacheRootPath === "string" &&
+              rawEroScriptsCacheRootPath.trim().length > 0
+              ? rawEroScriptsCacheRootPath.trim()
+              : null
+          );
+          setEroScriptsLoginStatus(rawEroScriptsLoginStatus);
           setMusicCacheRootPath(
             typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
               ? rawMusicCacheRootPath.trim()
@@ -614,6 +645,8 @@ export function SettingsPage() {
           setIsLoadingCheatModeEnabled(false);
           setIsLoadingBackgroundPhashScanningEnabled(false);
           setIsLoadingWebsiteVideoCacheRootPath(false);
+          setIsLoadingEroScriptsCacheRootPath(false);
+          setIsLoadingEroScriptsAuth(false);
           setIsLoadingMusicCacheRootPath(false);
           setIsLoadingFpackExtractionPath(false);
           setIsLoadingStartupSafeModeShortcutEnabled(false);
@@ -1165,6 +1198,93 @@ export function SettingsPage() {
     }
   };
 
+  const chooseEroScriptsCacheFolder = async () => {
+    if (isUpdatingEroScriptsCacheRootPath) return;
+    setIsUpdatingEroScriptsCacheRootPath(true);
+    try {
+      const selected = await window.electronAPI.dialog.selectEroScriptsCacheDirectory();
+      if (!selected) return;
+      const value = selected.trim();
+      await trpc.store.set.mutate({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY, value });
+      setEroScriptsCacheRootPath(value);
+    } catch (error) {
+      console.error("Failed to update EroScripts cache folder", error);
+    } finally {
+      setIsUpdatingEroScriptsCacheRootPath(false);
+    }
+  };
+
+  const resetEroScriptsCacheFolder = async () => {
+    if (isUpdatingEroScriptsCacheRootPath) return;
+    setIsUpdatingEroScriptsCacheRootPath(true);
+    try {
+      await trpc.store.set.mutate({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY, value: null });
+      setEroScriptsCacheRootPath(null);
+    } catch (error) {
+      console.error("Failed to reset EroScripts cache folder", error);
+    } finally {
+      setIsUpdatingEroScriptsCacheRootPath(false);
+    }
+  };
+
+  const openEroScriptsLogin = async () => {
+    if (isSavingEroScriptsAuth) return;
+    setIsSavingEroScriptsAuth(true);
+    setEroScriptsAuthMessage(null);
+    try {
+      await trpc.eroscripts.openLoginWindow.mutate();
+      setEroScriptsAuthMessage(
+        t`EroScripts login window opened. Complete sign-in there, then check login here.`
+      );
+    } catch (error) {
+      setEroScriptsAuthMessage(
+        error instanceof Error ? error.message : t`Failed to open EroScripts login.`
+      );
+    } finally {
+      setIsSavingEroScriptsAuth(false);
+    }
+  };
+
+  const refreshEroScriptsLoginStatus = async () => {
+    if (isSavingEroScriptsAuth) return;
+    setIsSavingEroScriptsAuth(true);
+    setEroScriptsAuthMessage(null);
+    try {
+      const status = await trpc.eroscripts.getLoginStatus.query();
+      setEroScriptsLoginStatus(status);
+      if (status.loggedIn) {
+        setEroScriptsAuthMessage(t`EroScripts login active.`);
+      } else if (status.error) {
+        setEroScriptsAuthMessage(status.error);
+      } else {
+        setEroScriptsAuthMessage(t`EroScripts is not logged in.`);
+      }
+    } catch (error) {
+      setEroScriptsAuthMessage(
+        error instanceof Error ? error.message : t`Failed to refresh EroScripts login.`
+      );
+    } finally {
+      setIsSavingEroScriptsAuth(false);
+    }
+  };
+
+  const clearEroScriptsLogin = async () => {
+    if (isSavingEroScriptsAuth) return;
+    setIsSavingEroScriptsAuth(true);
+    setEroScriptsAuthMessage(null);
+    try {
+      const status = await trpc.eroscripts.clearLoginCookies.mutate();
+      setEroScriptsLoginStatus(status);
+      setEroScriptsAuthMessage(t`EroScripts login cookies cleared.`);
+    } catch (error) {
+      setEroScriptsAuthMessage(
+        error instanceof Error ? error.message : t`Failed to clear EroScripts login cookies.`
+      );
+    } finally {
+      setIsSavingEroScriptsAuth(false);
+    }
+  };
+
   const chooseFpackExtractionFolder = async () => {
     try {
       const folderPath = await window.electronAPI.dialog.selectFpackExtractionDirectory();
@@ -1222,7 +1342,7 @@ export function SettingsPage() {
   };
 
   const openConfiguredPath = async (
-    target: "website-video-cache" | "music-cache" | "fpack-extraction"
+    target: "website-video-cache" | "music-cache" | "fpack-extraction" | "eroscripts-cache"
   ) => {
     if (openingPathTarget) return;
     setOpeningPathTarget(target);
@@ -1337,6 +1457,24 @@ export function SettingsPage() {
             >
               {activeSection && activeSection.id === "sources" ? (
                 <>
+                  <EroScriptsSettingsCard
+                    status={eroscriptsLoginStatus}
+                    message={eroscriptsAuthMessage}
+                    isLoading={isLoadingEroScriptsAuth}
+                    isPending={isSavingEroScriptsAuth}
+                    onLogin={() => {
+                      playSelectSound();
+                      void openEroScriptsLogin();
+                    }}
+                    onRefresh={() => {
+                      playSelectSound();
+                      void refreshEroScriptsLoginStatus();
+                    }}
+                    onClear={() => {
+                      playSelectSound();
+                      void clearEroScriptsLogin();
+                    }}
+                  />
                   <SourceIntegrationsCard />
                   <AutoScanFoldersCard
                     folders={autoScanFolders}
@@ -1412,6 +1550,24 @@ export function SettingsPage() {
                     onReset={() => {
                       playSelectSound();
                       void resetWebsiteVideoCacheFolder();
+                    }}
+                  />
+                  <EroScriptsCacheLocationCard
+                    configuredPath={eroscriptsCacheRootPath}
+                    isLoading={isLoadingEroScriptsCacheRootPath}
+                    isPending={isUpdatingEroScriptsCacheRootPath}
+                    isOpening={openingPathTarget === "eroscripts-cache"}
+                    onChooseFolder={() => {
+                      playSelectSound();
+                      void chooseEroScriptsCacheFolder();
+                    }}
+                    onOpenCurrentLocation={() => {
+                      playSelectSound();
+                      void openConfiguredPath("eroscripts-cache");
+                    }}
+                    onReset={() => {
+                      playSelectSound();
+                      void resetEroScriptsCacheFolder();
                     }}
                   />
                   <WebsiteVideoCacheScanCard />
@@ -1578,7 +1734,9 @@ function FpackExtractionLocationCard({
           <Trans>Current Location</Trans>
         </div>
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
-          {isLoading ? t`Loading...` : (configuredPath ?? t`Default app data folder (persistent)`)}
+          {isLoading
+            ? t`Loading...`
+            : formatStoragePathDisplay(configuredPath, t`Default app data folder (persistent)`)}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           <Trans>
@@ -1608,7 +1766,14 @@ function FpackExtractionLocationCard({
           </button>
           <button
             type="button"
-            disabled={isLoading || isPending || configuredPath === null}
+            disabled={
+              isLoading ||
+              isPending ||
+              !isStoragePathResettable(
+                configuredPath,
+                PORTABLE_DEFAULTS.get(FPACK_EXTRACTION_PATH_KEY) ?? null
+              )
+            }
             onMouseEnter={playHoverSound}
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1664,7 +1829,10 @@ function WebsiteVideoCacheLocationCard({
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
           {isLoading
             ? t`Loading...`
-            : (configuredPath ?? t`Default app data folder (existing behavior)`)}
+            : formatStoragePathDisplay(
+                configuredPath,
+                t`Default app data folder (existing behavior)`
+              )}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           <Trans>
@@ -1694,7 +1862,14 @@ function WebsiteVideoCacheLocationCard({
           </button>
           <button
             type="button"
-            disabled={isLoading || isPending || configuredPath === null}
+            disabled={
+              isLoading ||
+              isPending ||
+              !isStoragePathResettable(
+                configuredPath,
+                PORTABLE_DEFAULTS.get(WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY) ?? null
+              )
+            }
             onMouseEnter={playHoverSound}
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1702,6 +1877,194 @@ function WebsiteVideoCacheLocationCard({
             <Trans>Use Default</Trans>
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function EroScriptsCacheLocationCard({
+  configuredPath,
+  isLoading,
+  isPending,
+  isOpening,
+  onChooseFolder,
+  onOpenCurrentLocation,
+  onReset,
+}: {
+  configuredPath: string | null;
+  isLoading: boolean;
+  isPending: boolean;
+  isOpening: boolean;
+  onChooseFolder: () => void;
+  onOpenCurrentLocation: () => void;
+  onReset: () => void;
+}) {
+  const { t } = useLingui();
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          <Trans>EroScripts Download Cache Location</Trans>
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          <Trans>
+            Store downloaded EroScripts funscripts and optional video copies in a custom folder, or
+            leave this unset to use the default app data location.
+          </Trans>
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+          <Trans>Current Location</Trans>
+        </div>
+        <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
+          {isLoading
+            ? t`Loading...`
+            : formatStoragePathDisplay(configuredPath, t`Default app data folder`)}
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          <Trans>
+            Changing this only affects future EroScripts downloads. Existing cached files are not
+            moved automatically.
+          </Trans>
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isLoading || isPending}
+            onMouseEnter={playHoverSound}
+            onClick={onChooseFolder}
+            className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? t`Updating...` : t`Choose Folder`}
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || isPending || isOpening}
+            onMouseEnter={playHoverSound}
+            onClick={onOpenCurrentLocation}
+            className="rounded-xl border border-cyan-300/60 bg-cyan-500/20 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200/80 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isOpening ? t`Opening...` : t`Open Current Folder`}
+          </button>
+          <button
+            type="button"
+            disabled={
+              isLoading ||
+              isPending ||
+              !isStoragePathResettable(
+                configuredPath,
+                PORTABLE_DEFAULTS.get(EROSCRIPTS_CACHE_ROOT_PATH_KEY) ?? null
+              )
+            }
+            onMouseEnter={playHoverSound}
+            onClick={onReset}
+            className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trans>Use Default</Trans>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EroScriptsSettingsCard({
+  status,
+  message,
+  isLoading,
+  isPending,
+  onLogin,
+  onRefresh,
+  onClear,
+}: {
+  status: EroScriptsLoginStatus | null;
+  message: string | null;
+  isLoading: boolean;
+  isPending: boolean;
+  onLogin: () => void;
+  onRefresh: () => void;
+  onClear: () => void;
+}) {
+  const { t } = useLingui();
+  const statusLabel = isLoading
+    ? t`Checking login...`
+    : status?.loggedIn
+      ? status.username
+        ? t`Logged in as ${status.username}`
+        : t`Logged in`
+      : t`Not logged in`;
+  const cookieCount = status?.cookieCount ?? 0;
+
+  return (
+    <section className="animate-entrance rounded-3xl border border-cyan-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-cyan-100">
+          <Trans>EroScripts</Trans>
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          <Trans>
+            Log in on the EroScripts website to make the search popup and downloads use your account
+            cookies, including two-factor authentication.
+          </Trans>
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-300/20 bg-black/35 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              <Trans>Login Status</Trans>
+            </div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">{statusLabel}</div>
+          </div>
+          <div className="rounded-full border border-zinc-600/70 px-3 py-1 text-xs font-semibold text-zinc-300">
+            <Trans>Cookies stored: {cookieCount}</Trans>
+          </div>
+        </div>
+        {status?.error ? <p className="mt-2 text-sm text-amber-200">{status.error}</p> : null}
+      </div>
+
+      {message ? (
+        <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={isLoading || isPending}
+          onMouseEnter={playHoverSound}
+          onClick={onLogin}
+          className="rounded-xl border border-cyan-300/60 bg-cyan-500/25 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPending ? t`Opening...` : t`Login`}
+        </button>
+        <button
+          type="button"
+          disabled={isLoading || isPending}
+          onMouseEnter={playHoverSound}
+          onClick={onRefresh}
+          className="rounded-xl border border-emerald-300/60 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-200/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trans>Check Login</Trans>
+        </button>
+        <button
+          type="button"
+          disabled={isLoading || isPending || cookieCount === 0}
+          onMouseEnter={playHoverSound}
+          onClick={onClear}
+          className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trans>Clear Login Cookies</Trans>
+        </button>
       </div>
     </section>
   );
@@ -1750,7 +2113,10 @@ function MusicCacheLocationCard({
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
           {isLoading
             ? t`Loading...`
-            : (configuredPath ?? t`Default app data folder (existing behavior)`)}
+            : formatStoragePathDisplay(
+                configuredPath,
+                t`Default app data folder (existing behavior)`
+              )}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           <Trans>
@@ -1780,7 +2146,14 @@ function MusicCacheLocationCard({
           </button>
           <button
             type="button"
-            disabled={isLoading || isPending || configuredPath === null}
+            disabled={
+              isLoading ||
+              isPending ||
+              !isStoragePathResettable(
+                configuredPath,
+                PORTABLE_DEFAULTS.get(MUSIC_CACHE_ROOT_PATH_KEY) ?? null
+              )
+            }
             onMouseEnter={playHoverSound}
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3617,6 +3990,7 @@ function SelectiveClearDialog({
     videoCache: boolean;
     musicCache: boolean;
     fpackExtraction: boolean;
+    eroscriptsCache: boolean;
     settings: boolean;
   };
   onSelectionChange: (next: typeof selections) => void;
@@ -3662,6 +4036,11 @@ function SelectiveClearDialog({
       id: "fpackExtraction",
       label: t`.fpack Extractions`,
       description: t`Extracted pack contents stored for installed portable packages.`,
+    },
+    {
+      id: "eroscriptsCache",
+      label: t`EroScripts Cache`,
+      description: t`Downloaded EroScripts funscripts and optional video copies.`,
     },
     {
       id: "settings",

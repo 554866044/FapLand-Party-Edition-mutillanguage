@@ -311,6 +311,7 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectEroScriptsCacheDirectory: vi.fn(),
       selectMusicCacheDirectory: vi.fn(),
       selectMoaningCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
@@ -321,6 +322,7 @@ beforeEach(() => {
       addMoaningFromUrl: vi.fn(),
       addMoaningPlaylistFromUrl: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
+        selectFpackExtractionDirectory: vi.fn(),
     },
     window: {
       isFullscreen: vi.fn(),

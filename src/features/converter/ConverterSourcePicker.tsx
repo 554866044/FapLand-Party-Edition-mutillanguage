@@ -28,6 +28,7 @@ type ConverterSourcePickerProps = {
   onSelectLocalVideo: () => void;
   onSelectLocalFunscript: () => void;
   onSelectWebsiteSource: (videoUri: string, funscriptUri: string | null) => void;
+  onSearchEroScripts?: () => void;
 };
 
 function normalizeHttpUrl(value: string): string | null {
@@ -50,6 +51,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
     onSelectLocalVideo,
     onSelectLocalFunscript,
     onSelectWebsiteSource,
+    onSearchEroScripts,
   }) => {
     const { t } = useLingui();
     const [rounds, setRounds] = useState<InstalledRound[]>([]);
@@ -269,6 +271,19 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               >
                 <Trans>Select Local Funscript</Trans>
               </button>
+              {onSearchEroScripts ? (
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    onSearchEroScripts();
+                  }}
+                  className="rounded-xl border border-emerald-300/60 bg-emerald-500/25 px-5 py-3 text-sm font-semibold text-emerald-100 transition-all duration-200 hover:border-emerald-200/80 hover:bg-emerald-500/40"
+                >
+                  <Trans>Search EroScripts</Trans>
+                </button>
+              ) : null}
               <button
                 type="button"
                 onMouseEnter={playHoverSound}

@@ -14,6 +14,10 @@ import {
 import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { LibraryExportOverlay } from "../components/LibraryExportOverlay";
+import {
+  EroScriptsFunscriptSearchDialog,
+  type EroScriptsRoundInstallInput,
+} from "../components/EroScriptsFunscriptSearchDialog";
 import { SfwGuard } from "../components/SfwGuard";
 import { RoundVideoOverlay } from "../components/game/RoundVideoOverlay";
 import { buildPreviewRoundVideoOverlayProps } from "../components/game/buildRoundVideoOverlayProps";
@@ -65,9 +69,7 @@ import { playHoverSound, playSelectSound } from "../utils/audio";
 import { formatDurationLabel, getRoundDurationSec } from "../utils/duration";
 import { abbreviateNsfwText } from "../utils/sfwText";
 import { VirtualizedRoundLibraryGrid } from "../features/library/components/VirtualizedRoundLibraryGrid";
-import {
-  getInstalledRoundWebsiteVideoCacheStatus,
-} from "../features/webVideo/cacheStatus";
+import { getInstalledRoundWebsiteVideoCacheStatus } from "../features/webVideo/cacheStatus";
 import {
   DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
   ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
@@ -83,6 +85,7 @@ import {
 } from "../constants/experimentalFeatures";
 
 type GroupMode = "hero" | "playlist";
+type EroScriptsDialogContext = "library" | "website-round" | "edit-round";
 type EditableRoundType = "Normal" | "Interjection" | "Cum";
 type RoundEditDraft = {
   id: string;
@@ -865,6 +868,8 @@ export function InstalledRoundsPage() {
   const [websiteRoundVideoValidation, setWebsiteRoundVideoValidation] =
     useState<WebsiteRoundVideoValidationState>({ state: "idle", message: null });
   const [websiteRoundDialogOpen, setWebsiteRoundDialogOpen] = useState(false);
+  const [eroscriptsDialogContext, setEroScriptsDialogContext] =
+    useState<EroScriptsDialogContext | null>(null);
   const rounds = roundsResource.data;
   const availablePlaylists = playlistsResource.data;
   const disabledRoundIds = disabledIdsResource.data;
@@ -1555,7 +1560,8 @@ export function InstalledRoundsPage() {
     [availablePlaylists, groupMode, rounds]
   );
   const playlistsByRoundId = playlistGroupingData?.playlistsByRoundId ?? null;
-  const playlistWebsiteCacheSummaryById = playlistGroupingData?.cacheSummaryByPlaylistId ?? new Map();
+  const playlistWebsiteCacheSummaryById =
+    playlistGroupingData?.cacheSummaryByPlaylistId ?? new Map();
   const activeSection =
     ROUND_SECTIONS.find((section) => section.id === activeSectionId) ?? ROUND_SECTIONS[0];
   const standaloneRoundCount = useMemo(
@@ -2117,6 +2123,68 @@ export function InstalledRoundsPage() {
     }
   };
 
+  const getEroScriptsInitialQuery = () => {
+    if (eroscriptsDialogContext === "edit-round") {
+      return editingRound?.name ?? queryInput;
+    }
+    if (eroscriptsDialogContext === "website-round") {
+      return websiteRoundName.trim() || websiteRoundVideoUrl.trim() || queryInput;
+    }
+    return queryInput.trim() || query.trim();
+  };
+
+  const attachEroScriptsFunscript = async (result: { funscriptUri: string; filename: string }) => {
+    if (eroscriptsDialogContext === "edit-round") {
+      setEditingRound((previous) =>
+        previous ? { ...previous, funscriptUri: result.funscriptUri } : previous
+      );
+      showToast(t`Funscript attached. Save the round to keep it.`, "success");
+      return;
+    }
+
+    if (eroscriptsDialogContext === "website-round") {
+      setWebsiteRoundFunscriptFileUri(result.funscriptUri);
+      setWebsiteRoundFunscriptFileLabel(result.filename);
+      setWebsiteRoundFunscriptUrl("");
+      setWebsiteRoundError(null);
+      setWebsiteRoundSuccess(t`Funscript attached.`);
+      return;
+    }
+  };
+
+  const installEroScriptsRound = async (input: EroScriptsRoundInstallInput) => {
+    if (actionButtonsDisabled) return;
+    try {
+      if (input.videoUri.startsWith("http://") || input.videoUri.startsWith("https://")) {
+        await db.round.createWebsiteRound({
+          name: input.name,
+          videoUri: input.videoUri,
+          funscriptUri: input.funscriptUri,
+        });
+      } else {
+        await db.round.createMediaRound({
+          name: input.name,
+          videoUri: input.videoUri,
+          funscriptUri: input.funscriptUri,
+          sourceKey: input.sourceUrl,
+        });
+      }
+      await refreshInstalledRounds();
+      showToast(
+        input.funscriptUri
+          ? t`Installed EroScripts video with funscript.`
+          : t`Installed EroScripts video without a funscript.`,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : t`Failed to install EroScripts video.`,
+        "error"
+      );
+      throw error;
+    }
+  };
+
   const toggleHeroGroupSelection = useCallback(
     (group: Extract<RoundRenderRow, { kind: "hero-group" }>) => {
       const groupRoundIds = group.rounds.map((r) => r.id);
@@ -2651,6 +2719,16 @@ export function InstalledRoundsPage() {
                             handleSelectSfx();
                             void loadWebInstallSettings().catch(() => undefined);
                             setWebsiteRoundDialogOpen(true);
+                          }}
+                        />
+                        <RoundActionButton
+                          label={t`Search EroScripts`}
+                          tone="cyan"
+                          disabled={actionButtonsDisabled}
+                          onHover={handleHoverSfx}
+                          onClick={() => {
+                            handleSelectSfx();
+                            setEroScriptsDialogContext("library");
                           }}
                         />
                         <RoundActionButton
@@ -3274,6 +3352,17 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
+                          label={t`Search EroScripts`}
+                          description={t`Find EroScripts topics, download videos, and attach direct funscripts.`}
+                          tone="cyan"
+                          disabled={actionButtonsDisabled}
+                          onHover={handleHoverSfx}
+                          onClick={() => {
+                            handleSelectSfx();
+                            setEroScriptsDialogContext("library");
+                          }}
+                        />
+                        <RoundActionButton
                           label={scanRunning ? t`Scanning...` : t`Scan Now`}
                           description={t`Re-run install folder discovery for sources already connected to the app.`}
                           tone="cyan"
@@ -3393,11 +3482,29 @@ export function InstalledRoundsPage() {
           handleSelectSfx();
           void selectWebsiteRoundFunscriptFile();
         }}
+        onSearchEroScripts={() => {
+          handleSelectSfx();
+          setEroScriptsDialogContext("website-round");
+        }}
         onInstall={() => {
           handleSelectSfx();
           void installWebsiteRound();
         }}
         onHoverSfx={handleHoverSfx}
+      />
+      <EroScriptsFunscriptSearchDialog
+        open={eroscriptsDialogContext !== null}
+        initialQuery={getEroScriptsInitialQuery()}
+        currentFunscriptUri={
+          eroscriptsDialogContext === "edit-round" ? editingRound?.funscriptUri : null
+        }
+        onClose={() => setEroScriptsDialogContext(null)}
+        onAttachFunscript={
+          eroscriptsDialogContext === "edit-round" || eroscriptsDialogContext === "website-round"
+            ? attachEroScriptsFunscript
+            : undefined
+        }
+        onInstallRound={installEroScriptsRound}
       />
       {activePreviewRound && <RoundVideoOverlay {...previewOverlayProps} />}
       {editingRound && (
@@ -3572,6 +3679,17 @@ export function InstalledRoundsPage() {
                     className="rounded-xl border border-orange-300/35 bg-orange-500/12 px-3 py-2 text-xs uppercase tracking-[0.18em] text-orange-100 transition-all duration-200 hover:border-orange-200/75 hover:bg-orange-500/24 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trans>Detach Funscript</Trans>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingEdit || !editingRound.resourceId}
+                    onClick={() => {
+                      handleSelectSfx();
+                      setEroScriptsDialogContext("edit-round");
+                    }}
+                    className="rounded-xl border border-emerald-300/35 bg-emerald-500/12 px-3 py-2 text-xs uppercase tracking-[0.18em] text-emerald-100 transition-all duration-200 hover:border-emerald-200/75 hover:bg-emerald-500/24 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trans>Search EroScripts</Trans>
                   </button>
                 </div>
                 {!editingRound.resourceId && (
@@ -5716,6 +5834,7 @@ function WebsiteRoundInstallDialog({
   onVideoUrlChange,
   onFunscriptUrlChange,
   onSelectLocalFunscript,
+  onSearchEroScripts,
   onInstall,
   onHoverSfx,
 }: {
@@ -5736,6 +5855,7 @@ function WebsiteRoundInstallDialog({
   onVideoUrlChange: (value: string) => void;
   onFunscriptUrlChange: (value: string) => void;
   onSelectLocalFunscript: () => void;
+  onSearchEroScripts: () => void;
   onInstall: () => void;
   onHoverSfx: () => void;
 }) {
@@ -5912,16 +6032,24 @@ function WebsiteRoundInstallDialog({
 
           <div className="flex flex-wrap gap-3">
             <RoundActionButton
-              label="Select Local Funscript"
-              description="Attach an optional local .funscript file"
+              label={t`Select Local Funscript`}
+              description={t`Attach an optional local .funscript file`}
               tone="cyan"
               disabled={disabled}
               onHover={onHoverSfx}
               onClick={onSelectLocalFunscript}
             />
             <RoundActionButton
-              label={installing ? "Installing..." : "Install Website Round"}
-              description="Create an installed round from the current website source fields."
+              label={t`Search EroScripts`}
+              description={t`Find videos and direct funscripts from EroScripts.`}
+              tone="emerald"
+              disabled={disabled}
+              onHover={onHoverSfx}
+              onClick={onSearchEroScripts}
+            />
+            <RoundActionButton
+              label={installing ? t`Installing...` : t`Install Website Round`}
+              description={t`Create an installed round from the current website source fields.`}
               tone="violet"
               disabled={
                 disabled ||

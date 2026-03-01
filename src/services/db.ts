@@ -114,6 +114,12 @@ export const db = {
     }) => withInstalledRoundCacheInvalidation(() => trpc.db.updateRound.mutate(input)),
     createWebsiteRound: (input: { name: string; videoUri: string; funscriptUri?: string | null }) =>
       withInstalledRoundCacheInvalidation(() => trpc.db.createWebsiteRound.mutate(input)),
+    createMediaRound: (input: {
+      name: string;
+      videoUri: string;
+      funscriptUri?: string | null;
+      sourceKey?: string | null;
+    }) => withInstalledRoundCacheInvalidation(() => trpc.db.createMediaRound.mutate(input)),
     checkWebsiteVideoSupport: (videoUri: string) =>
       trpc.db.checkWebsiteRoundVideoSupport.query({ videoUri }),
     delete: (id: string) =>

@@ -64,6 +64,7 @@ import {
 } from "../../services/webVideo";
 import { clearMusicCache, resolveMusicCacheRoot } from "../../services/musicDownload";
 import { clearFpackExtractionCache, getFpackExtractionRoot } from "../../services/fpack";
+import { clearEroScriptsCache, resolveEroScriptsCacheRoot } from "../../services/eroscripts";
 import { publicProcedure, router } from "../trpc";
 import { and, eq, desc, asc, inArray } from "drizzle-orm";
 import {
@@ -110,6 +111,23 @@ function toWebsiteRoundInstallSourceKey(input: {
   ].join("|");
   const digest = crypto.createHash("sha256").update(payload).digest("hex");
   return `website:${digest}`;
+}
+
+function toMediaRoundInstallSourceKey(input: {
+  name: string;
+  videoUri: string;
+  funscriptUri: string | null;
+  sourceKey?: string | null;
+}): string {
+  const payload = [
+    "media-round:v1",
+    input.sourceKey?.trim() || "",
+    input.name.trim().toLowerCase(),
+    input.videoUri.trim(),
+    input.funscriptUri?.trim() ?? "",
+  ].join("|");
+  const digest = crypto.createHash("sha256").update(payload).digest("hex");
+  return `media:${digest}`;
 }
 
 function queueWebsiteVideoCaching(): void {
@@ -997,6 +1015,89 @@ export const dbRouter = router({
       }
     }),
 
+  createMediaRound: publicProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(1),
+        videoUri: z.string().trim().min(1),
+        funscriptUri: z.string().trim().min(1).optional().nullable(),
+        sourceKey: z.string().trim().min(1).optional().nullable(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const normalizedVideoUri = input.videoUri.trim();
+      const normalizedFunscriptUri = input.funscriptUri?.trim() || null;
+      const calculatedDifficulty =
+        await calculateFunscriptDifficultyFromUri(normalizedFunscriptUri);
+      const previewImage = await generateRoundPreviewImageDataUri({
+        videoUri: normalizedVideoUri,
+        startTimeMs: null,
+        endTimeMs: null,
+      });
+
+      try {
+        const created = await db.transaction(async (tx) => {
+          const [createdRound] = await tx
+            .insert(round)
+            .values({
+              name: input.name.trim(),
+              author: null,
+              description: null,
+              bpm: null,
+              difficulty: calculatedDifficulty,
+              phash: null,
+              startTime: null,
+              endTime: null,
+              type: "Normal",
+              installSourceKey: toMediaRoundInstallSourceKey({
+                name: input.name,
+                videoUri: normalizedVideoUri,
+                funscriptUri: normalizedFunscriptUri,
+                sourceKey: input.sourceKey ?? null,
+              }),
+              previewImage,
+              heroId: null,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          if (!createdRound) {
+            throw new Error("Failed to create the media round entry.");
+          }
+
+          const [createdResource] = await tx
+            .insert(resource)
+            .values({
+              videoUri: normalizedVideoUri,
+              funscriptUri: normalizedFunscriptUri,
+              phash: null,
+              durationMs: null,
+              disabled: false,
+              roundId: createdRound.id,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          if (!createdResource) {
+            throw new Error("Failed to attach media to the installed round.");
+          }
+
+          return {
+            roundId: createdRound.id,
+            resourceId: createdResource.id,
+          };
+        });
+
+        return created;
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Failed to create the media round.",
+        });
+      }
+    }),
+
   checkWebsiteRoundVideoSupport: publicProcedure
     .input(
       z.object({
@@ -1700,7 +1801,12 @@ export const dbRouter = router({
   openConfiguredPath: publicProcedure
     .input(
       z.object({
-        target: z.enum(["website-video-cache", "music-cache", "fpack-extraction"]),
+        target: z.enum([
+          "website-video-cache",
+          "music-cache",
+          "fpack-extraction",
+          "eroscripts-cache",
+        ]),
       })
     )
     .mutation(async ({ input }) => {
@@ -1709,7 +1815,9 @@ export const dbRouter = router({
           ? resolveWebsiteVideoCacheRoot()
           : input.target === "music-cache"
             ? resolveMusicCacheRoot()
-            : await getFpackExtractionRoot();
+            : input.target === "eroscripts-cache"
+              ? resolveEroScriptsCacheRoot()
+              : await getFpackExtractionRoot();
       await fs.mkdir(resolvedPath, { recursive: true });
       const openError = await shell.openPath(resolvedPath);
       if (openError) {
@@ -1733,6 +1841,7 @@ export const dbRouter = router({
           videoCache: z.boolean().optional(),
           musicCache: z.boolean().optional(),
           fpackExtraction: z.boolean().optional(),
+          eroscriptsCache: z.boolean().optional(),
           settings: z.boolean().optional(),
         })
         .optional()
@@ -1748,6 +1857,7 @@ export const dbRouter = router({
         videoCache = true,
         musicCache = true,
         fpackExtraction = true,
+        eroscriptsCache = true,
         settings = true,
       } = input ?? {};
 
@@ -1790,6 +1900,9 @@ export const dbRouter = router({
       }
       if (fpackExtraction && fpackExtractionRoot) {
         cacheClearTasks.push(clearFpackExtractionCache(fpackExtractionRoot));
+      }
+      if (eroscriptsCache) {
+        cacheClearTasks.push(clearEroScriptsCache());
       }
       await Promise.all(cacheClearTasks);
 
