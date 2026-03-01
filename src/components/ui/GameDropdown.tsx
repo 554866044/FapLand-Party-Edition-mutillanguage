@@ -15,6 +15,7 @@ export function GameDropdown<T extends string>({
   onHoverSfx,
   onSelectSfx,
   className,
+  menuPlacement = "bottom",
 }: {
   label?: string;
   value: T;
@@ -24,6 +25,7 @@ export function GameDropdown<T extends string>({
   onHoverSfx?: () => void;
   onSelectSfx?: () => void;
   className?: string;
+  menuPlacement?: "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -127,6 +129,10 @@ export function GameDropdown<T extends string>({
   const noop = () => {};
   const hover = onHoverSfx ?? noop;
   const select = onSelectSfx ?? noop;
+  const menuPositionClass =
+    menuPlacement === "top"
+      ? "bottom-full mb-2"
+      : "top-full mt-2";
 
   return (
     <div
@@ -222,7 +228,7 @@ export function GameDropdown<T extends string>({
             highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
           }
           tabIndex={-1}
-          className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-violet-300/35 bg-zinc-950/95 shadow-[0_0_24px_rgba(139,92,246,0.38)] backdrop-blur-xl"
+          className={`absolute z-50 w-full overflow-hidden rounded-xl border border-violet-300/35 bg-zinc-950/95 shadow-[0_0_24px_rgba(139,92,246,0.38)] backdrop-blur-xl ${menuPositionClass}`}
         >
           {options.map((option, index) => {
             const active = option.value === value;

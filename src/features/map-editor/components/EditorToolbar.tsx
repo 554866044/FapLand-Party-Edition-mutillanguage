@@ -61,7 +61,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
     onSave,
     onTestMap,
   }) => (
-    <div className="editor-toolbar flex flex-shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-black/40 px-2 py-1.5 backdrop-blur-sm">
+    <div className="editor-toolbar relative z-10 flex flex-shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-black/40 px-2 py-1.5 backdrop-blur-sm">
       {/* ── Mode tools ─────────────────── */}
       <div className="flex items-center gap-1">
         {TOOL_ITEMS.map((item) => {
