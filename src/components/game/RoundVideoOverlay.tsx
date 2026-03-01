@@ -108,19 +108,19 @@ export type RoundVideoOverlayProps = {
 type LoadingMediaItem =
   | BooruMediaItem
   | {
-    id: string;
-    source: "fallback";
-    url: string;
-    previewUrl?: string | null;
-  };
+      id: string;
+      source: "fallback";
+      url: string;
+      previewUrl?: string | null;
+    };
 
 type SegmentState =
   | { kind: "main" }
   | {
-    kind: "intermediary";
-    trigger: IntermediaryTrigger;
-    resumeAtSec: number;
-  };
+      kind: "intermediary";
+      trigger: IntermediaryTrigger;
+      resumeAtSec: number;
+    };
 
 type TransitionPlan = {
   nextSegment: SegmentState;
@@ -468,8 +468,9 @@ export function RoundVideoOverlay({
   const [handySyncState, setHandySyncState] = useState<HandySyncState>("disconnected");
   const [handySyncError, setHandySyncError] = useState<string | null>(null);
   const [failedVideoUri, setFailedVideoUri] = useState<string | null>(null);
-  const [missingMediaAutoCloseRemainingSec, setMissingMediaAutoCloseRemainingSec] =
-    useState<number | null>(null);
+  const [missingMediaAutoCloseRemainingSec, setMissingMediaAutoCloseRemainingSec] = useState<
+    number | null
+  >(null);
   const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
 
   const applyHandyOffsetMs = useCallback(
@@ -2491,9 +2492,9 @@ export function RoundVideoOverlay({
     const resumeMs =
       segment.kind === "intermediary"
         ? clampToPlaybackWindow(
-          mainResumePositionSecRef.current ?? segment.resumeAtSec,
-          resolveMainWindowForDuration(knownDurationSec)
-        ) * 1000
+            mainResumePositionSecRef.current ?? segment.resumeAtSec,
+            resolveMainWindowForDuration(knownDurationSec)
+          ) * 1000
         : 0;
 
     let cancelled = false;
@@ -2553,12 +2554,12 @@ export function RoundVideoOverlay({
     const activeBootstrapKey =
       activeRound && activeVideoUri
         ? [
-          activeRound.roundId,
-          activeRound.fieldId,
-          segment.kind,
-          activeVideoUri,
-          timelineUri ?? activeSegmentResource?.funscriptUri ?? "",
-        ].join(":")
+            activeRound.roundId,
+            activeRound.fieldId,
+            segment.kind,
+            activeVideoUri,
+            timelineUri ?? activeSegmentResource?.funscriptUri ?? "",
+          ].join(":")
         : null;
 
     if (!activeBootstrapKey) {
@@ -2604,6 +2605,7 @@ export function RoundVideoOverlay({
     let cancelled = false;
     const timer = window.setInterval(() => {
       if (cancelled) return;
+      if (finishRequestedRef.current) return;
       if (handyPushInFlightRef.current) return;
 
       const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
@@ -2900,15 +2902,15 @@ export function RoundVideoOverlay({
       ? undefined
       : onClose
         ? () => {
-          void stopHandyIfNeeded();
-          onClose();
-          return true;
-        }
-        : onOpenOptions
-          ? () => {
-            onOpenOptions();
+            void stopHandyIfNeeded();
+            onClose();
             return true;
           }
+        : onOpenOptions
+          ? () => {
+              onOpenOptions();
+              return true;
+            }
           : undefined,
     onUnhandledAction: (action) => {
       showUiTemporarily(UI_SHOW_AFTER_MOUSEMOVE_MS);
@@ -3249,10 +3251,11 @@ export function RoundVideoOverlay({
             <span>{status}</span>
 
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                canResyncHandy
                   ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              }`}
               disabled={!canResyncHandy}
               onClick={() => {
                 playSelectSound();
@@ -3279,10 +3282,11 @@ export function RoundVideoOverlay({
             {canUseRoundControls && (
               <>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.pauseCharges ?? 0) > 0
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.pauseCharges ?? 0) > 0
                       ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
                       : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  }`}
                   disabled={(roundControl?.pauseCharges ?? 0) <= 0 || isIntermediaryScreenActive}
                   onClick={() => {
                     playSelectSound();
@@ -3295,10 +3299,11 @@ export function RoundVideoOverlay({
                   {t`Pause ${roundControl?.pauseCharges ?? 0}`}
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.skipCharges ?? 0) > 0
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.skipCharges ?? 0) > 0
                       ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
                       : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  }`}
                   disabled={(roundControl?.skipCharges ?? 0) <= 0}
                   onClick={() => {
                     playSelectSound();
@@ -3327,10 +3332,11 @@ export function RoundVideoOverlay({
               </button>
             )}
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                showProgressBarAlways
                   ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
-                }`}
+              }`}
               onClick={() => {
                 playSelectSound();
                 setShowProgressBarAlways((current) => !current);
@@ -3342,10 +3348,11 @@ export function RoundVideoOverlay({
               {t`Bar ${showProgressBarAlways ? "Pinned" : "Auto"}`}
             </button>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                handyConnected
                   ? "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
                   : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              }`}
               disabled={!handyConnected}
               onClick={() => {
                 playSelectSound();
@@ -3414,10 +3421,11 @@ export function RoundVideoOverlay({
                   {t`Test Intermediary (I)`}
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${segment.kind === "intermediary"
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    segment.kind === "intermediary"
                       ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
                       : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  }`}
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {
                     playSelectSound();
@@ -3963,12 +3971,13 @@ export function RoundVideoOverlay({
                 )}
                 <div className="flex items-center gap-1.5">
                   <div
-                    className={`h-1.5 w-1.5 rounded-full ${handyManuallyStopped
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      handyManuallyStopped
                         ? "bg-rose-400"
                         : handySyncState === "error" || handySyncState === "missing-key"
                           ? "bg-amber-400"
                           : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]"
-                      }`}
+                    }`}
                   />
                   <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tabular-nums tracking-wider text-white/55">
                     {formatHandyOffsetLabel(offsetMs)}
