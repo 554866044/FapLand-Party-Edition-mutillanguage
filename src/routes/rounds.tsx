@@ -99,6 +99,7 @@ type RoundEditDraft = {
   type: EditableRoundType;
   resourceId: string | null;
   funscriptUri: string | null;
+  excludeFromRandom: boolean;
 };
 type HeroEditDraft = {
   id: string;
@@ -651,6 +652,7 @@ function toRoundEditDraft(round: InstalledRound): RoundEditDraft {
     type: round.type ?? "Normal",
     resourceId: primaryResource?.id ?? null,
     funscriptUri: primaryResource?.funscriptUri ?? null,
+    excludeFromRandom: round.excludeFromRandom ?? false,
   };
 }
 
@@ -1607,7 +1609,9 @@ export function InstalledRoundsPage() {
             ? t`Length`
             : sortMode === "name"
               ? t`Name`
-              : t`Newest`;
+              : sortMode === "excluded"
+                ? t`Excluded`
+                : t`Newest`;
   const groupModeLabel = groupMode === "playlist" ? t`Playlist` : t`Hero`;
   const highestFilteredDifficulty = useMemo(
     () => filteredRounds.reduce((max, round) => Math.max(max, round.difficulty ?? 0), 0),
@@ -2301,6 +2305,7 @@ export function InstalledRoundsPage() {
         endTime,
         funscriptUri: editingRound.resourceId ? editingRound.funscriptUri : undefined,
         type: editingRound.type,
+        excludeFromRandom: editingRound.excludeFromRandom,
       });
       setEditingRound(null);
       await refreshInstalledRounds();
@@ -2981,6 +2986,7 @@ export function InstalledRoundsPage() {
                             { value: "bpm", label: t`BPM` },
                             { value: "length", label: t`Length` },
                             { value: "name", label: t`Name` },
+                            { value: "excluded", label: t`Excluded` },
                           ]}
                           onChange={(value) => {
                             startTransition(() => {
@@ -3731,6 +3737,29 @@ export function InstalledRoundsPage() {
                 )}
               </div>
             </ModalField>
+            <ModalField label={t`Random Selection`} className="sm:col-span-2">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={editingRound.excludeFromRandom}
+                  onChange={(event) =>
+                    setEditingRound((previous) =>
+                      previous ? { ...previous, excludeFromRandom: event.target.checked } : previous
+                    )
+                  }
+                  className="h-4 w-4 rounded border-violet-300/40 bg-black/45 text-violet-400 focus:ring-violet-400/60"
+                />
+                <span className="text-sm text-zinc-300">
+                  <Trans>Exclude from random round selection</Trans>
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-zinc-500">
+                <Trans>
+                  When enabled, this round will never be picked by random round nodes, the succubus
+                  anti-perk, or the cum round fallback.
+                </Trans>
+              </p>
+            </ModalField>
             <ModalField label={t`Description`} className="sm:col-span-2">
               <textarea
                 value={editingRound.description}
@@ -4385,6 +4414,11 @@ const RoundCard = memo(function RoundCard({
           {showDisabledBadge && (
             <span className="rounded-full border border-rose-300/35 bg-rose-500/18 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-rose-100 backdrop-blur-md">
               <Trans>Disabled</Trans>
+            </span>
+          )}
+          {round.excludeFromRandom && (
+            <span className="rounded-full border border-orange-300/35 bg-orange-500/18 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-orange-100 backdrop-blur-md">
+              <Trans>Excluded</Trans>
             </span>
           )}
           {isTemplate && (

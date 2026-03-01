@@ -137,7 +137,7 @@ msgid "{0} hashed"
 msgstr "{0} 已哈希"
 
 #. placeholder {0}: filteredRounds.length
-#: src/routes/rounds.tsx:3032
+#: src/routes/rounds.tsx:3038
 msgid "{0} matching rounds are currently available."
 msgstr "当前有 {0} 个匹配的关卡可用。"
 
@@ -200,13 +200,13 @@ msgstr "{0} 个关卡"
 #. placeholder {1}: stats.playlistsImported
 #. placeholder {2}: stats.updated
 #. placeholder {3}: stats.failed
-#: src/routes/rounds.tsx:230
+#: src/routes/rounds.tsx:231
 msgid "{0} rounds / {1} playlists / {2} updated / {3} failed{progressText}"
 msgstr "{0} 个关卡 / {1} 个播放列表 / {2} 个已更新 / {3} 个失败{progressText}"
 
 #. placeholder {0}: selectionCount.rounds
 #. placeholder {1}: selectionCount.heroes
-#: src/routes/rounds.tsx:5719
+#: src/routes/rounds.tsx:5753
 msgid "{0} rounds and {1} heroes will be packaged."
 msgstr "{0} 个关卡和 {1} 个角色将被打包。"
 
@@ -217,13 +217,13 @@ msgstr "需要 {0} 个关卡"
 
 #. placeholder {0}: selectionCount.rounds
 #. placeholder {1}: selectionCount.heroes
-#: src/routes/rounds.tsx:5510
+#: src/routes/rounds.tsx:5544
 msgid "{0} rounds, {1} heroes"
 msgstr "{0} 个关卡，{1} 个角色"
 
 #. placeholder {0}: selectedRoundIds.size
 #. placeholder {1}: selectedHeroIds.size
-#: src/routes/rounds.tsx:2785
+#: src/routes/rounds.tsx:2790
 msgid "{0} rounds, {1} heroes selected"
 msgstr "已选择 {0} 个关卡，{1} 个角色"
 
@@ -231,7 +231,7 @@ msgstr "已选择 {0} 个关卡，{1} 个角色"
 #. placeholder {1}: status.stats.playlistsImported
 #. placeholder {2}: status.stats.updated
 #. placeholder {3}: status.stats.failed
-#: src/routes/rounds.tsx:5128
+#: src/routes/rounds.tsx:5162
 msgid "{0} rounds, {1} playlists, {2} updated, {3} failed"
 msgstr "{0} 个关卡，{1} 个播放列表，{2} 个已更新，{3} 个失败"
 
@@ -282,7 +282,7 @@ msgstr "{0} 个网络关卡{1} 缓存中"
 msgid "{0}/{1} active"
 msgstr "{0}/{1} 已激活"
 
-#: src/routes/rounds.tsx:2998
+#: src/routes/rounds.tsx:3004
 msgid "{activeFilterCount} Active Filters"
 msgstr "{activeFilterCount} 个活跃过滤器"
 
@@ -311,11 +311,11 @@ msgstr "{count, plural, one {# 个播放列表} other {# 个播放列表}}"
 msgid "playlist-workshop.resolution.auto-resolved-summary"
 msgstr "{count, plural, one {# 个引用已自动解析，可以查看。} other {# 个引用已自动解析，可以查看。}}"
 
-#: src/routes/rounds.tsx:4300
+#: src/routes/rounds.tsx:4329
 msgid "{displayName} preview"
 msgstr "{displayName} 预览"
 
-#: src/routes/rounds.tsx:4788
+#: src/routes/rounds.tsx:4822
 msgid "{heroName} ({roundCount} rounds)"
 msgstr "{heroName}（{roundCount} 个关卡）"
 
@@ -333,20 +333,20 @@ msgstr "{label} ({0})"
 msgid "{MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required"
 msgstr "需要 {MULTIPLAYER_MINIMUM_ROUNDS} 个关卡"
 
-#: src/routes/rounds.tsx:4801
+#: src/routes/rounds.tsx:4835
 msgid "{pendingCacheCount} Caching"
 msgstr "{pendingCacheCount} 缓存中"
 
-#: src/routes/rounds.tsx:4807
+#: src/routes/rounds.tsx:4841
 msgid "{pendingPreviewCount} Previews Generating"
 msgstr "{pendingPreviewCount} 个预览生成中"
 
-#: src/routes/rounds.tsx:4924
+#: src/routes/rounds.tsx:4958
 msgid "{playlistName} ({roundCount} rounds)"
 msgstr "{playlistName}（{roundCount} 个关卡）"
 
-#: src/routes/rounds.tsx:4812
-#: src/routes/rounds.tsx:4946
+#: src/routes/rounds.tsx:4846
+#: src/routes/rounds.tsx:4980
 msgid "{roundCount} Rounds"
 msgstr "{roundCount} 个关卡"
 
@@ -366,7 +366,7 @@ msgstr "• 未保存"
 #: src/routes/converter.tsx:142
 #: src/routes/highscores.tsx:459
 #: src/routes/playlist-workshop.tsx:1999
-#: src/routes/rounds.tsx:2611
+#: src/routes/rounds.tsx:2616
 #: src/routes/settings.tsx:1895
 #: src/routes/single-player-setup.tsx:521
 msgid "← Back"
@@ -469,7 +469,7 @@ msgstr "$ {0}"
 msgid "1 multiplayer result entry is still queued."
 msgstr "1 条多人游戏结果仍在队列中。"
 
-#: src/routes/rounds.tsx:5713
+#: src/routes/rounds.tsx:5747
 msgid "1. Scope"
 msgstr "1. 范围"
 
@@ -477,7 +477,7 @@ msgstr "1. 范围"
 msgid "1.0"
 msgstr "1.0"
 
-#: src/routes/rounds.tsx:5725
+#: src/routes/rounds.tsx:5759
 msgid "2. Media"
 msgstr "2. 媒体"
 
@@ -489,11 +489,11 @@ msgstr "25, 50, 75"
 msgid "3-10 min"
 msgstr "3-10 分钟"
 
-#: src/routes/rounds.tsx:5737
+#: src/routes/rounds.tsx:5771
 msgid "3. Estimate"
 msgstr "3. 估算"
 
-#: src/routes/rounds.tsx:5749
+#: src/routes/rounds.tsx:5783
 msgid "4. Export"
 msgstr "4. 导出"
 
@@ -526,7 +526,7 @@ msgstr "中止"
 msgid "Abort Export"
 msgstr "中止导出"
 
-#: src/routes/rounds.tsx:5204
+#: src/routes/rounds.tsx:5238
 msgid "Abort Import"
 msgstr "中止导入"
 
@@ -537,12 +537,12 @@ msgstr "已中止"
 
 #: src/components/LibraryExportOverlay.tsx:243
 #: src/components/PlaylistExportOverlay.tsx:249
-#: src/routes/rounds.tsx:5204
+#: src/routes/rounds.tsx:5238
 msgid "Aborting..."
 msgstr "正在中止..."
 
 #: src/routes/playlist-workshop.tsx:2141
-#: src/routes/rounds.tsx:4828
+#: src/routes/rounds.tsx:4862
 msgid "Actions"
 msgstr "操作"
 
@@ -824,14 +824,14 @@ msgstr "在公开列表中广播"
 msgid "After:"
 msgstr "之后："
 
-#: src/components/game/RoundVideoOverlay.tsx:680
+#: src/components/game/RoundVideoOverlay.tsx:681
 msgid "Aligning timeline with TheHandy before playback starts."
 msgstr "播放开始前正在与 TheHandy 同步时间线。"
 
 #: src/routes/map-editor.tsx:1718
-#: src/routes/rounds.tsx:2943
-#: src/routes/rounds.tsx:2961
-#: src/routes/rounds.tsx:5481
+#: src/routes/rounds.tsx:2948
+#: src/routes/rounds.tsx:2966
+#: src/routes/rounds.tsx:5515
 msgid "All"
 msgstr "全部"
 
@@ -878,11 +878,11 @@ msgstr "仅允许配置的 Stash 来源 URL，并阻止 yt-dlp 和用户白名�
 #: src/components/LibraryExportOverlay.tsx:192
 #: src/components/PlaylistExportOverlay.tsx:198
 #: src/components/PlaylistPackExportDialog.tsx:471
-#: src/routes/rounds.tsx:5450
+#: src/routes/rounds.tsx:5484
 msgid "Already AV1"
 msgstr "已是 AV1"
 
-#: src/components/game/RoundVideoOverlay.tsx:1437
+#: src/components/game/RoundVideoOverlay.tsx:1438
 msgid "Already inside an intermediary segment."
 msgstr "已在中间片段内。"
 
@@ -894,15 +894,15 @@ msgstr "渲染此页面时发生意外错误。"
 msgid "An unexpected error occurred. The app may continue to function partially."
 msgstr "发生意外错误。应用可能继续部分运行。"
 
-#: src/routes/rounds.tsx:5774
+#: src/routes/rounds.tsx:5808
 msgid "Analyzing export package..."
 msgstr "正在分析导出包..."
 
-#: src/routes/rounds.tsx:5741
+#: src/routes/rounds.tsx:5775
 msgid "Analyzing package size and compression time..."
 msgstr "正在分析包大小和压缩时间..."
 
-#: src/routes/rounds.tsx:5795
+#: src/routes/rounds.tsx:5829
 msgid "Analyzing..."
 msgstr "正在分析..."
 
@@ -973,7 +973,7 @@ msgstr "反技能最大值"
 msgid "Anti-Perk Max %"
 msgstr "反技能最大 %"
 
-#: src/components/game/RoundVideoOverlay.tsx:3052
+#: src/components/game/RoundVideoOverlay.tsx:3054
 msgid "Anti-perk sequence"
 msgstr "反技能序列"
 
@@ -1121,7 +1121,7 @@ msgstr "准备放置前九个可见图块类型之一。"
 msgid "Asking during manual sidecar imports before trusting unknown remote URLs."
 msgstr "在信任未知远程 URL 之前，在手动 sidecar 导入时询问。"
 
-#: src/routes/rounds.tsx:2480
+#: src/routes/rounds.tsx:2485
 msgid "Assign every unresolved hero round before saving."
 msgstr "在保存前为每个未解析的角色关卡分配来源。"
 
@@ -1129,11 +1129,11 @@ msgstr "在保存前为每个未解析的角色关卡分配来源。"
 msgid "Attach a funscript file for auto-detection of round boundaries."
 msgstr "附加 funscript 文件以自动检测关卡边界。"
 
-#: src/routes/rounds.tsx:6069
+#: src/routes/rounds.tsx:6103
 msgid "Attach an optional local .funscript file"
 msgstr "附加一个可选的本地 .funscript 文件"
 
-#: src/routes/rounds.tsx:3696
+#: src/routes/rounds.tsx:3702
 msgid "Attach Funscript"
 msgstr "附加 Funscript"
 
@@ -1142,16 +1142,16 @@ msgstr "附加 Funscript"
 msgid "Attach Funscript (Optional)"
 msgstr "附加 Funscript（可选）"
 
-#: src/routes/rounds.tsx:3905
+#: src/routes/rounds.tsx:3934
 msgid "Attach Hero Media"
 msgstr "附加角色媒体"
 
 #. placeholder {0}: repairingTemplateRound.roundName
-#: src/routes/rounds.tsx:3868
+#: src/routes/rounds.tsx:3897
 msgid "Attach installed media to <0>{0}</0>."
 msgstr "将已安装的媒体附加到 <0>{0}</0>。"
 
-#: src/routes/rounds.tsx:3863
+#: src/routes/rounds.tsx:3892
 msgid "Attach Source Media"
 msgstr "附加来源媒体"
 
@@ -1184,8 +1184,8 @@ msgid "Authentication failed."
 msgstr "认证失败。"
 
 #: src/routes/playlist-workshop.tsx:2655
-#: src/routes/rounds.tsx:3552
-#: src/routes/rounds.tsx:3831
+#: src/routes/rounds.tsx:3558
+#: src/routes/rounds.tsx:3860
 msgid "Author"
 msgstr "作者"
 
@@ -1193,7 +1193,7 @@ msgstr "作者"
 msgid "Author (optional)"
 msgstr "作者（可选）"
 
-#: src/routes/rounds.tsx:4502
+#: src/routes/rounds.tsx:4536
 msgid "Author:"
 msgstr "作者："
 
@@ -1206,7 +1206,7 @@ msgstr "自动（默认）"
 msgid "Auto Detection"
 msgstr "自动检测"
 
-#: src/routes/rounds.tsx:3624
+#: src/routes/rounds.tsx:3630
 msgid "Auto from funscript"
 msgstr "从funscript自动"
 
@@ -1292,7 +1292,7 @@ msgstr "返回编辑器"
 #: src/routes/converter.tsx:179
 #: src/routes/converter.tsx:291
 #: src/routes/highscores.tsx:908
-#: src/routes/rounds.tsx:3432
+#: src/routes/rounds.tsx:3438
 #: src/routes/settings.tsx:2130
 msgid "Back to Main Menu"
 msgstr "返回主菜单"
@@ -1316,7 +1316,7 @@ msgstr "后台 pHash 扫描帮助应用更准确地识别视觉相似的关卡�
 
 #: src/components/PlaylistPackExportDialog.tsx:62
 #: src/components/PlaylistPackExportDialog.tsx:392
-#: src/routes/rounds.tsx:5345
+#: src/routes/rounds.tsx:5379
 msgid "Balanced"
 msgstr "均衡"
 
@@ -1335,7 +1335,7 @@ msgid "Bans apply to your hosted lobbies by user ID or hardware ID."
 msgstr "封禁通过用户 ID 或硬件 ID 应用于您主持的房间。"
 
 #. placeholder {0}: showProgressBarAlways ? "Pinned" : "Auto"
-#: src/components/game/RoundVideoOverlay.tsx:3342
+#: src/components/game/RoundVideoOverlay.tsx:3348
 msgid "Bar {0}"
 msgstr "进度条 {0}"
 
@@ -1398,7 +1398,7 @@ msgstr "棋盘进度"
 msgid "hud.boardProgress"
 msgstr "棋盘进度"
 
-#: src/components/game/RoundVideoOverlay.tsx:1847
+#: src/components/game/RoundVideoOverlay.tsx:1848
 msgid "Board sequence completed."
 msgstr "棋盘序列已完成。"
 
@@ -1411,17 +1411,17 @@ msgstr "成功完成高潮关卡时获得的奖励分数。这仅影响得分，
 msgid "first-start.step.welcome.detail.4"
 msgstr "两种模式都以关卡作为核心内容。棋盘决定下一步发生什么，您的选择会改变运行的风险和回报。"
 
-#: src/routes/rounds.tsx:1605
-#: src/routes/rounds.tsx:2981
-#: src/routes/rounds.tsx:3563
+#: src/routes/rounds.tsx:1607
+#: src/routes/rounds.tsx:2986
+#: src/routes/rounds.tsx:3569
 msgid "BPM"
 msgstr "BPM"
 
-#: src/routes/rounds.tsx:4484
+#: src/routes/rounds.tsx:4518
 msgid "BPM:"
 msgstr "BPM："
 
-#: src/routes/rounds.tsx:3334
+#: src/routes/rounds.tsx:3340
 msgid "Bring in a portable round package or other supported import file."
 msgstr "引入便携式关卡包或其他支持的导入文件。"
 
@@ -1442,11 +1442,11 @@ msgstr "浏览公开的房间并一键加入。"
 msgid "Browse Library →"
 msgstr "浏览库 →"
 
-#: src/routes/rounds.tsx:2638
+#: src/routes/rounds.tsx:2643
 msgid "Browse, filter, and edit installed rounds with the main library view front and center."
 msgstr "浏览、过滤和编辑已安装的关卡，主要库视图居前居中。"
 
-#: src/routes/rounds.tsx:3389
+#: src/routes/rounds.tsx:3395
 msgid "Build a clean installed-database export and choose where the package should be written."
 msgstr "构建干净的已安装数据库导出，并选择包的写入位置。"
 
@@ -1503,16 +1503,16 @@ msgstr "缓存"
 msgid "Caching Failed"
 msgstr "缓存失败"
 
-#: src/routes/rounds.tsx:4935
+#: src/routes/rounds.tsx:4969
 #: src/routes/single-player-setup.tsx:471
 #: src/routes/single-player-setup.tsx:568
 msgid "Caching ongoing"
 msgstr "缓存进行中"
 
-#: src/routes/rounds.tsx:4334
-#: src/routes/rounds.tsx:4397
-#: src/routes/rounds.tsx:4801
-#: src/routes/rounds.tsx:4942
+#: src/routes/rounds.tsx:4363
+#: src/routes/rounds.tsx:4431
+#: src/routes/rounds.tsx:4835
+#: src/routes/rounds.tsx:4976
 #: src/routes/single-player-setup.tsx:625
 msgid "Caching Ongoing"
 msgstr "缓存进行中"
@@ -1525,19 +1525,19 @@ msgstr "缓存视频"
 msgid "Caching..."
 msgstr "缓存中..."
 
-#: src/routes/rounds.tsx:5124
+#: src/routes/rounds.tsx:5158
 msgid "Calculating ETA..."
 msgstr "正在计算预计时间..."
 
-#: src/routes/rounds.tsx:3624
+#: src/routes/rounds.tsx:3630
 msgid "Calculating…"
 msgstr "计算中…"
 
-#: src/components/game/RoundVideoOverlay.tsx:3916
+#: src/components/game/RoundVideoOverlay.tsx:3924
 msgid "Came as told"
 msgstr "按要求完成"
 
-#: src/components/game/RoundVideoOverlay.tsx:4079
+#: src/components/game/RoundVideoOverlay.tsx:4088
 msgid "Came as Told"
 msgstr "按要求完成"
 
@@ -1554,7 +1554,7 @@ msgstr "战役完成"
 #: src/routes/playlist-workshop.tsx:3496
 #: src/routes/playlist-workshop.tsx:4059
 #: src/routes/playlist-workshop.tsx:4175
-#: src/routes/rounds.tsx:5030
+#: src/routes/rounds.tsx:5064
 #: src/routes/settings.tsx:3817
 #: src/routes/settings.tsx:4236
 #: src/routes/settings.tsx:4619
@@ -1563,12 +1563,12 @@ msgstr "战役完成"
 msgid "Cancel"
 msgstr "取消"
 
-#: src/routes/rounds.tsx:2746
-#: src/routes/rounds.tsx:2780
+#: src/routes/rounds.tsx:2751
+#: src/routes/rounds.tsx:2785
 msgid "Cancel Selection"
 msgstr "取消选择"
 
-#: src/components/game/RoundVideoOverlay.tsx:1504
+#: src/components/game/RoundVideoOverlay.tsx:1505
 msgid "Cannot resync: missing Application ID/API key."
 msgstr "无法重新同步：缺少应用 ID/API 密钥。"
 
@@ -1628,7 +1628,7 @@ msgstr "检查中"
 msgid "Checking login..."
 msgstr "正在检查登录..."
 
-#: src/routes/rounds.tsx:1315
+#: src/routes/rounds.tsx:1317
 msgid "Checking website support..."
 msgstr "正在检查网站支持..."
 
@@ -1636,7 +1636,7 @@ msgstr "正在检查网站支持..."
 msgid "Checking..."
 msgstr "检查中..."
 
-#: src/routes/rounds.tsx:4104
+#: src/routes/rounds.tsx:4133
 msgid "Checkpoint"
 msgstr "检查点"
 
@@ -1648,7 +1648,7 @@ msgstr "已到达检查点。游戏已保存。"
 msgid "Checkpoint Rest (sec)"
 msgstr "检查点休息（秒）"
 
-#: src/routes/rounds.tsx:4081
+#: src/routes/rounds.tsx:4110
 msgid "Checkpoint:"
 msgstr "检查点："
 
@@ -1666,7 +1666,7 @@ msgstr "中文"
 msgid "first-start.step.booru.title"
 msgstr "选择 booru 搜索提示"
 
-#: src/routes/rounds.tsx:3323
+#: src/routes/rounds.tsx:3329
 msgid "Choose a folder and scan it for supported round media."
 msgstr "选择一个文件夹并扫描其中支持的关卡媒体。"
 
@@ -1687,7 +1687,7 @@ msgid "Choose a playlist to edit, or create one from here."
 msgstr "选择一个播放列表进行编辑，或从此处创建一个。"
 
 #. placeholder {0}: repairingTemplateHero.heroName
-#: src/routes/rounds.tsx:3910
+#: src/routes/rounds.tsx:3939
 msgid "Choose a source hero for <0>{0}</0>. Assignments are auto-filled by round name, then order."
 msgstr "为 <0>{0}</0> 选择一个来源角色。分配按关卡名称自动填充，然后按顺序排列。"
 
@@ -1729,13 +1729,13 @@ msgstr "选择哪些高潮关卡可用。"
 msgid "Choose your route"
 msgstr "选择您的路线"
 
-#: src/routes/rounds.tsx:3637
+#: src/routes/rounds.tsx:3643
 msgid "clear"
 msgstr "清除"
 
 #: src/components/GlobalMusicOverlay.tsx:698
 #: src/routes/playlist-workshop.tsx:1887
-#: src/routes/rounds.tsx:2797
+#: src/routes/rounds.tsx:2802
 #: src/routes/settings.tsx:3830
 #: src/routes/settings.tsx:4249
 msgid "Clear"
@@ -1749,7 +1749,7 @@ msgstr "清除数据"
 msgid "Clear Editor"
 msgstr "清空编辑器"
 
-#: src/routes/rounds.tsx:2913
+#: src/routes/rounds.tsx:2918
 msgid "Clear Filters"
 msgstr "清除过滤器"
 
@@ -1776,7 +1776,7 @@ msgstr "清除播放列表"
 msgid "Clear selected rounds?"
 msgstr "清空已选回合？"
 
-#: src/routes/rounds.tsx:3092
+#: src/routes/rounds.tsx:3098
 msgid "Clear the current filters to get back to the full library."
 msgstr "清除当前过滤器以返回完整库。"
 
@@ -1790,7 +1790,7 @@ msgstr "清除当前选择并取消待处理的连接。"
 msgid "Clearing..."
 msgstr "正在清除..."
 
-#: src/routes/rounds.tsx:5777
+#: src/routes/rounds.tsx:5811
 msgid "Click export to choose a destination and generate the package."
 msgstr "点击导出以选择目标位置并生成包。"
 
@@ -1809,20 +1809,20 @@ msgstr "关闭"
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:369
 #: src/components/game/GameScene.tsx:4471
 #: src/components/game/GameScene.tsx:4742
-#: src/components/game/RoundVideoOverlay.tsx:2984
-#: src/components/game/RoundVideoOverlay.tsx:3400
-#: src/components/game/RoundVideoOverlay.tsx:3942
+#: src/components/game/RoundVideoOverlay.tsx:2986
+#: src/components/game/RoundVideoOverlay.tsx:3407
+#: src/components/game/RoundVideoOverlay.tsx:3950
 #: src/components/GlobalHandyOverlay.tsx:259
 #: src/components/GlobalMusicOverlay.tsx:328
 #: src/components/PlaylistPackExportDialog.tsx:191
 #: src/routes/index.tsx:268
-#: src/routes/rounds.tsx:5005
-#: src/routes/rounds.tsx:5391
-#: src/routes/rounds.tsx:5968
+#: src/routes/rounds.tsx:5039
+#: src/routes/rounds.tsx:5425
+#: src/routes/rounds.tsx:6002
 msgid "Close"
 msgstr "关闭"
 
-#: src/components/game/RoundVideoOverlay.tsx:2983
+#: src/components/game/RoundVideoOverlay.tsx:2985
 msgid "Close ({missingMediaAutoCloseRemainingSec}s)"
 msgstr "关闭 ({missingMediaAutoCloseRemainingSec}s)"
 
@@ -1863,7 +1863,7 @@ msgstr "关闭 TheHandy 覆盖层"
 msgid "CODE"
 msgstr "验证码"
 
-#: src/routes/rounds.tsx:3078
+#: src/routes/rounds.tsx:3084
 msgid "Collapse Groups"
 msgstr "折叠分组"
 
@@ -1890,13 +1890,13 @@ msgid "Compress non-AV1 videos to AV1"
 msgstr "将非 AV1 视频压缩为 AV1"
 
 #: src/components/PlaylistPackExportDialog.tsx:257
-#: src/routes/rounds.tsx:5438
-#: src/routes/rounds.tsx:5586
+#: src/routes/rounds.tsx:5472
+#: src/routes/rounds.tsx:5620
 msgid "Compression"
 msgstr "压缩"
 
 #: src/components/PlaylistPackExportDialog.tsx:366
-#: src/routes/rounds.tsx:5649
+#: src/routes/rounds.tsx:5683
 msgid "Compression Strength"
 msgstr "压缩强度"
 
@@ -1920,7 +1920,7 @@ msgstr "确认并安装"
 msgid "Confirm Action"
 msgstr "确认操作"
 
-#: src/routes/rounds.tsx:3761
+#: src/routes/rounds.tsx:3790
 msgid "Confirm Conversion"
 msgstr "确认转换"
 
@@ -1934,7 +1934,7 @@ msgstr "确认删除"
 msgid "Confirm Reveal"
 msgstr "确认显示"
 
-#: src/components/game/RoundVideoOverlay.tsx:3906
+#: src/components/game/RoundVideoOverlay.tsx:3914
 msgid "Confirm what happened in this cum round."
 msgstr "确认此高潮关卡中发生了什么。"
 
@@ -1946,7 +1946,7 @@ msgstr "确认您已高潮"
 msgid "Confirm your orgasm. Because this is not a cum round, this will immediately end the round and the entire game as a loss."
 msgstr "确认您已高潮。由于这不是高潮关卡，这将立即结束当前关卡并将整场游戏判定为失败。"
 
-#: src/routes/rounds.tsx:2252
+#: src/routes/rounds.tsx:2256
 msgid "Confirmation text did not match. No changes were made."
 msgstr "确认文本不匹配。未进行任何更改。"
 
@@ -2066,19 +2066,19 @@ msgstr "转换实验室"
 msgid "Convert a standalone round into a hero with segments."
 msgstr "将独立关卡转换为带片段的角色。"
 
-#: src/routes/rounds.tsx:3750
+#: src/routes/rounds.tsx:3779
 msgid "Convert Hero to Round"
 msgstr "将角色转换为关卡"
 
-#: src/routes/rounds.tsx:5634
+#: src/routes/rounds.tsx:5668
 msgid "Convert to AV1"
 msgstr "转换为 AV1"
 
-#: src/routes/rounds.tsx:4564
+#: src/routes/rounds.tsx:4598
 msgid "Convert to Hero"
 msgstr "转换为角色"
 
-#: src/routes/rounds.tsx:4891
+#: src/routes/rounds.tsx:4925
 msgid "Convert to Round"
 msgstr "转换为关卡"
 
@@ -2092,8 +2092,8 @@ msgstr "将视频转换为可玩的回合"
 msgid "settings.help.shortcuts.converter.title"
 msgstr "转换器"
 
-#: src/routes/rounds.tsx:3760
-#: src/routes/rounds.tsx:4891
+#: src/routes/rounds.tsx:3789
+#: src/routes/rounds.tsx:4925
 msgid "Converting..."
 msgstr "正在转换..."
 
@@ -2111,7 +2111,7 @@ msgid "Copied to Clipboard!"
 msgstr "已复制到剪贴板！"
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:133
-#: src/routes/rounds.tsx:5439
+#: src/routes/rounds.tsx:5473
 msgid "Copy"
 msgstr "复制"
 
@@ -2119,7 +2119,7 @@ msgstr "复制"
 msgid "Copy invite code"
 msgstr "复制邀请码"
 
-#: src/routes/rounds.tsx:5607
+#: src/routes/rounds.tsx:5641
 msgid "Copy original media"
 msgstr "复制原始媒体"
 
@@ -2131,8 +2131,8 @@ msgstr "复制原始视频"
 msgid "Could not delete single-player run."
 msgstr "无法删除单人游戏运行。"
 
-#: src/routes/rounds.tsx:3614
-#: src/routes/rounds.tsx:3618
+#: src/routes/rounds.tsx:3620
+#: src/routes/rounds.tsx:3624
 msgid "Could not estimate difficulty from funscript."
 msgstr "无法从funscript估算难度。"
 
@@ -2153,7 +2153,7 @@ msgstr "创建"
 msgid "Create a new custom endpoint"
 msgstr "创建新的自定义端点"
 
-#: src/routes/rounds.tsx:4010
+#: src/routes/rounds.tsx:4039
 msgid "Create a playlist after import."
 msgstr "导入后创建播放列表。"
 
@@ -2173,11 +2173,11 @@ msgstr "从当前的入点和出点标记创建一个片段。"
 msgid "Create Account"
 msgstr "创建账户"
 
-#: src/routes/rounds.tsx:5951
+#: src/routes/rounds.tsx:5985
 msgid "Create an installed round directly from a supported public website URL. Playback starts from the web source immediately and caches in the background."
 msgstr "直接从支持的公开网站 URL 创建已安装的关卡。播放从网络源立即开始，并在后台缓存。"
 
-#: src/routes/rounds.tsx:6085
+#: src/routes/rounds.tsx:6119
 msgid "Create an installed round from the current website source fields."
 msgstr "根据当前网站来源字段创建已安装回合。"
 
@@ -2246,14 +2246,14 @@ msgstr "致谢 / 许可"
 msgid "Credits & License"
 msgstr "版权与许可"
 
-#: src/routes/rounds.tsx:2946
-#: src/routes/rounds.tsx:3543
+#: src/routes/rounds.tsx:2951
+#: src/routes/rounds.tsx:3549
 #: src/routes/settings.tsx:5389
 msgid "Cum"
 msgstr "高潮"
 
 #: src/components/game/GameScene.tsx:4431
-#: src/components/game/RoundVideoOverlay.tsx:3384
+#: src/components/game/RoundVideoOverlay.tsx:3391
 msgid "Cum (C)"
 msgstr "高潮 (C)"
 
@@ -2270,7 +2270,7 @@ msgstr "Cum 回合奖励分数"
 msgid "Cum Round Bonus Score"
 msgstr "Cum 回合奖励分数"
 
-#: src/components/game/RoundVideoOverlay.tsx:3900
+#: src/components/game/RoundVideoOverlay.tsx:3908
 msgid "Cum Round Check"
 msgstr "Cum 回合检查"
 
@@ -2307,11 +2307,11 @@ msgstr "当前预览"
 msgid "Current round already has a funscript"
 msgstr "当前回合已有 funscript"
 
-#: src/routes/rounds.tsx:5144
+#: src/routes/rounds.tsx:5178
 msgid "Current round preview"
 msgstr "当前回合预览"
 
-#: src/components/game/RoundVideoOverlay.tsx:4027
+#: src/components/game/RoundVideoOverlay.tsx:4036
 msgid "Current script position"
 msgstr "当前脚本位置"
 
@@ -2377,7 +2377,7 @@ msgstr "默认应用数据文件夹（现有行为）"
 msgid "Default app data folder (persistent)"
 msgstr "默认应用数据文件夹（持久化）"
 
-#: src/routes/rounds.tsx:4031
+#: src/routes/rounds.tsx:4060
 msgid "Defer phash generation to a later moment."
 msgstr "将 phash 生成推迟到稍后进行。"
 
@@ -2405,14 +2405,14 @@ msgstr "删除 <0>{0}</0>？此操作无法撤销。"
 msgid "Delete Edge"
 msgstr "删除边"
 
-#: src/routes/rounds.tsx:3814
-#: src/routes/rounds.tsx:4165
-#: src/routes/rounds.tsx:4852
+#: src/routes/rounds.tsx:3843
+#: src/routes/rounds.tsx:4194
+#: src/routes/rounds.tsx:4886
 msgid "Delete Hero"
 msgstr "删除 Hero"
 
 #. placeholder {0}: deleteHeroDialog?.name ?? ""
-#: src/routes/rounds.tsx:4164
+#: src/routes/rounds.tsx:4193
 msgid ""
 "Delete hero entry “{0}” from the database?\n"
 "\n"
@@ -2422,7 +2422,7 @@ msgstr ""
 "\n"
 "这也会永久删除数据库中所有关联的回合。磁盘上的文件将保持不变。"
 
-#: src/routes/rounds.tsx:4163
+#: src/routes/rounds.tsx:4192
 msgid "Delete Hero?"
 msgstr "删除 Hero？"
 
@@ -2438,13 +2438,13 @@ msgstr "删除播放列表"
 msgid "Delete Playlist?"
 msgstr "删除播放列表？"
 
-#: src/routes/rounds.tsx:3520
-#: src/routes/rounds.tsx:4156
+#: src/routes/rounds.tsx:3526
+#: src/routes/rounds.tsx:4185
 msgid "Delete Round"
 msgstr "删除回合"
 
 #. placeholder {0}: deleteRoundDialog?.name ?? ""
-#: src/routes/rounds.tsx:4155
+#: src/routes/rounds.tsx:4184
 msgid ""
 "Delete round entry “{0}” from the database?\n"
 "\n"
@@ -2454,7 +2454,7 @@ msgstr ""
 "\n"
 "这仅移除数据库条目。磁盘上的文件将保持不变。"
 
-#: src/routes/rounds.tsx:4154
+#: src/routes/rounds.tsx:4183
 msgid "Delete Round?"
 msgstr "删除回合？"
 
@@ -2479,13 +2479,13 @@ msgstr "删除当前选择。"
 #: src/routes/highscores.tsx:754
 #: src/routes/highscores.tsx:1095
 #: src/routes/playlist-workshop.tsx:3520
-#: src/routes/rounds.tsx:3520
-#: src/routes/rounds.tsx:3814
+#: src/routes/rounds.tsx:3526
+#: src/routes/rounds.tsx:3843
 msgid "Deleting..."
 msgstr "正在删除..."
 
-#: src/routes/rounds.tsx:3734
-#: src/routes/rounds.tsx:3842
+#: src/routes/rounds.tsx:3763
+#: src/routes/rounds.tsx:3871
 msgid "Description"
 msgstr "描述"
 
@@ -2502,11 +2502,11 @@ msgstr "设计棋盘布局"
 msgid "Destination:"
 msgstr "目的地："
 
-#: src/routes/rounds.tsx:3710
+#: src/routes/rounds.tsx:3716
 msgid "Detach Funscript"
 msgstr "分离 Funscript"
 
-#: src/routes/rounds.tsx:4535
+#: src/routes/rounds.tsx:4569
 msgid "Details"
 msgstr "详情"
 
@@ -2528,7 +2528,7 @@ msgstr "开发者菜单"
 msgid "Dev Perks"
 msgstr "开发者增益"
 
-#: src/components/game/RoundVideoOverlay.tsx:3440
+#: src/components/game/RoundVideoOverlay.tsx:3448
 msgid "Dev Skip (K)"
 msgstr "开发者跳过 (K)"
 
@@ -2537,12 +2537,12 @@ msgstr "开发者跳过 (K)"
 msgid "settings.help.shortcuts.gameDebug.description"
 msgstr "仅用于开发的快捷键，只有在启用回合调试控制时才会激活。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1467
+#: src/components/game/RoundVideoOverlay.tsx:1468
 msgid "Development: forced intermediary clip."
 msgstr "开发模式：强制中间片段。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2795
-#: src/components/game/RoundVideoOverlay.tsx:3424
+#: src/components/game/RoundVideoOverlay.tsx:2797
+#: src/components/game/RoundVideoOverlay.tsx:3432
 msgid "Development: intermediary ended early."
 msgstr "开发模式：中间片段提前结束。"
 
@@ -2578,15 +2578,15 @@ msgstr "设备已停止"
 msgid "Dice Roll Limits"
 msgstr "骰子掷点限制"
 
-#: src/components/game/RoundVideoOverlay.tsx:3924
+#: src/components/game/RoundVideoOverlay.tsx:3932
 msgid "Did not cum"
 msgstr "未完成"
 
-#: src/components/game/RoundVideoOverlay.tsx:4082
+#: src/components/game/RoundVideoOverlay.tsx:4091
 msgid "Did Not Cum"
 msgstr "未完成"
 
-#: src/components/game/RoundVideoOverlay.tsx:3903
+#: src/components/game/RoundVideoOverlay.tsx:3911
 msgid "Did you cum as instructed?"
 msgstr "你是否按照指示完成了？"
 
@@ -2594,10 +2594,10 @@ msgstr "你是否按照指示完成了？"
 msgid "Did you cum?"
 msgstr "你完成了吗？"
 
-#: src/routes/rounds.tsx:1603
-#: src/routes/rounds.tsx:2980
-#: src/routes/rounds.tsx:3574
-#: src/routes/rounds.tsx:4965
+#: src/routes/rounds.tsx:1605
+#: src/routes/rounds.tsx:2985
+#: src/routes/rounds.tsx:3580
+#: src/routes/rounds.tsx:4999
 msgid "Difficulty"
 msgstr "难度"
 
@@ -2630,16 +2630,16 @@ msgstr "已禁用"
 #: src/routes/first-start.tsx:1655
 #: src/routes/playlist-workshop.tsx:2331
 #: src/routes/playlist-workshop.tsx:2950
-#: src/routes/rounds.tsx:2840
-#: src/routes/rounds.tsx:4387
+#: src/routes/rounds.tsx:2845
+#: src/routes/rounds.tsx:4416
 msgid "Disabled"
 msgstr "已禁用"
 
-#: src/routes/rounds.tsx:3013
+#: src/routes/rounds.tsx:3019
 msgid "Disabled Hidden"
 msgstr "已禁用（隐藏）"
 
-#: src/routes/rounds.tsx:3013
+#: src/routes/rounds.tsx:3019
 msgid "Disabled Included"
 msgstr "已禁用（包含）"
 
@@ -2679,7 +2679,7 @@ msgstr "已丢弃物品"
 msgid "Disconnect"
 msgstr "断开连接"
 
-#: src/components/game/RoundVideoOverlay.tsx:3091
+#: src/components/game/RoundVideoOverlay.tsx:3093
 #: src/components/GlobalHandyOverlay.tsx:156
 #: src/routes/index.tsx:296
 #: src/routes/settings.tsx:3198
@@ -2720,7 +2720,7 @@ msgstr "不要在此使用你的访问令牌。请在 Handy 创建或选择一�
 msgid "game.perk.skip"
 msgstr "不要购买任何增益"
 
-#: src/routes/rounds.tsx:2653
+#: src/routes/rounds.tsx:2658
 msgid "download"
 msgstr "下载"
 
@@ -2779,7 +2779,7 @@ msgstr "拖拽以重新排序"
 msgid "Duplicate"
 msgstr "复制"
 
-#: src/components/game/RoundVideoOverlay.tsx:4018
+#: src/components/game/RoundVideoOverlay.tsx:4027
 msgid "Duration"
 msgstr "时长"
 
@@ -2812,13 +2812,13 @@ msgstr "编辑"
 msgid "Edit an existing hero and add or modify segments."
 msgstr "编辑现有的 Hero 并添加或修改片段。"
 
-#: src/routes/rounds.tsx:3807
-#: src/routes/rounds.tsx:4841
+#: src/routes/rounds.tsx:3836
+#: src/routes/rounds.tsx:4875
 msgid "Edit Hero"
 msgstr "编辑 Hero"
 
-#: src/routes/rounds.tsx:3513
-#: src/routes/rounds.tsx:4523
+#: src/routes/rounds.tsx:3519
+#: src/routes/rounds.tsx:4557
 msgid "Edit Round"
 msgstr "编辑回合"
 
@@ -2885,7 +2885,7 @@ msgstr "已启用"
 msgid "Enables dev menu features in singleplayer. Any highscore achieved will be permanently marked with 🎭. Does not work in multiplayer."
 msgstr "在单人模式中启用开发者菜单功能。任何获得的高分都将被永久标记为 🎭。在多人模式中无效。"
 
-#: src/routes/rounds.tsx:5657
+#: src/routes/rounds.tsx:5691
 msgid "Encoder pending"
 msgstr "编码器等待中"
 
@@ -2893,7 +2893,7 @@ msgstr "编码器等待中"
 msgid "End"
 msgstr "结束"
 
-#: src/components/game/RoundVideoOverlay.tsx:3429
+#: src/components/game/RoundVideoOverlay.tsx:3437
 msgid "End Intermediary (J)"
 msgstr "结束中间片段 (J)"
 
@@ -2906,7 +2906,7 @@ msgstr "结束节点是终端节点。"
 msgid "settings.help.shortcuts.gameDebug.endIntermediary"
 msgstr "提前结束当前中场并恢复主回合。"
 
-#: src/routes/rounds.tsx:3653
+#: src/routes/rounds.tsx:3659
 msgid "End Time (ms)"
 msgstr "结束时间 (ms)"
 
@@ -2923,7 +2923,7 @@ msgstr "英语"
 msgid "Enter a code to join immediately or host a lobby with the current playlist."
 msgstr "输入代码立即加入，或使用当前播放列表创建大厅。"
 
-#: src/routes/rounds.tsx:2066
+#: src/routes/rounds.tsx:2070
 msgid "Enter a round name before installing."
 msgstr "安装前请输入回合名称。"
 
@@ -2931,8 +2931,8 @@ msgstr "安装前请输入回合名称。"
 msgid "Enter a valid http(s) video URL."
 msgstr "请输入有效的 http(s) 视频 URL。"
 
-#: src/routes/rounds.tsx:1307
-#: src/routes/rounds.tsx:2073
+#: src/routes/rounds.tsx:1309
+#: src/routes/rounds.tsx:2077
 msgid "Enter a valid public http(s) website video URL."
 msgstr "请输入有效的公开 http(s) 网站视频 URL。"
 
@@ -3039,7 +3039,7 @@ msgstr "错误"
 msgid "Est. Encode Time"
 msgstr "预计编码时间"
 
-#: src/routes/rounds.tsx:5688
+#: src/routes/rounds.tsx:5722
 msgid "Est. Time"
 msgstr "预计时间"
 
@@ -3080,7 +3080,17 @@ msgstr "所有位置"
 msgid "Exact:"
 msgstr "精确："
 
-#: src/routes/rounds.tsx:4078
+#: src/routes/rounds.tsx:3753
+msgid "Exclude from random round selection"
+msgstr ""
+
+#: src/routes/rounds.tsx:1613
+#: src/routes/rounds.tsx:2989
+#: src/routes/rounds.tsx:4421
+msgid "Excluded"
+msgstr ""
+
+#: src/routes/rounds.tsx:4107
 msgid "Excluded:"
 msgstr "已排除："
 
@@ -3092,7 +3102,7 @@ msgstr "退出"
 msgid "Expand a cached match to review every player row from the stored standings snapshot."
 msgstr "展开缓存比赛以查看存储排名快照中的每行玩家数据。"
 
-#: src/routes/rounds.tsx:3056
+#: src/routes/rounds.tsx:3062
 msgid "Expand All Groups"
 msgstr "展开所有分组"
 
@@ -3102,7 +3112,7 @@ msgstr "预计最终大小"
 
 #. placeholder {0}: formatByteSize(estimate?.expectedVideoBytes ?? 0)
 #. placeholder {1}: effectiveMode === "av1" ? `, estimated encode time: ${formatDurationEstimate(estimate?.estimatedCompressionSeconds ?? 0)}.` : "."
-#: src/routes/rounds.tsx:5743
+#: src/routes/rounds.tsx:5777
 msgid "Expected media size: {0}{1}"
 msgstr "预计媒体大小：{0}{1}"
 
@@ -3112,7 +3122,7 @@ msgstr "预计节省"
 
 #: src/components/LibraryExportOverlay.tsx:204
 #: src/components/PlaylistExportOverlay.tsx:210
-#: src/routes/rounds.tsx:5683
+#: src/routes/rounds.tsx:5717
 msgid "Expected Size"
 msgstr "预计大小"
 
@@ -3140,8 +3150,8 @@ msgstr "实验性覆盖已激活：{0} 至少需要 {selectedPlaylistRequiredRou
 msgid "Experimental override active. This lobby expects {0} installed rounds, and joining below that may result in a bad user experience."
 msgstr "实验性覆盖已激活。此大厅期望 {0} 个已安装回合，低于此数量加入可能会导致糟糕的体验。"
 
-#: src/routes/rounds.tsx:2736
-#: src/routes/rounds.tsx:3397
+#: src/routes/rounds.tsx:2741
+#: src/routes/rounds.tsx:3403
 msgid "Export"
 msgstr "导出"
 
@@ -3149,16 +3159,16 @@ msgstr "导出"
 msgid "Export .fplay"
 msgstr "导出 .fplay"
 
-#: src/routes/rounds.tsx:3386
+#: src/routes/rounds.tsx:3392
 msgid "Export & Share"
 msgstr "导出与分享"
 
-#: src/routes/rounds.tsx:905
-#: src/routes/rounds.tsx:2026
+#: src/routes/rounds.tsx:907
+#: src/routes/rounds.tsx:2030
 msgid "Export canceled."
 msgstr "导出已取消。"
 
-#: src/routes/rounds.tsx:5372
+#: src/routes/rounds.tsx:5406
 msgid "Export complete."
 msgstr "导出完成。"
 
@@ -3171,19 +3181,19 @@ msgstr "导出 Fplay"
 msgid "Export Pack"
 msgstr "导出包"
 
-#: src/routes/rounds.tsx:5404
+#: src/routes/rounds.tsx:5438
 msgid "Export Ready"
 msgstr "导出就绪"
 
-#: src/routes/rounds.tsx:5461
+#: src/routes/rounds.tsx:5495
 msgid "Export Scope"
 msgstr "导出范围"
 
-#: src/routes/rounds.tsx:2808
+#: src/routes/rounds.tsx:2813
 msgid "Export Selected"
 msgstr "导出选中"
 
-#: src/routes/rounds.tsx:5484
+#: src/routes/rounds.tsx:5518
 msgid "Export the entire installed library."
 msgstr "导出整个已安装的库。"
 
@@ -3200,9 +3210,9 @@ msgstr "导出你的作品"
 msgid "first-start.step.heroes.detail.5"
 msgstr "导出自己的作品也很简单。当你的回合或播放列表准备好后，应用会提供直接的导出路径，因此分享包不是一个复杂的过程。"
 
-#: src/routes/rounds.tsx:2736
-#: src/routes/rounds.tsx:3397
-#: src/routes/rounds.tsx:5795
+#: src/routes/rounds.tsx:2741
+#: src/routes/rounds.tsx:3403
+#: src/routes/rounds.tsx:5829
 msgid "Exporting..."
 msgstr "正在导出..."
 
@@ -3224,7 +3234,7 @@ msgstr "为 EroScripts 服务提取的视频和趣味脚本。"
 
 #. placeholder {0}: status.phaseProgress.current
 #. placeholder {1}: status.phaseProgress.total
-#: src/routes/rounds.tsx:5132
+#: src/routes/rounds.tsx:5166
 msgid "Extracting pack {0} / {1} files"
 msgstr "正在提取包 {0} / {1} 个文件"
 
@@ -3236,11 +3246,11 @@ msgstr "ey..."
 msgid "F{fieldIndex}"
 msgstr "F{fieldIndex}"
 
-#: src/routes/rounds.tsx:386
+#: src/routes/rounds.tsx:387
 msgid "Failed"
 msgstr "失败"
 
-#: src/components/game/RoundVideoOverlay.tsx:3932
+#: src/components/game/RoundVideoOverlay.tsx:3940
 msgid "Failed instruction"
 msgstr "失败的指令"
 
@@ -3271,7 +3281,7 @@ msgstr "添加音乐文件失败。"
 msgid "Failed to analyze export package."
 msgstr "分析导出包失败。"
 
-#: src/routes/rounds.tsx:5291
+#: src/routes/rounds.tsx:5325
 msgid "Failed to analyze library package."
 msgstr "分析库包失败。"
 
@@ -3279,7 +3289,7 @@ msgstr "分析库包失败。"
 msgid "Failed to apply setting."
 msgstr "应用设置失败。"
 
-#: src/routes/rounds.tsx:2055
+#: src/routes/rounds.tsx:2059
 msgid "Failed to attach the selected funscript file."
 msgstr "附加所选 Funscript 文件失败。"
 
@@ -3300,7 +3310,7 @@ msgstr "清除 EroScripts 登录 Cookie 失败。"
 msgid "Failed to clear login cookies."
 msgstr "清除登录 Cookie 失败。"
 
-#: src/routes/rounds.tsx:2271
+#: src/routes/rounds.tsx:2275
 msgid "Failed to convert hero group back to a round."
 msgstr "将 Hero 组转换回回合失败。"
 
@@ -3309,7 +3319,7 @@ msgstr "将 Hero 组转换回回合失败。"
 msgid "Failed to copy invite info."
 msgstr "复制邀请信息失败。"
 
-#: src/routes/rounds.tsx:1941
+#: src/routes/rounds.tsx:1945
 msgid "Failed to create legacy playlist."
 msgstr "创建旧版播放列表失败。"
 
@@ -3327,7 +3337,7 @@ msgstr "创建播放列表失败。"
 msgid "Failed to create source."
 msgstr "创建来源失败。"
 
-#: src/routes/rounds.tsx:2374
+#: src/routes/rounds.tsx:2379
 msgid "Failed to delete hero."
 msgstr "删除 Hero 失败。"
 
@@ -3335,7 +3345,7 @@ msgstr "删除 Hero 失败。"
 msgid "Failed to delete playlist."
 msgstr "删除播放列表失败。"
 
-#: src/routes/rounds.tsx:2347
+#: src/routes/rounds.tsx:2352
 msgid "Failed to delete round."
 msgstr "删除回合失败。"
 
@@ -3351,8 +3361,8 @@ msgstr "直接发送负面增益失败。"
 msgid "Failed to download funscript."
 msgstr "无法下载 funscript。"
 
-#: src/routes/rounds.tsx:915
-#: src/routes/rounds.tsx:2029
+#: src/routes/rounds.tsx:917
+#: src/routes/rounds.tsx:2033
 msgid "Failed to export library package."
 msgstr "导出库包失败。"
 
@@ -3368,7 +3378,7 @@ msgstr "完成运行结算失败。"
 msgid "Failed to give up."
 msgstr "放弃失败。"
 
-#: src/routes/rounds.tsx:1799
+#: src/routes/rounds.tsx:1803
 msgid "Failed to import selected file."
 msgstr "导入所选文件失败。"
 
@@ -3380,23 +3390,23 @@ msgstr "导入所选文件失败。"
 msgid "Failed to import the selected folder."
 msgstr "导入所选文件夹失败。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1510
+#: src/components/game/RoundVideoOverlay.tsx:1511
 msgid "Failed to initialize TheHandy session for resync."
 msgstr "重新同步初始化 TheHandy 会话失败。"
 
-#: src/components/game/RoundVideoOverlay.tsx:917
+#: src/components/game/RoundVideoOverlay.tsx:918
 msgid "Failed to initialize TheHandy session."
 msgstr "初始化 TheHandy 会话失败。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1653
+#: src/components/game/RoundVideoOverlay.tsx:1654
 msgid "Failed to initialize TheHandy sync."
 msgstr "初始化 TheHandy 同步失败。"
 
-#: src/routes/rounds.tsx:2182
+#: src/routes/rounds.tsx:2186
 msgid "Failed to install EroScripts video."
 msgstr "无法安装 EroScripts 视频。"
 
-#: src/routes/rounds.tsx:2120
+#: src/routes/rounds.tsx:2124
 msgid "Failed to install the website round."
 msgstr "安装网站回合失败。"
 
@@ -3417,7 +3427,7 @@ msgstr "加入进行中的比赛失败。"
 msgid "Failed to kick player."
 msgstr "踢出玩家失败。"
 
-#: src/routes/rounds.tsx:1084
+#: src/routes/rounds.tsx:1086
 msgid "Failed to load disabled round IDs."
 msgstr "加载已禁用的回合 ID 失败。"
 
@@ -3425,20 +3435,20 @@ msgstr "加载已禁用的回合 ID 失败。"
 msgid "Failed to load EroScripts topic."
 msgstr "无法加载 EroScripts 主题。"
 
-#: src/routes/rounds.tsx:522
+#: src/routes/rounds.tsx:523
 msgid "Failed to load installed rounds"
 msgstr "加载已安装的回合失败"
 
-#: src/routes/rounds.tsx:1033
-#: src/routes/rounds.tsx:2856
+#: src/routes/rounds.tsx:1035
+#: src/routes/rounds.tsx:2861
 msgid "Failed to load installed rounds."
 msgstr "加载已安装的回合失败。"
 
-#: src/routes/rounds.tsx:1132
+#: src/routes/rounds.tsx:1134
 msgid "Failed to load playlists."
 msgstr "加载播放列表失败。"
 
-#: src/routes/rounds.tsx:1199
+#: src/routes/rounds.tsx:1201
 msgid "Failed to load preview settings."
 msgstr "加载预览设置失败。"
 
@@ -3450,7 +3460,7 @@ msgstr "加载公共大厅失败。"
 msgid "Failed to load trusted sites."
 msgstr "加载受信任的站点失败。"
 
-#: src/routes/rounds.tsx:1249
+#: src/routes/rounds.tsx:1251
 msgid "Failed to load web install settings."
 msgstr "加载网页安装设置失败。"
 
@@ -3510,11 +3520,11 @@ msgstr "移除服务器配置失败。"
 msgid "Failed to rename playlist."
 msgstr "重命名播放列表失败。"
 
-#: src/routes/rounds.tsx:2498
+#: src/routes/rounds.tsx:2503
 msgid "Failed to repair template hero."
 msgstr "修复模板 Hero 失败。"
 
-#: src/routes/rounds.tsx:2441
+#: src/routes/rounds.tsx:2446
 msgid "Failed to repair template round."
 msgstr "修复模板回合失败。"
 
@@ -3522,15 +3532,15 @@ msgstr "修复模板回合失败。"
 msgid "Failed to resume selected playlist."
 msgstr "恢复所选播放列表失败。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1546
+#: src/components/game/RoundVideoOverlay.tsx:1547
 msgid "Failed to resync timing with TheHandy."
 msgstr "与 TheHandy 重新同步时间失败。"
 
-#: src/routes/rounds.tsx:2416
+#: src/routes/rounds.tsx:2421
 msgid "Failed to retry template hero linking."
 msgstr "重试模板 Hero 链接失败。"
 
-#: src/routes/rounds.tsx:2399
+#: src/routes/rounds.tsx:2404
 msgid "Failed to retry template round linking."
 msgstr "重试模板回合链接失败。"
 
@@ -3571,7 +3581,7 @@ msgstr "为所有玩家启动失败。"
 msgid "Failed to start selected playlist."
 msgstr "启动所选播放列表失败。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2655
+#: src/components/game/RoundVideoOverlay.tsx:2657
 msgid "Failed to stream sync position to TheHandy."
 msgstr "向 TheHandy 流式传输同步位置失败。"
 
@@ -3599,7 +3609,7 @@ msgstr "解除封禁玩家失败。"
 msgid "Failed to update heartbeat."
 msgstr "更新心跳失败。"
 
-#: src/routes/rounds.tsx:2330
+#: src/routes/rounds.tsx:2335
 msgid "Failed to update hero."
 msgstr "更新 Hero 失败。"
 
@@ -3612,7 +3622,7 @@ msgstr "更新大厅锁定状态失败。"
 msgid "Failed to update public lobby visibility."
 msgstr "更新公共大厅可见性失败。"
 
-#: src/routes/rounds.tsx:2309
+#: src/routes/rounds.tsx:2314
 msgid "Failed to update round."
 msgstr "更新回合失败。"
 
@@ -3651,7 +3661,7 @@ msgstr "Fap Land Party Edition 支持两种棋盘风格，因为不是每次运�
 msgid "Fastest"
 msgstr "最快"
 
-#: src/routes/rounds.tsx:5610
+#: src/routes/rounds.tsx:5644
 msgid "Fastest export. Keeps current codec and file size."
 msgstr "最快导出。保持当前编解码器和文件大小。"
 
@@ -3687,7 +3697,7 @@ msgstr "筛选域名"
 msgid "Final"
 msgstr "决赛"
 
-#: src/routes/rounds.tsx:5413
+#: src/routes/rounds.tsx:5447
 msgid "Final Artifact"
 msgstr "最终物品"
 
@@ -3712,7 +3722,7 @@ msgstr "最终排名"
 msgid "Finalized"
 msgstr "已结算"
 
-#: src/routes/rounds.tsx:3357
+#: src/routes/rounds.tsx:3363
 msgid "Find EroScripts topics, download videos, and attach direct funscripts."
 msgstr "查找 EroScripts 主题、下载视频并附加直接 funscript。"
 
@@ -3720,7 +3730,7 @@ msgstr "查找 EroScripts 主题、下载视频并附加直接 funscript。"
 msgid "Find Videos & Funscripts"
 msgstr "查找视频和 Funscript"
 
-#: src/routes/rounds.tsx:6077
+#: src/routes/rounds.tsx:6111
 msgid "Find videos and direct funscripts from EroScripts."
 msgstr "从 EroScripts 查找视频和直接 funscript。"
 
@@ -3772,11 +3782,11 @@ msgstr "已完成：{0}"
 msgid "First Start Workflow"
 msgstr "首次启动向导"
 
-#: src/routes/rounds.tsx:3314
+#: src/routes/rounds.tsx:3320
 msgid "Folder installs are best for bulk local content. Portable file import is best for sidecars and packaged exports."
 msgstr "文件夹安装适合批量本地内容。便携文件导入适合附属文件和打包导出。"
 
-#: src/routes/rounds.tsx:383
+#: src/routes/rounds.tsx:384
 msgid "Folders"
 msgstr "文件夹"
 
@@ -3789,7 +3799,7 @@ msgstr "对于"
 msgid "Force stop"
 msgstr "强制停止"
 
-#: src/components/game/RoundVideoOverlay.tsx:3371
+#: src/components/game/RoundVideoOverlay.tsx:3378
 #: src/routes/settings.tsx:3352
 msgid "Force Stop"
 msgstr "强制停止"
@@ -3836,20 +3846,20 @@ msgstr "全屏、背景视频"
 msgid "Fully Random"
 msgstr "完全随机"
 
-#: src/routes/rounds.tsx:3664
+#: src/routes/rounds.tsx:3670
 msgid "Funscript"
 msgstr "Funscript"
 
-#: src/components/game/RoundVideoOverlay.tsx:4024
+#: src/components/game/RoundVideoOverlay.tsx:4033
 msgid "Funscript actions"
 msgstr "Funscript 动作"
 
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:238
-#: src/routes/rounds.tsx:2151
+#: src/routes/rounds.tsx:2155
 msgid "Funscript attached."
 msgstr "Funscript 已附加。"
 
-#: src/routes/rounds.tsx:2142
+#: src/routes/rounds.tsx:2146
 msgid "Funscript attached. Save the round to keep it."
 msgstr "Funscript 已附加。保存回合后才会保留。"
 
@@ -3859,14 +3869,14 @@ msgstr "Funscript 已准备好用于视频安装。"
 
 #: src/features/converter/ConverterSourcePicker.tsx:259
 #: src/features/converter/ConverterSourcePicker.tsx:262
-#: src/routes/rounds.tsx:6027
-#: src/routes/rounds.tsx:6034
-#: src/routes/rounds.tsx:6042
+#: src/routes/rounds.tsx:6061
+#: src/routes/rounds.tsx:6068
+#: src/routes/rounds.tsx:6076
 msgid "Funscript URL"
 msgstr "Funscript URL"
 
 #: src/features/converter/ConverterSourcePicker.tsx:334
-#: src/routes/rounds.tsx:2094
+#: src/routes/rounds.tsx:2098
 msgid "Funscript URL must also be a valid http(s) URL."
 msgstr "Funscript URL 也必须是有效的 http(s) URL。"
 
@@ -3875,7 +3885,7 @@ msgid "Funscript:"
 msgstr "Funscript："
 
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:497
-#: src/routes/rounds.tsx:5428
+#: src/routes/rounds.tsx:5462
 msgid "Funscripts"
 msgstr "Funscript"
 
@@ -3897,8 +3907,8 @@ msgstr "游戏会话"
 msgid "Gameplay"
 msgstr "游戏玩法"
 
-#: src/components/game/RoundVideoOverlay.tsx:3572
-#: src/components/game/RoundVideoOverlay.tsx:3670
+#: src/components/game/RoundVideoOverlay.tsx:3580
+#: src/components/game/RoundVideoOverlay.tsx:3678
 msgid "Gameplay captions"
 msgstr "游戏字幕"
 
@@ -3933,7 +3943,7 @@ msgstr "门槛：如果玩家缺少金钱，此边不可用。"
 msgid "General"
 msgstr "通用"
 
-#: src/components/game/RoundVideoOverlay.tsx:1032
+#: src/components/game/RoundVideoOverlay.tsx:1033
 msgid "Generated sequence sync failed."
 msgstr "生成的序列同步失败。"
 
@@ -4014,7 +4024,7 @@ msgstr "图播放列表"
 msgid "Grid tidy"
 msgstr "网格整理"
 
-#: src/routes/rounds.tsx:3005
+#: src/routes/rounds.tsx:3011
 msgid "Grouping:"
 msgstr "分组："
 
@@ -4022,7 +4032,7 @@ msgstr "分组："
 msgid "Guaranteed perk"
 msgstr "保证增益"
 
-#: src/components/game/RoundVideoOverlay.tsx:3277
+#: src/components/game/RoundVideoOverlay.tsx:3280
 msgid "Handy Menu"
 msgstr "Handy 菜单"
 
@@ -4067,7 +4077,7 @@ msgstr "硬件性能预设"
 msgid "Hardware: {0}"
 msgstr "硬件：{0}"
 
-#: src/routes/rounds.tsx:5161
+#: src/routes/rounds.tsx:5195
 msgid "Hashes may need to be calculated, and video transcoding or preview generation may also be required."
 msgstr "可能需要计算哈希值，也可能需要进行视频转码或生成预览。"
 
@@ -4075,15 +4085,15 @@ msgstr "可能需要计算哈希值，也可能需要进行视频转码或生成
 msgid "Help"
 msgstr "帮助"
 
-#: src/routes/rounds.tsx:1611
+#: src/routes/rounds.tsx:1615
 msgid "Hero"
 msgstr "主角"
 
-#: src/routes/rounds.tsx:4792
+#: src/routes/rounds.tsx:4826
 msgid "Hero Group"
 msgstr "主角组"
 
-#: src/routes/rounds.tsx:2833
+#: src/routes/rounds.tsx:2838
 msgid "Hero Groups"
 msgstr "主角组"
 
@@ -4095,13 +4105,13 @@ msgstr "主角元数据"
 msgid "Hero name *"
 msgstr "主角名称 *"
 
-#: src/routes/rounds.tsx:4488
+#: src/routes/rounds.tsx:4522
 msgid "Hero:"
 msgstr "主角："
 
 #: src/components/LibraryExportOverlay.tsx:124
-#: src/routes/rounds.tsx:2565
-#: src/routes/rounds.tsx:5422
+#: src/routes/rounds.tsx:2570
+#: src/routes/rounds.tsx:5456
 msgid "Heroes"
 msgstr "主角"
 
@@ -4118,7 +4128,7 @@ msgstr "内置服务器已隐藏"
 msgid "Hide Advanced"
 msgstr "隐藏高级选项"
 
-#: src/routes/rounds.tsx:4535
+#: src/routes/rounds.tsx:4569
 msgid "Hide Details"
 msgstr "隐藏详情"
 
@@ -4130,13 +4140,13 @@ msgstr "隐藏网格"
 msgid "Hide shortcuts, clear marks, or clear selection."
 msgstr "隐藏快捷键、清除标记或清除选择。"
 
-#: src/routes/rounds.tsx:4532
+#: src/routes/rounds.tsx:4566
 msgid "Hide Technical Details"
 msgstr "隐藏技术详情"
 
 #: src/components/PlaylistPackExportDialog.tsx:63
 #: src/components/PlaylistPackExportDialog.tsx:395
-#: src/routes/rounds.tsx:5346
+#: src/routes/rounds.tsx:5380
 msgid "High compression"
 msgstr "高压缩"
 
@@ -4238,7 +4248,7 @@ msgstr "https://project.supabase.co"
 msgid "https://stash.example.com"
 msgstr "https://stash.example.com"
 
-#: src/routes/rounds.tsx:5997
+#: src/routes/rounds.tsx:6031
 msgid "https://www.pornhub.com/view_video.php?viewkey=..."
 msgstr "https://www.pornhub.com/view_video.php?viewkey=..."
 
@@ -4265,7 +4275,7 @@ msgstr "空闲"
 msgid "Idle. Cached history is ready to browse."
 msgstr "空闲。缓存历史已可浏览。"
 
-#: src/routes/rounds.tsx:5551
+#: src/routes/rounds.tsx:5585
 msgid "If unchecked, only sidecars and scripts are exported."
 msgstr "如果未勾选，则仅导出附属文件和脚本。"
 
@@ -4313,7 +4323,7 @@ msgid "IMPACT COST: ₪{0}"
 msgstr "影响费用：₪{0}"
 
 #: src/routes/playlist-workshop.tsx:2131
-#: src/routes/rounds.tsx:4092
+#: src/routes/rounds.tsx:4121
 msgid "Import"
 msgstr "导入"
 
@@ -4322,12 +4332,12 @@ msgstr "导入"
 msgid "Import {0}"
 msgstr "导入 {0}"
 
-#: src/routes/rounds.tsx:2554
-#: src/routes/rounds.tsx:2634
+#: src/routes/rounds.tsx:2559
+#: src/routes/rounds.tsx:2639
 msgid "Import & Export"
 msgstr "导入与导出"
 
-#: src/routes/rounds.tsx:3980
+#: src/routes/rounds.tsx:4009
 msgid "Import and Create Playlist"
 msgstr "导入并创建播放列表"
 
@@ -4336,16 +4346,16 @@ msgid "Import Content"
 msgstr "导入内容"
 
 #: src/routes/first-start.tsx:1915
-#: src/routes/rounds.tsx:2705
-#: src/routes/rounds.tsx:3333
+#: src/routes/rounds.tsx:2710
+#: src/routes/rounds.tsx:3339
 msgid "Import File"
 msgstr "导入文件"
 
-#: src/routes/rounds.tsx:3311
+#: src/routes/rounds.tsx:3317
 msgid "Import New Content"
 msgstr "导入新内容"
 
-#: src/routes/rounds.tsx:4060
+#: src/routes/rounds.tsx:4089
 msgid "Import Order Preview"
 msgstr "导入顺序预览"
 
@@ -4354,7 +4364,7 @@ msgstr "导入顺序预览"
 msgid "Import with Selected Resolutions"
 msgstr "以所选分辨率导入"
 
-#: src/routes/rounds.tsx:3981
+#: src/routes/rounds.tsx:4010
 msgid "Import Without Playlist"
 msgstr "不创建播放列表导入"
 
@@ -4394,7 +4404,7 @@ msgstr "已导入文件夹。安装了 {0} 个回合，导入了 {1} 个播放�
 msgid "first-start.step.round-packs.detail.2"
 msgstr "当有人发给你一个 `.hero` 或 `.round` 文件而你只想要那个项目时，导入单个文件更好。"
 
-#: src/routes/rounds.tsx:3978
+#: src/routes/rounds.tsx:4007
 msgid "Importing..."
 msgstr "正在导入..."
 
@@ -4418,7 +4428,7 @@ msgid "Inactive"
 msgstr "未激活"
 
 #: src/components/PlaylistPackExportDialog.tsx:221
-#: src/routes/rounds.tsx:5548
+#: src/routes/rounds.tsx:5582
 msgid "Include Media Files"
 msgstr "包含媒体文件"
 
@@ -4431,12 +4441,18 @@ msgstr "正在初始化..."
 msgid "highscores.section.single.description"
 msgstr "查看本地运行历史、生存时间和高分进度。"
 
-#: src/routes/rounds.tsx:3093
+#: src/routes/rounds.tsx:3099
 msgid "Install a folder or import a portable file to start building the library."
 msgstr "安装文件夹或导入便携文件以开始构建库。"
 
-#: src/routes/rounds.tsx:5938
+#: src/routes/rounds.tsx:5972
 msgid "Install from web"
+msgstr "从网页安装"
+
+#: src/routes/rounds.tsx:2720
+#: src/routes/rounds.tsx:3350
+#: src/routes/rounds.tsx:5982
+msgid "Install From Web"
 msgstr "从网页安装"
 
 #. js-lingui-explicit-id
@@ -4444,24 +4460,18 @@ msgstr "从网页安装"
 msgid "command-palette.rounds-install-web"
 msgstr "从网络安装"
 
-#: src/routes/rounds.tsx:2715
-#: src/routes/rounds.tsx:3344
-#: src/routes/rounds.tsx:5948
-msgid "Install From Web"
-msgstr "从网页安装"
-
-#: src/routes/rounds.tsx:2639
+#: src/routes/rounds.tsx:2644
 msgid "Install new rounds, import portable files, and manage database exports from one place."
 msgstr "在一个地方安装新回合、导入便携文件和管理数据库导出。"
+
+#: src/routes/rounds.tsx:2700
+#: src/routes/rounds.tsx:3328
+msgid "Install Rounds"
+msgstr "安装回合"
 
 #. js-lingui-explicit-id
 #: src/components/CommandPalette.tsx:270
 msgid "command-palette.rounds-install-folder"
-msgstr "安装回合"
-
-#: src/routes/rounds.tsx:2695
-#: src/routes/rounds.tsx:3322
-msgid "Install Rounds"
 msgstr "安装回合"
 
 #. js-lingui-explicit-id
@@ -4482,31 +4492,31 @@ msgstr "安装此内容？"
 msgid "Install Web Video"
 msgstr "安装网页视频"
 
-#: src/routes/rounds.tsx:6084
+#: src/routes/rounds.tsx:6118
 msgid "Install Website Round"
 msgstr "安装网站回合"
 
 #: src/features/converter/SourcePanel.tsx:72
-#: src/routes/rounds.tsx:384
-#: src/routes/rounds.tsx:2962
-#: src/routes/rounds.tsx:4241
+#: src/routes/rounds.tsx:385
+#: src/routes/rounds.tsx:2967
+#: src/routes/rounds.tsx:4270
 #: src/routes/settings.tsx:3063
 msgid "Installed"
 msgstr "已安装"
 
-#: src/routes/rounds.tsx:2116
+#: src/routes/rounds.tsx:2120
 msgid "Installed \"{trimmedName}\"."
 msgstr "已安装 \"{trimmedName}\"。"
 
-#: src/routes/rounds.tsx:2176
+#: src/routes/rounds.tsx:2180
 msgid "Installed EroScripts video with funscript."
 msgstr "已安装带 funscript 的 EroScripts 视频。"
 
-#: src/routes/rounds.tsx:2177
+#: src/routes/rounds.tsx:2181
 msgid "Installed EroScripts video without a funscript."
 msgstr "已安装不带 funscript 的 EroScripts 视频。"
 
-#: src/routes/rounds.tsx:1969
+#: src/routes/rounds.tsx:1973
 msgid "Installed Library"
 msgstr "已安装库"
 
@@ -4518,13 +4528,13 @@ msgstr "已安装库 · 点击添加以加入队列"
 msgid "Installed round"
 msgstr "已安装回合"
 
-#: src/routes/rounds.tsx:3876
+#: src/routes/rounds.tsx:3905
 msgid "Installed Round Source"
 msgstr "已安装回合来源"
 
 #: src/routes/index.tsx:209
-#: src/routes/rounds.tsx:2517
-#: src/routes/rounds.tsx:2631
+#: src/routes/rounds.tsx:2522
+#: src/routes/rounds.tsx:2636
 msgid "Installed Rounds"
 msgstr "已安装回合"
 
@@ -4553,12 +4563,12 @@ msgstr "已安装 v{0}"
 msgid "Installed v{0} -> Latest v{1}"
 msgstr "已安装 v{0} -> 最新 v{1}"
 
-#: src/routes/rounds.tsx:5158
+#: src/routes/rounds.tsx:5192
 msgid "Installing rounds can take a very long time."
 msgstr "安装回合可能需要很长时间。"
 
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:608
-#: src/routes/rounds.tsx:6084
+#: src/routes/rounds.tsx:6118
 msgid "Installing..."
 msgstr "正在安装..."
 
@@ -4571,13 +4581,13 @@ msgstr "指令失败"
 msgid "hud.intensityCap"
 msgstr "强度 <="
 
-#: src/routes/rounds.tsx:2945
-#: src/routes/rounds.tsx:3542
+#: src/routes/rounds.tsx:2950
+#: src/routes/rounds.tsx:3548
 #: src/routes/settings.tsx:5388
 msgid "Interjection"
 msgstr "插入"
 
-#: src/components/game/RoundVideoOverlay.tsx:4015
+#: src/components/game/RoundVideoOverlay.tsx:4024
 msgid "Intermediary"
 msgstr "中间环节"
 
@@ -4586,7 +4596,7 @@ msgstr "中间环节"
 msgid "hud.intermediary"
 msgstr "中间环节"
 
-#: src/components/game/RoundVideoOverlay.tsx:2336
+#: src/components/game/RoundVideoOverlay.tsx:2337
 msgid "Intermediary clip spawned."
 msgstr "中间环节片段已生成。"
 
@@ -4630,11 +4640,11 @@ msgstr "中间环节最大值 %"
 msgid "first-start.step.booru.eyebrow"
 msgstr "中间环节媒体"
 
-#: src/components/game/RoundVideoOverlay.tsx:1375
+#: src/components/game/RoundVideoOverlay.tsx:1376
 msgid "Intermediary media was not found. Returning to main video."
 msgstr "未找到中间媒体。返回主视频。"
 
-#: src/components/game/RoundVideoOverlay.tsx:4032
+#: src/components/game/RoundVideoOverlay.tsx:4041
 msgid "Intermediary queue"
 msgstr "中间环节队列"
 
@@ -4717,11 +4727,11 @@ msgstr "跳转到源视频中的随机位置。"
 msgid "Keep Playlist"
 msgstr "保留播放列表"
 
-#: src/routes/rounds.tsx:371
+#: src/routes/rounds.tsx:372
 msgid "Keep the flow predictable: install from folders for bulk local content, use safe exports for portability, and only include URIs when the receiving machine expects them."
 msgstr "保持流程可预测：从文件夹安装以批量导入本地内容，使用安全导出以便携传输，仅在接收方需要时才包含 URI。"
 
-#: src/routes/rounds.tsx:2687
+#: src/routes/rounds.tsx:2692
 msgid "Keep the main browsing tools, collection health, and import actions in one place."
 msgstr "将主要浏览工具、集合健康状态和导入操作集中在一处。"
 
@@ -4791,7 +4801,7 @@ msgstr "语言"
 msgid "Large playlists can still require more installed rounds than the global minimum"
 msgstr "大型播放列表仍可能需要比全局最小值更多的已安装回合"
 
-#: src/routes/rounds.tsx:238
+#: src/routes/rounds.tsx:239
 msgid "Last scan done ({summary})"
 msgstr "上次扫描完成（{summary}）"
 
@@ -4836,7 +4846,7 @@ msgstr "排行榜"
 msgid "Leave custom mode off unless you explicitly want to override the built-in app identity."
 msgstr "除非你明确想覆盖内置应用标识，否则请保持自定义模式关闭。"
 
-#: src/routes/rounds.tsx:1919
+#: src/routes/rounds.tsx:1923
 msgid "Legacy import did not finish."
 msgstr "旧版导入未完成。"
 
@@ -4844,9 +4854,9 @@ msgstr "旧版导入未完成。"
 msgid "Legacy Login"
 msgstr "旧版登录"
 
-#: src/routes/rounds.tsx:1746
-#: src/routes/rounds.tsx:1885
-#: src/routes/rounds.tsx:4054
+#: src/routes/rounds.tsx:1750
+#: src/routes/rounds.tsx:1889
+#: src/routes/rounds.tsx:4083
 msgid "Legacy Playlist"
 msgstr "旧版播放列表"
 
@@ -4859,12 +4869,12 @@ msgstr "Stash 来源不再提供旧版用户名/密码登录。请将此来源�
 msgid "perk.rarity.legendary"
 msgstr "传说"
 
-#: src/routes/rounds.tsx:1607
-#: src/routes/rounds.tsx:2982
+#: src/routes/rounds.tsx:1609
+#: src/routes/rounds.tsx:2987
 msgid "Length"
 msgstr "长度"
 
-#: src/routes/rounds.tsx:4509
+#: src/routes/rounds.tsx:4543
 msgid "Length:"
 msgstr "长度："
 
@@ -4880,9 +4890,9 @@ msgstr "先帮你完成设置。这个快速引导会介绍核心内容，并让
 msgid "Lets singleplayer start while required web rounds are still caching. Warning: some rounds may not play, and the web version is used instead of the local cache."
 msgstr "允许在所需 Web 回合仍在缓存时启动单人模式。警告：部分回合可能无法播放，且会使用 Web 版本而非本地缓存。"
 
-#: src/routes/rounds.tsx:2554
-#: src/routes/rounds.tsx:2634
-#: src/routes/rounds.tsx:4405
+#: src/routes/rounds.tsx:2559
+#: src/routes/rounds.tsx:2639
+#: src/routes/rounds.tsx:4439
 #: src/routes/settings.tsx:4807
 msgid "Library"
 msgstr "库"
@@ -4892,7 +4902,7 @@ msgstr "库"
 msgid "Library ({0} files)"
 msgstr "库（{0} 个文件）"
 
-#: src/routes/rounds.tsx:5365
+#: src/routes/rounds.tsx:5399
 msgid "Library Export"
 msgstr "库导出"
 
@@ -4900,15 +4910,15 @@ msgstr "库导出"
 msgid "Library Export Running"
 msgstr "库导出进行中"
 
-#: src/routes/rounds.tsx:2561
+#: src/routes/rounds.tsx:2566
 msgid "Library Grouping"
 msgstr "库分组"
 
-#: src/routes/rounds.tsx:298
+#: src/routes/rounds.tsx:299
 msgid "Library Idle"
 msgstr "库空闲"
 
-#: src/routes/rounds.tsx:2684
+#: src/routes/rounds.tsx:2689
 msgid "Library Snapshot"
 msgstr "库快照"
 
@@ -4961,7 +4971,7 @@ msgstr "加载背景视频"
 msgid "Load Into Editor"
 msgstr "载入编辑器"
 
-#: src/components/game/RoundVideoOverlay.tsx:3823
+#: src/components/game/RoundVideoOverlay.tsx:3831
 msgid "Loading captions"
 msgstr "正在加载字幕"
 
@@ -4977,15 +4987,15 @@ msgstr "正在加载外部来源..."
 msgid "Loading folders..."
 msgstr "正在加载文件夹..."
 
-#: src/components/game/RoundVideoOverlay.tsx:1303
+#: src/components/game/RoundVideoOverlay.tsx:1304
 msgid "LOADING INTERMEDIARY"
 msgstr "正在加载中间事件"
 
-#: src/components/game/RoundVideoOverlay.tsx:1305
+#: src/components/game/RoundVideoOverlay.tsx:1306
 msgid "Loading intermediary assets..."
 msgstr "正在加载中间事件资源..."
 
-#: src/routes/rounds.tsx:2604
+#: src/routes/rounds.tsx:2609
 msgid "Loading playlist groups..."
 msgstr "正在加载播放列表分组..."
 
@@ -5005,7 +5015,7 @@ msgstr "正在加载安全设置..."
 msgid "Loading..."
 msgstr "加载中..."
 
-#: src/routes/rounds.tsx:3008
+#: src/routes/rounds.tsx:3014
 msgid "Loading…"
 msgstr "加载中…"
 
@@ -5066,7 +5076,7 @@ msgid "Lobby:"
 msgstr "大厅："
 
 #: src/features/converter/SourcePanel.tsx:56
-#: src/routes/rounds.tsx:4229
+#: src/routes/rounds.tsx:4258
 msgid "Local"
 msgstr "本地"
 
@@ -5084,7 +5094,7 @@ msgstr "已附加本地 funscript：{0}"
 msgid "Local funscript attached: {websiteFunscriptFileLabel}"
 msgstr "已附加本地 Funscript：{websiteFunscriptFileLabel}"
 
-#: src/components/game/RoundVideoOverlay.tsx:3697
+#: src/components/game/RoundVideoOverlay.tsx:3705
 msgid "Local media file not found"
 msgstr "未找到本地媒体文件"
 
@@ -5154,7 +5164,7 @@ msgstr "登录状态"
 msgid "Logout"
 msgstr "退出登录"
 
-#: src/routes/rounds.tsx:5155
+#: src/routes/rounds.tsx:5189
 msgid "Long Import Running"
 msgstr "长时间导入进行中"
 
@@ -5168,7 +5178,7 @@ msgstr "循环："
 
 #: src/components/PlaylistPackExportDialog.tsx:61
 #: src/components/PlaylistPackExportDialog.tsx:389
-#: src/routes/rounds.tsx:5344
+#: src/routes/rounds.tsx:5378
 msgid "Low compression"
 msgstr "低压缩"
 
@@ -5176,7 +5186,7 @@ msgstr "低压缩"
 msgid "Lower values reduce each automatic scan burst on weaker laptops. Higher values finish background matching faster on stronger systems."
 msgstr "较低的值会减少弱性能笔记本上每次自动扫描的突发工作量。较高的值会在更强的系统上更快完成后台匹配。"
 
-#: src/components/game/RoundVideoOverlay.tsx:4015
+#: src/components/game/RoundVideoOverlay.tsx:4024
 msgid "Main"
 msgstr "主项"
 
@@ -5202,7 +5212,7 @@ msgstr "管理"
 msgid "Manage & Clear Data"
 msgstr "管理并清除数据"
 
-#: src/routes/rounds.tsx:2520
+#: src/routes/rounds.tsx:2525
 msgid "Manage imports, hero groups, and exports with the same focused shell as the new settings screen."
 msgstr "使用与新设置界面相同的聚焦布局来管理导入、主角分组和导出。"
 
@@ -5219,11 +5229,11 @@ msgstr "管理你的回合库"
 msgid "Manage your stored perks and active effects."
 msgstr "管理你已存储的增益和当前激活的效果。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2865
+#: src/components/game/RoundVideoOverlay.tsx:2867
 msgid "Manual pause active (15s)."
 msgstr "手动暂停已启用（15 秒）。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2869
+#: src/components/game/RoundVideoOverlay.tsx:2871
 msgid "Manual pause ended."
 msgstr "手动暂停已结束。"
 
@@ -5238,13 +5248,13 @@ msgid "Map Editor"
 msgstr "地图编辑器"
 
 #. js-lingui-explicit-id
-#: src/routes/settings.tsx:398
-msgid "settings.help.shortcuts.mapEditor.title"
+#: src/components/CommandPalette.tsx:89
+msgid "command-palette.map-editor"
 msgstr "地图编辑器"
 
 #. js-lingui-explicit-id
-#: src/components/CommandPalette.tsx:89
-msgid "command-palette.map-editor"
+#: src/routes/settings.tsx:398
+msgid "settings.help.shortcuts.mapEditor.title"
 msgstr "地图编辑器"
 
 #: src/routes/map-editor.tsx:1819
@@ -5303,7 +5313,7 @@ msgstr "Booru"
 msgid "command-palette.category.media"
 msgstr "媒体"
 
-#: src/routes/rounds.tsx:5407
+#: src/routes/rounds.tsx:5441
 msgid "Media included:"
 msgstr "包含媒体："
 
@@ -5339,17 +5349,17 @@ msgstr "最小掷骰"
 msgid "Minimum Round Count: {requiredNormalRoundCount}"
 msgstr "最少回合数：{requiredNormalRoundCount}"
 
-#: src/routes/rounds.tsx:2963
+#: src/routes/rounds.tsx:2968
 msgid "Missing"
 msgstr "缺失"
 
-#: src/components/game/RoundVideoOverlay.tsx:3095
+#: src/components/game/RoundVideoOverlay.tsx:3097
 msgid "Missing API Key"
 msgstr "缺少 API 密钥"
 
-#: src/components/game/RoundVideoOverlay.tsx:1503
-#: src/components/game/RoundVideoOverlay.tsx:1612
-#: src/components/game/RoundVideoOverlay.tsx:2426
+#: src/components/game/RoundVideoOverlay.tsx:1504
+#: src/components/game/RoundVideoOverlay.tsx:1613
+#: src/components/game/RoundVideoOverlay.tsx:2427
 msgid "Missing Application ID/API key for TheHandy v3."
 msgstr "缺少 TheHandy v3 的应用 ID/API 密钥。"
 
@@ -5387,8 +5397,8 @@ msgstr "呻吟文件已添加到游戏音频库。"
 msgid "Moaning volume"
 msgstr "呻吟音量"
 
-#: src/routes/rounds.tsx:5429
-#: src/routes/rounds.tsx:5433
+#: src/routes/rounds.tsx:5463
+#: src/routes/rounds.tsx:5467
 msgid "Mode"
 msgstr "模式"
 
@@ -5557,26 +5567,26 @@ msgstr "我的大厅"
 msgid "My Private Server"
 msgstr "我的私人服务器"
 
-#: src/routes/rounds.tsx:5981
+#: src/routes/rounds.tsx:6015
 msgid "My Website Round"
 msgstr "我的网站回合"
 
 #: src/components/PlaylistPackExportDialog.tsx:439
 #: src/routes/highscores.tsx:681
-#: src/routes/rounds.tsx:4239
-#: src/routes/rounds.tsx:4485
+#: src/routes/rounds.tsx:4268
+#: src/routes/rounds.tsx:4519
 msgid "N/A"
 msgstr "不适用"
 
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:80
-#: src/routes/rounds.tsx:1609
-#: src/routes/rounds.tsx:2983
-#: src/routes/rounds.tsx:3526
-#: src/routes/rounds.tsx:3820
+#: src/routes/rounds.tsx:1611
+#: src/routes/rounds.tsx:2988
+#: src/routes/rounds.tsx:3532
+#: src/routes/rounds.tsx:3849
 msgid "Name"
 msgstr "名称"
 
-#: src/routes/rounds.tsx:2878
+#: src/routes/rounds.tsx:2883
 msgid "Narrow the collection by round type, script availability, or a text search across round metadata."
 msgstr "按回合类型、脚本可用性或回合元数据文本搜索来缩小集合范围。"
 
@@ -5621,8 +5631,8 @@ msgstr "新播放列表名称"
 msgid "game.reward.newScoreTotal"
 msgstr "新分数总额"
 
-#: src/routes/rounds.tsx:1610
-#: src/routes/rounds.tsx:2978
+#: src/routes/rounds.tsx:1614
+#: src/routes/rounds.tsx:2983
 msgid "Newest"
 msgstr "最新"
 
@@ -5653,12 +5663,12 @@ msgstr "下次掷骰倍率"
 msgid "Next/Prev"
 msgstr "下一个/上一个"
 
-#: src/routes/rounds.tsx:5407
+#: src/routes/rounds.tsx:5441
 msgid "no"
 msgstr "否"
 
-#: src/routes/rounds.tsx:4078
-#: src/routes/rounds.tsx:4081
+#: src/routes/rounds.tsx:4107
+#: src/routes/rounds.tsx:4110
 msgid "No"
 msgstr "否"
 
@@ -5666,7 +5676,7 @@ msgstr "否"
 msgid "No active bans."
 msgstr "没有生效中的封禁。"
 
-#: src/routes/rounds.tsx:2999
+#: src/routes/rounds.tsx:3005
 msgid "No Active Filters"
 msgstr "没有激活的筛选器"
 
@@ -5674,11 +5684,11 @@ msgstr "没有激活的筛选器"
 msgid "No active perk effects."
 msgstr "没有激活的增益效果。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1995
+#: src/components/game/RoundVideoOverlay.tsx:1996
 msgid "No active round."
 msgstr "当前没有激活的回合。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1484
+#: src/components/game/RoundVideoOverlay.tsx:1485
 msgid "No active TheHandy timeline to resync."
 msgstr "没有可重新同步的 TheHandy 时间轴。"
 
@@ -5686,7 +5696,7 @@ msgstr "没有可重新同步的 TheHandy 时间轴。"
 msgid "NO ACTIVE THREATS"
 msgstr "无活动威胁"
 
-#: src/components/game/RoundVideoOverlay.tsx:1480
+#: src/components/game/RoundVideoOverlay.tsx:1481
 msgid "No active video to resync."
 msgstr "没有可重新同步的视频。"
 
@@ -5738,7 +5748,7 @@ msgid "No cum rounds selected."
 msgstr "未选择高潮回合。"
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:115
-#: src/routes/rounds.tsx:4237
+#: src/routes/rounds.tsx:4266
 #: src/routes/single-player-setup.tsx:548
 msgid "No description"
 msgstr "无描述"
@@ -5771,7 +5781,7 @@ msgstr "未选择文件。你可以继续，稍后再从“已安装回合”导
 msgid "No folder was selected. You can continue and import content later."
 msgstr "未选择文件夹。你可以继续，稍后再导入内容。"
 
-#: src/routes/rounds.tsx:3671
+#: src/routes/rounds.tsx:3677
 msgid "No funscript attached"
 msgstr "未附加 Funscript"
 
@@ -5795,7 +5805,7 @@ msgstr "未找到已安装的高潮回合。"
 msgid "No installed rounds match the current filter."
 msgstr "没有已安装回合匹配当前筛选条件。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1441
+#: src/components/game/RoundVideoOverlay.tsx:1442
 msgid "No intermediary resources available for this round."
 msgstr "此回合没有可用的中间事件资源。"
 
@@ -5854,7 +5864,7 @@ msgstr "没有可用的播放列表"
 
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:728
 #: src/routes/playlist-workshop.tsx:3961
-#: src/routes/rounds.tsx:4337
+#: src/routes/rounds.tsx:4366
 msgid "No Preview"
 msgstr "无预览"
 
@@ -5879,11 +5889,11 @@ msgstr "未找到结果。"
 msgid "No results loaded"
 msgstr "未加载结果"
 
-#: src/routes/rounds.tsx:3031
+#: src/routes/rounds.tsx:3037
 msgid "No rounds currently match the active search and filter state."
 msgstr "当前没有回合匹配已启用的搜索和筛选条件。"
 
-#: src/routes/rounds.tsx:3088
+#: src/routes/rounds.tsx:3094
 msgid "No rounds match this filter"
 msgstr "没有回合匹配此筛选条件"
 
@@ -5897,8 +5907,8 @@ msgstr "没有回合匹配你的搜索。"
 msgid "No Saves"
 msgstr "无存档"
 
-#: src/routes/rounds.tsx:4426
-#: src/routes/rounds.tsx:4499
+#: src/routes/rounds.tsx:4460
+#: src/routes/rounds.tsx:4533
 msgid "No Script"
 msgstr "无脚本"
 
@@ -5906,7 +5916,7 @@ msgstr "无脚本"
 msgid "No segments. Mark IN/OUT and add one."
 msgstr "没有片段。请标记 IN/OUT 并添加一个。"
 
-#: src/routes/rounds.tsx:5511
+#: src/routes/rounds.tsx:5545
 msgid "No selection"
 msgstr "未选择"
 
@@ -5942,7 +5952,7 @@ msgstr "尚无已存储的物品。"
 msgid "No stored perks yet."
 msgstr "尚无已存储的增益。"
 
-#: src/routes/rounds.tsx:1739
+#: src/routes/rounds.tsx:1743
 msgid "No supported video files found in selected folder."
 msgstr "在所选文件夹中未找到受支持的视频文件。"
 
@@ -5967,11 +5977,11 @@ msgstr "未配置 URL"
 msgid "No user-trusted domains yet."
 msgstr "尚无用户信任域名。"
 
-#: src/routes/rounds.tsx:5744
+#: src/routes/rounds.tsx:5778
 msgid "No video packaging step is required."
 msgstr "无需进行视频打包步骤。"
 
-#: src/components/game/RoundVideoOverlay.tsx:3073
+#: src/components/game/RoundVideoOverlay.tsx:3075
 msgid "No video resource found for this round. The board is still running underneath."
 msgstr "未找到此回合的视频资源。底层棋盘仍在继续运行。"
 
@@ -6015,8 +6025,8 @@ msgstr "未选择"
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:481
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:548
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:745
-#: src/routes/rounds.tsx:2944
-#: src/routes/rounds.tsx:3541
+#: src/routes/rounds.tsx:2949
+#: src/routes/rounds.tsx:3547
 #: src/routes/settings.tsx:5387
 msgid "Normal"
 msgstr "普通"
@@ -6076,8 +6086,8 @@ msgstr "关闭"
 msgid "Offset Slider"
 msgstr "偏移滑块"
 
-#: src/routes/rounds.tsx:1601
-#: src/routes/rounds.tsx:2979
+#: src/routes/rounds.tsx:1603
+#: src/routes/rounds.tsx:2984
 msgid "Oldest"
 msgstr "最旧"
 
@@ -6099,7 +6109,7 @@ msgstr "仅检查点"
 msgid "Only firmware version 4 and up is supported."
 msgstr "仅支持固件版本 4 及以上。"
 
-#: src/routes/rounds.tsx:5732
+#: src/routes/rounds.tsx:5766
 msgid "Only sidecars and script files will be written. Video URIs stay as references."
 msgstr "仅会写入 sidecar 和脚本文件。视频 URI 将保留为引用。"
 
@@ -6124,7 +6134,7 @@ msgstr "打开 {0}"
 msgid "Open A Playlist"
 msgstr "打开播放列表"
 
-#: src/routes/rounds.tsx:3345
+#: src/routes/rounds.tsx:3351
 msgid "Open a popup to create an installed round from a public website URL."
 msgstr "打开弹窗，通过公开网站 URL 创建一个已安装回合。"
 
@@ -6148,7 +6158,7 @@ msgstr "打开首次启动流程"
 msgid "Open Handy User Portal"
 msgstr "打开 Handy 用户门户"
 
-#: src/routes/rounds.tsx:3114
+#: src/routes/rounds.tsx:3120
 msgid "Open Import & Export"
 msgstr "打开导入与导出"
 
@@ -6208,7 +6218,7 @@ msgstr "打开单人历史记录"
 msgid "settings.help.shortcuts.game.cumConfirmation"
 msgstr "打开射精确认流程。"
 
-#: src/routes/rounds.tsx:3398
+#: src/routes/rounds.tsx:3404
 msgid "Open the export flow and package the installed database."
 msgstr "打开导出流程并打包已安装数据库。"
 
@@ -6275,15 +6285,15 @@ msgstr "启用仍未完成、可能在不同构建间变更或失效的功能。
 msgid "first-start.step.optional-setup.eyebrow"
 msgstr "可选设置"
 
-#: src/routes/rounds.tsx:6040
+#: src/routes/rounds.tsx:6074
 msgid "Optional: https://example.com/video.funscript"
 msgstr "可选：https://example.com/video.funscript"
 
 #: src/components/game/GameScene.tsx:4439
 #: src/components/game/GameScene.tsx:4652
 #: src/components/game/GameScene.tsx:4827
-#: src/components/game/RoundVideoOverlay.tsx:3326
-#: src/components/game/RoundVideoOverlay.tsx:4069
+#: src/components/game/RoundVideoOverlay.tsx:3331
+#: src/components/game/RoundVideoOverlay.tsx:4078
 msgid "Options"
 msgstr "选项"
 
@@ -6304,26 +6314,26 @@ msgstr "出路径"
 msgid "highscores.section.overview.title"
 msgstr "概览"
 
-#: src/routes/rounds.tsx:5435
+#: src/routes/rounds.tsx:5469
 msgid "Pack"
 msgstr "打包"
 
 #: src/components/PlaylistPackExportDialog.tsx:244
-#: src/routes/rounds.tsx:5572
+#: src/routes/rounds.tsx:5606
 msgid "Pack into .fpack File"
 msgstr "打包为 .fpack 文件"
 
 #: src/components/PlaylistPackExportDialog.tsx:199
-#: src/routes/rounds.tsx:5519
+#: src/routes/rounds.tsx:5553
 msgid "Package Options"
 msgstr "打包选项"
 
-#: src/routes/rounds.tsx:5372
+#: src/routes/rounds.tsx:5406
 msgid "Package your library."
 msgstr "打包你的库。"
 
 #: src/components/PlaylistPackExportDialog.tsx:247
-#: src/routes/rounds.tsx:5575
+#: src/routes/rounds.tsx:5609
 msgid "Packs all exported files into a single ZIP archive (.fpack)."
 msgstr "将所有导出的文件打包到一个 ZIP 压缩包（.fpack）中。"
 
@@ -6374,7 +6384,7 @@ msgid "Pause"
 msgstr "暂停"
 
 #. placeholder {0}: roundControl?.pauseCharges ?? 0
-#: src/components/game/RoundVideoOverlay.tsx:3295
+#: src/components/game/RoundVideoOverlay.tsx:3299
 msgid "Pause {0}"
 msgstr "暂停 {0}"
 
@@ -6386,7 +6396,7 @@ msgstr "中间事件结束后，在恢复主回合前的暂停时长。"
 msgid "Pause Gap (ms)"
 msgstr "暂停间隔（毫秒）"
 
-#: src/components/game/RoundVideoOverlay.tsx:4067
+#: src/components/game/RoundVideoOverlay.tsx:4076
 msgid "Pause Round"
 msgstr "暂停回合"
 
@@ -6529,7 +6539,7 @@ msgstr "游戏"
 msgid "game.btn.play"
 msgstr "播放"
 
-#: src/routes/rounds.tsx:4366
+#: src/routes/rounds.tsx:4395
 msgid "Play {displayName}"
 msgstr "播放 {displayName}"
 
@@ -6541,14 +6551,14 @@ msgstr "再玩一次"
 msgid "Play or pause the source video."
 msgstr "播放或暂停源视频。"
 
-#: src/components/game/RoundVideoOverlay.tsx:4021
+#: src/components/game/RoundVideoOverlay.tsx:4030
 #: src/components/GlobalHandyOverlay.tsx:417
 msgid "Playback"
 msgstr "播放"
 
-#: src/components/game/RoundVideoOverlay.tsx:1192
-#: src/components/game/RoundVideoOverlay.tsx:3561
-#: src/components/game/RoundVideoOverlay.tsx:3660
+#: src/components/game/RoundVideoOverlay.tsx:1193
+#: src/components/game/RoundVideoOverlay.tsx:3569
+#: src/components/game/RoundVideoOverlay.tsx:3668
 msgid "Playback paused for transition..."
 msgstr "播放已暂停，等待过渡..."
 
@@ -6576,17 +6586,17 @@ msgstr "玩家排名"
 msgid "Playing on <0>{0}</0> · Codes are case-insensitive."
 msgstr "当前服务器：<0>{0}</0> · 邀请码不区分大小写。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2220
-#: src/components/game/RoundVideoOverlay.tsx:2237
+#: src/components/game/RoundVideoOverlay.tsx:2221
+#: src/components/game/RoundVideoOverlay.tsx:2238
 msgid "Playing video (empty funscript)."
 msgstr "正在播放视频（空 Funscript）。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2209
+#: src/components/game/RoundVideoOverlay.tsx:2210
 msgid "Playing video (no funscript)."
 msgstr "正在播放视频（无 Funscript）。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2220
-#: src/components/game/RoundVideoOverlay.tsx:2237
+#: src/components/game/RoundVideoOverlay.tsx:2221
+#: src/components/game/RoundVideoOverlay.tsx:2238
 msgid "Playing video + funscript."
 msgstr "正在播放视频 + Funscript。"
 
@@ -6594,7 +6604,7 @@ msgstr "正在播放视频 + Funscript。"
 #: src/components/PlaylistExportOverlay.tsx:130
 #: src/routes/first-start.tsx:1781
 #: src/routes/multiplayer.tsx:1057
-#: src/routes/rounds.tsx:1611
+#: src/routes/rounds.tsx:1615
 #: src/routes/settings.tsx:3871
 #: src/routes/settings.tsx:4290
 msgid "Playlist"
@@ -6623,7 +6633,7 @@ msgstr "播放列表导出进行中"
 msgid "Playlist exported."
 msgstr "播放列表已导出。"
 
-#: src/routes/rounds.tsx:4928
+#: src/routes/rounds.tsx:4962
 msgid "Playlist Group"
 msgstr "播放列表分组"
 
@@ -6656,7 +6666,7 @@ msgstr "播放列表名称"
 
 #: src/routes/playlist-workshop.tsx:4037
 #: src/routes/playlist-workshop.tsx:4118
-#: src/routes/rounds.tsx:4034
+#: src/routes/rounds.tsx:4063
 msgid "Playlist Name"
 msgstr "播放列表名称"
 
@@ -6711,14 +6721,14 @@ msgid "Playlist:"
 msgstr "播放列表："
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:89
-#: src/routes/rounds.tsx:385
-#: src/routes/rounds.tsx:2566
+#: src/routes/rounds.tsx:386
+#: src/routes/rounds.tsx:2571
 #: src/routes/settings.tsx:4505
 #: src/routes/single-player-setup.tsx:419
 msgid "Playlists"
 msgstr "播放列表"
 
-#: src/routes/rounds.tsx:2596
+#: src/routes/rounds.tsx:2601
 msgid "Playlists..."
 msgstr "播放列表..."
 
@@ -6775,15 +6785,15 @@ msgstr "正在准备可用回合"
 msgid "Preparing export package..."
 msgstr "正在准备导出包..."
 
-#: src/routes/rounds.tsx:1983
+#: src/routes/rounds.tsx:1987
 msgid "Preparing export..."
 msgstr "正在准备导出..."
 
-#: src/routes/rounds.tsx:5129
+#: src/routes/rounds.tsx:5163
 msgid "Preparing import..."
 msgstr "正在准备导入..."
 
-#: src/components/game/RoundVideoOverlay.tsx:1335
+#: src/components/game/RoundVideoOverlay.tsx:1336
 msgid "Preparing main round resume..."
 msgstr "正在准备恢复主回合..."
 
@@ -6795,11 +6805,11 @@ msgstr "正在所选服务器上准备多人认证。"
 msgid "Preparing playback..."
 msgstr "正在准备播放..."
 
-#: src/components/game/RoundVideoOverlay.tsx:2030
+#: src/components/game/RoundVideoOverlay.tsx:2031
 msgid "Preparing round video..."
 msgstr "正在准备回合视频..."
 
-#: src/components/game/RoundVideoOverlay.tsx:681
+#: src/components/game/RoundVideoOverlay.tsx:682
 msgid "Preparing TheHandy synchronization."
 msgstr "正在准备 TheHandy 同步。"
 
@@ -6845,8 +6855,8 @@ msgstr "预览 + 时间轴"
 msgid "Preview First File"
 msgstr "预览第一个文件"
 
-#: src/routes/rounds.tsx:4336
-#: src/routes/rounds.tsx:4808
+#: src/routes/rounds.tsx:4365
+#: src/routes/rounds.tsx:4842
 msgid "Preview Is Being Generated"
 msgstr "预览正在生成"
 
@@ -6889,7 +6899,7 @@ msgstr "程序版本"
 
 #: src/components/LibraryExportOverlay.tsx:100
 #: src/components/PlaylistExportOverlay.tsx:106
-#: src/routes/rounds.tsx:5171
+#: src/routes/rounds.tsx:5205
 msgid "Progress"
 msgstr "进度"
 
@@ -6901,7 +6911,7 @@ msgstr "渐进随机"
 msgid "prompt"
 msgstr "搜索词"
 
-#: src/components/game/RoundVideoOverlay.tsx:3878
+#: src/components/game/RoundVideoOverlay.tsx:3886
 msgid "Prompt:"
 msgstr "搜索词："
 
@@ -6968,6 +6978,10 @@ msgstr "随机回合"
 msgid "Random round acquired"
 msgstr "获得随机回合"
 
+#: src/routes/rounds.tsx:3740
+msgid "Random Selection"
+msgstr ""
+
 #: src/routes/playlist-workshop.tsx:1884
 msgid "Randomize"
 msgstr "随机排列"
@@ -6987,7 +7001,7 @@ msgstr "范围"
 msgid "perk.rarity.rare"
 msgstr "稀有"
 
-#: src/routes/rounds.tsx:3368
+#: src/routes/rounds.tsx:3374
 msgid "Re-run install folder discovery for sources already connected to the app."
 msgstr "重新为已连接到应用的来源运行安装文件夹发现。"
 
@@ -7089,7 +7103,7 @@ msgstr "降低弱性能硬件上的预览生成负载。在更强的系统上保
 
 #: src/components/LibraryExportOverlay.tsx:184
 #: src/components/PlaylistExportOverlay.tsx:190
-#: src/routes/rounds.tsx:5444
+#: src/routes/rounds.tsx:5478
 msgid "Reencoded"
 msgstr "已重新编码"
 
@@ -7110,7 +7124,7 @@ msgstr "刷新多人游戏"
 msgid "Refreshing export analysis..."
 msgstr "正在刷新导出分析..."
 
-#: src/routes/rounds.tsx:473
+#: src/routes/rounds.tsx:474
 msgid "Refreshing library..."
 msgstr "正在刷新库..."
 
@@ -7135,7 +7149,7 @@ msgstr "剩余缺失："
 msgid "Remote Import Trust"
 msgstr "远程导入信任"
 
-#: src/components/game/RoundVideoOverlay.tsx:3698
+#: src/components/game/RoundVideoOverlay.tsx:3706
 msgid "Remote media file not found"
 msgstr "未找到远程媒体文件"
 
@@ -7179,29 +7193,29 @@ msgstr "重命名中..."
 msgid "Reorder selected rounds?"
 msgstr "重新排序已选回合？"
 
-#: src/routes/rounds.tsx:4545
+#: src/routes/rounds.tsx:4579
 msgid "Repair Template"
 msgstr "修复模板"
 
-#: src/routes/rounds.tsx:3900
+#: src/routes/rounds.tsx:3929
 msgid "Repair Template Hero"
 msgstr "修复模板主角"
 
-#: src/routes/rounds.tsx:3858
+#: src/routes/rounds.tsx:3887
 msgid "Repair Template Round"
 msgstr "修复模板回合"
 
-#: src/routes/rounds.tsx:4865
+#: src/routes/rounds.tsx:4899
 msgid "Repair Templates"
 msgstr "修复模板"
 
-#: src/routes/rounds.tsx:3863
-#: src/routes/rounds.tsx:3905
+#: src/routes/rounds.tsx:3892
+#: src/routes/rounds.tsx:3934
 msgid "Repairing..."
 msgstr "修复中..."
 
 #: src/features/converter/ConverterSourcePicker.tsx:204
-#: src/routes/rounds.tsx:3696
+#: src/routes/rounds.tsx:3702
 msgid "Replace Funscript"
 msgstr "替换 Funscript"
 
@@ -7216,7 +7230,7 @@ msgstr "报告错误"
 msgid "Reset"
 msgstr "重置"
 
-#: src/routes/rounds.tsx:3098
+#: src/routes/rounds.tsx:3104
 msgid "Reset Filters"
 msgstr "重置筛选"
 
@@ -7284,11 +7298,11 @@ msgstr "解决缺失"
 msgid "Resolve multiplayer readiness first."
 msgstr "请先解决多人游戏就绪问题。"
 
-#: src/routes/rounds.tsx:4443
+#: src/routes/rounds.tsx:4477
 msgid "Resource Hash"
 msgstr "资源哈希"
 
-#: src/routes/rounds.tsx:4445
+#: src/routes/rounds.tsx:4479
 msgid "Resource ID"
 msgstr "资源 ID"
 
@@ -7310,7 +7324,7 @@ msgid "Resume"
 msgstr "继续"
 
 #: src/components/game/GameScene.tsx:4422
-#: src/components/game/RoundVideoOverlay.tsx:3371
+#: src/components/game/RoundVideoOverlay.tsx:3378
 msgid "Resume Handy"
 msgstr "恢复 Handy"
 
@@ -7331,11 +7345,11 @@ msgstr "使用 Web 回退继续"
 msgid "Resuming..."
 msgstr "继续中..."
 
-#: src/components/game/RoundVideoOverlay.tsx:3265
+#: src/components/game/RoundVideoOverlay.tsx:3268
 msgid "Resync (R)"
 msgstr "重新同步 (R)"
 
-#: src/components/game/RoundVideoOverlay.tsx:1550
+#: src/components/game/RoundVideoOverlay.tsx:1551
 msgid "Resync failed: {message}"
 msgstr "重新同步失败：{message}"
 
@@ -7344,18 +7358,18 @@ msgstr "重新同步失败：{message}"
 msgid "settings.help.shortcuts.game.resyncHandy"
 msgstr "将 TheHandy 时间同步到当前回合视频。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1491
+#: src/components/game/RoundVideoOverlay.tsx:1492
 msgid "Resyncing TheHandy timing..."
 msgstr "正在重新同步 TheHandy 计时..."
 
 #: src/features/converter/ConverterCachingOverlay.tsx:174
 #: src/routes/multiplayer.tsx:877
-#: src/routes/rounds.tsx:527
+#: src/routes/rounds.tsx:528
 msgid "Retry"
 msgstr "重试"
 
-#: src/routes/rounds.tsx:4553
-#: src/routes/rounds.tsx:4876
+#: src/routes/rounds.tsx:4587
+#: src/routes/rounds.tsx:4910
 msgid "Retry Auto-Link"
 msgstr "重试自动链接"
 
@@ -7371,13 +7385,13 @@ msgstr "中间事件后返回暂停（秒）"
 msgid "Return to main menu"
 msgstr "返回主菜单"
 
-#: src/components/game/RoundVideoOverlay.tsx:1333
-#: src/components/game/RoundVideoOverlay.tsx:2479
+#: src/components/game/RoundVideoOverlay.tsx:1334
+#: src/components/game/RoundVideoOverlay.tsx:2480
 msgid "RETURNING TO MAIN"
 msgstr "返回主视频"
 
-#: src/components/game/RoundVideoOverlay.tsx:1318
-#: src/components/game/RoundVideoOverlay.tsx:2152
+#: src/components/game/RoundVideoOverlay.tsx:1319
+#: src/components/game/RoundVideoOverlay.tsx:2153
 msgid "Returning to main round video."
 msgstr "正在返回主回合视频。"
 
@@ -7396,11 +7410,11 @@ msgstr "查看自动解决"
 msgid "highscores.section.multiplayer.description"
 msgstr "查看已缓存的比赛排名，并同步排队中的远程结果。"
 
-#: src/routes/rounds.tsx:3971
+#: src/routes/rounds.tsx:4000
 msgid "Review Legacy Import"
 msgstr "查看旧版导入"
 
-#: src/routes/rounds.tsx:5377
+#: src/routes/rounds.tsx:5411
 msgid "Review scope, media handling, and AV1 compression before choosing the destination folder."
 msgstr "在选择目标文件夹之前，查看范围、媒体处理和 AV1 压缩选项。"
 
@@ -7408,7 +7422,7 @@ msgstr "在选择目标文件夹之前，查看范围、媒体处理和 AV1 压�
 msgid "Review the estimated pack size and compression time before choosing the destination folder."
 msgstr "在选择目标文件夹之前，查看预估的包大小和压缩时间。"
 
-#: src/routes/rounds.tsx:3987
+#: src/routes/rounds.tsx:4016
 msgid "Review the folder before import. Ordered by filename (natural sort), so entries like 2, 10, and 100 stay in human order."
 msgstr "导入前查看文件夹。按文件名自然排序，因此 2、10 和 100 等条目保持人类阅读顺序。"
 
@@ -7446,7 +7460,7 @@ msgstr "掷骰子或触发主要游戏操作。"
 msgid "hud.phase.rolling"
 msgstr "掷骰中"
 
-#: src/components/game/RoundVideoOverlay.tsx:3247
+#: src/components/game/RoundVideoOverlay.tsx:3249
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:111
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:120
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:223
@@ -7478,19 +7492,19 @@ msgstr "回合数量"
 msgid "playlist-workshop.section.session.description"
 msgstr "回合数量、安全点和棋盘布局。"
 
-#: src/routes/rounds.tsx:2287
+#: src/routes/rounds.tsx:2291
 msgid "Round fields must use valid numeric values."
 msgstr "回合字段必须使用有效的数值。"
 
-#: src/routes/rounds.tsx:4442
+#: src/routes/rounds.tsx:4476
 msgid "Round Hash"
 msgstr "回合哈希"
 
-#: src/routes/rounds.tsx:4444
+#: src/routes/rounds.tsx:4478
 msgid "Round ID"
 msgstr "回合 ID"
 
-#: src/routes/rounds.tsx:3027
+#: src/routes/rounds.tsx:3033
 msgid "Round Library"
 msgstr "回合库"
 
@@ -7498,8 +7512,8 @@ msgstr "回合库"
 msgid "Round name"
 msgstr "回合名称"
 
-#: src/routes/rounds.tsx:5975
-#: src/routes/rounds.tsx:5985
+#: src/routes/rounds.tsx:6009
+#: src/routes/rounds.tsx:6019
 msgid "Round Name"
 msgstr "回合名称"
 
@@ -7526,7 +7540,7 @@ msgstr "回合开始延迟（秒）"
 msgid "playlist-workshop.section.timing.description"
 msgstr "回合开始延迟和概率缩放。"
 
-#: src/routes/rounds.tsx:2514
+#: src/routes/rounds.tsx:2519
 msgid "Round Vault"
 msgstr "回合仓库"
 
@@ -7540,13 +7554,13 @@ msgid "Rounds"
 msgstr "回合"
 
 #. js-lingui-explicit-id
-#: src/routes/first-start.tsx:138
-msgid "first-start.step.round-packs.shortLabel"
+#: src/routes/playlist-workshop.tsx:178
+msgid "playlist-workshop.section.rounds.title"
 msgstr "回合"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:178
-msgid "playlist-workshop.section.rounds.title"
+#: src/routes/first-start.tsx:138
+msgid "first-start.step.round-packs.shortLabel"
 msgstr "回合"
 
 #: src/routes/first-start.tsx:2255
@@ -7582,7 +7596,7 @@ msgstr "运行摘要"
 msgid "Run the guided introduction again if you want a refresher on play modes, content installs, editors, Handy setup, music, and booru search."
 msgstr "如果你想复习游戏模式、内容安装、编辑器、Handy 设置、音乐和 booru 搜索，可以再次运行引导介绍。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1794
+#: src/components/game/RoundVideoOverlay.tsx:1795
 msgid "Running anti-perk sequence..."
 msgstr "正在运行反增益序列..."
 
@@ -7637,7 +7651,7 @@ msgstr "保存端点"
 msgid "Save Game"
 msgstr "保存游戏"
 
-#: src/routes/rounds.tsx:3812
+#: src/routes/rounds.tsx:3841
 msgid "Save Hero"
 msgstr "保存主角"
 
@@ -7650,7 +7664,7 @@ msgstr "保存模式"
 msgid "Save Resolutions"
 msgstr "保存解决方案"
 
-#: src/routes/rounds.tsx:3518
+#: src/routes/rounds.tsx:3524
 msgid "Save Round"
 msgstr "保存回合"
 
@@ -7677,30 +7691,30 @@ msgstr "启用保存的运行会在本地高分和运行历史中标记为辅助
 #: src/routes/playlist-workshop.tsx:1979
 #: src/routes/playlist-workshop.tsx:2243
 #: src/routes/playlist-workshop.tsx:2252
-#: src/routes/rounds.tsx:3518
-#: src/routes/rounds.tsx:3812
+#: src/routes/rounds.tsx:3524
+#: src/routes/rounds.tsx:3841
 msgid "Saving..."
 msgstr "保存中..."
 
-#: src/routes/rounds.tsx:5686
+#: src/routes/rounds.tsx:5720
 msgid "Savings"
 msgstr "节省"
 
-#: src/routes/rounds.tsx:235
+#: src/routes/rounds.tsx:236
 msgid "Scan aborted ({summary})"
 msgstr "扫描已中止（{summary}）"
 
-#: src/routes/rounds.tsx:237
+#: src/routes/rounds.tsx:238
 msgid "Scan error ({summary})"
 msgstr "扫描出错（{summary}）"
 
-#: src/routes/rounds.tsx:3367
-#: src/routes/rounds.tsx:3423
+#: src/routes/rounds.tsx:3373
+#: src/routes/rounds.tsx:3429
 #: src/routes/settings.tsx:2824
 msgid "Scan Now"
 msgstr "立即扫描"
 
-#: src/routes/rounds.tsx:233
+#: src/routes/rounds.tsx:234
 msgid "Scan running ({summary})"
 msgstr "扫描进行中（{summary}）"
 
@@ -7708,12 +7722,12 @@ msgstr "扫描进行中（{summary}）"
 msgid "Scanning"
 msgstr "扫描中"
 
-#: src/routes/rounds.tsx:5133
+#: src/routes/rounds.tsx:5167
 msgid "Scanning files and preparing imported rounds..."
 msgstr "正在扫描文件并准备导入的回合..."
 
-#: src/routes/rounds.tsx:3367
-#: src/routes/rounds.tsx:3423
+#: src/routes/rounds.tsx:3373
+#: src/routes/rounds.tsx:3429
 #: src/routes/settings.tsx:2824
 msgid "Scanning..."
 msgstr "扫描中..."
@@ -7758,12 +7772,12 @@ msgstr "分数快照"
 msgid "Score:"
 msgstr "分数："
 
-#: src/routes/rounds.tsx:2958
+#: src/routes/rounds.tsx:2963
 msgid "Script"
 msgstr "脚本"
 
-#: src/routes/rounds.tsx:4425
-#: src/routes/rounds.tsx:4499
+#: src/routes/rounds.tsx:4459
+#: src/routes/rounds.tsx:4533
 msgid "Script Ready"
 msgstr "脚本就绪"
 
@@ -7772,12 +7786,12 @@ msgstr "脚本就绪"
 msgid "Scripts"
 msgstr "脚本"
 
-#: src/routes/rounds.tsx:2835
+#: src/routes/rounds.tsx:2840
 msgid "Scripts Ready"
 msgstr "脚本就绪"
 
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:396
-#: src/routes/rounds.tsx:2921
+#: src/routes/rounds.tsx:2926
 #: src/routes/settings.tsx:5359
 msgid "Search"
 msgstr "搜索"
@@ -7787,7 +7801,7 @@ msgstr "搜索"
 msgid "Search {0}..."
 msgstr "搜索 {0}..."
 
-#: src/routes/rounds.tsx:2875
+#: src/routes/rounds.tsx:2880
 msgid "Search & Filter"
 msgstr "搜索与筛选"
 
@@ -7801,10 +7815,10 @@ msgid "Search by round, author, or type"
 msgstr "按回合、作者或类型搜索"
 
 #: src/features/converter/ConverterSourcePicker.tsx:316
-#: src/routes/rounds.tsx:2726
-#: src/routes/rounds.tsx:3356
-#: src/routes/rounds.tsx:3721
-#: src/routes/rounds.tsx:6076
+#: src/routes/rounds.tsx:2731
+#: src/routes/rounds.tsx:3362
+#: src/routes/rounds.tsx:3727
+#: src/routes/rounds.tsx:6110
 msgid "Search EroScripts"
 msgstr "搜索 EroScripts"
 
@@ -7840,7 +7854,7 @@ msgstr "搜索图块"
 msgid "Search title, creator, or video name"
 msgstr "搜索标题、创作者或视频名称"
 
-#: src/routes/rounds.tsx:2934
+#: src/routes/rounds.tsx:2939
 msgid "Search title, hero, author"
 msgstr "搜索标题、主角、作者"
 
@@ -7877,7 +7891,7 @@ msgstr "向前进 1 秒。"
 msgid "Seek forward by 5 seconds."
 msgstr "向前进 5 秒。"
 
-#: src/components/game/RoundVideoOverlay.tsx:4015
+#: src/components/game/RoundVideoOverlay.tsx:4024
 msgid "Segment"
 msgstr "片段"
 
@@ -7914,7 +7928,7 @@ msgstr "创建大厅前请先选择播放列表。"
 msgid "Select a search result to inspect downloadable files."
 msgstr "选择一个搜索结果以查看可下载文件。"
 
-#: src/routes/rounds.tsx:2476
+#: src/routes/rounds.tsx:2481
 msgid "Select a source hero first."
 msgstr "请先选择一个源主角。"
 
@@ -7934,7 +7948,7 @@ msgstr "从你的电脑中选择一个视频文件来转换为回合。"
 msgid "Select an edge to inspect"
 msgstr "选择一条边进行检查"
 
-#: src/routes/rounds.tsx:2427
+#: src/routes/rounds.tsx:2432
 msgid "Select an installed round to repair this template."
 msgstr "选择一个已安装的回合来修复此模板。"
 
@@ -7955,8 +7969,8 @@ msgstr "选择并重新排列普通回合。"
 msgid "Select Funscript File"
 msgstr "选择 Funscript 文件"
 
-#: src/routes/rounds.tsx:3880
-#: src/routes/rounds.tsx:3941
+#: src/routes/rounds.tsx:3909
+#: src/routes/rounds.tsx:3970
 msgid "Select installed round"
 msgstr "选择已安装的回合"
 
@@ -7964,21 +7978,21 @@ msgstr "选择已安装的回合"
 msgid "Select Installed Round"
 msgstr "选择已安装的回合"
 
-#: src/routes/rounds.tsx:2746
-#: src/routes/rounds.tsx:2780
+#: src/routes/rounds.tsx:2751
+#: src/routes/rounds.tsx:2785
 msgid "Select Items"
 msgstr "选择项目"
 
-#: src/routes/rounds.tsx:5776
+#: src/routes/rounds.tsx:5810
 msgid "Select items in the library first."
 msgstr "请先在库中选择项目。"
 
-#: src/routes/rounds.tsx:5720
+#: src/routes/rounds.tsx:5754
 msgid "Select items in the library to enable partial export."
 msgstr "在库中选择项目以启用部分导出。"
 
 #: src/features/converter/ConverterSourcePicker.tsx:304
-#: src/routes/rounds.tsx:6068
+#: src/routes/rounds.tsx:6102
 msgid "Select Local Funscript"
 msgstr "选择本地 Funscript"
 
@@ -7991,7 +8005,7 @@ msgstr "选择增益"
 msgid "Select Playlist"
 msgstr "选择播放列表"
 
-#: src/routes/rounds.tsx:3922
+#: src/routes/rounds.tsx:3951
 msgid "Select source hero"
 msgstr "选择源主角"
 
@@ -8022,7 +8036,7 @@ msgstr "选择、创建和管理播放列表。"
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:543
 #: src/routes/first-start.tsx:1460
 #: src/routes/playlist-workshop.tsx:2088
-#: src/routes/rounds.tsx:5506
+#: src/routes/rounds.tsx:5540
 msgid "Selected"
 msgstr "已选择"
 
@@ -8096,7 +8110,7 @@ msgid "Set a name and choose how rounds are generated."
 msgstr "设置名称并选择回合的生成方式。"
 
 #. placeholder {0}: level === 1 ? "" : "s"
-#: src/routes/rounds.tsx:3586
+#: src/routes/rounds.tsx:3592
 msgid "Set difficulty to {level} star{0}"
 msgstr "将难度设置为 {level} 颗星{0}"
 
@@ -8226,7 +8240,7 @@ msgstr "显示高级选项"
 msgid "Show Anti-Perk Beatbar"
 msgstr "显示反增益节拍条"
 
-#: src/routes/rounds.tsx:2891
+#: src/routes/rounds.tsx:2896
 msgid "Show Disabled Imports"
 msgstr "显示已禁用的导入"
 
@@ -8247,7 +8261,7 @@ msgstr "显示或隐藏编辑器网格。"
 msgid "Show or hide the shortcut overlay."
 msgstr "显示或隐藏快捷键面板。"
 
-#: src/routes/rounds.tsx:4532
+#: src/routes/rounds.tsx:4566
 msgid "Show Technical Details"
 msgstr "显示技术详情"
 
@@ -8255,8 +8269,8 @@ msgstr "显示技术详情"
 msgid "Show this {mediaLabel} anyway?"
 msgstr "仍然显示此{mediaLabel}？"
 
-#: src/components/game/RoundVideoOverlay.tsx:3676
-#: src/components/game/RoundVideoOverlay.tsx:3840
+#: src/components/game/RoundVideoOverlay.tsx:3684
+#: src/components/game/RoundVideoOverlay.tsx:3848
 msgid "Show Video Once"
 msgstr "播放视频一次"
 
@@ -8285,7 +8299,7 @@ msgstr "Sidecar 导入会自动信任 Stash 源主机、yt-dlp 支持的域名�
 msgid "Sidecars"
 msgstr "Sidecar 文件"
 
-#: src/routes/rounds.tsx:5433
+#: src/routes/rounds.tsx:5467
 msgid "Sidecars Only"
 msgstr "仅 Sidecar"
 
@@ -8355,7 +8369,7 @@ msgid "Size"
 msgstr "大小"
 
 #. placeholder {0}: roundControl?.skipCharges ?? 0
-#: src/components/game/RoundVideoOverlay.tsx:3311
+#: src/components/game/RoundVideoOverlay.tsx:3316
 msgid "Skip {0}"
 msgstr "跳过 {0}"
 
@@ -8391,11 +8405,11 @@ msgstr "可跳过"
 msgid "Skipping..."
 msgstr "跳过中..."
 
-#: src/routes/rounds.tsx:4063
+#: src/routes/rounds.tsx:4092
 msgid "slots"
 msgstr "槽位"
 
-#: src/routes/rounds.tsx:5637
+#: src/routes/rounds.tsx:5671
 msgid "Smaller packages. Takes longer because videos may be reencoded."
 msgstr "更小的包。耗时更长，因为视频可能需要重新编码。"
 
@@ -8432,7 +8446,7 @@ msgstr "部分回合可能无法播放；未缓存的回合将使用 Web 版本"
 msgid "Something went wrong"
 msgstr "出了点问题"
 
-#: src/routes/rounds.tsx:2975
+#: src/routes/rounds.tsx:2980
 msgid "Sort"
 msgstr "排序"
 
@@ -8441,7 +8455,7 @@ msgstr "排序"
 msgid "Sort by Difficulty"
 msgstr "按难度排序"
 
-#: src/routes/rounds.tsx:3002
+#: src/routes/rounds.tsx:3008
 msgid "Sort:"
 msgstr "排序："
 
@@ -8457,11 +8471,11 @@ msgstr "来源"
 msgid "Source Code"
 msgstr "源代码"
 
-#: src/routes/rounds.tsx:3918
+#: src/routes/rounds.tsx:3947
 msgid "Source Hero"
 msgstr "源主角"
 
-#: src/routes/rounds.tsx:4447
+#: src/routes/rounds.tsx:4481
 msgid "Source Key"
 msgstr "源密钥"
 
@@ -8469,7 +8483,7 @@ msgstr "源密钥"
 msgid "Source name"
 msgstr "源名称"
 
-#: src/routes/rounds.tsx:5679
+#: src/routes/rounds.tsx:5713
 msgid "Source Size"
 msgstr "源大小"
 
@@ -8477,7 +8491,7 @@ msgstr "源大小"
 msgid "Source Video Size"
 msgstr "源视频大小"
 
-#: src/routes/rounds.tsx:4512
+#: src/routes/rounds.tsx:4546
 msgid "Source:"
 msgstr "来源："
 
@@ -8523,8 +8537,8 @@ msgid "stacks"
 msgstr "叠加"
 
 #: src/components/LibraryExportOverlay.tsx:130
-#: src/routes/rounds.tsx:2832
-#: src/routes/rounds.tsx:5423
+#: src/routes/rounds.tsx:2837
+#: src/routes/rounds.tsx:5457
 msgid "Standalone"
 msgstr "独立"
 
@@ -8556,7 +8570,7 @@ msgstr "使用当前播放列表创建大厅，然后分享邀请码或公开发
 msgid "command-palette.single-player.description"
 msgstr "开始一场单人游戏"
 
-#: src/routes/rounds.tsx:5795
+#: src/routes/rounds.tsx:5829
 msgid "Start Export"
 msgstr "开始导出"
 
@@ -8591,7 +8605,7 @@ msgstr "启动 TheHandy"
 msgid "command-palette.thehandy-start"
 msgstr "启动TheHandy"
 
-#: src/routes/rounds.tsx:3642
+#: src/routes/rounds.tsx:3648
 msgid "Start Time (ms)"
 msgstr "开始时间（毫秒）"
 
@@ -8641,7 +8655,7 @@ msgstr "初始百分比概率。"
 msgid "Starting..."
 msgstr "启动中..."
 
-#: src/routes/rounds.tsx:4227
+#: src/routes/rounds.tsx:4256
 msgid "Stash"
 msgstr "Stash"
 
@@ -8703,7 +8717,7 @@ msgstr "停止 TheHandy"
 msgid "command-palette.thehandy-stop"
 msgstr "停止TheHandy"
 
-#: src/components/game/RoundVideoOverlay.tsx:3093
+#: src/components/game/RoundVideoOverlay.tsx:3095
 #: src/components/GlobalHandyOverlay.tsx:158
 msgid "Stopped"
 msgstr "已停止"
@@ -8776,7 +8790,7 @@ msgstr "Supabase URL"
 msgid "Supported in practice through yt-dlp-backed playback. Paste sites like Pornhub, XVideos, or xHamster here, then add segments the same way as any other source."
 msgstr "通过 yt-dlp 支持的播放实际可用。在此粘贴 Pornhub、XVideos 或 xHamster 等站点的链接，然后像其他来源一样添加片段。"
 
-#: src/routes/rounds.tsx:1330
+#: src/routes/rounds.tsx:1332
 msgid "Supported via {sourceLabel}{titleSuffix}"
 msgstr "通过 {sourceLabel}{titleSuffix} 支持"
 
@@ -8819,7 +8833,7 @@ msgstr "切换到选择工具。"
 msgid "Sync & Cache"
 msgstr "同步与缓存"
 
-#: src/components/game/RoundVideoOverlay.tsx:3099
+#: src/components/game/RoundVideoOverlay.tsx:3101
 msgid "Sync Error"
 msgstr "同步错误"
 
@@ -8837,13 +8851,13 @@ msgstr "同步偏移"
 msgid "Sync Queue"
 msgstr "同步队列"
 
-#: src/components/game/RoundVideoOverlay.tsx:3097
+#: src/components/game/RoundVideoOverlay.tsx:3099
 #: src/components/GlobalHandyOverlay.tsx:160
 #: src/routes/settings.tsx:3203
 msgid "Synced"
 msgstr "已同步"
 
-#: src/components/game/RoundVideoOverlay.tsx:3100
+#: src/components/game/RoundVideoOverlay.tsx:3102
 #: src/components/GlobalHandyOverlay.tsx:161
 msgid "Syncing"
 msgstr "同步中"
@@ -8872,7 +8886,7 @@ msgstr "仅系统"
 msgid "SYSTEM TERMINATION"
 msgstr "系统终止"
 
-#: src/components/game/RoundVideoOverlay.tsx:4050
+#: src/components/game/RoundVideoOverlay.tsx:4059
 msgid "System Warning"
 msgstr "系统警告"
 
@@ -8897,12 +8911,12 @@ msgstr "目标玩家"
 msgid "Technical preferences for power users."
 msgstr "面向高级用户的技术偏好设置。"
 
-#: src/routes/rounds.tsx:4392
-#: src/routes/rounds.tsx:4499
+#: src/routes/rounds.tsx:4426
+#: src/routes/rounds.tsx:4533
 msgid "Template"
 msgstr "模板"
 
-#: src/routes/rounds.tsx:3726
+#: src/routes/rounds.tsx:3732
 msgid "Template rounds do not have a primary media resource, so a funscript cannot be attached here."
 msgstr "模板回合没有主要媒体资源，因此无法在此附加 Funscript。"
 
@@ -8920,7 +8934,7 @@ msgstr "临时排名"
 msgid "Test"
 msgstr "测试"
 
-#: src/components/game/RoundVideoOverlay.tsx:3414
+#: src/components/game/RoundVideoOverlay.tsx:3421
 msgid "Test Intermediary (I)"
 msgstr "测试中间事件 (I)"
 
@@ -8950,11 +8964,11 @@ msgstr "应用可以在后台计算视觉指纹以改进回合匹配。在较慢
 msgid "The audio will be downloaded as MP3 via yt-dlp and added to your queue"
 msgstr "音频将通过yt-dlp下载为MP3并添加到队列中"
 
-#: src/components/game/RoundVideoOverlay.tsx:678
+#: src/components/game/RoundVideoOverlay.tsx:679
 msgid "The device reported a sync error. Retrying handshake..."
 msgstr "设备报告了同步错误。正在重试握手..."
 
-#: src/components/game/RoundVideoOverlay.tsx:2704
+#: src/components/game/RoundVideoOverlay.tsx:2706
 msgid "The device reported a sync error. Retrying momentarily..."
 msgstr "设备报告了同步错误。即将重试..."
 
@@ -8978,7 +8992,7 @@ msgstr "对当前本地进度和多人游戏缓存健康状况的最快概览。
 msgid "The folder picker opens next. Export starts after you choose the destination."
 msgstr "接下来会打开文件夹选择器。选择目标后导出即开始。"
 
-#: src/routes/rounds.tsx:5717
+#: src/routes/rounds.tsx:5751
 msgid "The full installed library will be packaged."
 msgstr "已安装的完整库将被打包。"
 
@@ -8990,7 +9004,7 @@ msgstr "游戏会在后台继续运行。"
 msgid "The global multiplayer minimum helps ensure everyone starts from a baseline good experience"
 msgstr "全局多人游戏最低要求有助于确保每个人都获得良好的基础体验"
 
-#: src/routes/rounds.tsx:3774
+#: src/routes/rounds.tsx:3803
 msgid "The hero will be removed and the kept round will become a standalone entry. This cannot be undone in-app."
 msgstr "主角将被移除，保留的回合将成为独立条目。此操作无法在应用内撤销。"
 
@@ -9011,7 +9025,7 @@ msgstr "提出最初 fap land 想法的人。"
 msgid "TheHandy"
 msgstr "TheHandy"
 
-#: src/components/game/RoundVideoOverlay.tsx:3991
+#: src/components/game/RoundVideoOverlay.tsx:4000
 msgid "TheHandy {handyStatusLabel}"
 msgstr "TheHandy {handyStatusLabel}"
 
@@ -9027,7 +9041,7 @@ msgstr "TheHandy 全局偏移滑块"
 msgid "TheHandy hardware integration and funscript compatibility."
 msgstr "TheHandy 硬件集成和 Funscript 兼容性。"
 
-#: src/components/game/RoundVideoOverlay.tsx:3754
+#: src/components/game/RoundVideoOverlay.tsx:3762
 msgid "TheHandy Linkup"
 msgstr "TheHandy 连接"
 
@@ -9058,7 +9072,7 @@ msgstr "TheHandy 重新连接失败。"
 msgid "TheHandy reconnected."
 msgstr "TheHandy 已重新连接。"
 
-#: src/components/game/RoundVideoOverlay.tsx:3354
+#: src/components/game/RoundVideoOverlay.tsx:3361
 #: src/components/GlobalHandyOverlay.tsx:83
 msgid "TheHandy resumed."
 msgstr "TheHandy 已恢复。"
@@ -9073,8 +9087,8 @@ msgstr "TheHandy已恢复。"
 msgid "game.handy.resumed"
 msgstr "TheHandy 已恢复。"
 
-#: src/components/game/RoundVideoOverlay.tsx:2441
-#: src/components/game/RoundVideoOverlay.tsx:3362
+#: src/components/game/RoundVideoOverlay.tsx:2442
+#: src/components/game/RoundVideoOverlay.tsx:3369
 msgid "TheHandy stopped manually."
 msgstr "TheHandy 已手动停止。"
 
@@ -9092,7 +9106,7 @@ msgstr "TheHandy已停止。"
 msgid "game.handy.stopped"
 msgstr "TheHandy 已停止。"
 
-#: src/components/game/RoundVideoOverlay.tsx:1543
+#: src/components/game/RoundVideoOverlay.tsx:1544
 msgid "TheHandy timing resynced."
 msgstr "TheHandy 计时已重新同步。"
 
@@ -9145,7 +9159,7 @@ msgstr "此高分是在作弊模式激活时获得的"
 
 #. placeholder {0}: heroGroupRoundConversion.keepRoundName
 #. placeholder {1}: heroGroupRoundConversion.roundsToDeleteCount
-#: src/routes/rounds.tsx:3768
+#: src/routes/rounds.tsx:3797
 msgid "This keeps \"{0}\" and permanently deletes {1} attached round(s)."
 msgstr "这将保留\"{0}\"并永久删除 {1} 个附加回合。"
 
@@ -9203,7 +9217,7 @@ msgstr "此运行是在作弊模式激活时完成的"
 msgid "This Stash source will connect without API keys."
 msgstr "此 Stash 来源将在不使用 API 密钥的情况下连接。"
 
-#: src/routes/rounds.tsx:1338
+#: src/routes/rounds.tsx:1340
 msgid "This website video URL is not supported."
 msgstr "此网站视频 URL 不受支持。"
 
@@ -9319,7 +9333,7 @@ msgstr "查看最高分状态、同步状态和快捷操作。"
 msgid "Topic {0}"
 msgstr "主题 {0}"
 
-#: src/routes/rounds.tsx:5424
+#: src/routes/rounds.tsx:5458
 msgid "Total Rounds"
 msgstr "总回合数"
 
@@ -9349,7 +9363,7 @@ msgstr "转码进度"
 msgid "Transfer"
 msgstr "传输"
 
-#: src/routes/rounds.tsx:368
+#: src/routes/rounds.tsx:369
 msgid "Transfer Guidance"
 msgstr "传输引导"
 
@@ -9400,13 +9414,13 @@ msgstr "回合"
 msgid "hud.turn"
 msgstr "回合"
 
-#: src/routes/rounds.tsx:2940
-#: src/routes/rounds.tsx:3537
+#: src/routes/rounds.tsx:2945
+#: src/routes/rounds.tsx:3543
 msgid "Type"
 msgstr "类型"
 
 #. placeholder {0}: heroGroupRoundConversion.heroName
-#: src/routes/rounds.tsx:3780
+#: src/routes/rounds.tsx:3809
 msgid "Type \"{0}\" to confirm"
 msgstr "输入\"{0}\"以确认"
 
@@ -9445,7 +9459,7 @@ msgstr "未知"
 #: src/routes/multiplayer-match.tsx:938
 #: src/routes/multiplayer.tsx:631
 #: src/routes/playlist-workshop.tsx:2668
-#: src/routes/rounds.tsx:4238
+#: src/routes/rounds.tsx:4267
 msgid "Unknown"
 msgstr "未知"
 
@@ -9592,8 +9606,8 @@ msgstr "使用你的自定义 TheHandy 应用密钥。"
 msgid "Verify the board and start."
 msgstr "验证棋盘并开始。"
 
-#: src/components/game/RoundVideoOverlay.tsx:3677
-#: src/components/game/RoundVideoOverlay.tsx:3841
+#: src/components/game/RoundVideoOverlay.tsx:3685
+#: src/components/game/RoundVideoOverlay.tsx:3849
 msgid "video"
 msgstr "视频"
 
@@ -9601,7 +9615,7 @@ msgstr "视频"
 msgid "Video Cache"
 msgstr "视频缓存"
 
-#: src/routes/rounds.tsx:4423
+#: src/routes/rounds.tsx:4457
 msgid "Video Caching"
 msgstr "视频缓存"
 
@@ -9623,8 +9637,8 @@ msgstr "已安装不带 funscript 的视频。"
 
 #: src/features/converter/ConverterSourcePicker.tsx:237
 #: src/features/converter/ConverterSourcePicker.tsx:240
-#: src/routes/rounds.tsx:5991
-#: src/routes/rounds.tsx:6007
+#: src/routes/rounds.tsx:6025
+#: src/routes/rounds.tsx:6041
 msgid "Video URL"
 msgstr "视频 URL"
 
@@ -9639,15 +9653,15 @@ msgstr "VideoHash FFmpeg 来源"
 #: src/components/EroScriptsFunscriptSearchDialog.tsx:568
 #: src/components/LibraryExportOverlay.tsx:136
 #: src/components/PlaylistExportOverlay.tsx:142
-#: src/routes/rounds.tsx:5425
+#: src/routes/rounds.tsx:5459
 msgid "Videos"
 msgstr "视频"
 
-#: src/routes/rounds.tsx:5731
+#: src/routes/rounds.tsx:5765
 msgid "Videos and funscripts will be copied into the export package without reencoding."
 msgstr "视频和 Funscript 将被复制到导出包中，无需重新编码。"
 
-#: src/routes/rounds.tsx:5730
+#: src/routes/rounds.tsx:5764
 msgid "Videos will be packaged and reencoded to AV1 when needed. Funscripts remain attached."
 msgstr "视频将在需要时被打包并重新编码为 AV1。Funscript 保持附加。"
 
@@ -9665,7 +9679,7 @@ msgstr "查看分数历史"
 msgid "Visibility is"
 msgstr "可见性为"
 
-#: src/routes/rounds.tsx:2644
+#: src/routes/rounds.tsx:2649
 msgid "Visible"
 msgstr "可见"
 
@@ -9686,16 +9700,16 @@ msgstr "音量："
 msgid "Wait until the required web rounds finish caching"
 msgstr "等待所需的 Web 回合完成缓存"
 
-#: src/routes/rounds.tsx:2079
+#: src/routes/rounds.tsx:2083
 msgid "Wait until the website video URL support check finishes."
 msgstr "等待网站视频 URL 支持检查完成。"
 
-#: src/components/game/RoundVideoOverlay.tsx:3757
+#: src/components/game/RoundVideoOverlay.tsx:3765
 msgid "Waiting For Device Sync"
 msgstr "等待设备同步"
 
-#: src/components/game/RoundVideoOverlay.tsx:1197
-#: src/components/game/RoundVideoOverlay.tsx:2709
+#: src/components/game/RoundVideoOverlay.tsx:1198
+#: src/components/game/RoundVideoOverlay.tsx:2711
 msgid "Waiting for TheHandy sync before playback..."
 msgstr "播放前等待 TheHandy 同步..."
 
@@ -9715,15 +9729,15 @@ msgstr "警告：此操作无法撤销。"
 msgid "Weak hardware: reduce rounds per pass, enable single-thread previews, or turn off background hashing if startup or library work feels heavy."
 msgstr "弱性能硬件：如果启动或媒体库处理感觉吃力，请减少每次处理的回合数、启用单线程预览，或关闭后台哈希计算。"
 
-#: src/routes/rounds.tsx:4228
+#: src/routes/rounds.tsx:4257
 msgid "Web"
 msgstr "网页"
 
-#: src/routes/rounds.tsx:5945
+#: src/routes/rounds.tsx:5979
 msgid "Website Install"
 msgstr "网站安装"
 
-#: src/components/game/RoundVideoOverlay.tsx:3695
+#: src/components/game/RoundVideoOverlay.tsx:3703
 msgid "Website stream playback failed"
 msgstr "网站流播放失败"
 
@@ -9763,7 +9777,7 @@ msgstr "欢迎来到 Fap Land"
 msgid "first-start.step.welcome.title"
 msgstr "Fap Land 派对版是什么以及两种游戏模式的玩法"
 
-#: src/routes/rounds.tsx:5708
+#: src/routes/rounds.tsx:5742
 msgid "What happens"
 msgstr "将会发生什么"
 
@@ -9787,15 +9801,19 @@ msgstr "启用时，在应用启动的前 5 秒内按住 'S' 将自动启用 SFW
 msgid "When enabled, perks (not anti-perks) are applied immediately when received instead of being stored in inventory."
 msgstr "启用时，增益（非反增益）在收到时会立即生效，而不是存入物品栏。"
 
+#: src/routes/rounds.tsx:3757
+msgid "When enabled, this round will never be picked by random round nodes, the succubus anti-perk, or the cum round fallback."
+msgstr ""
+
 #: src/routes/settings.tsx:987
 msgid "Window and display preferences."
 msgstr "窗口和显示偏好设置。"
 
-#: src/routes/rounds.tsx:4505
+#: src/routes/rounds.tsx:4539
 msgid "Window:"
 msgstr "窗口："
 
-#: src/routes/rounds.tsx:5429
+#: src/routes/rounds.tsx:5463
 msgid "With Media"
 msgstr "含媒体"
 
@@ -9817,12 +9835,12 @@ msgstr "处理中..."
 msgid "command-palette.category.workshop"
 msgstr "工坊"
 
-#: src/routes/rounds.tsx:5407
+#: src/routes/rounds.tsx:5441
 msgid "yes"
 msgstr "是"
 
-#: src/routes/rounds.tsx:4078
-#: src/routes/rounds.tsx:4081
+#: src/routes/rounds.tsx:4107
+#: src/routes/rounds.tsx:4110
 msgid "Yes"
 msgstr "是"
 
@@ -9856,7 +9874,7 @@ msgstr "你可以稍后在设置的数据与存储中更改此项。"
 msgid "first-start.step.booru.detail.3"
 msgstr "你可以稍后在设置的游戏玩法中更改此项。"
 
-#: src/routes/rounds.tsx:5772
+#: src/routes/rounds.tsx:5806
 msgid "You can close this dialog now."
 msgstr "你现在可以关闭此对话框。"
 
@@ -9913,7 +9931,7 @@ msgstr "你需要至少 {MULTIPLAYER_MINIMUM_ROUNDS} 个已安装的回合才能
 msgid "You were removed from this game."
 msgstr "你已被移出此游戏。"
 
-#: src/routes/rounds.tsx:5752
+#: src/routes/rounds.tsx:5786
 msgid "You will choose a destination folder, then a timestamped export package will be generated inside it."
 msgstr "你将选择一个目标文件夹，然后在其中生成一个带时间戳的导出包。"
 
@@ -9921,7 +9939,7 @@ msgstr "你将选择一个目标文件夹，然后在其中生成一个带时间
 msgid "Your custom and imported playlists."
 msgstr "你的自定义和导入的播放列表。"
 
-#: src/routes/rounds.tsx:5376
+#: src/routes/rounds.tsx:5410
 msgid "Your export is ready. You can close this dialog or use the path below."
 msgstr "你的导出已就绪。你可以关闭此对话框或使用下方的路径。"
 

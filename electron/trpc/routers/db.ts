@@ -790,6 +790,7 @@ export const dbRouter = router({
         endTime: z.number().int().min(0).optional().nullable(),
         funscriptUri: z.string().trim().min(1).optional().nullable(),
         type: ZRoundType,
+        excludeFromRandom: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -867,6 +868,9 @@ export const dbRouter = router({
           endTime,
           previewImage,
           type: input.type,
+          ...(input.excludeFromRandom !== undefined
+            ? { excludeFromRandom: input.excludeFromRandom }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(round.id, input.id))
@@ -1372,6 +1376,7 @@ export const dbRouter = router({
           installSourceKey: true,
           previewImage: true,
           heroId: true,
+          excludeFromRandom: true,
         },
         with: {
           hero: {

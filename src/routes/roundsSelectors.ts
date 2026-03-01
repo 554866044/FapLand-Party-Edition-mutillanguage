@@ -1,7 +1,4 @@
-import {
-  collectPlaylistRefs,
-  createPortableRoundRefResolver,
-} from "../game/playlistResolution";
+import { collectPlaylistRefs, createPortableRoundRefResolver } from "../game/playlistResolution";
 import type { InstalledRound, VideoDownloadProgress } from "../services/db";
 import type { StoredPlaylist } from "../services/playlists";
 import { getRoundDurationSec } from "../utils/duration";
@@ -9,7 +6,7 @@ import type { PlaylistWebsiteCacheSummary } from "../features/webVideo/cacheStat
 
 export type TypeFilter = "all" | NonNullable<InstalledRound["type"]>;
 export type ScriptFilter = "all" | "installed" | "missing";
-export type SortMode = "newest" | "oldest" | "difficulty" | "bpm" | "length" | "name";
+export type SortMode = "newest" | "oldest" | "difficulty" | "bpm" | "length" | "name" | "excluded";
 
 export type IndexedRound = {
   round: InstalledRound;
@@ -73,7 +70,10 @@ export function buildAggregateDownloadProgress(downloadProgresses: VideoDownload
     (sum, progress) => sum + (progress.downloadedBytes ?? 0),
     0
   );
-  const totalSize = downloadProgresses.reduce((sum, progress) => sum + (progress.totalBytes ?? 0), 0);
+  const totalSize = downloadProgresses.reduce(
+    (sum, progress) => sum + (progress.totalBytes ?? 0),
+    0
+  );
 
   return {
     count: downloadProgresses.length,
@@ -125,6 +125,12 @@ export function filterAndSortRounds({
     }
     if (sortMode === "name") {
       return roundNameCollator.compare(left.round.name, right.round.name);
+    }
+    if (sortMode === "excluded") {
+      const leftExcluded = left.round.excludeFromRandom ? 0 : 1;
+      const rightExcluded = right.round.excludeFromRandom ? 0 : 1;
+      const diff = leftExcluded - rightExcluded;
+      return diff !== 0 ? diff : right.createdAtMs - left.createdAtMs;
     }
     return right.createdAtMs - left.createdAtMs;
   });

@@ -30,6 +30,7 @@ function makeRound(id: string, name = id, type: InstalledRound["type"] = "Normal
     updatedAt: now,
     hero: null,
     resources: [],
+    excludeFromRandom: false,
   };
 }
 

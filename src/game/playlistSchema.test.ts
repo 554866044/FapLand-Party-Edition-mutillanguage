@@ -41,7 +41,11 @@ function buildConfig(boardConfig: unknown): Record<string, unknown> {
   };
 }
 
-function makeRound(id: string, name: string, type: InstalledRound["type"] = "Normal"): InstalledRound {
+function makeRound(
+  id: string,
+  name: string,
+  type: InstalledRound["type"] = "Normal"
+): InstalledRound {
   const now = new Date("2026-01-01T00:00:00.000Z");
   return {
     id,
@@ -61,6 +65,7 @@ function makeRound(id: string, name: string, type: InstalledRound["type"] = "Nor
     updatedAt: now,
     hero: null,
     resources: [],
+    excludeFromRandom: false,
   };
 }
 
@@ -74,7 +79,7 @@ describe("playlistSchema", () => {
         normalRoundRefsByIndex: {},
         normalRoundOrder: [],
         cumRoundRefs: [],
-      }),
+      })
     );
 
     expect(parsed.playlistVersion).toBe(CURRENT_PLAYLIST_VERSION);
@@ -108,7 +113,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
     expect(missingStart.success).toBe(false);
 
@@ -124,7 +129,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
     expect(badEdgeRef.success).toBe(false);
   });
@@ -146,7 +151,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     expect(parsed.success).toBe(true);
@@ -165,7 +170,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
     expect(missingEnd.success).toBe(false);
 
@@ -181,7 +186,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [{ idHint: "cum-1", name: "Cum 1", type: "Cum" }],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
     expect(valid.success).toBe(true);
     if (valid.success && valid.data.boardConfig.mode === "graph") {
@@ -220,7 +225,7 @@ describe("playlistSchema", () => {
         normalRoundRefsByIndex: {},
         normalRoundOrder: [{ idHint: "round-1", name: "Round 1", type: "Normal" }],
         cumRoundRefs: [],
-      }),
+      })
     );
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
@@ -266,7 +271,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [{ idHint: "cum-1", name: "Cum 1", type: "Cum" }],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("cum-1", "Cum 1", "Cum")]);
@@ -281,7 +286,13 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, forceStop: true },
+          {
+            id: "round-1",
+            name: "Round 1",
+            kind: "round",
+            roundRef: { idHint: "round-1", name: "Round 1" },
+            forceStop: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -291,7 +302,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     expect(parsed.boardConfig.mode).toBe("graph");
@@ -313,7 +324,14 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "perk-1", name: "Perk 1", kind: "perk", forceStop: true, visualId: "loaded-dice", giftGuaranteedPerk: true },
+          {
+            id: "perk-1",
+            name: "Perk 1",
+            kind: "perk",
+            forceStop: true,
+            visualId: "loaded-dice",
+            giftGuaranteedPerk: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -323,7 +341,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     expect(parsed.boardConfig.mode).toBe("graph");
@@ -348,7 +366,13 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, skippable: true },
+          {
+            id: "round-1",
+            name: "Round 1",
+            kind: "round",
+            roundRef: { idHint: "round-1", name: "Round 1" },
+            skippable: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -358,7 +382,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     expect(parsed.boardConfig.mode).toBe("graph");
@@ -379,14 +403,19 @@ describe("playlistSchema", () => {
         mode: "graph",
         startNodeId: "start",
         nodes: [
-          { id: "start", name: "Start", kind: "start", styleHint: { x: 10, y: 20, color: "#10b981", size: 1.8 } },
+          {
+            id: "start",
+            name: "Start",
+            kind: "start",
+            styleHint: { x: 10, y: 20, color: "#10b981", size: 1.8 },
+          },
           { id: "end", name: "End", kind: "end", styleHint: { x: 30, y: 40 } },
         ],
         edges: [{ id: "edge-a", fromNodeId: "start", toNodeId: "end" }],
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     expect(parsed.boardConfig.mode).toBe("graph");
@@ -395,15 +424,21 @@ describe("playlistSchema", () => {
     }
 
     const editorConfig = toEditorGraphConfig(parsed.boardConfig);
-    expect(editorConfig.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(editorConfig.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe(
+      "#10b981"
+    );
     expect(editorConfig.nodes.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
 
     const roundTripped = toGraphBoardConfig(editorConfig);
-    expect(roundTripped.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(roundTripped.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe(
+      "#10b981"
+    );
     expect(roundTripped.nodes.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
 
     const runtimeConfig = toGameConfigFromPlaylist(parsed, []);
-    expect(runtimeConfig.board.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(runtimeConfig.board.find((node) => node.id === "start")?.styleHint?.color).toBe(
+      "#10b981"
+    );
     expect(runtimeConfig.board.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
   });
 
@@ -414,7 +449,13 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, forceStop: true },
+          {
+            id: "round-1",
+            name: "Round 1",
+            kind: "round",
+            roundRef: { idHint: "round-1", name: "Round 1" },
+            forceStop: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -424,7 +465,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
@@ -438,7 +479,14 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "perk-1", name: "Perk 1", kind: "perk", forceStop: true, visualId: "loaded-dice", giftGuaranteedPerk: true },
+          {
+            id: "perk-1",
+            name: "Perk 1",
+            kind: "perk",
+            forceStop: true,
+            visualId: "loaded-dice",
+            giftGuaranteedPerk: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -448,7 +496,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
@@ -464,7 +512,13 @@ describe("playlistSchema", () => {
         startNodeId: "start",
         nodes: [
           { id: "start", name: "Start", kind: "start" },
-          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, skippable: true },
+          {
+            id: "round-1",
+            name: "Round 1",
+            kind: "round",
+            roundRef: { idHint: "round-1", name: "Round 1" },
+            skippable: true,
+          },
           { id: "end", name: "End", kind: "end" },
         ],
         edges: [
@@ -474,7 +528,7 @@ describe("playlistSchema", () => {
         randomRoundPools: [],
         cumRoundRefs: [],
         pathChoiceTimeoutMs: 6000,
-      }),
+      })
     );
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
@@ -490,7 +544,7 @@ describe("playlistSchema", () => {
         normalRoundRefsByIndex: {},
         normalRoundOrder: [],
         cumRoundRefs: [],
-      }),
+      })
     );
 
     expect(parsed.dice).toEqual({ min: 1, max: 6 });

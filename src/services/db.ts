@@ -111,6 +111,7 @@ export const db = {
       endTime?: number | null;
       funscriptUri?: string | null;
       type: "Normal" | "Interjection" | "Cum";
+      excludeFromRandom?: boolean;
     }) => withInstalledRoundCacheInvalidation(() => trpc.db.updateRound.mutate(input)),
     createWebsiteRound: (input: { name: string; videoUri: string; funscriptUri?: string | null }) =>
       withInstalledRoundCacheInvalidation(() => trpc.db.createWebsiteRound.mutate(input)),

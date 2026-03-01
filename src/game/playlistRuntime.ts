@@ -33,9 +33,10 @@ function randomIndex(length: number, randomValue: () => number): number {
 function buildRandomInstalledRoundPool(
   installedRounds: ReadonlyArray<InstalledRound>
 ): RuntimeGraphRandomPool {
+  const eligible = installedRounds.filter((round) => !round.excludeFromRandom);
   return {
     id: "__installed-rounds__",
-    candidates: installedRounds.map((round) => ({
+    candidates: eligible.map((round) => ({
       roundId: round.id,
       weight: 1,
     })),
@@ -48,7 +49,7 @@ export function toPortableRoundRef(round: PlaylistResolutionRoundLike): Portable
 
 export function resolvePortableRoundRef<T extends PlaylistResolutionRoundLike>(
   ref: PortableRoundRef,
-  installedRounds: ReadonlyArray<T>,
+  installedRounds: ReadonlyArray<T>
 ): T | null {
   return resolvePortableRoundRefExact(ref, installedRounds);
 }
@@ -69,7 +70,7 @@ function buildRuntimeGraph(
   startNodeId: string,
   edges: RuntimeGraphEdge[],
   randomPools: RuntimeGraphRandomPool[],
-  pathChoiceTimeoutMs: number,
+  pathChoiceTimeoutMs: number
 ): RuntimeGraphConfig {
   const edgesById: Record<string, RuntimeGraphEdge> = {};
   const outgoingEdgeIdsByNodeId: Record<string, string[]> = {};
@@ -113,7 +114,7 @@ function normalizeSafePoints(indices: number[], totalIndices: number): number[] 
 function buildLinearConfig(
   config: LinearBoardConfig,
   installedRounds: ReadonlyArray<InstalledRound>,
-  randomValue: () => number,
+  randomValue: () => number
 ): GameConfig {
   const totalIndices = clamp(config.totalIndices, 1, 500);
   const safePointIndices = normalizeSafePoints(config.safePointIndices, totalIndices);
@@ -124,17 +125,16 @@ function buildLinearConfig(
     .filter((round): round is InstalledRound => Boolean(round));
   const orderedRoundIds = orderedRounds.map((round) => round.id);
 
-  const explicitByIndex = Object.entries(config.normalRoundRefsByIndex).reduce<Record<number, string>>(
-    (acc, [rawIndex, ref]) => {
-      const index = Number(rawIndex);
-      if (!Number.isInteger(index) || index < 1 || index > totalIndices) return acc;
-      const resolved = resolvePortableRoundRef(ref, installedRounds);
-      if (!resolved) return acc;
-      acc[index] = resolved.id;
-      return acc;
-    },
-    {},
-  );
+  const explicitByIndex = Object.entries(config.normalRoundRefsByIndex).reduce<
+    Record<number, string>
+  >((acc, [rawIndex, ref]) => {
+    const index = Number(rawIndex);
+    if (!Number.isInteger(index) || index < 1 || index > totalIndices) return acc;
+    const resolved = resolvePortableRoundRef(ref, installedRounds);
+    if (!resolved) return acc;
+    acc[index] = resolved.id;
+    return acc;
+  }, {});
 
   const normalRoundIdsByIndex: Record<number, string> = { ...explicitByIndex };
   const board: BoardField[] = [{ id: "start", name: "Start", kind: "start" }];
@@ -237,7 +237,10 @@ function buildLinearConfig(
   };
 }
 
-function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArray<InstalledRound>): GameConfig {
+function buildGraphConfig(
+  config: GraphBoardConfig,
+  installedRounds: ReadonlyArray<InstalledRound>
+): GameConfig {
   const resolvedRoundByNodeId = config.nodes.reduce<Record<string, string>>((acc, node) => {
     if (!node.roundRef) return acc;
     const resolved = resolvePortableRoundRef(node.roundRef, installedRounds);
@@ -299,7 +302,7 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
       config.startNodeId,
       edges,
       randomPools,
-      config.pathChoiceTimeoutMs,
+      config.pathChoiceTimeoutMs
     ),
     dice: { min: 1, max: 6 },
     perkSelection: {
@@ -351,12 +354,13 @@ export function normalizePlaylistConfig(input: unknown): PlaylistConfig {
 export function toGameConfigFromPlaylist(
   playlistConfig: PlaylistConfig,
   installedRounds: ReadonlyArray<InstalledRound>,
-  randomValue: () => number = Math.random,
+  randomValue: () => number = Math.random
 ): GameConfig {
   const boardConfig = playlistConfig.boardConfig;
-  const config = boardConfig.mode === "linear"
-    ? buildLinearConfig(boardConfig, installedRounds, randomValue)
-    : buildGraphConfig(boardConfig, installedRounds);
+  const config =
+    boardConfig.mode === "linear"
+      ? buildLinearConfig(boardConfig, installedRounds, randomValue)
+      : buildGraphConfig(boardConfig, installedRounds);
 
   return {
     ...config,
