@@ -11,6 +11,7 @@ import {
   getWebsiteVideoTargetUrl,
   isStashProxyUri,
 } from "./webVideo";
+import { shouldDeferBackgroundWork } from "./rendererPerformance";
 
 export type WebsiteVideoScanState = "idle" | "running" | "done" | "aborted" | "error";
 
@@ -396,7 +397,7 @@ export function startContinuousWebsiteVideoScan(): void {
   }
 
   continuousScanTimer = setInterval(async () => {
-    if (activeScanPromise) {
+    if (activeScanPromise || shouldDeferBackgroundWork()) {
       return;
     }
 
@@ -407,9 +408,11 @@ export function startContinuousWebsiteVideoScan(): void {
     }
   }, CONTINUOUS_SCAN_INTERVAL_MS);
 
-  void startWebsiteVideoScan().catch((error) => {
-    console.error("Initial continuous website video scan error:", error);
-  });
+  if (!shouldDeferBackgroundWork()) {
+    void startWebsiteVideoScan().catch((error) => {
+      console.error("Initial continuous website video scan error:", error);
+    });
+  }
 }
 
 export function stopContinuousWebsiteVideoScan(): void {

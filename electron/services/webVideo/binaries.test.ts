@@ -3,7 +3,12 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { YtDlpBinary } from "./types";
-import { getBundledYtDlpCandidatePaths, selectYtDlpBinary } from "./binaries";
+import {
+  __resetYtDlpBinaryCacheForTests,
+  getBundledYtDlpCandidatePaths,
+  resetYtDlpBinaryCache,
+  selectYtDlpBinary,
+} from "./binaries";
 
 const bundled: YtDlpBinary = {
   ytDlpPath: "/bundled/yt-dlp",
@@ -82,5 +87,10 @@ describe("webVideo binaries", () => {
 
   it("throws when no yt-dlp binary is available", () => {
     expect(() => selectYtDlpBinary("auto", null, null)).toThrow(/Unable to locate yt-dlp/i);
+  });
+
+  it("exposes cache reset helpers", () => {
+    expect(() => resetYtDlpBinaryCache()).not.toThrow();
+    expect(() => __resetYtDlpBinaryCacheForTests()).not.toThrow();
   });
 });

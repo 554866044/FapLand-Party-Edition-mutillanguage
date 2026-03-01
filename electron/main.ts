@@ -37,6 +37,7 @@ import { startContinuousWebsiteVideoScan } from "./services/webVideoScanService"
 import { createMediaResponse } from "./services/protocol/mediaResponse";
 import { initializeAppUpdater, subscribeToUpdateState } from "./services/updater";
 import { subscribeToEroScriptsLoginStatus } from "./services/eroscripts";
+import { getRendererPerformanceState, setRendererPerformanceState } from "./services/rendererPerformance";
 import {
   startContinuousDatabaseBackup,
   stopContinuousDatabaseBackup,
@@ -54,6 +55,7 @@ let appOpenRendererReady = false;
 let mainWindowRef: BrowserWindow | null = null;
 let rendererDevToolsWindowRef: BrowserWindow | null = null;
 let trpcIpcHandler: { attachWindow: (window: BrowserWindow) => void } | null = null;
+let performanceSnapshotTimer: ReturnType<typeof setInterval> | null = null;
 const WINDOW_ZOOM_STEP = 0.5;
 
 function getWindowZoomPercent(win: BrowserWindow): number {
@@ -701,6 +703,18 @@ async function createWindow(): Promise<BrowserWindow> {
     }
   });
 
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[RendererProcessGone]", details);
+  });
+
+  mainWindow.on("unresponsive", () => {
+    console.error("[RendererUnresponsive]", getRendererPerformanceState());
+  });
+
+  mainWindow.on("responsive", () => {
+    console.warn("[RendererResponsiveAgain]", getRendererPerformanceState());
+  });
+
   // Handle zoom shortcuts and F11 fullscreen toggle since we removed the default menu
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
@@ -755,6 +769,10 @@ async function createWindow(): Promise<BrowserWindow> {
   }
 
   mainWindow.on("closed", () => {
+    if (performanceSnapshotTimer) {
+      clearInterval(performanceSnapshotTimer);
+      performanceSnapshotTimer = null;
+    }
     if (rendererDevToolsWindowRef && !rendererDevToolsWindowRef.isDestroyed()) {
       rendererDevToolsWindowRef.close();
       rendererDevToolsWindowRef = null;
@@ -765,6 +783,28 @@ async function createWindow(): Promise<BrowserWindow> {
       appOpenRendererReady = false;
     }
   });
+
+  if (!performanceSnapshotTimer) {
+    performanceSnapshotTimer = setInterval(() => {
+      const performanceState = getRendererPerformanceState();
+      if (!performanceState.visible || !performanceState.idleSensitive) {
+        return;
+      }
+
+      const metrics = app.getAppMetrics();
+      const currentWindow = mainWindowRef;
+      const currentPid = currentWindow?.webContents.getOSProcessId();
+      const rendererMetric = currentPid
+        ? metrics.find((metric) => metric.pid === currentPid)
+        : undefined;
+
+      console.warn("[PerformanceSnapshot]", {
+        rendererState: performanceState,
+        appMetricsCount: metrics.length,
+        rendererMetric,
+      });
+    }, 60_000);
+  }
 
   mainWindow.webContents.on("did-start-loading", () => {
     if (mainWindowRef === mainWindow) {
@@ -841,6 +881,21 @@ function registerWindowControlsIpc() {
     win.close();
     return true;
   });
+
+  ipcMain.handle(
+    "performance:updateState",
+    (_event, state: { route: string; visible: boolean; idleSensitive: boolean }) => {
+      const previous = getRendererPerformanceState();
+      const next = setRendererPerformanceState(state);
+      if (
+        previous.route !== next.route
+        || previous.visible !== next.visible
+        || previous.idleSensitive !== next.idleSensitive
+      ) {
+        console.log("[RendererPerformanceState]", next);
+      }
+    }
+  );
 }
 
 function registerDialogIpc() {
@@ -1241,6 +1296,12 @@ app
     startContinuousPhashScan();
     startContinuousWebsiteVideoScan();
     startContinuousDatabaseBackup();
+
+    app.on("child-process-gone", (_event, details) => {
+      if (details.type === "GPU") {
+        console.error("[GpuProcessGone]", details, getRendererPerformanceState());
+      }
+    });
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

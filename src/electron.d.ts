@@ -48,6 +48,13 @@ declare global {
         subscribeToZoom?: (callback: (zoomPercent: number) => void) => UpdateUnsubscribe;
         close: () => Promise<boolean>;
       };
+      performance?: {
+        updateState: (state: {
+          route: string;
+          visible: boolean;
+          idleSensitive: boolean;
+        }) => Promise<void>;
+      };
       updates: {
         subscribe: (
           callback: (state: import("../electron/services/updater").AppUpdateState) => void

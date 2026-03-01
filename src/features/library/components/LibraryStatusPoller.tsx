@@ -114,8 +114,21 @@ export const LibraryStatusPoller: React.FC<LibraryStatusPollerProps> = memo(
 
     useEffect(() => {
       let mounted = true;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleNext = (delayMs: number) => {
+        if (!mounted) return;
+        timeout = window.setTimeout(() => {
+          void pollScanStatus();
+        }, delayMs);
+      };
 
       const pollScanStatus = async () => {
+        if (document.hidden) {
+          scheduleNext(10_000);
+          return;
+        }
+
         try {
           const status = await db.install.getScanStatus();
           if (!mounted) return;
@@ -136,17 +149,20 @@ export const LibraryStatusPoller: React.FC<LibraryStatusPollerProps> = memo(
           previousCountRef.current = currentCount;
         } catch (error) {
           console.error("Failed to poll library scan status", error);
+        } finally {
+          scheduleNext(scanStatus?.state === "running" ? 2_000 : 10_000);
         }
       };
 
       void pollScanStatus();
-      const interval = window.setInterval(pollScanStatus, 2000);
 
       return () => {
         mounted = false;
-        window.clearInterval(interval);
+        if (timeout) {
+          window.clearTimeout(timeout);
+        }
       };
-    }, [onDataChanged]);
+    }, [onDataChanged, scanStatus?.state]);
 
     if (!visible || !scanStatus) {
       return null;

@@ -13,6 +13,7 @@ import {
 } from "../constants/experimentalFeatures";
 import { useHandy } from "../contexts/HandyContext";
 import { useAppUpdate } from "../hooks/useAppUpdate";
+import { useIdleScreenPerformance } from "../hooks/useIdleScreenPerformance";
 import { useSfwMode } from "../hooks/useSfwMode";
 import { useMenuNavigation, type MenuOption } from "../hooks/useMenuNavigation";
 import { getAssistedTooltip, getSaveModeEmoji } from "../game/saveMode";
@@ -139,6 +140,7 @@ const loadHomeData = async (): Promise<HomeData> => {
 };
 
 const Home = () => {
+  useIdleScreenPerformance("home", { reduceEffects: false });
   const [homeData, setHomeData] = useState<HomeData>(DEFAULT_HOME_DATA);
   const navigate = useNavigate();
   const { t } = useLingui();
@@ -376,7 +378,7 @@ const Home = () => {
       ref={scopeRef}
       className="relative min-h-screen flex flex-col items-center justify-center select-none overflow-hidden"
     >
-      <AnimatedBackground videoUris={videos} />
+      <AnimatedBackground videoUris={videos} quality="light" />
 
       <HighscoreDisplay
         score={overallHighscore.score}

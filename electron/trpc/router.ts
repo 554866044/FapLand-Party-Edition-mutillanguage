@@ -11,6 +11,7 @@ import { mediaRouter } from "./routers/media";
 import { updaterRouter } from "./routers/updater";
 import { securityRouter } from "./routers/security";
 import { eroscriptsRouter } from "./routers/eroscripts";
+import { binariesRouter } from "./routers/binaries";
 
 export const appRouter = router({
   db: dbRouter,
@@ -25,6 +26,7 @@ export const appRouter = router({
   updater: updaterRouter,
   security: securityRouter,
   eroscripts: eroscriptsRouter,
+  binaries: binariesRouter,
 });
 
 export type AppRouter = typeof appRouter;

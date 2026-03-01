@@ -47,6 +47,7 @@ import {
 import { setMapEditorTestSession } from "../features/map-editor/testSession";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
 import { PERK_RARITY_META, resolvePerkRarity } from "../game/data/perkRarity";
+import { useIdleScreenPerformance } from "../hooks/useIdleScreenPerformance";
 import { useInstalledRoundMedia } from "../hooks/useInstalledRoundMedia";
 import { usePlayableVideoFallback } from "../hooks/usePlayableVideoFallback";
 import { useSfwMode } from "../hooks/useSfwMode";
@@ -773,6 +774,7 @@ export const Route = createFileRoute("/playlist-workshop")({
 });
 
 function PlaylistWorkshopPage() {
+  useIdleScreenPerformance("playlist-workshop");
   const { t } = useLingui();
   const workshopSections = useMemo(() => getWorkshopSections(), []);
   const sfwMode = useSfwMode();
@@ -974,8 +976,11 @@ function PlaylistWorkshopPage() {
 
   useEffect(() => {
     let mounted = true;
+    const shouldPollContinuously =
+      savePending || showExportOverlay || exportStatus?.state === "running";
 
     const pollExportStatus = async () => {
+      if (document.hidden && !shouldPollContinuously) return;
       try {
         const status = await playlists.getExportPackageStatus();
         if (!mounted) return;
@@ -990,15 +995,21 @@ function PlaylistWorkshopPage() {
     };
 
     void pollExportStatus();
+    if (!shouldPollContinuously) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     const interval = window.setInterval(() => {
       void pollExportStatus();
-    }, 500);
+    }, 1500);
 
     return () => {
       mounted = false;
       window.clearInterval(interval);
     };
-  }, [savePending]);
+  }, [exportStatus?.state, savePending, showExportOverlay]);
 
   const normalRounds = useMemo(
     () =>
@@ -1308,7 +1319,7 @@ function PlaylistWorkshopPage() {
   if (playlistList.length === 0) {
     return (
       <div className="relative min-h-screen overflow-hidden">
-        <AnimatedBackground />
+        <AnimatedBackground quality="minimal" />
 
         <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
           <div className="w-full max-w-2xl rounded-3xl border border-violet-300/25 bg-zinc-950/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
@@ -1378,7 +1389,7 @@ function PlaylistWorkshopPage() {
   if (!activePlaylist) {
     return (
       <div className="relative min-h-screen overflow-hidden">
-        <AnimatedBackground />
+        <AnimatedBackground quality="minimal" />
 
         <div className="relative z-10 min-h-screen px-4 py-8 sm:px-8">
           <main className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -1504,7 +1515,7 @@ function PlaylistWorkshopPage() {
   if (shouldRedirectGraphPlaylist) {
     return (
       <div className="relative min-h-screen overflow-hidden">
-        <AnimatedBackground />
+        <AnimatedBackground quality="minimal" />
 
         <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
           <div className="w-full max-w-xl rounded-3xl border border-amber-300/25 bg-zinc-950/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
@@ -1921,7 +1932,7 @@ function PlaylistWorkshopPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <AnimatedBackground />
+      <AnimatedBackground quality="minimal" />
 
       <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
         {/* ── Sidebar ── */}

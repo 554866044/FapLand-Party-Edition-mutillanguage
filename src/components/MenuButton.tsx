@@ -152,7 +152,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
         />
       )}
 
-      <div className="absolute inset-0 rounded-xl" style={{ backdropFilter: "blur(8px)" }} />
+      <div className="absolute inset-0 rounded-xl bg-white/[0.02]" />
 
       <span className="relative z-10 flex items-center justify-center gap-3">
         <span

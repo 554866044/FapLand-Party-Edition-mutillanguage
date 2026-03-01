@@ -11,6 +11,7 @@ import {
 import { generateVideoPhash } from "./phash";
 import { getInstallScanStatus } from "./installer";
 import { resolveDirectPlayableResolution, type DirectPlayableResolution } from "./integrations";
+import { shouldDeferBackgroundWork } from "./rendererPerformance";
 
 export type PhashScanState = "idle" | "running" | "done" | "aborted" | "error";
 
@@ -427,7 +428,7 @@ export function startContinuousPhashScan(): void {
       const currentSetting = normalizeBackgroundPhashScanningEnabled(
         getStore().get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
       );
-      if (!currentSetting || activeScanPromise) return;
+      if (!currentSetting || activeScanPromise || shouldDeferBackgroundWork()) return;
 
       void startPhashScan().catch((error) => {
         console.error("Initial continuous phash scan error:", error);
@@ -445,7 +446,7 @@ export function startContinuousPhashScan(): void {
       return;
     }
 
-    if (activeScanPromise) {
+    if (activeScanPromise || shouldDeferBackgroundWork()) {
       return;
     }
 

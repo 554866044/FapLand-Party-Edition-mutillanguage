@@ -36,6 +36,7 @@ const PARTICLE_COLORS = [
 const LIGHT_BACKGROUND_VIDEO_LIMIT = 6;
 const LIGHT_PARTICLE_COUNT = 6;
 const FULL_PARTICLE_COUNT = 18;
+const MINIMAL_PARTICLE_COUNT = 0;
 
 function generateParticles(count: number): Particle[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -51,7 +52,7 @@ function generateParticles(count: number): Particle[] {
 
 interface AnimatedBackgroundProps {
   videoUris?: string[];
-  quality?: "light" | "full";
+  quality?: "light" | "full" | "minimal";
 }
 
 function getRandomVideoIndex(videoCount: number): number {
@@ -75,7 +76,11 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
   ({ videoUris = [], quality = "light" }) => {
     const effectiveVideoUris = useMemo(
       () =>
-        quality === "light" ? videoUris.slice(0, LIGHT_BACKGROUND_VIDEO_LIMIT) : videoUris,
+        quality === "minimal"
+          ? []
+          : quality === "light"
+            ? videoUris.slice(0, LIGHT_BACKGROUND_VIDEO_LIMIT)
+            : videoUris,
       [quality, videoUris]
     );
     const [currentVideoIndex, setCurrentVideoIndex] = useState(() =>
@@ -85,10 +90,13 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
     const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(
       DEFAULT_BACKGROUND_VIDEO_ENABLED
     );
-    const particles = useMemo(
-      () => generateParticles(quality === "light" ? LIGHT_PARTICLE_COUNT : FULL_PARTICLE_COUNT),
-      [quality]
-    );
+    const particleCount =
+      quality === "minimal"
+        ? MINIMAL_PARTICLE_COUNT
+        : quality === "light"
+          ? LIGHT_PARTICLE_COUNT
+          : FULL_PARTICLE_COUNT;
+    const particles = useMemo(() => generateParticles(particleCount), [particleCount]);
     const sfwMode = useSfwMode();
     const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
 
@@ -130,7 +138,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
       if (!backgroundVideoEnabled || effectiveVideoUris.length <= 1) return;
 
       const interval = window.setInterval(() => {
-        if (quality === "light") {
+        if (quality === "light" || quality === "minimal") {
           setCurrentVideoIndex((prev) => (prev + 1) % effectiveVideoUris.length);
           return;
         }
@@ -165,7 +173,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
     }, [effectiveVideoUris.length, quality]);
 
     useEffect(() => {
-      if (quality === "light") {
+      if (quality === "light" || quality === "minimal") {
         setNextVideoIndex(null);
       }
     }, [quality]);
@@ -184,7 +192,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
       const src = getVideoSrc(originalSrc);
       if (!src) return null;
 
-      if (quality === "light") {
+      if (quality === "light" || quality === "minimal") {
         return (
           <video
             key={uri}
@@ -205,7 +213,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              opacity: 0.18,
+              opacity: quality === "minimal" ? 0.1 : 0.18,
               filter: "saturate(1.25) brightness(0.82)",
             }}
           />
@@ -252,7 +260,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
       >
         {backgroundVideoEnabled && !sfwMode && effectiveVideoUris.length > 0 && (
           <div className="absolute inset-0" data-testid="animated-background-video-layer">
-            {quality === "light"
+            {quality === "light" || quality === "minimal"
               ? currentVideoUri
                 ? renderVideo(currentVideoUri)
                 : null
@@ -276,9 +284,11 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
               borderRadius: "50%",
               background:
                 "radial-gradient(circle, rgba(139,92,246,0.35) 0%, rgba(139,92,246,0.08) 60%, transparent 80%)",
-              filter: "blur(60px)",
+              filter: quality === "minimal" ? "blur(34px)" : "blur(60px)",
               animation:
-                quality === "light"
+                quality === "minimal"
+                  ? undefined
+                  : quality === "light"
                   ? "orb-drift 20s ease-in-out infinite, orb-fade 6s ease-in-out infinite"
                   : "orb-drift 20s ease-in-out infinite, pulse-glow 4s ease-in-out infinite",
             }}
@@ -293,9 +303,11 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
               borderRadius: "50%",
               background:
                 "radial-gradient(circle, rgba(99,102,241,0.28) 0%, rgba(99,102,241,0.06) 60%, transparent 80%)",
-              filter: "blur(70px)",
+              filter: quality === "minimal" ? "blur(38px)" : "blur(70px)",
               animation:
-                quality === "light"
+                quality === "minimal"
+                  ? undefined
+                  : quality === "light"
                   ? "orb-drift-2 27s ease-in-out -6s infinite, orb-fade 6s ease-in-out -2s infinite"
                   : "orb-drift-2 27s ease-in-out -6s infinite, pulse-glow 4s ease-in-out -3s infinite",
             }}

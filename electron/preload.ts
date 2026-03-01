@@ -84,6 +84,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     close: () => ipcRenderer.invoke("window:close") as Promise<boolean>,
   },
+  performance: {
+    updateState: (state: { route: string; visible: boolean; idleSensitive: boolean }) =>
+      ipcRenderer.invoke("performance:updateState", state) as Promise<void>,
+  },
   updates: {
     subscribe: (callback: (state: AppUpdateState) => void) => {
       const listener = (_event: unknown, state: AppUpdateState) => {

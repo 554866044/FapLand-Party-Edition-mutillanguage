@@ -3,10 +3,12 @@
 import { describe, expect, it } from "vitest";
 import type { PhashBinaries } from "./types";
 import {
+    __resetPhashBinariesCacheForTests,
     compareVersionTuple,
     getBundledFfmpegCandidatePaths,
     parseToolVersionLine,
     parseVersionTuple,
+    resetPhashBinariesCache,
     selectPhashBinaries,
 } from "./binaries";
 
@@ -63,6 +65,15 @@ describe("phash binary version parsing", () => {
         ]);
     });
 
+    it("only returns packaged and vendor candidate paths", () => {
+        expect(
+            getBundledFfmpegCandidatePaths("ffmpeg/linux-x64/ffmpeg", {
+                cwd: "/repo",
+                resourcesPath: "/package/resources",
+            }),
+        ).not.toContain("node_modules/ffmpeg-static");
+    });
+
     it("keeps auto behavior preferring newer system when parseable", () => {
         expect(selectPhashBinaries("auto", bundled, system).source).toBe("system");
     });
@@ -70,5 +81,10 @@ describe("phash binary version parsing", () => {
     it("throws when forced source is unavailable", () => {
         expect(() => selectPhashBinaries("bundled", null, system)).toThrow(/forced to bundled/i);
         expect(() => selectPhashBinaries("system", bundled, null)).toThrow(/forced to system/i);
+    });
+
+    it("exposes cache reset helpers", () => {
+        expect(() => resetPhashBinariesCache()).not.toThrow();
+        expect(() => __resetPhashBinariesCacheForTests()).not.toThrow();
     });
 });

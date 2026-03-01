@@ -168,7 +168,7 @@ async function resolveSystemBinary(): Promise<YtDlpProbeResult> {
   return probeCandidates(getSystemYtDlpCandidatePaths(), "system");
 }
 
-export function __resetYtDlpBinaryCacheForTests(): void {
+export function resetYtDlpBinaryCache(): void {
   binariesPromiseByPreference.clear();
 }
 
@@ -235,4 +235,8 @@ export async function resolveYtDlpBinary(preference?: YtDlpBinaryPreference): Pr
   });
   binariesPromiseByPreference.set(effectivePreference, pending);
   return pending;
+}
+
+export function __resetYtDlpBinaryCacheForTests(): void {
+  resetYtDlpBinaryCache();
 }

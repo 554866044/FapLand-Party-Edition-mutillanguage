@@ -27,6 +27,7 @@ import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
 import { useGameplayMoaning } from "../hooks/useGameplayMoaning";
 import { useAppUpdate } from "../hooks/useAppUpdate";
+import { useIdleScreenPerformance } from "../hooks/useIdleScreenPerformance";
 import { useSfwMode } from "../hooks/useSfwMode";
 import { ensureBooruMediaCache } from "../services/booru";
 import { db, type PhashScanStatus, type WebsiteVideoScanStatus } from "../services/db";
@@ -160,6 +161,8 @@ const ACTIVE_STASH_VERSION = "30.1";
 const LEGACY_LOGIN_AUTH_VALUE = "__legacy_login__";
 const HANDY_USER_PORTAL_URL = "https://user.handyfeeling.com";
 type EroScriptsLoginStatus = Awaited<ReturnType<typeof trpc.eroscripts.getLoginStatus.query>>;
+type BinaryDiagnostics = Awaited<ReturnType<typeof trpc.binaries.getResolvedVersions.query>>;
+type BinaryDiagnosticEntry = BinaryDiagnostics["ffmpeg"];
 const SETTINGS_SECTION_IDS = [
   "general",
   "gameplay",
@@ -637,6 +640,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 export function SettingsPage() {
+  useIdleScreenPerformance("settings");
   const { t } = useLingui();
   const { showToast } = useToast();
   const { locale, locales, setLocale } = useLocale();
@@ -719,6 +723,10 @@ export function SettingsPage() {
   const [eroscriptsAuthMessage, setEroScriptsAuthMessage] = useState<string | null>(null);
   const [musicCacheRootPath, setMusicCacheRootPath] = useState<string | null>(null);
   const [fpackExtractionPath, setFpackExtractionPath] = useState<string | null>(null);
+  const [binaryDiagnostics, setBinaryDiagnostics] = useState<BinaryDiagnostics | null>(null);
+  const [binaryDiagnosticsError, setBinaryDiagnosticsError] = useState<string | null>(null);
+  const [isLoadingBinaryDiagnostics, setIsLoadingBinaryDiagnostics] = useState(true);
+  const [isRefreshingBinaryDiagnostics, setIsRefreshingBinaryDiagnostics] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isLoadingVideoHashPreference, setIsLoadingVideoHashPreference] = useState(true);
   const [isLoadingYtDlpPreference, setIsLoadingYtDlpPreference] = useState(true);
@@ -778,6 +786,23 @@ export function SettingsPage() {
     eroscriptsCache: true,
     settings: true,
   });
+
+  const refreshBinaryDiagnostics = useCallback(async () => {
+    setIsRefreshingBinaryDiagnostics(true);
+    setBinaryDiagnosticsError(null);
+    try {
+      const nextDiagnostics = await trpc.binaries.getResolvedVersions.query();
+      setBinaryDiagnostics(nextDiagnostics);
+    } catch (error) {
+      console.error("Failed to load binary diagnostics", error);
+      setBinaryDiagnosticsError(
+        error instanceof Error ? error.message : t`Failed to load program versions.`
+      );
+    } finally {
+      setIsLoadingBinaryDiagnostics(false);
+      setIsRefreshingBinaryDiagnostics(false);
+    }
+  }, [t]);
 
   useEffect(() => {
     let mounted = true;
@@ -991,6 +1016,10 @@ export function SettingsPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    void refreshBinaryDiagnostics();
+  }, [refreshBinaryDiagnostics]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.eroscripts.subscribeToLoginStatus((status) => {
@@ -1530,6 +1559,7 @@ export function SettingsPage() {
               const value = normalizeVideoHashFfmpegSourcePreference(next);
               await trpc.store.set.mutate({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY, value });
               setVideoHashFfmpegSourcePreference(value);
+              await refreshBinaryDiagnostics();
             },
           },
           {
@@ -1547,6 +1577,7 @@ export function SettingsPage() {
               const value = normalizeYtDlpBinaryPreference(next);
               await trpc.store.set.mutate({ key: YT_DLP_BINARY_PREFERENCE_KEY, value });
               setYtDlpBinaryPreference(value);
+              await refreshBinaryDiagnostics();
             },
           },
         ],
@@ -1668,6 +1699,7 @@ export function SettingsPage() {
       setLocale,
       showToast,
       t,
+      refreshBinaryDiagnostics,
     ]
   );
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(
@@ -1983,7 +2015,7 @@ export function SettingsPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <AnimatedBackground />
+      <AnimatedBackground quality="minimal" />
 
       <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
         {/* ── Sidebar (vertical on lg+, horizontal strip on small) ── */}
@@ -2251,6 +2283,23 @@ export function SettingsPage() {
                   section={activeSection}
                   loading={isLoadingAutofixBrokenFunscripts}
                 />
+              ) : activeSection && activeSection.id === "advanced" ? (
+                <>
+                  <SettingsSectionCard
+                    section={activeSection}
+                    loading={isLoadingVideoHashPreference || isLoadingYtDlpPreference}
+                  />
+                  <ProgramVersionsCard
+                    diagnostics={binaryDiagnostics}
+                    error={binaryDiagnosticsError}
+                    isLoading={isLoadingBinaryDiagnostics}
+                    isRefreshing={isRefreshingBinaryDiagnostics}
+                    onRefresh={() => {
+                      playSelectSound();
+                      void refreshBinaryDiagnostics();
+                    }}
+                  />
+                </>
               ) : activeSection && activeSection.id === "credits" ? (
                 <CreditsCard />
               ) : activeSection ? (
@@ -2819,8 +2868,20 @@ function PhashScanCard() {
 
   useEffect(() => {
     let mounted = true;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (!mounted) return;
+      timeout = window.setTimeout(() => {
+        void pollStatus();
+      }, delayMs);
+    };
 
     const pollStatus = async () => {
+      if (document.hidden) {
+        scheduleNext(10_000);
+        return;
+      }
       try {
         const status = await db.phash.getScanStatus();
         if (mounted) {
@@ -2828,17 +2889,20 @@ function PhashScanCard() {
         }
       } catch (error) {
         console.error("Failed to poll phash scan status", error);
+      } finally {
+        scheduleNext(scanStatus?.state === "running" ? 2_000 : 10_000);
       }
     };
 
     void pollStatus();
-    const interval = window.setInterval(pollStatus, 2000);
 
     return () => {
       mounted = false;
-      window.clearInterval(interval);
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
     };
-  }, []);
+  }, [scanStatus?.state]);
 
   const handleStartScan = async () => {
     if (isStarting) return;
@@ -2996,8 +3060,20 @@ function WebsiteVideoCacheScanCard() {
 
   useEffect(() => {
     let mounted = true;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (!mounted) return;
+      timeout = window.setTimeout(() => {
+        void pollStatus();
+      }, delayMs);
+    };
 
     const pollStatus = async () => {
+      if (document.hidden) {
+        scheduleNext(10_000);
+        return;
+      }
       try {
         const status = await db.webVideoCache.getScanStatus();
         if (mounted) {
@@ -3005,17 +3081,20 @@ function WebsiteVideoCacheScanCard() {
         }
       } catch (error) {
         console.error("Failed to poll website video cache scan status", error);
+      } finally {
+        scheduleNext(scanStatus?.state === "running" ? 2_000 : 10_000);
       }
     };
 
     void pollStatus();
-    const interval = window.setInterval(pollStatus, 2000);
 
     return () => {
       mounted = false;
-      window.clearInterval(interval);
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
     };
-  }, []);
+  }, [scanStatus?.state]);
 
   const handleStartScan = async () => {
     if (isStarting) return;
@@ -5132,6 +5211,7 @@ function SourceIntegrationsCard() {
 
     void load();
     const interval = window.setInterval(() => {
+      if (document.hidden) return;
       void integrations
         .getSyncStatus()
         .then((status) => {
@@ -5630,6 +5710,147 @@ function SettingsSectionCard({ section, loading }: { section: SettingsSection; l
         {section.settings.map((setting) => (
           <SettingRow key={setting.id} setting={setting} disabled={loading} />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function ProgramVersionsCard({
+  diagnostics,
+  error,
+  isLoading,
+  isRefreshing,
+  onRefresh,
+}: {
+  diagnostics: BinaryDiagnostics | null;
+  error: string | null;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useLingui();
+  const entries: BinaryDiagnosticEntry[] = diagnostics
+    ? [diagnostics.ffmpeg, diagnostics.ffprobe, diagnostics.ytDlp]
+    : [];
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+            <Trans>Program Versions</Trans>
+          </h2>
+          <p className="mt-1 text-sm text-zinc-300">
+            <Trans>
+              Live versions fetched from the currently resolved ffmpeg, ffprobe, and yt-dlp
+              executables. These reflect your active source preferences.
+            </Trans>
+          </p>
+          {diagnostics?.checkedAtIso ? (
+            <p className="mt-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] text-zinc-500">
+              <Trans>Last checked:</Trans> {new Date(diagnostics.checkedAtIso).toLocaleString()}
+            </p>
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          disabled={isRefreshing}
+          onMouseEnter={playHoverSound}
+          onClick={onRefresh}
+          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+            isRefreshing
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+          }`}
+        >
+          {isRefreshing ? t`Refreshing...` : t`Refresh`}
+        </button>
+      </div>
+
+      {error ? (
+        <div className="mb-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        {isLoading && !diagnostics ? (
+          <div className="rounded-2xl border border-violet-300/25 bg-black/35 px-4 py-5 text-sm text-zinc-300">
+            {t`Loading...`}
+          </div>
+        ) : null}
+
+        {entries.map((entry) => {
+          const sourceLabel =
+            entry.source === "bundled" ? t`Bundled` : entry.source === "system" ? t`System` : t`Unavailable`;
+          const preferenceLabel =
+            entry.preference === "bundled"
+              ? t`Bundled Only`
+              : entry.preference === "system"
+                ? t`System Only`
+                : t`Auto (Default)`;
+
+          return (
+            <div
+              key={entry.tool}
+              className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+              onMouseEnter={playHoverSound}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-bold uppercase tracking-[0.18em] text-zinc-100">
+                    {entry.tool}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    <Trans>Preference:</Trans> {preferenceLabel}
+                  </p>
+                </div>
+
+                <span
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+                    entry.source === "bundled"
+                      ? "border-cyan-300/40 bg-cyan-500/15 text-cyan-100"
+                      : entry.source === "system"
+                        ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+                        : "border-rose-300/40 bg-rose-500/15 text-rose-100"
+                  }`}
+                >
+                  {sourceLabel}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    <Trans>Version</Trans>
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-zinc-100">
+                    {entry.version ?? t`Unavailable`}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    <Trans>Path</Trans>
+                  </div>
+                  <div className="mt-1 break-all font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-300">
+                    {entry.path ?? t`Unavailable`}
+                  </div>
+                </div>
+              </div>
+
+              {entry.error ? (
+                <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  {entry.error}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

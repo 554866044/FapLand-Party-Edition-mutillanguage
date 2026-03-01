@@ -37,6 +37,31 @@ body {
   overflow: hidden;
 }
 
+body.perf-reduced-effects .animate-entrance,
+body.perf-reduced-effects .animate-entrance-fade,
+body.perf-reduced-effects .animate-pulse,
+body.perf-reduced-effects .animate-pulse-glow,
+body.perf-reduced-effects .animate-orb-drift,
+body.perf-reduced-effects .animate-orb-drift-2,
+body.perf-reduced-effects .animate-orb-fade,
+body.perf-reduced-effects .animate-title,
+body.perf-reduced-effects .animate-phash-progress-shimmer,
+body.perf-reduced-effects .animate-phash-scanline,
+body.perf-reduced-effects .scanlines,
+body.perf-reduced-effects .particle {
+  animation: none !important;
+}
+
+body.perf-reduced-effects .backdrop-blur-sm,
+body.perf-reduced-effects .backdrop-blur-md,
+body.perf-reduced-effects .backdrop-blur-xl,
+body.perf-reduced-effects .backdrop-blur-2xl,
+body.perf-reduced-effects .glass,
+body.perf-reduced-effects .converter-panel-glass {
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
 .text-gradient-safe {
   color: #f5f3ff;
   background-image: linear-gradient(to right, #ddd6fe, #f3e8ff, #c7d2fe);

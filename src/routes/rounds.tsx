@@ -935,18 +935,36 @@ export function InstalledRoundsPage() {
 
   useEffect(() => {
     let mounted = true;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (!mounted) return;
+      timeout = window.setTimeout(() => {
+        void pollExportStatus();
+      }, delayMs);
+    };
 
     const pollExportStatus = async () => {
+      const currentExportRunning = libraryExportStatus?.state === "running";
+      const shouldPollContinuously = showLibraryExportOverlay || currentExportRunning;
+      if (document.hidden && !shouldPollContinuously) {
+        scheduleNext(10_000);
+        return;
+      }
+
+      let nextDelay = currentExportRunning || showLibraryExportOverlay ? 1_500 : 10_000;
       try {
         const status = await db.install.getExportPackageStatus();
         if (!mounted) return;
         setLibraryExportStatus(status);
         if (status.state === "running") {
           setShowLibraryExportOverlay(true);
+          nextDelay = 1_500;
           return;
         }
         setShowLibraryExportOverlay(false);
         setIsAbortingLibraryExport(false);
+        nextDelay = 10_000;
         if (status.state === "aborted") {
           setExportDialog((current) =>
             current
@@ -970,19 +988,20 @@ export function InstalledRoundsPage() {
         }
       } catch (error) {
         console.error("Failed to poll library export status", error);
+      } finally {
+        scheduleNext(nextDelay);
       }
     };
 
     void pollExportStatus();
-    const interval = window.setInterval(() => {
-      void pollExportStatus();
-    }, 500);
 
     return () => {
       mounted = false;
-      window.clearInterval(interval);
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
     };
-  }, []);
+  }, [libraryExportStatus?.state, showLibraryExportOverlay, t]);
   useEffect(() => {
     let mounted = true;
     void getControllerSupportEnabled().then((nextControllerSupportEnabled) => {
@@ -1567,8 +1586,25 @@ export function InstalledRoundsPage() {
     let mounted = true;
     let previousState: string | null = null;
     let hadActiveProgress = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (!mounted) return;
+      timeout = window.setTimeout(() => {
+        void pollWebsiteVideoScanStatus();
+      }, delayMs);
+    };
 
     const pollWebsiteVideoScanStatus = async () => {
+      const currentScanRunning = websiteVideoScanStatus?.state === "running";
+      const currentHasProgress = downloadProgresses.length > 0;
+      const shouldPollContinuously = currentScanRunning || currentHasProgress;
+      if (document.hidden && !shouldPollContinuously) {
+        scheduleNext(10_000);
+        return;
+      }
+
+      let nextDelay = shouldPollContinuously ? 2_000 : 10_000;
       try {
         const [status, progresses] = await Promise.all([
           db.webVideoCache.getScanStatus(),
@@ -1588,19 +1624,23 @@ export function InstalledRoundsPage() {
 
         previousState = status.state;
         hadActiveProgress = hasActiveProgress;
+        nextDelay = status.state === "running" || hasActiveProgress ? 2_000 : 10_000;
       } catch (error) {
         console.error("Failed to poll website video scan status", error);
+      } finally {
+        scheduleNext(nextDelay);
       }
     };
 
     void pollWebsiteVideoScanStatus();
-    const interval = window.setInterval(pollWebsiteVideoScanStatus, 2000);
 
     return () => {
       mounted = false;
-      window.clearInterval(interval);
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
     };
-  }, [refreshInstalledRounds]);
+  }, [downloadProgresses.length, refreshInstalledRounds, websiteVideoScanStatus?.state]);
 
   useEffect(() => {
     setCardAssetsByRoundId(new Map());
@@ -1613,30 +1653,33 @@ export function InstalledRoundsPage() {
     }
 
     let cancelled = false;
-    void getInstalledRoundCardAssetsCached(nextVisibleRoundIds, showDisabledRounds)
-      .then((entries) => {
-        if (cancelled || entries.length === 0) {
-          return;
-        }
-        setCardAssetsByRoundId((previous) => {
-          let changed = false;
-          const next = new Map(previous);
-          for (const entry of entries) {
-            if (next.get(entry.roundId) === entry) {
-              continue;
-            }
-            next.set(entry.roundId, entry);
-            changed = true;
+    const timeout = window.setTimeout(() => {
+      void getInstalledRoundCardAssetsCached(nextVisibleRoundIds, showDisabledRounds)
+        .then((entries) => {
+          if (cancelled || entries.length === 0) {
+            return;
           }
-          return changed ? next : previous;
+          setCardAssetsByRoundId((previous) => {
+            let changed = false;
+            const next = new Map(previous);
+            for (const entry of entries) {
+              if (next.get(entry.roundId) === entry) {
+                continue;
+              }
+              next.set(entry.roundId, entry);
+              changed = true;
+            }
+            return changed ? next : previous;
+          });
+        })
+        .catch((error) => {
+          console.error("Failed to load installed round card assets", error);
         });
-      })
-      .catch((error) => {
-        console.error("Failed to load installed round card assets", error);
-      });
+    }, 180);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [showDisabledRounds, visibleRoundIds]);
 

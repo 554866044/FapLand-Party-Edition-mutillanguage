@@ -141,6 +141,37 @@ vi.mock("../services/integrations", () => ({
 
 vi.mock("../services/trpc", () => ({
   trpc: {
+    binaries: {
+      getResolvedVersions: {
+        query: vi.fn(async () => ({
+          ffmpeg: {
+            tool: "ffmpeg",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/ffmpeg",
+            version: "7.1.0",
+            error: null,
+          },
+          ffprobe: {
+            tool: "ffprobe",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/ffprobe",
+            version: "7.1.0",
+            error: null,
+          },
+          ytDlp: {
+            tool: "yt-dlp",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/yt-dlp",
+            version: "2026.04.01",
+            error: null,
+          },
+          checkedAtIso: "2026-04-28T00:00:00.000Z",
+        })),
+      },
+    },
     db: {
       openConfiguredPath: {
         mutate: vi.fn(async () => ({ path: "/tmp/web-video-cache" })),

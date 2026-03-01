@@ -55,6 +55,8 @@ export function VirtualizedRoundLibraryGrid({
   const [columns, setColumns] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
+  const measureFrameRef = useRef<number | null>(null);
+  const lastVisibleRoundIdsRef = useRef<string>("");
   const hasGroupedRows = useMemo(() => rows.some((row) => row.kind !== "standalone"), [rows]);
 
   useEffect(() => {
@@ -91,10 +93,14 @@ export function VirtualizedRoundLibraryGrid({
     () => buildRoundLibraryShelves(rows, columns, expandedGroupKeys),
     [columns, expandedGroupKeys, rows],
   );
+  const shelfSignature = useMemo(
+    () => shelves.map((shelf) => shelf.key).join("|"),
+    [shelves],
+  );
   const preferVirtualization =
     rows.length >= VIRTUALIZATION_MIN_ROWS ||
     (hasGroupedRows && shelves.length >= GROUPED_VIRTUALIZATION_MIN_SHELVES);
-  const canVirtualize = preferVirtualization && scrollContainer != null;
+  const canVirtualize = preferVirtualization && scrollContainer != null && !hasGroupedRows;
 
   const shelfRenderer = useMemo(
     () => (shelf: RoundLibraryShelf) => {
@@ -140,12 +146,23 @@ export function VirtualizedRoundLibraryGrid({
     useAnimationFrameWithResizeObserver: true,
     enabled: canVirtualize,
   });
+  const scheduleMeasure = useCallback(() => {
+    if (!canVirtualize) return;
+    if (measureFrameRef.current !== null) {
+      window.cancelAnimationFrame(measureFrameRef.current);
+    }
+    measureFrameRef.current = window.requestAnimationFrame(() => {
+      measureFrameRef.current = null;
+      virtualizer.measure();
+    });
+  }, [canVirtualize, virtualizer]);
+
   const handleShelfMediaStateChange = useCallback(
-    (event: SyntheticEvent<HTMLDivElement>) => {
+    (_event: SyntheticEvent<HTMLDivElement>) => {
       if (!canVirtualize) return;
-      virtualizer.measureElement(event.currentTarget);
+      scheduleMeasure();
     },
-    [canVirtualize, virtualizer],
+    [canVirtualize, scheduleMeasure],
   );
 
   useEffect(() => {
@@ -153,26 +170,16 @@ export function VirtualizedRoundLibraryGrid({
       return;
     }
 
-    virtualizer.measure();
-
-    const frame = window.requestAnimationFrame(() => {
-      virtualizer.measure();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [canVirtualize, columns, shelves, virtualizer]);
+    scheduleMeasure();
+  }, [canVirtualize, columns, scheduleMeasure, shelfSignature]);
 
   useEffect(() => {
     if (!canVirtualize || containerWidth <= 0) {
       return;
     }
 
-    const frame = window.requestAnimationFrame(() => {
-      virtualizer.measure();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [canVirtualize, containerWidth, virtualizer]);
+    scheduleMeasure();
+  }, [canVirtualize, containerWidth, scheduleMeasure]);
 
   useEffect(() => {
     if (!canVirtualize || typeof document === "undefined" || !document.fonts?.ready) {
@@ -182,14 +189,22 @@ export function VirtualizedRoundLibraryGrid({
     let cancelled = false;
     void document.fonts.ready.then(() => {
       if (!cancelled) {
-        virtualizer.measure();
+        scheduleMeasure();
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [canVirtualize, virtualizer]);
+  }, [canVirtualize, scheduleMeasure]);
+
+  useEffect(() => {
+    return () => {
+      if (measureFrameRef.current !== null) {
+        window.cancelAnimationFrame(measureFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!onVisibleRoundIdsChange) {
@@ -201,14 +216,29 @@ export function VirtualizedRoundLibraryGrid({
           virtualizer.getVirtualItems().flatMap((item) => collectRoundIdsFromShelf(shelves[item.index]))
         ),
       ];
+      const nextKey = nextRoundIds.join("|");
+      if (lastVisibleRoundIdsRef.current === nextKey) {
+        return;
+      }
+      lastVisibleRoundIdsRef.current = nextKey;
       onVisibleRoundIdsChange(nextRoundIds);
       return;
     }
-    if (preferVirtualization) {
+    if (preferVirtualization && scrollContainer == null) {
+      if (lastVisibleRoundIdsRef.current === "") {
+        return;
+      }
+      lastVisibleRoundIdsRef.current = "";
       onVisibleRoundIdsChange([]);
       return;
     }
-    onVisibleRoundIdsChange(collectRoundIdsFromRows(rows));
+    const nextRoundIds = collectRoundIdsFromRows(rows);
+    const nextKey = nextRoundIds.join("|");
+    if (lastVisibleRoundIdsRef.current === nextKey) {
+      return;
+    }
+    lastVisibleRoundIdsRef.current = nextKey;
+    onVisibleRoundIdsChange(nextRoundIds);
   }, [canVirtualize, onVisibleRoundIdsChange, preferVirtualization, rows, shelves, virtualizer]);
 
   if (preferVirtualization && !scrollContainer) {
@@ -253,6 +283,7 @@ export function VirtualizedRoundLibraryGrid({
             onErrorCapture={handleShelfMediaStateChange}
             onLoadCapture={handleShelfMediaStateChange}
             onLoadedMetadataCapture={handleShelfMediaStateChange}
+            onTransitionEndCapture={handleShelfMediaStateChange}
           >
             {shelfRenderer(shelf)}
           </div>

@@ -153,8 +153,21 @@ export const WebsiteVideoScanStatusPoller: React.FC<WebsiteVideoScanStatusPoller
 
     useEffect(() => {
       let mounted = true;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleNext = (delayMs: number) => {
+        if (!mounted) return;
+        timeout = window.setTimeout(() => {
+          void pollScanStatus();
+        }, delayMs);
+      };
 
       const pollScanStatus = async () => {
+        if (document.hidden) {
+          scheduleNext(10_000);
+          return;
+        }
+
         try {
           const status = await db.webVideoCache.getScanStatus();
           if (!mounted) return;
@@ -175,20 +188,23 @@ export const WebsiteVideoScanStatusPoller: React.FC<WebsiteVideoScanStatusPoller
           }
         } catch (error) {
           console.error("Failed to poll website video scan status", error);
+        } finally {
+          scheduleNext(scanStatus?.state === "running" ? 2_000 : 10_000);
         }
       };
 
       void pollScanStatus();
-      const interval = window.setInterval(pollScanStatus, 2000);
 
       return () => {
         mounted = false;
-        window.clearInterval(interval);
+        if (timeout) {
+          window.clearTimeout(timeout);
+        }
         if (hideTimeoutRef.current) {
           clearTimeout(hideTimeoutRef.current);
         }
       };
-    }, []);
+    }, [scanStatus?.state]);
 
     if (!visible || !scanStatus) {
       return null;

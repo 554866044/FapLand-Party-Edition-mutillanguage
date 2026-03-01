@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import {
     DEFAULT_VIDEOHASH_FFMPEG_SOURCE_PREFERENCE,
     normalizeVideoHashFfmpegSourcePreference,
@@ -10,8 +9,6 @@ import {
 import { getStore } from "../store";
 import type { PhashBinaries } from "./types";
 import { runCommand } from "./extract";
-
-const require = createRequire(import.meta.url);
 
 type ParsedVersion = [number, number, number];
 
@@ -62,16 +59,6 @@ export function getBundledFfmpegCandidatePaths(
     return [...new Set(candidates.map((candidate) => path.normalize(candidate)))];
 }
 
-function patchAsarPath(inputPath: string): string {
-    const normalized = path.normalize(inputPath);
-    const asarSegment = `${path.sep}app.asar${path.sep}`;
-    if (!normalized.includes(asarSegment)) return normalized;
-
-    const unpacked = normalized.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
-    if (fs.existsSync(unpacked)) return unpacked;
-    return normalized;
-}
-
 function isExecutablePath(filePath: string | null | undefined): filePath is string {
     if (!filePath || typeof filePath !== "string") return false;
     if (!filePath.trim()) return false;
@@ -85,42 +72,19 @@ function isExecutablePath(filePath: string | null | undefined): filePath is stri
 
 function loadBundledBinaryPaths(): { ffmpegPath: string | null; ffprobePath: string | null } {
     const vendorRelativePaths = getBundledBinaryRelativePaths();
-    if (vendorRelativePaths) {
-        const ffmpegCandidate = getBundledFfmpegCandidatePaths(vendorRelativePaths.ffmpegPath).find(isExecutablePath);
-        const ffprobeCandidate = getBundledFfmpegCandidatePaths(vendorRelativePaths.ffprobePath).find(isExecutablePath);
-
-        if (ffmpegCandidate && ffprobeCandidate) {
-            return {
-                ffmpegPath: ffmpegCandidate,
-                ffprobePath: ffprobeCandidate,
-            };
-        }
+    if (!vendorRelativePaths) {
+        return {
+            ffmpegPath: null,
+            ffprobePath: null,
+        };
     }
 
-    let ffmpegPath: string | null = null;
-    let ffprobePath: string | null = null;
-
-    try {
-        const resolved = require("ffmpeg-static") as string | null;
-        ffmpegPath = typeof resolved === "string" ? patchAsarPath(resolved) : null;
-    } catch {
-        ffmpegPath = null;
-    }
-
-    try {
-        const resolved = require("ffprobe-static") as { path?: string } | string;
-        if (typeof resolved === "string") {
-            ffprobePath = patchAsarPath(resolved);
-        } else {
-            ffprobePath = typeof resolved.path === "string" ? patchAsarPath(resolved.path) : null;
-        }
-    } catch {
-        ffprobePath = null;
-    }
+    const ffmpegPath = getBundledFfmpegCandidatePaths(vendorRelativePaths.ffmpegPath).find(isExecutablePath) ?? null;
+    const ffprobePath = getBundledFfmpegCandidatePaths(vendorRelativePaths.ffprobePath).find(isExecutablePath) ?? null;
 
     return {
-        ffmpegPath: isExecutablePath(ffmpegPath) ? ffmpegPath : null,
-        ffprobePath: isExecutablePath(ffprobePath) ? ffprobePath : null,
+        ffmpegPath,
+        ffprobePath,
     };
 }
 
@@ -266,6 +230,10 @@ async function resolveBinariesInternal(preference: VideoHashFfmpegSourcePreferen
     return selectPhashBinaries(preference, bundled, system);
 }
 
+export function resetPhashBinariesCache(): void {
+    binariesPromiseByPreference.clear();
+}
+
 export async function resolvePhashBinaries(preference?: VideoHashFfmpegSourcePreference): Promise<PhashBinaries> {
     const effectivePreference = preference ?? getConfiguredVideoHashBinaryPreference();
     const cached = binariesPromiseByPreference.get(effectivePreference);
@@ -277,4 +245,8 @@ export async function resolvePhashBinaries(preference?: VideoHashFfmpegSourcePre
     });
     binariesPromiseByPreference.set(effectivePreference, pending);
     return pending;
+}
+
+export function __resetPhashBinariesCacheForTests(): void {
+    resetPhashBinariesCache();
 }

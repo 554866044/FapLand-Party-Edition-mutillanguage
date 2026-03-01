@@ -168,6 +168,37 @@ vi.mock("../services/integrations", () => ({
 
 vi.mock("../services/trpc", () => ({
   trpc: {
+    binaries: {
+      getResolvedVersions: {
+        query: vi.fn(async () => ({
+          ffmpeg: {
+            tool: "ffmpeg",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/ffmpeg",
+            version: "7.1.0",
+            error: null,
+          },
+          ffprobe: {
+            tool: "ffprobe",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/ffprobe",
+            version: "7.1.0",
+            error: null,
+          },
+          ytDlp: {
+            tool: "yt-dlp",
+            preference: "auto",
+            source: "bundled",
+            path: "/bundle/yt-dlp",
+            version: "2026.04.01",
+            error: null,
+          },
+          checkedAtIso: "2026-04-28T00:00:00.000Z",
+        })),
+      },
+    },
     eroscripts: {
       getLoginStatus: {
         query: vi.fn(async () => ({
@@ -247,6 +278,7 @@ describe("Settings music section", () => {
     mocks.handy.resetOffset.mockClear();
     mocks.handy.offsetMs = 0;
     mocks.appUpdate.triggerPrimaryAction.mockClear();
+    vi.mocked(trpc.binaries.getResolvedVersions.query).mockClear();
 
     window.electronAPI = {
       file: {
@@ -689,5 +721,81 @@ describe("Settings music section", () => {
     expect(getVisibleShortcutGroups(testI18n, false).some((group) => group.id === "game-debug")).toBe(
       true
     );
+  });
+
+  it("shows live program versions in Advanced and refreshes after source changes", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "🔧 Advanced" }));
+
+    await screen.findByText("Program Versions");
+    expect(screen.getByText("/bundle/ffmpeg")).toBeInTheDocument();
+    expect(screen.getByText("/bundle/ffprobe")).toBeInTheDocument();
+    expect(screen.getByText("/bundle/yt-dlp")).toBeInTheDocument();
+    expect(vi.mocked(trpc.binaries.getResolvedVersions.query)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => {
+      expect(vi.mocked(trpc.binaries.getResolvedVersions.query)).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Auto (Default)" })[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "System Only" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+    await waitFor(() => {
+      expect(vi.mocked(trpc.store.set.mutate)).toHaveBeenCalledWith({
+        key: "hash.videophash.ffmpegSourcePreference",
+        value: "system",
+      });
+      expect(vi.mocked(trpc.binaries.getResolvedVersions.query)).toHaveBeenCalledTimes(3);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Auto (Default)" })[0]!);
+    fireEvent.click(screen.getByRole("option", { name: "System Only" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+    await waitFor(() => {
+      expect(vi.mocked(trpc.store.set.mutate)).toHaveBeenCalledWith({
+        key: "webVideo.ytDlpBinaryPreference",
+        value: "system",
+      });
+      expect(vi.mocked(trpc.binaries.getResolvedVersions.query)).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  it("keeps rendering successful versions when one tool is unavailable", async () => {
+    vi.mocked(trpc.binaries.getResolvedVersions.query).mockResolvedValueOnce({
+      ffmpeg: {
+        tool: "ffmpeg",
+        preference: "auto",
+        source: null,
+        path: null,
+        version: null,
+        error: "ffmpeg missing",
+      },
+      ffprobe: {
+        tool: "ffprobe",
+        preference: "auto",
+        source: null,
+        path: null,
+        version: null,
+        error: "ffmpeg missing",
+      },
+      ytDlp: {
+        tool: "yt-dlp",
+        preference: "auto",
+        source: "bundled",
+        path: "/bundle/yt-dlp",
+        version: "2026.04.01",
+        error: null,
+      },
+      checkedAtIso: "2026-04-28T00:00:00.000Z",
+    });
+
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "🔧 Advanced" }));
+
+    await screen.findAllByText("Unavailable");
+    expect(screen.getByText("ffmpeg missing")).toBeInTheDocument();
+    expect(screen.getByText("/bundle/yt-dlp")).toBeInTheDocument();
   });
 });
