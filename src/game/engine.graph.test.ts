@@ -44,10 +44,13 @@ function makeGraphConfig(input: {
     acc[node.id] = index;
     return acc;
   }, {});
-  const edgesById = input.edges.reduce<Record<string, GameConfig["runtimeGraph"]["edges"][number]>>((acc, edge) => {
-    acc[edge.id] = edge;
-    return acc;
-  }, {});
+  const edgesById = input.edges.reduce<Record<string, GameConfig["runtimeGraph"]["edges"][number]>>(
+    (acc, edge) => {
+      acc[edge.id] = edge;
+      return acc;
+    },
+    {}
+  );
   const outgoingEdgeIdsByNodeId = input.edges.reduce<Record<string, string[]>>((acc, edge) => {
     const outgoing = acc[edge.fromNodeId];
     if (outgoing) {
@@ -101,6 +104,7 @@ function makeGraphConfig(input: {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
@@ -249,7 +253,13 @@ describe("graph engine runtime", () => {
     const config = makeGraphConfig({
       board: [
         { id: "start", name: "Start", kind: "start" },
-        { id: "perk-1", name: "Perk 1", kind: "perk", visualId: "loaded-dice", giftGuaranteedPerk: true },
+        {
+          id: "perk-1",
+          name: "Perk 1",
+          kind: "perk",
+          visualId: "loaded-dice",
+          giftGuaranteedPerk: true,
+        },
         { id: "after", name: "After", kind: "path" },
       ],
       edges: [
@@ -272,7 +282,14 @@ describe("graph engine runtime", () => {
     const config = makeGraphConfig({
       board: [
         { id: "start", name: "Start", kind: "start" },
-        { id: "round-1", name: "Round 1", kind: "round", fixedRoundId: "round-1", forceStop: true, skippable: true },
+        {
+          id: "round-1",
+          name: "Round 1",
+          kind: "round",
+          fixedRoundId: "round-1",
+          forceStop: true,
+          skippable: true,
+        },
         { id: "after", name: "After", kind: "path" },
       ],
       edges: [
@@ -295,7 +312,13 @@ describe("graph engine runtime", () => {
     const config = makeGraphConfig({
       board: [
         { id: "start", name: "Start", kind: "start" },
-        { id: "round-1", name: "Round 1", kind: "round", fixedRoundId: "round-1", forceStop: false },
+        {
+          id: "round-1",
+          name: "Round 1",
+          kind: "round",
+          fixedRoundId: "round-1",
+          forceStop: false,
+        },
         { id: "after", name: "After", kind: "path" },
       ],
       edges: [
@@ -460,7 +483,11 @@ describe("graph engine runtime", () => {
     const rounds = [makeRound("round-1", "Round 1"), makeRound("cum-1", "Cum 1", "Cum")];
     const rolled = rollTurn(createInitialGameState(config), rounds, 1);
     const started = triggerQueuedRound(rolled);
-    const completed = completeRound(started, { intermediaryCount: 0, activeAntiPerkCount: 0 }, rounds);
+    const completed = completeRound(
+      started,
+      { intermediaryCount: 0, activeAntiPerkCount: 0 },
+      rounds
+    );
 
     expect(completed.sessionPhase).toBe("normal");
     expect(completed.queuedRound).toBeNull();

@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         callback(filePaths);
       };
       ipcRenderer.on("app-open:files", listener);
+      void ipcRenderer.invoke("app-open:renderer-ready");
       return () => {
         ipcRenderer.off("app-open:files", listener);
       };

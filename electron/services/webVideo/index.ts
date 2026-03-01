@@ -1,10 +1,14 @@
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import vm from "node:vm";
 import { app } from "electron";
+import { File as MegaFile } from "megajs";
 import {
   getVideoContentTypeByExtension,
   isLikelyVideoUrl,
@@ -46,13 +50,22 @@ const PREFERRED_BROWSER_STREAM_EXTENSIONS = new Map([
 const inFlightCacheByUrl = new Map<string, Promise<WebsiteVideoCacheMetadata>>();
 const cacheRemovalRequestsByUrl = new Set<string>();
 const downloadProgressByUrl = new Map<string, VideoDownloadProgress>();
+const MULTI_FILE_WEBSITE_VIDEO_ERROR =
+  "This hoster URL resolves to multiple files. Install rounds only support single-file downloads.";
+const MEGA_EXTRACTOR_KEY = "mega";
+const GOFILE_EXTRACTOR_KEY = "gofile";
+const PIXELDRAIN_EXTRACTOR_KEY = "pixeldrain";
 
 type YtDlpInfoJson = {
   url?: unknown;
+  _type?: unknown;
   extractor?: unknown;
   extractor_key?: unknown;
   title?: unknown;
   duration?: unknown;
+  entries?: unknown;
+  playlist_count?: unknown;
+  n_entries?: unknown;
   http_headers?: unknown;
   requested_downloads?: unknown;
   requested_formats?: unknown;
@@ -83,6 +96,21 @@ type HtmlMediaCandidate = {
   contentType: string | null;
 };
 
+type MegaSharedFile = {
+  file: InstanceType<typeof MegaFile>;
+  title: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+};
+
+type DirectDownloadTarget = {
+  downloadUrl: string;
+  title: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  extractor: string;
+};
+
 function normalizeHttpUrl(input: string): string {
   let parsed: URL;
   try {
@@ -95,7 +123,9 @@ function normalizeHttpUrl(input: string): string {
     throw new Error("Website video URL must use http or https.");
   }
 
-  parsed.hash = "";
+  if (!isMegaHost(parsed.hostname.toLowerCase())) {
+    parsed.hash = "";
+  }
   return parsed.toString();
 }
 
@@ -167,6 +197,81 @@ function buildCachePaths(url: string): WebsiteVideoCachePaths {
   };
 }
 
+function isMegaHost(hostname: string): boolean {
+  return hostname === "mega.nz" || hostname === "www.mega.nz" || hostname === "mega.co.nz";
+}
+
+function isGofileHost(hostname: string): boolean {
+  return hostname === "gofile.io" || hostname === "www.gofile.io";
+}
+
+function isPixeldrainHost(hostname: string): boolean {
+  return hostname === "pixeldrain.com" || hostname === "www.pixeldrain.com";
+}
+
+function isMegaSharedFileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(normalizeHttpUrl(url));
+    return isMegaHost(parsed.hostname.toLowerCase()) && parsed.pathname.startsWith("/file/");
+  } catch {
+    return false;
+  }
+}
+
+function assertMegaSingleFileUrl(url: string): void {
+  const parsed = new URL(normalizeHttpUrl(url));
+  if (!isMegaHost(parsed.hostname.toLowerCase())) {
+    throw new Error("MEGA URL is invalid or not supported.");
+  }
+  if (parsed.pathname.startsWith("/folder/")) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+  if (!parsed.pathname.startsWith("/file/")) {
+    throw new Error("MEGA URLs must point to a shared file.");
+  }
+}
+
+function getPixeldrainFileId(url: string): string | null {
+  const parsed = new URL(normalizeHttpUrl(url));
+  if (!isPixeldrainHost(parsed.hostname.toLowerCase())) return null;
+  const match = /^\/u\/([^/]+)$/u.exec(parsed.pathname);
+  return match?.[1] ?? null;
+}
+
+function assertPixeldrainSingleFileUrl(url: string): string {
+  const parsed = new URL(normalizeHttpUrl(url));
+  if (!isPixeldrainHost(parsed.hostname.toLowerCase())) {
+    throw new Error("PixelDrain URL is invalid or not supported.");
+  }
+  if (parsed.pathname.startsWith("/l/")) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+  const fileId = getPixeldrainFileId(url);
+  if (!fileId) {
+    throw new Error("PixelDrain URLs must point to a shared file.");
+  }
+  return fileId;
+}
+
+function getGofileContentId(url: string): string | null {
+  const parsed = new URL(normalizeHttpUrl(url));
+  if (!isGofileHost(parsed.hostname.toLowerCase())) return null;
+  const match = /^\/d\/([^/]+)$/u.exec(parsed.pathname);
+  return match?.[1] ?? null;
+}
+
+function assertGofileSingleFileUrl(url: string): string {
+  const parsed = new URL(normalizeHttpUrl(url));
+  if (!isGofileHost(parsed.hostname.toLowerCase())) {
+    throw new Error("Gofile URL is invalid or not supported.");
+  }
+  const contentId = getGofileContentId(url);
+  if (!contentId) {
+    throw new Error("Gofile URLs must point to a shared download page.");
+  }
+  return contentId;
+}
+
 function resolveWebsiteVideoCacheRoot(): string {
   const configuredRoot = normalizeConfiguredCacheRoot(
     getStore().get(WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY)
@@ -184,6 +289,40 @@ function resolveWebsiteVideoCacheRoot(): string {
 
 async function ensureDirectory(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true });
+}
+
+function setInitialDownloadProgress(url: string): void {
+  downloadProgressByUrl.set(url, {
+    url,
+    percent: 0,
+    speedBytesPerSec: null,
+    etaSeconds: null,
+    totalBytes: null,
+    downloadedBytes: null,
+    startedAt: new Date().toISOString(),
+  });
+}
+
+function updateDownloadedBytes(
+  url: string,
+  downloadedBytes: number,
+  totalBytes: number | null
+): void {
+  const existing = downloadProgressByUrl.get(url);
+  if (!existing) return;
+  downloadProgressByUrl.set(url, {
+    ...existing,
+    downloadedBytes,
+    totalBytes,
+    percent: totalBytes && totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : existing.percent,
+  });
+}
+
+async function downloadResponseBodyToFile(response: Response, filePath: string): Promise<void> {
+  if (!response.body) {
+    throw new Error("Remote hoster response did not include a body.");
+  }
+  await pipeline(Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>), createWriteStream(filePath));
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -262,7 +401,9 @@ function extractHtmlMediaCandidates(html: string): HtmlMediaCandidate[] {
   });
 }
 
-async function resolveWebsiteVideoFromHtml(url: string): Promise<WebsiteVideoStreamResolution | null> {
+async function resolveWebsiteVideoFromHtml(
+  url: string
+): Promise<WebsiteVideoStreamResolution | null> {
   const normalizedUrl = normalizeHttpUrl(url);
   const response = await fetch(normalizedUrl, {
     headers: {
@@ -289,6 +430,160 @@ async function resolveWebsiteVideoFromHtml(url: string): Promise<WebsiteVideoStr
     durationMs: null,
     contentType: candidate.contentType,
     playbackStrategy: isDirectRemoteMediaUri(candidate.url) ? "remote" : "ytdlp",
+  };
+}
+
+async function inspectMegaSharedFile(url: string): Promise<MegaSharedFile> {
+  const normalizedUrl = normalizeHttpUrl(url);
+  assertMegaSingleFileUrl(normalizedUrl);
+  const file = MegaFile.fromURL(normalizedUrl);
+  await file.loadAttributes();
+  if (file.directory) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+  const title = normalizeNullableString(file.name);
+  const extension = title ? path.extname(title).toLowerCase() : "";
+  return {
+    file,
+    title,
+    contentType: extension ? getVideoContentTypeByExtension(extension) ?? null : null,
+    sizeBytes: typeof file.size === "number" && Number.isFinite(file.size) ? file.size : null,
+  };
+}
+
+let gofileGenerateWebsiteTokenPromise: Promise<(token: string) => string> | null = null;
+
+async function getGofileWebsiteTokenGenerator(): Promise<(token: string) => string> {
+  if (!gofileGenerateWebsiteTokenPromise) {
+    gofileGenerateWebsiteTokenPromise = (async () => {
+      const response = await fetch("https://gofile.io/dist/js/wt.obf.js");
+      if (!response.ok) {
+        throw new Error("Failed to load the Gofile website token generator.");
+      }
+      const script = await response.text();
+      const context = {
+        window: null as unknown,
+        document: {},
+        navigator: { language: "en-US" },
+        console,
+      };
+      context.window = context;
+      vm.createContext(context);
+      vm.runInContext(script, context);
+      if (typeof (context as { generateWT?: unknown }).generateWT !== "function") {
+        throw new Error("Failed to initialize the Gofile website token generator.");
+      }
+      return (context as { generateWT: (token: string) => string }).generateWT;
+    })().catch((error) => {
+      gofileGenerateWebsiteTokenPromise = null;
+      throw error;
+    });
+  }
+  return gofileGenerateWebsiteTokenPromise;
+}
+
+async function createGofileGuestToken(): Promise<string> {
+  const response = await fetch("https://api.gofile.io/accounts", { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to create a Gofile guest token: ${response.status} ${response.statusText}`);
+  }
+  const payload = (await response.json()) as { status?: string; data?: { token?: unknown } };
+  const token = typeof payload.data?.token === "string" ? payload.data.token.trim() : "";
+  if (payload.status !== "ok" || !token) {
+    throw new Error("Failed to create a usable Gofile guest token.");
+  }
+  return token;
+}
+
+async function inspectGofileSharedFile(url: string): Promise<DirectDownloadTarget> {
+  const normalizedUrl = normalizeHttpUrl(url);
+  const contentId = assertGofileSingleFileUrl(normalizedUrl);
+  const [token, generateWebsiteToken] = await Promise.all([
+    createGofileGuestToken(),
+    getGofileWebsiteTokenGenerator(),
+  ]);
+
+  const contentUrl = new URL(`https://api.gofile.io/contents/${contentId}`);
+  contentUrl.search = new URLSearchParams({
+    page: "1",
+    pageSize: "1000",
+    sortField: "createTime",
+    sortDirection: "-1",
+  }).toString();
+
+  const response = await fetch(contentUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Website-Token": generateWebsiteToken(token),
+      "X-BL": "en-US",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Gofile metadata request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = (await response.json()) as {
+    status?: string;
+    data?: {
+      childrenCount?: unknown;
+      children?: Record<string, unknown>;
+    };
+  };
+  if (payload.status !== "ok" || !payload.data) {
+    throw new Error("Gofile metadata request did not return a valid payload.");
+  }
+
+  const childCount =
+    typeof payload.data.childrenCount === "number" && Number.isFinite(payload.data.childrenCount)
+      ? payload.data.childrenCount
+      : Object.keys(payload.data.children ?? {}).length;
+  if (childCount !== 1) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+
+  const child = Object.values(payload.data.children ?? {})[0] as
+    | {
+        type?: unknown;
+        link?: unknown;
+        name?: unknown;
+        mimetype?: unknown;
+        size?: unknown;
+      }
+    | undefined;
+  if (!child || child.type !== "file" || typeof child.link !== "string") {
+    throw new Error("Gofile share did not resolve to a downloadable file.");
+  }
+
+  return {
+    downloadUrl: child.link,
+    title: normalizeNullableString(child.name),
+    contentType: normalizeNullableString(child.mimetype),
+    sizeBytes: typeof child.size === "number" && Number.isFinite(child.size) ? child.size : null,
+    extractor: GOFILE_EXTRACTOR_KEY,
+  };
+}
+
+async function inspectPixeldrainSharedFile(url: string): Promise<DirectDownloadTarget> {
+  const normalizedUrl = normalizeHttpUrl(url);
+  const fileId = assertPixeldrainSingleFileUrl(normalizedUrl);
+  const response = await fetch(`https://pixeldrain.com/api/file/${fileId}/info`);
+  if (!response.ok) {
+    throw new Error(`Pixeldrain metadata request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = (await response.json()) as {
+    id?: unknown;
+    name?: unknown;
+    size?: unknown;
+    mime_type?: unknown;
+  };
+
+  return {
+    downloadUrl: `https://pixeldrain.com/api/file/${fileId}?download`,
+    title: normalizeNullableString(payload.name),
+    contentType: normalizeNullableString(payload.mime_type),
+    sizeBytes: typeof payload.size === "number" && Number.isFinite(payload.size) ? payload.size : null,
+    extractor: PIXELDRAIN_EXTRACTOR_KEY,
   };
 }
 
@@ -567,6 +862,22 @@ function parseYtDlpInfo(output: string): YtDlpInfoJson {
   return JSON.parse(output) as YtDlpInfoJson;
 }
 
+function assertSingleFileWebsiteVideo(info: YtDlpInfoJson): void {
+  const infoType = normalizeNullableString(info._type)?.toLowerCase() ?? null;
+  const playlistCount = toFiniteNumber(info.playlist_count);
+  const entryCount = toFiniteNumber(info.n_entries);
+
+  if (Array.isArray(info.entries) && info.entries.length > 0) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+  if (infoType && /(playlist|multi[_-]?video|url_transparent)/u.test(infoType)) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+  if ((playlistCount !== null && playlistCount > 1) || (entryCount !== null && entryCount > 1)) {
+    throw new Error(MULTI_FILE_WEBSITE_VIDEO_ERROR);
+  }
+}
+
 function extractFallbackStreamUrl(info: YtDlpInfoJson): string | null {
   return (
     extractStreamUrl(info.url) ??
@@ -606,7 +917,9 @@ async function inspectWebsiteVideoInfo(url: string): Promise<YtDlpInfoJson> {
     ["--dump-single-json", "--no-playlist", "--no-warnings", normalizedUrl],
     { timeoutMs: 600_000 }
   );
-  return parseYtDlpInfo(stdout.toString("utf8"));
+  const info = parseYtDlpInfo(stdout.toString("utf8"));
+  assertSingleFileWebsiteVideo(info);
+  return info;
 }
 
 async function resolveWebsiteVideoDirectUrl(url: string): Promise<string | null> {
@@ -621,6 +934,50 @@ async function resolveWebsiteVideoDirectUrl(url: string): Promise<string | null>
 }
 
 async function inspectWebsiteVideo(url: string): Promise<WebsiteVideoStreamResolution> {
+  try {
+    const parsed = new URL(normalizeHttpUrl(url));
+    if (isMegaHost(parsed.hostname.toLowerCase())) {
+      const inspected = await inspectMegaSharedFile(url);
+      return {
+        streamUrl: normalizeHttpUrl(url),
+        headers: {},
+        extractor: MEGA_EXTRACTOR_KEY,
+        title: inspected.title,
+        durationMs: null,
+        contentType: inspected.contentType,
+        playbackStrategy: "ytdlp",
+      };
+    }
+    if (isPixeldrainHost(parsed.hostname.toLowerCase())) {
+      const inspected = await inspectPixeldrainSharedFile(url);
+      return {
+        streamUrl: inspected.downloadUrl,
+        headers: {},
+        extractor: inspected.extractor,
+        title: inspected.title,
+        durationMs: null,
+        contentType: inspected.contentType,
+        playbackStrategy: "remote",
+      };
+    }
+    if (isGofileHost(parsed.hostname.toLowerCase())) {
+      const inspected = await inspectGofileSharedFile(url);
+      return {
+        streamUrl: inspected.downloadUrl,
+        headers: {},
+        extractor: inspected.extractor,
+        title: inspected.title,
+        durationMs: null,
+        contentType: inspected.contentType,
+        playbackStrategy: "remote",
+      };
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === MULTI_FILE_WEBSITE_VIDEO_ERROR) {
+      throw error;
+    }
+  }
+
   try {
     const [info, resolvedUrl] = await Promise.all([
       inspectWebsiteVideoInfo(url),
@@ -644,13 +1001,18 @@ async function inspectWebsiteVideo(url: string): Promise<WebsiteVideoStreamResol
       ...baseMetadata,
       headers:
         browserPlayableCandidate?.url === directUrl &&
-          Object.keys(browserPlayableCandidate.headers).length > 0
+        Object.keys(browserPlayableCandidate.headers).length > 0
           ? browserPlayableCandidate.headers
           : baseMetadata.headers,
       contentType: browserPlayableCandidate?.contentType ?? directUrlContentType,
       playbackStrategy,
     };
-  } catch { }
+  } catch (error) {
+    if (error instanceof Error && error.message === MULTI_FILE_WEBSITE_VIDEO_ERROR) {
+      throw error;
+    }
+    // Fall through to HTML-based resolution
+  }
 
   const htmlFallback = await resolveWebsiteVideoFromHtml(url).catch(() => null);
   if (htmlFallback) {
@@ -676,16 +1038,7 @@ async function downloadWebsiteVideo(
   await resetIncompleteCache(paths);
   await writeInProgressMarker(paths);
 
-
-  downloadProgressByUrl.set(paths.normalizedUrl, {
-    url: paths.normalizedUrl,
-    percent: 0,
-    speedBytesPerSec: null,
-    etaSeconds: null,
-    totalBytes: null,
-    downloadedBytes: null,
-    startedAt: new Date().toISOString(),
-  });
+  setInitialDownloadProgress(paths.normalizedUrl);
 
   console.info(`[webVideo] Cache started: ${paths.normalizedUrl}`);
 
@@ -761,6 +1114,163 @@ async function downloadWebsiteVideo(
   console.info(`[webVideo] Cache finished: ${paths.normalizedUrl}`);
 
   return metadata;
+}
+
+async function downloadMegaWebsiteVideo(
+  paths: WebsiteVideoCachePaths
+): Promise<WebsiteVideoCacheMetadata> {
+  await throwIfCacheRemovalRequested(paths);
+  await ensureDirectory(paths.cacheDir);
+  const existingMetadata = await readMetadataByPath(paths.metadataPath);
+  if (existingMetadata && (await isNonEmptyFile(existingMetadata.finalFilePath))) {
+    await removeInProgressMarker(paths);
+    return touchMetadata(paths, existingMetadata);
+  }
+
+  await resetIncompleteCache(paths);
+  await writeInProgressMarker(paths);
+  setInitialDownloadProgress(paths.normalizedUrl);
+
+  console.info(`[webVideo] Cache started: ${paths.normalizedUrl}`);
+
+  try {
+    const inspected = await inspectMegaSharedFile(paths.normalizedUrl);
+    const extension = inspected.title ? path.extname(inspected.title).toLowerCase() : "";
+    const normalizedExtension = extension || ".bin";
+    const finalFilePath = path.join(
+      paths.cacheDir,
+      `${DOWNLOADED_VIDEO_BASENAME}${normalizedExtension}`
+    );
+
+    let downloadedBytes = 0;
+    const source = inspected.file.download({});
+    source.on("data", (chunk: Buffer) => {
+      downloadedBytes += chunk.length;
+      updateDownloadedBytes(paths.normalizedUrl, downloadedBytes, inspected.sizeBytes);
+    });
+
+    await pipeline(source, createWriteStream(finalFilePath));
+    await throwIfCacheRemovalRequested(paths);
+    if (!(await isNonEmptyFile(finalFilePath))) {
+      await resetIncompleteCache(paths);
+      throw new Error("MEGA download finished without producing a cached media file.");
+    }
+
+    const now = new Date().toISOString();
+    const metadata: WebsiteVideoCacheMetadata = {
+      originalUrl: paths.normalizedUrl,
+      extractor: MEGA_EXTRACTOR_KEY,
+      title: inspected.title,
+      durationMs: null,
+      finalFilePath,
+      fileExtension: normalizedExtension.replace(/^\./u, "") || null,
+      ytDlpVersion: null,
+      createdAt: existingMetadata?.createdAt ?? now,
+      lastAccessedAt: now,
+    };
+
+    await writeMetadata(paths, metadata);
+    await removeInProgressMarker(paths);
+
+    console.info(`[webVideo] Cache finished: ${paths.normalizedUrl}`);
+    return metadata;
+  } catch (error) {
+    await resetIncompleteCache(paths);
+    const message = error instanceof Error ? error.message : "MEGA download failed.";
+    throw new Error(message);
+  } finally {
+    downloadProgressByUrl.delete(paths.normalizedUrl);
+  }
+}
+
+async function downloadDirectHosterVideo(
+  paths: WebsiteVideoCachePaths,
+  inspect: (url: string) => Promise<DirectDownloadTarget>
+): Promise<WebsiteVideoCacheMetadata> {
+  await throwIfCacheRemovalRequested(paths);
+  await ensureDirectory(paths.cacheDir);
+  const existingMetadata = await readMetadataByPath(paths.metadataPath);
+  if (existingMetadata && (await isNonEmptyFile(existingMetadata.finalFilePath))) {
+    await removeInProgressMarker(paths);
+    return touchMetadata(paths, existingMetadata);
+  }
+
+  await resetIncompleteCache(paths);
+  await writeInProgressMarker(paths);
+  setInitialDownloadProgress(paths.normalizedUrl);
+
+  console.info(`[webVideo] Cache started: ${paths.normalizedUrl}`);
+
+  try {
+    const inspected = await inspect(paths.normalizedUrl);
+    const extension = inspected.title ? path.extname(inspected.title).toLowerCase() : "";
+    const normalizedExtension = extension || ".bin";
+    const finalFilePath = path.join(
+      paths.cacheDir,
+      `${DOWNLOADED_VIDEO_BASENAME}${normalizedExtension}`
+    );
+
+    const response = await fetch(inspected.downloadUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Hoster download request failed: ${response.status} ${response.statusText}`
+      );
+    }
+    if (!response.body) {
+      throw new Error("Hoster download response did not include a body.");
+    }
+
+    const [progressStream, fileStream] = response.body.tee();
+    const progressTask = (async () => {
+      let downloadedBytes = 0;
+      const reader = progressStream.getReader();
+      let readDone = false;
+      while (!readDone) {
+        const chunk = await reader.read();
+        readDone = chunk.done;
+        if (chunk.value) {
+          downloadedBytes += chunk.value.length;
+          updateDownloadedBytes(paths.normalizedUrl, downloadedBytes, inspected.sizeBytes);
+        }
+      }
+    })();
+
+    await Promise.all([
+      progressTask,
+      downloadResponseBodyToFile(new Response(fileStream), finalFilePath),
+    ]);
+
+    await throwIfCacheRemovalRequested(paths);
+    if (!(await isNonEmptyFile(finalFilePath))) {
+      await resetIncompleteCache(paths);
+      throw new Error("Hoster download finished without producing a cached media file.");
+    }
+
+    const now = new Date().toISOString();
+    const metadata: WebsiteVideoCacheMetadata = {
+      originalUrl: paths.normalizedUrl,
+      extractor: inspected.extractor,
+      title: inspected.title,
+      durationMs: null,
+      finalFilePath,
+      fileExtension: normalizedExtension.replace(/^\./u, "") || null,
+      ytDlpVersion: null,
+      createdAt: existingMetadata?.createdAt ?? now,
+      lastAccessedAt: now,
+    };
+
+    await writeMetadata(paths, metadata);
+    await removeInProgressMarker(paths);
+
+    console.info(`[webVideo] Cache finished: ${paths.normalizedUrl}`);
+    return metadata;
+  } catch (error) {
+    await resetIncompleteCache(paths);
+    const message = error instanceof Error ? error.message : "Hoster download failed.";
+    throw new Error(message);
+  } finally {
+    downloadProgressByUrl.delete(paths.normalizedUrl);
+  }
 }
 
 export function __resetWebsiteVideoCachesForTests(): void {
@@ -842,6 +1352,7 @@ export async function ensureWebsiteVideoCached(
       thumbnail: null,
       cachedAt: new Date().toISOString(),
       format: "stash-stream",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   }
 
@@ -862,7 +1373,15 @@ export async function ensureWebsiteVideoCached(
     return existingInFlight;
   }
 
-  const pending = downloadWebsiteVideo(buildCachePaths(normalizedUrl)).finally(() => {
+  const pending = (
+    isMegaSharedFileUrl(normalizedUrl)
+      ? downloadMegaWebsiteVideo(buildCachePaths(normalizedUrl))
+      : getPixeldrainFileId(normalizedUrl)
+        ? downloadDirectHosterVideo(buildCachePaths(normalizedUrl), inspectPixeldrainSharedFile)
+        : getGofileContentId(normalizedUrl)
+          ? downloadDirectHosterVideo(buildCachePaths(normalizedUrl), inspectGofileSharedFile)
+          : downloadWebsiteVideo(buildCachePaths(normalizedUrl))
+  ).finally(() => {
     inFlightCacheByUrl.delete(normalizedUrl);
   });
   inFlightCacheByUrl.set(normalizedUrl, pending);

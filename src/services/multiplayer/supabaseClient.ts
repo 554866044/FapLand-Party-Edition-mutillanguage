@@ -168,6 +168,16 @@ export async function ensureMultiplayerAuth(profile?: MultiplayerServerProfile):
     return { profile: resolvedProfile, client, user: session.user };
   }
 
+  const authRequirement = resolvedProfile.authRequirement ?? "anonymous_only";
+  if (authRequirement === "email_password_required") {
+    // If we require email login, we don't auto-sign in anonymously.
+    // Instead, we throw or return what we have (null user), allowing resolveMultiplayerAuthStatus to handle it.
+    if (session?.user) {
+      return { profile: resolvedProfile, client, user: session.user };
+    }
+    throw new Error("Authentication required.");
+  }
+
   const signInResult = await client.auth.signInAnonymously();
   if (signInResult.error || !signInResult.data.user) {
     throw new Error(signInResult.error?.message ?? "Failed to sign in anonymously.");
@@ -190,7 +200,18 @@ export function getMultiplayerAuthRedirectUrl(): string {
 
 export async function resolveMultiplayerAuthStatus(profile?: MultiplayerServerProfile): Promise<MultiplayerAuthStatus> {
   const { profile: resolvedProfile, client } = await getSupabaseClientForProfile(profile);
-  await ensureMultiplayerAuth(resolvedProfile);
+
+  const requirement = resolvedProfile.authRequirement ?? "anonymous_only";
+
+  try {
+    await ensureMultiplayerAuth(resolvedProfile);
+  } catch (error) {
+    if (requirement === "email_password_required") {
+      // If we failed ensureMultiplayerAuth because of requirement, we just proceed to resolve status
+    } else {
+      throw error;
+    }
+  }
 
   const userResult = await client.auth.getUser();
   if (userResult.error || !userResult.data.user) {
@@ -203,6 +224,21 @@ export async function resolveMultiplayerAuthStatus(profile?: MultiplayerServerPr
     user = {
       ...user,
       identities: identitiesResult.data.identities,
+    };
+  }
+
+  if (requirement === "email_password_required" && (isAnonymousUser(user) || !user.email)) {
+    return {
+      profile: resolvedProfile,
+      client,
+      user,
+      requirement: "email_password_required",
+      isAnonymous: isAnonymousUser(user),
+      hasDiscordIdentity: hasDiscordIdentity(user),
+      hasEmail: hasUsableEmail(user),
+      discordLinkUrl: null,
+      status: "needs_login",
+      message: "This server requires email and password authentication.",
     };
   }
 
@@ -277,6 +313,42 @@ export async function startDiscordMultiplayerLink(profile?: MultiplayerServerPro
   if (result.error) {
     throw new Error(result.error.message);
   }
+}
+
+export async function signInWithMultiplayerEmail(
+  email: string,
+  password: string,
+  profile?: MultiplayerServerProfile,
+): Promise<void> {
+  const { client } = await getSupabaseClientForProfile(profile);
+  const result = await client.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  notifyAuthRefreshListeners();
+}
+
+export async function signUpWithMultiplayerEmail(
+  email: string,
+  password: string,
+  profile?: MultiplayerServerProfile,
+): Promise<void> {
+  const { client } = await getSupabaseClientForProfile(profile);
+  const result = await client.auth.signUp({
+    email,
+    password,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  notifyAuthRefreshListeners();
 }
 
 export async function handleMultiplayerAuthCallback(callbackUrl: string, profile?: MultiplayerServerProfile): Promise<boolean> {

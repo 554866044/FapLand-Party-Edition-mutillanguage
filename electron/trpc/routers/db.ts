@@ -57,6 +57,7 @@ import { eq, desc, asc, inArray } from "drizzle-orm";
 import {
   gameProfile,
   singlePlayerRunHistory,
+  singlePlayerRunSave,
   multiplayerMatchCache,
   resultSyncQueue,
   hero,
@@ -65,9 +66,11 @@ import {
   playlistTrackPlay,
   playlist,
 } from "../../services/db/schema";
+import { ZSinglePlayerRunSaveSnapshot } from "../../../src/game/saveSchema";
 
 const ZNullableText = z.string().optional().nullable();
 const ZRoundType = z.enum(["Normal", "Interjection", "Cum"]);
+const ZPersistablePlaylistSaveMode = z.enum(["checkpoint", "everywhere"]);
 
 function normalizeHttpUrl(input: string): string {
   let parsed: URL;
@@ -141,28 +144,76 @@ export const dbRouter = router({
     return {
       highscore: Math.max(0, profile?.highscore ?? 0),
       highscoreCheatMode: profile?.highscoreCheatMode ?? false,
+      highscoreAssisted: profile?.highscoreAssisted ?? false,
+      highscoreAssistedSaveMode: profile?.highscoreAssistedSaveMode ?? null,
     };
   }),
 
   setLocalHighscore: publicProcedure
-    .input(z.object({ highscore: z.number().int().min(0), cheatMode: z.boolean().optional() }))
+    .input(z.object({
+      highscore: z.number().int().min(0),
+      cheatMode: z.boolean().optional(),
+      assisted: z.boolean().optional(),
+      assistedSaveMode: ZPersistablePlaylistSaveMode.nullable().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const clamped = Math.max(0, Math.floor(input.highscore));
       const existing = await db.select().from(gameProfile).where(eq(gameProfile.id, "local")).get();
-      const nextHighscore = Math.max(existing?.highscore ?? 0, clamped);
+      const existingHighscore = existing?.highscore ?? 0;
+      const nextHighscore = Math.max(existingHighscore, clamped);
+      const matchesExistingHighscore = clamped > 0 && clamped === existingHighscore;
       const nextCheatMode =
-        clamped > (existing?.highscore ?? 0)
+        clamped > existingHighscore
           ? (input.cheatMode ?? false)
-          : (existing?.highscoreCheatMode ?? false);
+          : matchesExistingHighscore
+            ? ((existing?.highscoreCheatMode ?? false) || (input.cheatMode ?? false))
+            : (existing?.highscoreCheatMode ?? false);
+      const nextAssisted =
+        clamped > existingHighscore
+          ? (input.assisted ?? false)
+          : matchesExistingHighscore
+            ? ((existing?.highscoreAssisted ?? false) || (input.assisted ?? false))
+            : (existing?.highscoreAssisted ?? false);
+      const mergedAssistedSaveMode =
+        clamped > existingHighscore
+          ? (input.assisted ? (input.assistedSaveMode ?? null) : null)
+          : matchesExistingHighscore
+            ? (
+                (existing?.highscoreAssistedSaveMode === "everywhere" ||
+                  input.assistedSaveMode === "everywhere")
+                  ? "everywhere"
+                  : (existing?.highscoreAssistedSaveMode === "checkpoint" ||
+                      input.assistedSaveMode === "checkpoint")
+                    ? "checkpoint"
+                    : null
+              )
+            : (existing?.highscoreAssistedSaveMode ?? null);
+      const nextAssistedSaveMode = nextAssisted ? mergedAssistedSaveMode : null;
       await db
         .insert(gameProfile)
-        .values({ id: "local", highscore: nextHighscore, highscoreCheatMode: nextCheatMode })
+        .values({
+          id: "local",
+          highscore: nextHighscore,
+          highscoreCheatMode: nextCheatMode,
+          highscoreAssisted: nextAssisted,
+          highscoreAssistedSaveMode: nextAssistedSaveMode,
+        })
         .onConflictDoUpdate({
           target: gameProfile.id,
-          set: { highscore: nextHighscore, highscoreCheatMode: nextCheatMode },
+          set: {
+            highscore: nextHighscore,
+            highscoreCheatMode: nextCheatMode,
+            highscoreAssisted: nextAssisted,
+            highscoreAssistedSaveMode: nextAssistedSaveMode,
+          },
         });
-      return { highscore: nextHighscore, highscoreCheatMode: nextCheatMode };
+      return {
+        highscore: nextHighscore,
+        highscoreCheatMode: nextCheatMode,
+        highscoreAssisted: nextAssisted,
+        highscoreAssistedSaveMode: nextAssistedSaveMode,
+      };
     }),
 
   recordSinglePlayerRun: publicProcedure
@@ -181,6 +232,8 @@ export const dbRouter = router({
         endingPosition: z.number().int().min(0),
         turn: z.number().int().min(0),
         cheatModeActive: z.boolean().optional(),
+        assistedActive: z.boolean().optional(),
+        assistedSaveMode: ZPersistablePlaylistSaveMode.nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -201,6 +254,8 @@ export const dbRouter = router({
           endingPosition: input.endingPosition,
           turn: input.turn,
           cheatModeActive: input.cheatModeActive ?? false,
+          assistedActive: input.assistedActive ?? false,
+          assistedSaveMode: input.assistedActive ? (input.assistedSaveMode ?? null) : null,
         })
         .returning();
       return created;
@@ -227,6 +282,77 @@ export const dbRouter = router({
     ).length;
   }),
 
+  upsertSinglePlayerRunSave: publicProcedure
+    .input(z.object({
+      playlistId: z.string().min(1),
+      playlistName: z.string().min(1),
+      playlistFormatVersion: z.number().int().min(1).nullable().optional(),
+      saveMode: ZPersistablePlaylistSaveMode,
+      snapshot: ZSinglePlayerRunSaveSnapshot,
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const snapshot = ZSinglePlayerRunSaveSnapshot.parse(input.snapshot);
+      const [saved] = await db
+        .insert(singlePlayerRunSave)
+        .values({
+          playlistId: input.playlistId,
+          playlistName: input.playlistName.trim(),
+          playlistFormatVersion: input.playlistFormatVersion ?? null,
+          saveMode: input.saveMode,
+          snapshotJson: snapshot,
+          savedAt: new Date(snapshot.savedAtMs),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: singlePlayerRunSave.playlistId,
+          set: {
+            playlistName: input.playlistName.trim(),
+            playlistFormatVersion: input.playlistFormatVersion ?? null,
+            saveMode: input.saveMode,
+            snapshotJson: snapshot,
+            savedAt: new Date(snapshot.savedAtMs),
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return saved;
+    }),
+
+  getSinglePlayerRunSave: publicProcedure
+    .input(z.object({ playlistId: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const row = await db.query.singlePlayerRunSave.findFirst({
+        where: eq(singlePlayerRunSave.playlistId, input.playlistId),
+      });
+      if (!row) return null;
+      const rawSnapshot =
+        typeof row.snapshotJson === "string" ? JSON.parse(row.snapshotJson) : row.snapshotJson;
+      return {
+        ...row,
+        snapshotJson: ZSinglePlayerRunSaveSnapshot.parse(rawSnapshot),
+      };
+    }),
+
+  listSinglePlayerRunSaves: publicProcedure.query(async () => {
+    const db = getDb();
+    return db.query.singlePlayerRunSave.findMany({
+      orderBy: [desc(singlePlayerRunSave.savedAt)],
+    });
+  }),
+
+  deleteSinglePlayerRunSaveByPlaylist: publicProcedure
+    .input(z.object({ playlistId: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [deleted] = await db
+        .delete(singlePlayerRunSave)
+        .where(eq(singlePlayerRunSave.playlistId, input.playlistId))
+        .returning();
+      return deleted ?? null;
+    }),
+
   deleteSinglePlayerRun: publicProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ input }) => {
@@ -248,10 +374,15 @@ export const dbRouter = router({
         limit: 10_000,
       });
       const nextHighscore = remainingRuns.reduce((best, run) => Math.max(best, run.score), 0);
+      const topRuns = nextHighscore > 0
+        ? remainingRuns.filter((run) => run.score === nextHighscore)
+        : [];
       const nextHighscoreCheatMode =
-        nextHighscore > 0
-          ? remainingRuns.some((run) => run.score === nextHighscore && run.cheatModeActive)
-          : false;
+        topRuns.some((run) => run.cheatModeActive);
+      const nextHighscoreAssisted = topRuns.some((run) => run.assistedActive);
+      const nextHighscoreAssistedSaveMode = nextHighscoreAssisted
+        ? (topRuns.some((run) => run.assistedSaveMode === "everywhere") ? "everywhere" : "checkpoint")
+        : null;
 
       await db
         .insert(gameProfile)
@@ -259,12 +390,16 @@ export const dbRouter = router({
           id: "local",
           highscore: nextHighscore,
           highscoreCheatMode: nextHighscoreCheatMode,
+          highscoreAssisted: nextHighscoreAssisted,
+          highscoreAssistedSaveMode: nextHighscoreAssistedSaveMode,
         })
         .onConflictDoUpdate({
           target: gameProfile.id,
           set: {
             highscore: nextHighscore,
             highscoreCheatMode: nextHighscoreCheatMode,
+            highscoreAssisted: nextHighscoreAssisted,
+            highscoreAssistedSaveMode: nextHighscoreAssistedSaveMode,
           },
         });
 
@@ -272,6 +407,8 @@ export const dbRouter = router({
         deleted,
         highscore: nextHighscore,
         highscoreCheatMode: nextHighscoreCheatMode,
+        highscoreAssisted: nextHighscoreAssisted,
+        highscoreAssistedSaveMode: nextHighscoreAssistedSaveMode,
       };
     }),
 

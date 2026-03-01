@@ -12,6 +12,7 @@ const {
   resolvePlayableVideoUriMock,
   toLocalVideoPathMock,
   getCachedWebsiteVideoLocalPathMock,
+  ensureWebsiteVideoCachedMock,
   createWebsiteVideoStreamResponseMock,
   resolveWebsiteVideoStreamMock,
   warmWebsiteVideoCacheMock,
@@ -25,6 +26,7 @@ const {
   resolvePlayableVideoUriMock: vi.fn(),
   toLocalVideoPathMock: vi.fn(),
   getCachedWebsiteVideoLocalPathMock: vi.fn(),
+  ensureWebsiteVideoCachedMock: vi.fn(),
   createWebsiteVideoStreamResponseMock: vi.fn(),
   resolveWebsiteVideoStreamMock: vi.fn(),
   warmWebsiteVideoCacheMock: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock("../playableVideo", () => ({
 vi.mock("../webVideo", () => ({
   buildWebsiteVideoProxyUri: vi.fn((target: string) => `app://external/web-url?target=${encodeURIComponent(target)}`),
   createWebsiteVideoStreamResponse: createWebsiteVideoStreamResponseMock,
+  ensureWebsiteVideoCached: ensureWebsiteVideoCachedMock,
   getCachedWebsiteVideoLocalPath: getCachedWebsiteVideoLocalPathMock,
   isDirectRemoteMediaUri: vi.fn((uri: string) => uri.includes(".mp4")),
   isWebsiteVideoCandidateUri: vi.fn((uri: string) => uri.includes("pornhub.com") || uri.includes("xvideos.com")),

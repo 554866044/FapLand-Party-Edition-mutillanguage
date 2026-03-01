@@ -24,6 +24,7 @@ declare global {
           errors: { url: string; error: string }[];
         }>;
         selectConverterFunscriptFile: () => Promise<string | null>;
+        selectFpackExtractionDirectory: () => Promise<string | null>;
       };
       window: {
         isFullscreen: () => Promise<boolean>;

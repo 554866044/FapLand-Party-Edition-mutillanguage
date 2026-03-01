@@ -1,4 +1,6 @@
 import React from "react";
+import { useSfwMode } from "../../hooks/useSfwMode";
+import { abbreviateNsfwText } from "../../utils/sfwText";
 import { getConverterShortcutGroups } from "./shortcuts";
 
 type HotkeyOverlayProps = {
@@ -6,6 +8,7 @@ type HotkeyOverlayProps = {
 };
 
 export const HotkeyOverlay: React.FC<HotkeyOverlayProps> = React.memo(({ visible }) => {
+    const sfwMode = useSfwMode();
     if (!visible) return null;
 
     return (
@@ -23,7 +26,9 @@ export const HotkeyOverlay: React.FC<HotkeyOverlayProps> = React.memo(({ visible
                             {group.shortcuts.map((shortcut) => (
                                 <div key={shortcut.id} className="flex items-center gap-2 text-xs">
                                     <kbd className="converter-kbd min-w-[6rem] text-center">{shortcut.keysLabel}</kbd>
-                                    <span className="text-zinc-300">{shortcut.description}</span>
+                                    <span className="text-zinc-300">
+                                        {abbreviateNsfwText(shortcut.description, sfwMode)}
+                                    </span>
                                 </div>
                             ))}
                         </div>

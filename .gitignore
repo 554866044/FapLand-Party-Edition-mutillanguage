@@ -56,3 +56,4 @@ VideoInfo.json
 /TODO.md
 /dev.db-shm
 /dev.db-wal
+/bun.lock

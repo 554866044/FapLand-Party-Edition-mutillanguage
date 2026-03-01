@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useControllerSurface } from "../controller";
 import type { InstalledRound } from "../services/db";
 import type {
@@ -47,33 +47,40 @@ export function PlaylistResolutionModal({
   onPrimaryAction,
   onSecondaryAction,
 }: PlaylistResolutionModalProps) {
-  const [overrides, setOverrides] = useState<Record<string, string | null | undefined>>(initialOverrides ?? {});
+  const [overrides, setOverrides] = useState<Record<string, string | null | undefined>>(
+    initialOverrides ?? {}
+  );
   const [expandedIssueKey, setExpandedIssueKey] = useState<string | null>(null);
   const [searchByKey, setSearchByKey] = useState<Record<string, string>>({});
   const [sameTypeOnlyByKey, setSameTypeOnlyByKey] = useState<Record<string, boolean>>({});
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setOverrides(initialOverrides ?? {});
-    setExpandedIssueKey(null);
-    setSearchByKey({});
-    setSameTypeOnlyByKey({});
-  }, [initialOverrides, open]);
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevInitialOverrides, setPrevInitialOverrides] = useState(initialOverrides);
+  if (open !== prevOpen || initialOverrides !== prevInitialOverrides) {
+    if (open) {
+      setOverrides(initialOverrides ?? {});
+      setExpandedIssueKey(null);
+      setSearchByKey({});
+      setSameTypeOnlyByKey({});
+    }
+    setPrevOpen(open);
+    setPrevInitialOverrides(initialOverrides);
+  }
 
   const roundById = useMemo(
     () => new Map(installedRounds.map((round) => [round.id, round])),
-    [installedRounds],
+    [installedRounds]
   );
 
   const remainingMissingCount = useMemo(
-    () => analysis.issues.filter((issue) => {
-      const selectedRoundId = overrides[issue.key] !== undefined
-        ? overrides[issue.key]
-        : issue.defaultRoundId;
-      return !selectedRoundId;
-    }).length,
-    [analysis.issues, overrides],
+    () =>
+      analysis.issues.filter((issue) => {
+        const selectedRoundId =
+          overrides[issue.key] !== undefined ? overrides[issue.key] : issue.defaultRoundId;
+        return !selectedRoundId;
+      }).length,
+    [analysis.issues, overrides]
   );
 
   const issueCandidatesByKey = useMemo(() => {
@@ -81,25 +88,36 @@ export function PlaylistResolutionModal({
       const query = (searchByKey[issue.key] ?? "").trim().toLowerCase();
       const sameTypeOnly = sameTypeOnlyByKey[issue.key] ?? true;
       const suggestionIds = new Set(issue.suggestions.map((entry) => entry.roundId));
-      const suggestionRank = new Map(issue.suggestions.map((entry, index) => [entry.roundId, index]));
+      const suggestionRank = new Map(
+        issue.suggestions.map((entry, index) => [entry.roundId, index])
+      );
       const suggestions = issue.suggestions
         .map((entry) => roundById.get(entry.roundId))
         .filter((round): round is InstalledRound => Boolean(round));
       const filteredInstalled = installedRounds.filter((round) => {
-        if (sameTypeOnly && issue.ref.type && (round.type ?? "Normal") !== issue.ref.type) return false;
+        if (sameTypeOnly && issue.ref.type && (round.type ?? "Normal") !== issue.ref.type)
+          return false;
         if (!query) return true;
-        const haystack = `${round.name} ${round.author ?? ""} ${round.type ?? "Normal"}`.toLowerCase();
+        const haystack =
+          `${round.name} ${round.author ?? ""} ${round.type ?? "Normal"}`.toLowerCase();
         return haystack.includes(query);
       });
-      const combined = [...suggestions, ...filteredInstalled.filter((round) => !suggestionIds.has(round.id))];
+      const combined = [
+        ...suggestions,
+        ...filteredInstalled.filter((round) => !suggestionIds.has(round.id)),
+      ];
       combined.sort((left, right) => {
         const leftRank = suggestionRank.get(left.id);
         const rightRank = suggestionRank.get(right.id);
         if (typeof leftRank === "number" || typeof rightRank === "number") {
-          if (typeof leftRank === "number" && typeof rightRank === "number") return leftRank - rightRank;
+          if (typeof leftRank === "number" && typeof rightRank === "number")
+            return leftRank - rightRank;
           return typeof leftRank === "number" ? -1 : 1;
         }
-        return left.name.localeCompare(right.name, undefined, { sensitivity: "base", numeric: true });
+        return left.name.localeCompare(right.name, undefined, {
+          sensitivity: "base",
+          numeric: true,
+        });
       });
       acc[issue.key] = combined.slice(0, 16);
       return acc;
@@ -129,16 +147,22 @@ export function PlaylistResolutionModal({
         <div className="border-b border-white/10 px-5 py-4 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300">Playlist Resolution</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300">
+                Playlist Resolution
+              </p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-50">{title}</h2>
               <p className="mt-2 text-sm text-zinc-300">
-                Exact: <span className="font-semibold text-emerald-300">{analysis.counts.exact}</span>
+                Exact:{" "}
+                <span className="font-semibold text-emerald-300">{analysis.counts.exact}</span>
                 {" • "}
-                Auto-suggested: <span className="font-semibold text-cyan-300">{analysis.counts.suggested}</span>
+                Auto-suggested:{" "}
+                <span className="font-semibold text-cyan-300">{analysis.counts.suggested}</span>
                 {" • "}
-                Missing: <span className="font-semibold text-rose-300">{analysis.counts.missing}</span>
+                Missing:{" "}
+                <span className="font-semibold text-rose-300">{analysis.counts.missing}</span>
                 {" • "}
-                Remaining missing: <span className="font-semibold text-amber-300">{remainingMissingCount}</span>
+                Remaining missing:{" "}
+                <span className="font-semibold text-amber-300">{remainingMissingCount}</span>
               </p>
             </div>
             <button
@@ -161,41 +185,57 @@ export function PlaylistResolutionModal({
           ) : (
             <div className="grid gap-4">
               {analysis.issues.map((issue) => {
-                const selectedRoundId = overrides[issue.key] !== undefined
-                  ? overrides[issue.key]
-                  : issue.defaultRoundId;
-                const selectedRound = selectedRoundId ? roundById.get(selectedRoundId) ?? null : null;
+                const selectedRoundId =
+                  overrides[issue.key] !== undefined ? overrides[issue.key] : issue.defaultRoundId;
+                const selectedRound = selectedRoundId
+                  ? (roundById.get(selectedRoundId) ?? null)
+                  : null;
                 const sameTypeOnly = sameTypeOnlyByKey[issue.key] ?? true;
                 const isExpanded = expandedIssueKey === issue.key;
                 const candidates = issueCandidatesByKey[issue.key] ?? [];
 
                 return (
-                  <div key={issue.key} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                  <div
+                    key={issue.key}
+                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                  >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-                            issue.kind === "missing"
-                              ? "border-rose-400/40 bg-rose-500/15 text-rose-200"
-                              : "border-cyan-400/40 bg-cyan-500/15 text-cyan-200"
-                          }`}>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                              issue.kind === "missing"
+                                ? "border-rose-400/40 bg-rose-500/15 text-rose-200"
+                                : "border-cyan-400/40 bg-cyan-500/15 text-cyan-200"
+                            }`}
+                          >
                             {issue.kind === "missing" ? "Missing" : "Suggested"}
                           </span>
                           <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
                             {issue.label}
                           </span>
                         </div>
-                        <div className="mt-3 text-lg font-semibold text-zinc-100">{issue.ref.name}</div>
+                        <div className="mt-3 text-lg font-semibold text-zinc-100">
+                          {issue.ref.name}
+                        </div>
                         <div className="mt-1 text-sm text-zinc-400">{formatRefMeta(issue)}</div>
                         <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-3">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Current Choice</div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                            Current Choice
+                          </div>
                           {selectedRound ? (
                             <div className="mt-2">
-                              <div className="text-sm font-semibold text-emerald-100">{selectedRound.name}</div>
-                              <div className="text-xs text-zinc-400">{formatRoundMeta(selectedRound)}</div>
+                              <div className="text-sm font-semibold text-emerald-100">
+                                {selectedRound.name}
+                              </div>
+                              <div className="text-xs text-zinc-400">
+                                {formatRoundMeta(selectedRound)}
+                              </div>
                             </div>
                           ) : (
-                            <div className="mt-2 text-sm font-semibold text-rose-200">Unresolved</div>
+                            <div className="mt-2 text-sm font-semibold text-rose-200">
+                              Unresolved
+                            </div>
                           )}
                         </div>
                       </div>
@@ -205,7 +245,10 @@ export function PlaylistResolutionModal({
                           <button
                             type="button"
                             onClick={() => {
-                              setOverrides((prev) => ({ ...prev, [issue.key]: issue.defaultRoundId }));
+                              setOverrides((prev) => ({
+                                ...prev,
+                                [issue.key]: issue.defaultRoundId,
+                              }));
                             }}
                             className="rounded-xl border border-cyan-300/45 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
                             data-controller-focus-id={`playlist-resolution-suggested-${issue.key}`}
@@ -259,7 +302,10 @@ export function PlaylistResolutionModal({
                             <button
                               type="button"
                               onClick={() => {
-                                setSameTypeOnlyByKey((prev) => ({ ...prev, [issue.key]: !sameTypeOnly }));
+                                setSameTypeOnlyByKey((prev) => ({
+                                  ...prev,
+                                  [issue.key]: !sameTypeOnly,
+                                }));
                               }}
                               className={`w-full rounded-xl border px-4 py-2.5 text-sm font-semibold ${
                                 sameTypeOnly
@@ -290,7 +336,9 @@ export function PlaylistResolutionModal({
                                 data-controller-focus-id={`playlist-resolution-choice-${issue.key}-${round.id}`}
                               >
                                 <div className="text-sm font-semibold">{round.name}</div>
-                                <div className="mt-1 text-xs text-zinc-400">{formatRoundMeta(round)}</div>
+                                <div className="mt-1 text-xs text-zinc-400">
+                                  {formatRoundMeta(round)}
+                                </div>
                               </button>
                             );
                           })}

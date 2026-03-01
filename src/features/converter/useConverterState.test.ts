@@ -1,6 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CONVERTER_MIN_ROUND_KEY, CONVERTER_PAUSE_GAP_KEY, CONVERTER_ZOOM_KEY, MIN_ZOOM_PX_PER_SEC } from "./types";
+import {
+  CONVERTER_MIN_ROUND_KEY,
+  CONVERTER_PAUSE_GAP_KEY,
+  CONVERTER_ZOOM_KEY,
+  MIN_ZOOM_PX_PER_SEC,
+} from "./types";
 
 const mocks = vi.hoisted(() => ({
   db: {
@@ -15,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   storeSet: vi.fn(),
   converterSaveSegments: vi.fn(),
   loadFunscriptTimeline: vi.fn().mockResolvedValue(null),
-  buildDetectedSegments: vi.fn(() => []),
+  buildDetectedSegments: vi.fn<(...args: unknown[]) => unknown[]>(() => []),
 }));
 
 vi.mock("../../services/db", () => ({
@@ -132,11 +137,12 @@ describe("useConverterState", () => {
     });
 
     expect(result.current.sortedSegments).toHaveLength(2);
-    expect(result.current.sortedSegments.map((segment) => [segment.startTimeMs, segment.endTimeMs]))
-      .toEqual([
-        [1_000, 3_000],
-        [3_000, 5_000],
-      ]);
+    expect(
+      result.current.sortedSegments.map((segment) => [segment.startTimeMs, segment.endTimeMs])
+    ).toEqual([
+      [1_000, 3_000],
+      [3_000, 5_000],
+    ]);
     expect(result.current.selectedSegmentId).toBe(result.current.sortedSegments[1]?.id ?? null);
     expect(result.current.message).toBe("Split segment at 00:03.00.");
     expect(result.current.error).toBeNull();
@@ -270,7 +276,10 @@ describe("useConverterState", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "s" }));
     });
 
-    expect(result.current.sortedSegments[0]).toMatchObject({ startTimeMs: 2_000, endTimeMs: 4_000 });
+    expect(result.current.sortedSegments[0]).toMatchObject({
+      startTimeMs: 2_000,
+      endTimeMs: 4_000,
+    });
 
     act(() => {
       result.current.setCurrentTimeMs(3_500);
@@ -280,7 +289,10 @@ describe("useConverterState", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "e" }));
     });
 
-    expect(result.current.sortedSegments[0]).toMatchObject({ startTimeMs: 2_000, endTimeMs: 3_500 });
+    expect(result.current.sortedSegments[0]).toMatchObject({
+      startTimeMs: 2_000,
+      endTimeMs: 3_500,
+    });
   });
 
   it("merges the selected segment with the next one when pressing m", async () => {
@@ -318,7 +330,10 @@ describe("useConverterState", () => {
     });
 
     expect(result.current.sortedSegments).toHaveLength(1);
-    expect(result.current.sortedSegments[0]).toMatchObject({ startTimeMs: 1_000, endTimeMs: 4_000 });
+    expect(result.current.sortedSegments[0]).toMatchObject({
+      startTimeMs: 1_000,
+      endTimeMs: 4_000,
+    });
   });
 
   it("runs and applies auto-detection shortcuts", async () => {

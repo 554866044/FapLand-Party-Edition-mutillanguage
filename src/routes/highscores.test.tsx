@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   loaderData: {
     localHighscore: 900,
+    localHighscoreCheatMode: false,
+    localHighscoreAssisted: false,
+    localHighscoreAssistedSaveMode: null,
     singleRuns: [
       {
         id: "run-1",
@@ -19,6 +22,9 @@ const mocks = vi.hoisted(() => ({
         playlistFormatVersion: 1,
         endingPosition: 100,
         turn: 42,
+        cheatModeActive: false,
+        assistedActive: false,
+        assistedSaveMode: null,
         createdAt: "2026-03-20T10:00:00.000Z",
       },
       {
@@ -35,6 +41,9 @@ const mocks = vi.hoisted(() => ({
         playlistFormatVersion: 1,
         endingPosition: 74,
         turn: 28,
+        cheatModeActive: false,
+        assistedActive: false,
+        assistedSaveMode: null,
         createdAt: "2026-03-20T09:00:00.000Z",
       },
     ],
@@ -44,11 +53,21 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   db: {
     gameProfile: {
-      getLocalHighscore: vi.fn().mockResolvedValue({ highscore: 900, highscoreCheatMode: false }),
+      getLocalHighscore: vi.fn().mockResolvedValue({
+        highscore: 900,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      }),
     },
     singlePlayerHistory: {
       listRuns: vi.fn().mockResolvedValue([]),
-      deleteRun: vi.fn().mockResolvedValue({ highscore: 320, highscoreCheatMode: false }),
+      deleteRun: vi.fn().mockResolvedValue({
+        highscore: 320,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      }),
     },
     multiplayer: {
       listResultSyncLobbies: vi.fn().mockResolvedValue([]),
@@ -127,6 +146,9 @@ describe("HighscoresRoute", () => {
         playlistFormatVersion: 1,
         endingPosition: 100,
         turn: 42,
+        cheatModeActive: false,
+        assistedActive: false,
+        assistedSaveMode: null,
         createdAt: "2026-03-20T10:00:00.000Z",
       },
       {
@@ -143,18 +165,36 @@ describe("HighscoresRoute", () => {
         playlistFormatVersion: 1,
         endingPosition: 74,
         turn: 28,
+        cheatModeActive: false,
+        assistedActive: false,
+        assistedSaveMode: null,
         createdAt: "2026-03-20T09:00:00.000Z",
       },
     ];
     mocks.navigate.mockReset();
-    mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({ highscore: 900, highscoreCheatMode: false });
+    mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({
+      highscore: 900,
+      highscoreCheatMode: false,
+      highscoreAssisted: false,
+      highscoreAssistedSaveMode: null,
+    });
     mocks.db.singlePlayerHistory.listRuns.mockResolvedValue(mocks.loaderData.singleRuns);
     mocks.db.singlePlayerHistory.deleteRun.mockReset();
     mocks.db.singlePlayerHistory.deleteRun.mockImplementation(async (id: string) => {
       mocks.loaderData.singleRuns = mocks.loaderData.singleRuns.filter((run) => run.id !== id);
       mocks.db.singlePlayerHistory.listRuns.mockResolvedValue(mocks.loaderData.singleRuns);
-      mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({ highscore: 320, highscoreCheatMode: false });
-      return { highscore: 320, highscoreCheatMode: false };
+      mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({
+        highscore: 320,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      });
+      return {
+        highscore: 320,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      };
     });
     vi.stubGlobal("Audio", AudioMock);
   });

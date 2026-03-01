@@ -157,12 +157,18 @@ function queueOpenedFiles(filePaths: string[]): void {
     approveOpenedFilePath(filePath);
   }
 
-  if (appOpenRendererReady && mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send("app-open:files", normalized);
+  pendingOpenedFiles.push(...normalized);
+  flushPendingOpenedFiles();
+}
+
+function flushPendingOpenedFiles(): void {
+  if (!appOpenRendererReady || !mainWindowRef || mainWindowRef.isDestroyed()) {
     return;
   }
 
-  pendingOpenedFiles.push(...normalized);
+  if (pendingOpenedFiles.length === 0) return;
+
+  mainWindowRef.webContents.send("app-open:files", pendingOpenedFiles.splice(0, pendingOpenedFiles.length));
 }
 
 function queueAuthCallback(rawUrl: string): void {
@@ -637,6 +643,23 @@ function registerDialogIpc() {
     return directoryPath;
   });
 
+  ipcMain.handle("dialog:selectFpackExtractionDirectory", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose fpack extraction folder",
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.handle("dialog:selectWebsiteVideoCacheDirectory", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -754,8 +777,11 @@ function registerDialogIpc() {
 
 function registerAppOpenIpc() {
   ipcMain.handle("app-open:consumePendingFiles", () => {
-    appOpenRendererReady = true;
     return pendingOpenedFiles.splice(0, pendingOpenedFiles.length);
+  });
+  ipcMain.handle("app-open:renderer-ready", () => {
+    appOpenRendererReady = true;
+    flushPendingOpenedFiles();
   });
 }
 

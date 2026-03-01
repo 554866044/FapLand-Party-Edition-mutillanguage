@@ -19,6 +19,9 @@ export async function runCommand(
   }
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
+    const cmdStr = `${command} ${args.join(" ")}`;
+    // console.log(`[runCommand] Executing: ${cmdStr}`); // Too verbose for general logs
+
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -31,8 +34,9 @@ export async function runCommand(
     if (options?.timeoutMs) {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
+        console.error(`[runCommand] Command timed out after ${options.timeoutMs}ms: ${cmdStr}`);
         child.kill("SIGKILL");
-        reject(new Error(`Command timed out after ${options.timeoutMs}ms: ${command} ${args.join(" ")}`));
+        reject(new Error(`Command timed out after ${options.timeoutMs}ms: ${cmdStr}`));
       }, options.timeoutMs);
     }
 
@@ -63,6 +67,7 @@ export async function runCommand(
     child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
     child.on("error", (error) => {
+      console.error(`[runCommand] Child process error: ${error.message}`);
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (timedOut) return;
       reject(error);
@@ -85,7 +90,9 @@ export async function runCommand(
 
       const stderrText = stderr.toString("utf8").trim();
       const signalText = signal ? `, signal ${signal}` : "";
-      reject(new Error(`Command failed with exit code ${code}${signalText}: ${stderrText}`));
+      const errorMsg = `Command failed with exit code ${code}${signalText}: ${stderrText}`;
+      console.error(`[runCommand] ${errorMsg}`);
+      reject(new Error(errorMsg));
     });
   });
 }
@@ -94,7 +101,7 @@ export async function extractSpriteBmp(
   ffmpegPath: string,
   videoPath: string,
   range: NormalizedVideoHashRange,
-  options?: { lowPriority?: boolean }
+  options?: { lowPriority?: boolean; headers?: Record<string, string> }
 ): Promise<Buffer> {
   const tileLayout = `${SPRITE_COLUMNS}x${SPRITE_ROWS}`;
   const frameWidth = SPRITE_SCREENSHOT_WIDTH;
@@ -116,6 +123,16 @@ export async function extractSpriteBmp(
     "-loglevel",
     "error",
     "-nostdin",
+  ];
+
+  if (options?.headers && Object.keys(options.headers).length > 0) {
+    const headerString = Object.entries(options.headers)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\r\n") + "\r\n";
+    args.push("-headers", headerString);
+  }
+
+  args.push(
     "-ss",
     ssSeconds,
     "-i",
@@ -133,7 +150,7 @@ export async function extractSpriteBmp(
     "-f",
     "image2pipe",
     "-",
-  ];
+  );
 
   const { stdout } = await runCommand(ffmpegPath, args, { ...options, timeoutMs: 120_000 });
   if (stdout.length === 0) {

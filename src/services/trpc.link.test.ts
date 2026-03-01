@@ -35,8 +35,9 @@ describe("tRPC Electron link", () => {
         }
 
         queueMicrotask(() => {
+          const op = message.operation as { id: unknown };
           onMessage?.({
-            id: message.operation.id,
+            id: op.id,
             result: {
               type: "data",
               data: superjson.serialize(null),

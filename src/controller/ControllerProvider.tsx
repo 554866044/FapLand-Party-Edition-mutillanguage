@@ -227,6 +227,13 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
+      const eventTarget = event.target instanceof HTMLElement ? event.target : null;
+      if (eventTarget?.closest('[data-controller-skip="true"]')) {
+        return;
+      }
+
       const activeElement = document.activeElement;
       const editableFocused =
         activeElement instanceof HTMLElement &&

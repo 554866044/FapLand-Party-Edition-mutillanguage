@@ -10,10 +10,8 @@ interface PlaylistPickerViewProps {
     newPlaylistName: string;
     createPlaylistPending: boolean;
     saveNotice: string | null;
-    importPending: boolean;
     onNewPlaylistNameChange: (name: string) => void;
     onCreatePlaylist: () => void;
-    onImportPlaylist: () => void;
     onOpenPlaylist: (playlist: StoredPlaylist) => void;
     onNavigateBack: () => void;
 }
@@ -24,10 +22,8 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
     newPlaylistName,
     createPlaylistPending,
     saveNotice,
-    importPending,
     onNewPlaylistNameChange,
     onCreatePlaylist,
-    onImportPlaylist,
     onOpenPlaylist,
     onNavigateBack,
 }) => {
@@ -128,16 +124,6 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                             data-controller-focus-id="map-editor-picker-create"
                         >
                             {createPlaylistPending ? "Creating..." : "Create Playlist"}
-                        </button>
-                        <button
-                            type="button"
-                            className="mt-2 rounded-lg border border-violet-400/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-violet-100 disabled:opacity-50"
-                            onMouseEnter={playHoverSound}
-                            onClick={onImportPlaylist}
-                            disabled={importPending}
-                            data-controller-focus-id="map-editor-picker-import"
-                        >
-                            {importPending ? "Importing..." : "Import .fplay"}
                         </button>
                     </section>
                 </div>

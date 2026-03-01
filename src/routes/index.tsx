@@ -12,12 +12,14 @@ import { useHandy } from "../contexts/HandyContext";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { useSfwMode } from "../hooks/useSfwMode";
 import { useMenuNavigation, type MenuOption } from "../hooks/useMenuNavigation";
+import { getAssistedTooltip, getSaveModeEmoji } from "../game/saveMode";
 import { db } from "../services/db";
 import { parseStandingsJson } from "../services/multiplayer/results";
 import { trpc } from "../services/trpc";
 import { LibraryStatusPoller } from "../features/library/components/LibraryStatusPoller";
 import { PhashScanStatusPoller } from "../features/phash/components/PhashScanStatusPoller";
 import { WebsiteVideoScanStatusPoller } from "../features/webVideo/components/WebsiteVideoScanStatusPoller";
+import { abbreviateNsfwText } from "../utils/sfwText";
 import "../styles.css";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
@@ -32,15 +34,28 @@ const getVideos = async (): Promise<string[]> => {
   }
 };
 
-const getOverallHighscore = async (): Promise<{ score: number; localCheatMode: boolean }> => {
+const getOverallHighscore = async (): Promise<{
+  score: number;
+  localCheatMode: boolean;
+  localAssisted: boolean;
+  localAssistedSaveMode: "checkpoint" | "everywhere" | null;
+}> => {
   try {
     const [localResult, cachedMatches] = await Promise.all([
-      db.gameProfile.getLocalHighscore().catch(() => ({ highscore: 0, highscoreCheatMode: false })),
+      db.gameProfile.getLocalHighscore().catch(() => ({
+        highscore: 0,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      })),
       db.multiplayer.listMatchCache(100).catch(() => []),
     ]);
 
     const localScore = typeof localResult === "number" ? localResult : localResult.highscore;
     const localCheatMode = typeof localResult === "number" ? false : localResult.highscoreCheatMode;
+    const localAssisted = typeof localResult === "number" ? false : (localResult.highscoreAssisted ?? false);
+    const localAssistedSaveMode =
+      typeof localResult === "number" ? null : (localResult.highscoreAssistedSaveMode ?? null);
 
     let maxRemote = 0;
     for (const match of cachedMatches) {
@@ -57,10 +72,12 @@ const getOverallHighscore = async (): Promise<{ score: number; localCheatMode: b
     return {
       score: bestScore,
       localCheatMode: isFromLocal ? localCheatMode : false,
+      localAssisted: isFromLocal ? localAssisted : false,
+      localAssistedSaveMode: isFromLocal ? localAssistedSaveMode : null,
     };
   } catch (error) {
     console.error("Error fetching overall highscore", error);
-    return { score: 0, localCheatMode: false };
+    return { score: 0, localCheatMode: false, localAssisted: false, localAssistedSaveMode: null };
   }
 };
 
@@ -258,6 +275,8 @@ const Home = memo(() => {
       <HighscoreDisplay
         score={overallHighscore.score}
         cheatMode={overallHighscore.localCheatMode}
+        assisted={overallHighscore.localAssisted}
+        assistedSaveMode={overallHighscore.localAssistedSaveMode}
         cumLoadCount={cumLoadCount}
         hideCumLoadCount={sfwModeEnabled}
       />
@@ -299,7 +318,7 @@ const Home = memo(() => {
                 backgroundSize: "200% auto",
               }}
             >
-              {sfwModeEnabled ? "SAFE MODE" : "FAP LAND"}
+              {sfwModeEnabled ? "SAFE MODE" : abbreviateNsfwText("FAP LAND", sfwModeEnabled)}
             </h1>
 
             {/* Decorative divider */}
@@ -373,7 +392,7 @@ const Home = memo(() => {
               </div>
               <div className="pl-3.5 space-y-0">
                 <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide text-indigo-100/90">
-                  v{import.meta.env.VITE_APP_VERSION}-alpha
+                  v{import.meta.env.VITE_APP_VERSION}
                 </div>
                 <div className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide text-indigo-200/60">
                   Early Access
@@ -588,11 +607,15 @@ export const Route = createFileRoute("/")({
 function HighscoreDisplay({
   score,
   cheatMode,
+  assisted,
+  assistedSaveMode,
   cumLoadCount,
   hideCumLoadCount,
 }: {
   score: number;
   cheatMode?: boolean;
+  assisted?: boolean;
+  assistedSaveMode?: "checkpoint" | "everywhere" | null;
   cumLoadCount: number;
   hideCumLoadCount?: boolean;
 }) {
@@ -629,7 +652,11 @@ function HighscoreDisplay({
     >
       <div
         className="relative group overflow-hidden rounded-2xl border border-fuchsia-400/30 bg-black/40 p-4 backdrop-blur-md shadow-[0_0_20px_rgba(217,70,239,0.15)] transition-all duration-500 hover:border-fuchsia-400/60 hover:shadow-[0_0_30px_rgba(217,70,239,0.3)] hover:scale-105"
-        title={cheatMode ? "This highscore was achieved with cheat mode active" : undefined}
+        title={
+          cheatMode
+            ? "This highscore was achieved with cheat mode active"
+            : (assisted ? getAssistedTooltip(assistedSaveMode) : undefined)
+        }
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-fuchsia-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
         <div className="flex flex-col items-start gap-1">
@@ -648,10 +675,18 @@ function HighscoreDisplay({
                 🎭
               </span>
             )}
+            {assisted && assistedSaveMode && (
+              <span className="text-lg cursor-help" title={getAssistedTooltip(assistedSaveMode)}>
+                {getSaveModeEmoji(assistedSaveMode)}
+              </span>
+            )}
           </div>
           {!hideCumLoadCount && (
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.12em] text-fuchsia-100/85">
-              💦 {cumLoadCount.toLocaleString()} cum loads extracted
+              {abbreviateNsfwText(
+                `💦 ${cumLoadCount.toLocaleString()} cum loads extracted`,
+                Boolean(hideCumLoadCount)
+              )}
             </p>
           )}
         </div>

@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { SfwGuard } from "../components/SfwGuard";
+import { GameDropdown } from "../components/ui/GameDropdown";
 import { PlaylistPackExportDialog } from "../components/PlaylistPackExportDialog";
 import { MenuButton } from "../components/MenuButton";
 import { PlaylistExportOverlay } from "../components/PlaylistExportOverlay";
 import { PlaylistResolutionModal } from "../components/PlaylistResolutionModal";
 import { RoundVideoOverlay } from "../components/game/RoundVideoOverlay";
-import { useControllerSurface } from "../controller";
 import {
   CURRENT_PLAYLIST_VERSION,
   ZPlaylistConfig,
@@ -28,6 +29,7 @@ import { setMapEditorTestSession } from "../features/map-editor/testSession";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
 import { PERK_RARITY_META, resolvePerkRarity } from "../game/data/perkRarity";
 import { usePlayableVideoFallback } from "../hooks/usePlayableVideoFallback";
+import { useSfwMode } from "../hooks/useSfwMode";
 import { db, type InstalledRound } from "../services/db";
 import {
   playlists,
@@ -36,12 +38,14 @@ import {
 } from "../services/playlists";
 import { formatDurationLabel, getRoundDurationSec } from "../utils/duration";
 import { playHoverSound, playSelectSound } from "../utils/audio";
+import { abbreviateNsfwText } from "../utils/sfwText";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 
 type EditableLinearSetup = {
   roundCount: number;
   safePointsEnabled: boolean;
   safePointIndices: number[];
+  saveMode: "none" | "checkpoint" | "everywhere";
   normalRoundOrder: string[];
   enabledCumRoundIds: string[];
   enabledPerkIds: string[];
@@ -61,6 +65,8 @@ type EditableLinearSetup = {
     };
   };
   scorePerCumRoundSuccess: number;
+  diceMin: number;
+  diceMax: number;
 };
 
 const DEFAULT_SAFE_PRESET = [25, 50, 75];
@@ -72,20 +78,24 @@ type NormalRoundSort = "selected-first" | "queue" | "name-asc" | "name-desc" | "
 type DurationFilter = "any" | "short" | "medium" | "long" | "unknown";
 type ResolutionModalState =
   | {
-    context: "import";
-    title: string;
-    filePath: string;
-    analysis: PlaylistResolutionAnalysis;
-  }
+      context: "import";
+      title: string;
+      filePath: string;
+      analysis: PlaylistResolutionAnalysis;
+    }
   | {
-    context: "playlist";
-    title: string;
-    analysis: PlaylistResolutionAnalysis;
-  };
+      context: "playlist";
+      title: string;
+      analysis: PlaylistResolutionAnalysis;
+    };
 type ImportedPlaylistReview = {
   playlistId: string;
   analysis: PlaylistResolutionAnalysis;
 };
+
+const PlaylistWorkshopSearchSchema = z.object({
+  open: z.enum(["active"]).optional(),
+});
 
 const WORKSHOP_SECTION_IDS = [
   "playlist",
@@ -331,6 +341,7 @@ function toEditableSetup(
       roundCount: 100,
       safePointsEnabled: true,
       safePointIndices: [...DEFAULT_SAFE_PRESET],
+      saveMode: config.saveMode ?? "none",
       normalRoundOrder: [],
       enabledCumRoundIds: [],
       enabledPerkIds: [...config.perkPool.enabledPerkIds],
@@ -350,6 +361,8 @@ function toEditableSetup(
         },
       },
       scorePerCumRoundSuccess: config.economy.scorePerCumRoundSuccess,
+      diceMin: config.dice?.min ?? 1,
+      diceMax: config.dice?.max ?? 6,
     };
   }
 
@@ -371,6 +384,7 @@ function toEditableSetup(
     roundCount: board.totalIndices,
     safePointsEnabled: board.safePointIndices.length > 0,
     safePointIndices: [...board.safePointIndices],
+    saveMode: config.saveMode ?? "none",
     normalRoundOrder,
     enabledCumRoundIds,
     enabledPerkIds: [...config.perkPool.enabledPerkIds],
@@ -390,6 +404,8 @@ function toEditableSetup(
       },
     },
     scorePerCumRoundSuccess: config.economy.scorePerCumRoundSuccess,
+    diceMin: config.dice?.min ?? 1,
+    diceMax: config.dice?.max ?? 6,
   };
 }
 
@@ -414,9 +430,9 @@ function toLinearBoardConfig(
     totalIndices: Math.max(1, Math.min(500, Math.floor(setup.roundCount))),
     safePointIndices: setup.safePointsEnabled
       ? filterIndicesWithinTotal(
-        parseSafePointsInput(formatSafePointsInput(setup.safePointIndices)),
-        setup.roundCount
-      )
+          parseSafePointsInput(formatSafePointsInput(setup.safePointIndices)),
+          setup.roundCount
+        )
       : [],
     safePointRestMsByIndex: {},
     normalRoundRefsByIndex: {},
@@ -432,6 +448,7 @@ function createEmptyEditableSetup(installedRounds: InstalledRound[]): EditableLi
       name: "Empty",
       description: null,
       formatVersion: 1,
+      installSourceKey: null,
       config: createDefaultPlaylistConfig(installedRounds),
       createdAt: new Date(0),
       updatedAt: new Date(0),
@@ -441,6 +458,7 @@ function createEmptyEditableSetup(installedRounds: InstalledRound[]): EditableLi
 }
 
 export const Route = createFileRoute("/playlist-workshop")({
+  validateSearch: (search) => PlaylistWorkshopSearchSchema.parse(search),
   loader: async () => {
     const [installedRounds, availablePlaylists] = await Promise.all([
       getInstalledRounds(),
@@ -453,7 +471,9 @@ export const Route = createFileRoute("/playlist-workshop")({
 });
 
 export function PlaylistWorkshopRoute() {
+  const sfwMode = useSfwMode();
   const navigate = useNavigate();
+  const search = PlaylistWorkshopSearchSchema.parse(Route.useSearch());
   const goBack = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -474,13 +494,18 @@ export function PlaylistWorkshopRoute() {
   const [playlistList, setPlaylistList] = useState<StoredPlaylist[]>(
     withActivePlaylist(availablePlaylists, loaderActivePlaylist)
   );
-  const [activePlaylistId, setActivePlaylistId] = useState(loaderActivePlaylist?.id ?? "");
+  const [activePlaylistId, setActivePlaylistId] = useState(
+    search.open === "active" ? (loaderActivePlaylist?.id ?? "") : ""
+  );
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [savePending, setSavePending] = useState(false);
   const [exportStatus, setExportStatus] = useState<PlaylistExportPackageStatus | null>(null);
   const [showPackExportDialog, setShowPackExportDialog] = useState(false);
   const [showExportOverlay, setShowExportOverlay] = useState(false);
   const [isAbortingExport, setIsAbortingExport] = useState(false);
+  const [graphRedirectFailedPlaylistId, setGraphRedirectFailedPlaylistId] = useState<string | null>(
+    null
+  );
   const [newPlaylistDialogOpen, setNewPlaylistDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -500,13 +525,11 @@ export function PlaylistWorkshopRoute() {
   const playlistMenuRef = useRef<HTMLDivElement | null>(null);
   const manageMenuRef = useRef<HTMLDivElement | null>(null);
   const transferMenuRef = useRef<HTMLDivElement | null>(null);
+  const graphRedirectPlaylistIdRef = useRef<string | null>(null);
 
   const activePlaylist = useMemo(
-    () =>
-      playlistList.find((playlist) => playlist.id === activePlaylistId) ??
-      loaderActivePlaylist ??
-      null,
-    [activePlaylistId, loaderActivePlaylist, playlistList]
+    () => playlistList.find((playlist) => playlist.id === activePlaylistId) ?? null,
+    [activePlaylistId, playlistList]
   );
 
   const [setup, setSetup] = useState<EditableLinearSetup>(() =>
@@ -526,9 +549,9 @@ export function PlaylistWorkshopRoute() {
       if (current && nextList.some((playlist) => playlist.id === current)) {
         return current;
       }
-      return loaderActivePlaylist?.id ?? nextList[0]?.id ?? "";
+      return search.open === "active" ? (loaderActivePlaylist?.id ?? "") : "";
     });
-  }, [availablePlaylists, loaderActivePlaylist]);
+  }, [availablePlaylists, loaderActivePlaylist, search.open]);
 
   useEffect(() => {
     if (!activePlaylist) return;
@@ -634,8 +657,8 @@ export function PlaylistWorkshopRoute() {
       query.length === 0
         ? normalRounds
         : normalRounds.filter((round) =>
-          `${round.name} ${round.author ?? ""}`.toLowerCase().includes(query)
-        );
+            `${round.name} ${round.author ?? ""}`.toLowerCase().includes(query)
+          );
     const durationFiltered = filtered.filter((round) =>
       matchesDurationFilter(getRoundDurationSec(round), normalRoundDurationFilter)
     );
@@ -696,15 +719,15 @@ export function PlaylistWorkshopRoute() {
     () =>
       activePreviewRound
         ? {
-          fieldId: "playlist-workshop-preview-field",
-          nodeId: "playlist-workshop-preview-node",
-          roundId: activePreviewRound.id,
-          roundName: activePreviewRound.name,
-          selectionKind: "fixed",
-          poolId: null,
-          phaseKind: "normal",
-          campaignIndex: 1,
-        }
+            fieldId: "playlist-workshop-preview-field",
+            nodeId: "playlist-workshop-preview-node",
+            roundId: activePreviewRound.id,
+            roundName: activePreviewRound.name,
+            selectionKind: "fixed",
+            poolId: null,
+            phaseKind: "normal",
+            campaignIndex: 1,
+          }
         : null,
     [activePreviewRound]
   );
@@ -719,6 +742,52 @@ export function PlaylistWorkshopRoute() {
   }, [activePreviewRound, installedRounds]);
 
   const isLinearEditable = activePlaylist?.config.boardConfig.mode === "linear";
+  const shouldAutoOpenActivePlaylist = search.open === "active";
+  const shouldRedirectGraphPlaylist =
+    Boolean(activePlaylist) &&
+    shouldAutoOpenActivePlaylist &&
+    !isLinearEditable &&
+    graphRedirectFailedPlaylistId !== activePlaylist?.id;
+
+  useEffect(() => {
+    if (!activePlaylist || isLinearEditable) {
+      graphRedirectPlaylistIdRef.current = null;
+      return;
+    }
+    if (graphRedirectFailedPlaylistId === activePlaylist.id) {
+      return;
+    }
+    if (graphRedirectPlaylistIdRef.current === activePlaylist.id) {
+      return;
+    }
+
+    graphRedirectPlaylistIdRef.current = activePlaylist.id;
+
+    void (async () => {
+      try {
+        await playlists.setActive(activePlaylist.id);
+        setMapEditorTestSession(activePlaylist.id);
+        await navigate({ to: "/map-editor" });
+      } catch (error) {
+        console.error("Failed to auto-open graph playlist in map editor", error);
+        setGraphRedirectFailedPlaylistId(activePlaylist.id);
+        setImportNotice(
+          error instanceof Error ? error.message : "Failed to open advanced map editor."
+        );
+      } finally {
+        if (graphRedirectPlaylistIdRef.current === activePlaylist.id) {
+          graphRedirectPlaylistIdRef.current = null;
+        }
+      }
+    })();
+  }, [
+    activePlaylist,
+    graphRedirectFailedPlaylistId,
+    isLinearEditable,
+    navigate,
+    shouldAutoOpenActivePlaylist,
+  ]);
+
   const activePlaylistResolution = useMemo(
     () =>
       activePlaylist ? analyzePlaylistResolution(activePlaylist.config, installedRounds) : null,
@@ -765,7 +834,12 @@ export function PlaylistWorkshopRoute() {
     const nextList = await playlists.list();
     const nextActive = nextList.length > 0 ? await playlists.getActive() : null;
     setPlaylistList(withActivePlaylist(nextList, nextActive));
-    setActivePlaylistId(nextActive?.id ?? "");
+    setActivePlaylistId((current) => {
+      if (current && nextList.some((playlist) => playlist.id === current)) {
+        return current;
+      }
+      return "";
+    });
   }
 
   async function handleImportPlaylist() {
@@ -785,6 +859,7 @@ export function PlaylistWorkshopRoute() {
     const imported = await playlists.importFromFile({ filePath });
     await playlists.setActive(imported.playlist.id);
     await refreshPlaylists();
+    setActivePlaylistId(imported.playlist.id);
     if (analysis.resolution.issues.length > 0) {
       setImportedPlaylistReview({
         playlistId: imported.playlist.id,
@@ -800,7 +875,7 @@ export function PlaylistWorkshopRoute() {
     );
   }
 
-  if (!activePlaylist) {
+  if (playlistList.length === 0) {
     return (
       <div className="relative min-h-screen overflow-hidden">
         <AnimatedBackground />
@@ -814,8 +889,7 @@ export function PlaylistWorkshopRoute() {
               Playlist Workshop
             </h1>
             <p className="mt-3 text-sm text-zinc-300 sm:text-base">
-              No playlist exists yet. Create one here or import a `.fplay` file when you want to
-              start editing.
+              No playlist exists yet. Create one here when you want to start editing.
             </p>
 
             {importNotice && (
@@ -824,7 +898,7 @@ export function PlaylistWorkshopRoute() {
               </div>
             )}
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <MenuButton
                 label="Create Playlist"
                 primary
@@ -832,13 +906,6 @@ export function PlaylistWorkshopRoute() {
                 onClick={() => {
                   playSelectSound();
                   setNewPlaylistDialogOpen(true);
-                }}
-              />
-              <MenuButton
-                label="Import .fplay"
-                onHover={playHoverSound}
-                onClick={() => {
-                  void handleImportPlaylist();
                 }}
               />
               <MenuButton
@@ -862,6 +929,7 @@ export function PlaylistWorkshopRoute() {
                 const created = await playlists.create({ name, config });
                 await playlists.setActive(created.id);
                 await refreshPlaylists();
+                setActivePlaylistId(created.id);
                 setNewPlaylistDialogOpen(false);
                 setImportNotice("Playlist created.");
               } catch (error) {
@@ -873,6 +941,146 @@ export function PlaylistWorkshopRoute() {
             onEmptyName={() => setImportNotice("Playlist name cannot be empty.")}
           />
         )}
+      </div>
+    );
+  }
+
+  if (!activePlaylist) {
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+        <AnimatedBackground />
+
+        <div className="relative z-10 min-h-screen px-4 py-8 sm:px-8">
+          <main className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+            <header className="rounded-3xl border border-violet-300/25 bg-zinc-950/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.32em] text-violet-200/70">
+                Creation & Workshop
+              </p>
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                Playlist Workshop
+              </h1>
+              <p className="mt-3 text-sm text-zinc-300 sm:text-base">
+                Choose a playlist to edit, or create one from here.
+              </p>
+
+              {importNotice && (
+                <div className="mt-4 rounded-xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
+                  {importNotice}
+                </div>
+              )}
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <MenuButton
+                  label="Create Playlist"
+                  primary
+                  onHover={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setNewPlaylistDialogOpen(true);
+                  }}
+                />
+                <MenuButton
+                  label="Back"
+                  onHover={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    goBack();
+                  }}
+                />
+              </div>
+            </header>
+
+            <section className="rounded-3xl border border-violet-300/20 bg-zinc-950/70 p-5 shadow-2xl backdrop-blur-xl sm:p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.28em] text-violet-200/70">
+                    Select Playlist
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+                    Open A Playlist
+                  </h2>
+                </div>
+                <span className="rounded-full border border-violet-300/35 bg-violet-500/10 px-3 py-1 text-xs uppercase tracking-[0.14em] text-violet-100">
+                  {playlistList.length} Playlist{playlistList.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {playlistList.map((playlist) => {
+                  const isStoredActive = playlist.id === loaderActivePlaylist?.id;
+                  const boardMode = playlist.config.boardConfig.mode === "graph" ? "Graph" : "Linear";
+                  return (
+                    <button
+                      key={playlist.id}
+                      type="button"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => {
+                        playSelectSound();
+                        setActivePlaylistId(playlist.id);
+                      }}
+                      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-500/12 to-slate-950/70 px-4 py-4 text-left transition-all duration-200 hover:border-violet-200/60 hover:bg-violet-500/18"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-lg font-semibold text-white">{playlist.name}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                          <span>{boardMode} Playlist</span>
+                          {isStoredActive && <span>Active</span>}
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-xl border border-violet-300/45 bg-violet-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-violet-100">
+                        Open
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </main>
+        </div>
+
+        {newPlaylistDialogOpen && (
+          <NewPlaylistDialog
+            onClose={() => setNewPlaylistDialogOpen(false)}
+            onSubmit={async ({ name, mode }) => {
+              try {
+                const config = buildNewPlaylistConfig(mode);
+                const created = await playlists.create({ name, config });
+                await playlists.setActive(created.id);
+                await refreshPlaylists();
+                setActivePlaylistId(created.id);
+                setNewPlaylistDialogOpen(false);
+                setImportNotice("Playlist created.");
+              } catch (error) {
+                console.error("Failed to create playlist", error);
+                setImportNotice("Failed to create playlist.");
+                throw error;
+              }
+            }}
+            onEmptyName={() => setImportNotice("Playlist name cannot be empty.")}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (shouldRedirectGraphPlaylist) {
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+        <AnimatedBackground />
+
+        <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
+          <div className="w-full max-w-xl rounded-3xl border border-amber-300/25 bg-zinc-950/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.32em] text-amber-100/75">
+              Redirecting
+            </p>
+            <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+              Opening Graph Editor
+            </h1>
+            <p className="mt-3 text-sm text-zinc-300 sm:text-base">
+              This playlist uses a graph board, so it opens in the Advanced Map Editor instead.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -995,10 +1203,15 @@ export function PlaylistWorkshopRoute() {
         ...activePlaylist.config,
         playlistVersion: activePlaylist.config.playlistVersion ?? CURRENT_PLAYLIST_VERSION,
         boardConfig: linearBoardConfig,
+        saveMode: setup.saveMode,
         roundStartDelayMs: Math.max(
-          0,
+          1000,
           Math.min(300000, Math.round(setup.roundStartDelaySec * 1000))
         ),
+        dice: {
+          min: Math.max(1, Math.min(20, Math.floor(setup.diceMin))),
+          max: Math.max(1, Math.min(20, Math.floor(setup.diceMax))),
+        },
         perkSelection: {
           optionsPerPick: activePlaylist.config.perkSelection.optionsPerPick,
           triggerChancePerCompletedRound: Math.max(0, Math.min(1, setup.perkTriggerChancePerRound)),
@@ -1125,8 +1338,8 @@ export function PlaylistWorkshopRoute() {
       const sourceRounds =
         selectedRoundIds.length > 0
           ? selectedRoundIds
-            .map((roundId) => normalRounds.find((round) => round.id === roundId))
-            .filter((round): round is InstalledRound => Boolean(round))
+              .map((roundId) => normalRounds.find((round) => round.id === roundId))
+              .filter((round): round is InstalledRound => Boolean(round))
           : normalRounds;
 
       if (sourceRounds.length === 0) return prev;
@@ -1214,7 +1427,7 @@ export function PlaylistWorkshopRoute() {
                 className={`settings-sidebar-item whitespace-nowrap ${active ? "is-active" : ""}`}
               >
                 <span className="settings-sidebar-icon">{section.icon}</span>
-                <span>{section.title}</span>
+                <span>{abbreviateNsfwText(section.title, sfwMode)}</span>
               </button>
             );
           })}
@@ -1269,9 +1482,11 @@ export function PlaylistWorkshopRoute() {
             {activeSection && (
               <header className="settings-panel-enter mb-1" key={`header-${activeSection.id}`}>
                 <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-3xl">
-                  {activeSection.title}
+                  {abbreviateNsfwText(activeSection.title, sfwMode)}
                 </h2>
-                <p className="mt-1.5 text-sm text-zinc-400">{activeSection.description}</p>
+                <p className="mt-1.5 text-sm text-zinc-400">
+                  {abbreviateNsfwText(activeSection.description, sfwMode)}
+                </p>
               </header>
             )}
 
@@ -1332,10 +1547,11 @@ export function PlaylistWorkshopRoute() {
                                       setPlaylistMenuOpen(false);
                                     })();
                                   }}
-                                  className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${selected
+                                  className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${
+                                    selected
                                       ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
                                       : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
-                                    }`}
+                                  }`}
                                 >
                                   <div className="truncate font-semibold">{playlist.name}</div>
                                   <div className="text-[10px] uppercase tracking-[0.15em] text-zinc-400">
@@ -1353,10 +1569,11 @@ export function PlaylistWorkshopRoute() {
                           Playlist Version {activePlaylist.config.playlistVersion}
                         </span>
                         <span
-                          className={`rounded-full border px-3 py-1 ${isLinearEditable
+                          className={`rounded-full border px-3 py-1 ${
+                            isLinearEditable
                               ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
                               : "border-rose-300/35 bg-rose-500/10 text-rose-100"
-                            }`}
+                          }`}
                         >
                           {isLinearEditable ? "Linear Board" : "Graph Board"}
                         </span>
@@ -1538,10 +1755,11 @@ export function PlaylistWorkshopRoute() {
                             safePointsEnabled: !prev.safePointsEnabled,
                           }));
                         }}
-                        className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold ${setup.safePointsEnabled
+                        className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold ${
+                          setup.safePointsEnabled
                             ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
                             : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                          }`}
+                        }`}
                       >
                         {setup.safePointsEnabled ? "Enabled" : "Disabled"}
                       </button>
@@ -1587,6 +1805,43 @@ export function PlaylistWorkshopRoute() {
                       placeholder="25, 50, 75"
                     />
                   </label>
+
+                  <div className="mt-4">
+                    <span className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-300">
+                      Save Mode
+                    </span>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {[
+                        { value: "none" as const, label: "No Saves" },
+                        { value: "checkpoint" as const, label: "Only Checkpoint" },
+                        { value: "everywhere" as const, label: "Everywhere" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          disabled={!isLinearEditable}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            setSetup((prev) => ({ ...prev, saveMode: option.value }));
+                          }}
+                          className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                            setup.saveMode === option.value
+                              ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100"
+                              : "border-zinc-600 bg-zinc-800 text-zinc-300"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    {setup.saveMode !== "none" && (
+                      <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+                        {setup.saveMode === "checkpoint" ? "🚩" : "💾"} Warning: runs from this
+                        playlist are marked as assisted on the highscore and in run history.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1639,43 +1894,56 @@ export function PlaylistWorkshopRoute() {
                         placeholder="Search by round or author"
                       />
                     </label>
-                    <label className="block">
+                    <div className="block">
                       <span className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-300">
                         Sort
                       </span>
-                      <select
+                      <GameDropdown
                         value={normalRoundSort}
-                        onChange={(event) =>
-                          setNormalRoundSort(event.target.value as NormalRoundSort)
-                        }
-                        onMouseEnter={playHoverSound}
-                        className="w-full rounded-xl border border-purple-300/30 bg-black/45 px-4 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-300/75 focus:ring-2 focus:ring-purple-400/30"
-                      >
-                        <option value="selected-first">Selected first</option>
-                        <option value="queue">Queue position</option>
-                        <option value="name-asc">Name (A-Z)</option>
-                        <option value="name-desc">Name (Z-A)</option>
-                        <option value="author">Author</option>
-                      </select>
-                    </label>
+                        options={[
+                          { value: "selected-first", label: "Selected first" },
+                          { value: "queue", label: "Queue position" },
+                          { value: "name-asc", label: "Name (A-Z)" },
+                          { value: "name-desc", label: "Name (Z-A)" },
+                          { value: "author", label: "Author" },
+                        ]}
+                        onChange={(value) => setNormalRoundSort(value as NormalRoundSort)}
+                        onHoverSfx={playHoverSound}
+                      />
+                    </div>
+                    <div className="block">
+                      <span className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-300">
+                        Duration
+                      </span>
+                      <GameDropdown
+                        value={normalRoundDurationFilter}
+                        options={[
+                          { value: "any", label: "Any duration" },
+                          { value: "short", label: "Short under 3 min" },
+                          { value: "medium", label: "Medium 3-10 min" },
+                          { value: "long", label: "Long over 10 min" },
+                          { value: "unknown", label: "Unknown duration" },
+                        ]}
+                        onChange={(value) => setNormalRoundDurationFilter(value as DurationFilter)}
+                        onHoverSfx={playHoverSound}
+                      />
+                    </div>
                     <label className="block">
                       <span className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-300">
                         Duration
                       </span>
-                      <select
+                      <GameDropdown
                         value={normalRoundDurationFilter}
-                        onChange={(event) =>
-                          setNormalRoundDurationFilter(event.target.value as DurationFilter)
-                        }
-                        onMouseEnter={playHoverSound}
-                        className="w-full rounded-xl border border-purple-300/30 bg-black/45 px-4 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-300/75 focus:ring-2 focus:ring-purple-400/30"
-                      >
-                        <option value="any">Any duration</option>
-                        <option value="short">Short under 3 min</option>
-                        <option value="medium">Medium 3-10 min</option>
-                        <option value="long">Long over 10 min</option>
-                        <option value="unknown">Unknown duration</option>
-                      </select>
+                        options={[
+                          { value: "any", label: "Any duration" },
+                          { value: "short", label: "Short under 3 min" },
+                          { value: "medium", label: "Medium 3-10 min" },
+                          { value: "long", label: "Long over 10 min" },
+                          { value: "unknown", label: "Unknown duration" },
+                        ]}
+                        onChange={(value) => setNormalRoundDurationFilter(value as DurationFilter)}
+                        onHoverSfx={playHoverSound}
+                      />
                     </label>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -1742,10 +2010,11 @@ export function PlaylistWorkshopRoute() {
                                     playSelectSound();
                                     toggleNormalRound(round.id);
                                   }}
-                                  className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${selected
+                                  className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
+                                    selected
                                       ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
                                       : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                                    }`}
+                                  }`}
                                 >
                                   {selected ? "Selected" : "Select"}
                                 </button>
@@ -1817,16 +2086,19 @@ export function PlaylistWorkshopRoute() {
                 <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
                   <div className="mb-4 rounded-xl border border-purple-300/20 bg-purple-500/10 px-4 py-3 text-sm text-purple-50">
                     <p className="font-semibold uppercase tracking-[0.14em] text-purple-200">
-                      How cum rounds work
+                      {abbreviateNsfwText("How cum rounds work", sfwMode)}
                     </p>
                     <p className="mt-2 text-purple-50/90">
-                      Cum rounds play after the main playlist reaches the end. The rounds you enable
-                      here become a random selection pool, and one of them will be chosen when the
-                      run finishes.
+                      {abbreviateNsfwText(
+                        "Cum rounds play after the main playlist reaches the end. The rounds you enable here become a random selection pool, and one of them will be chosen when the run finishes.",
+                        sfwMode
+                      )}
                     </p>
                     <p className="mt-2 text-purple-50/90">
-                      If you leave this list empty, the game falls back to a random installed cum
-                      round instead of ending without one.
+                      {abbreviateNsfwText(
+                        "If you leave this list empty, the game falls back to a random installed cum round instead of ending without one.",
+                        sfwMode
+                      )}
                     </p>
                   </div>
                   <div className="grid gap-2">
@@ -1836,10 +2108,11 @@ export function PlaylistWorkshopRoute() {
                       return (
                         <div
                           key={round.id}
-                          className={`rounded-2xl border px-3 py-3 ${selected
+                          className={`rounded-2xl border px-3 py-3 ${
+                            selected
                               ? "border-emerald-300/60 bg-emerald-500/12 text-emerald-100"
                               : "border-zinc-600 bg-black/35 text-zinc-200"
-                            }`}
+                          }`}
                         >
                           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
                             <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start">
@@ -1871,10 +2144,11 @@ export function PlaylistWorkshopRoute() {
                                 playSelectSound();
                                 toggleCumRound(round.id);
                               }}
-                              className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${selected
+                              className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
+                                selected
                                   ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
                                   : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                                }`}
+                              }`}
                             >
                               {selected ? "Enabled" : "Disabled"}
                             </button>
@@ -1884,7 +2158,7 @@ export function PlaylistWorkshopRoute() {
                     })}
                     {cumRounds.length === 0 && (
                       <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
-                        No cum rounds installed.
+                        {abbreviateNsfwText("No cum rounds installed.", sfwMode)}
                       </div>
                     )}
                   </div>
@@ -1961,10 +2235,11 @@ export function PlaylistWorkshopRoute() {
                                 playSelectSound();
                                 togglePerk(perk.id);
                               }}
-                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${selected
+                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${
+                                selected
                                   ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-emerald-300/65 shadow-[0_0_20px_rgba(16,185,129,0.25)]`
                                   : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
-                                }`}
+                              }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-2">
@@ -1982,10 +2257,11 @@ export function PlaylistWorkshopRoute() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selected
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                                      selected
                                         ? "border-emerald-300/65 bg-emerald-500/25 text-emerald-50"
                                         : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
-                                      }`}
+                                    }`}
                                   >
                                     {selected ? "Active" : "Inactive"}
                                   </span>
@@ -2059,10 +2335,11 @@ export function PlaylistWorkshopRoute() {
                                 playSelectSound();
                                 toggleAntiPerk(perk.id);
                               }}
-                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${selected
+                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${
+                                selected
                                   ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-rose-300/65 shadow-[0_0_20px_rgba(251,113,133,0.25)]`
                                   : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
-                                }`}
+                              }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-2">
@@ -2080,10 +2357,11 @@ export function PlaylistWorkshopRoute() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selected
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                                      selected
                                         ? "border-rose-300/65 bg-rose-500/25 text-rose-50"
                                         : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
-                                      }`}
+                                    }`}
                                   >
                                     {selected ? "Active" : "Inactive"}
                                   </span>
@@ -2110,8 +2388,55 @@ export function PlaylistWorkshopRoute() {
 
               {/* ── Timing & Probabilities section ── */}
               {activeSectionId === "timing" && (
-                <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-black/40 border border-white/10 rounded-xl p-6 backdrop-blur-md">
+                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                      <span>🎲</span> Dice Roll Limits
+                    </h3>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-white/40 uppercase tracking-wider">
+                          Minimum Roll
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={setup.diceMin}
+                          onChange={(e) =>
+                            setSetup((prev) => ({
+                              ...prev,
+                              diceMin: Math.max(1, Math.min(20, Number(e.target.value))),
+                            }))
+                          }
+                          className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-3 focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-white/40 uppercase tracking-wider">
+                          Maximum Roll
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={setup.diceMax}
+                          onChange={(e) =>
+                            setSetup((prev) => ({
+                              ...prev,
+                              diceMax: Math.max(1, Math.min(20, Number(e.target.value))),
+                            }))
+                          }
+                          className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-3 focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-white/40 mt-4 leading-relaxed italic">
+                      Controls the range of the dice used for movement. Default is 1 to 6.
+                    </p>
+                  </div>
+
+                  <div className="bg-black/40 border border-white/10 rounded-xl p-6 backdrop-blur-md">
                     <NumberInput
                       label="Round Start Delay (sec)"
                       description="Time to wait before each round starts. Set to 0 for instant transitions. Default is 20 seconds."
@@ -2238,8 +2563,11 @@ export function PlaylistWorkshopRoute() {
                       }
                     />
                     <NumberInput
-                      label="Cum Round Bonus Score"
-                      description="Bonus score granted when a cum round is completed successfully. This affects scoring only and does not influence trigger probabilities."
+                      label={abbreviateNsfwText("Cum Round Bonus Score", sfwMode)}
+                      description={abbreviateNsfwText(
+                        "Bonus score granted when a cum round is completed successfully. This affects scoring only and does not influence trigger probabilities.",
+                        sfwMode
+                      )}
                       value={setup.scorePerCumRoundSuccess}
                       min={0}
                       max={100000}
@@ -2388,9 +2716,9 @@ export function PlaylistWorkshopRoute() {
                 setImportedPlaylistReview(
                   resolutionModalState.analysis.issues.length > 0
                     ? {
-                      playlistId: imported.playlist.id,
-                      analysis: resolutionModalState.analysis,
-                    }
+                        playlistId: imported.playlist.id,
+                        analysis: resolutionModalState.analysis,
+                      }
                     : null
                 );
                 setImportNotice(
@@ -2485,10 +2813,11 @@ export function PlaylistWorkshopRoute() {
       {importNotice && (
         <div className="fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 animate-entrance">
           <div
-            className={`rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${importNotice.toLowerCase().includes("fail")
+            className={`rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${
+              importNotice.toLowerCase().includes("fail")
                 ? "border-rose-300/40 bg-rose-950/85 text-rose-100 shadow-rose-500/20"
                 : "border-emerald-300/40 bg-emerald-950/85 text-emerald-100 shadow-emerald-500/20"
-              }`}
+            }`}
           >
             {importNotice}
           </div>
@@ -2636,7 +2965,7 @@ function WorkshopRoundPreview({
               if (!video) return;
               const { startSec } = resolvePreviewWindow(video);
               video.currentTime = startSec;
-              void video.play().catch(() => { });
+              void video.play().catch(() => {});
             }}
             onTimeUpdate={() => {
               if (!isPreviewActive) return;
@@ -2650,7 +2979,7 @@ function WorkshopRoundPreview({
               if (endSec !== null && video.currentTime >= endSec - 0.04) {
                 video.currentTime = startSec;
                 if (video.paused) {
-                  void video.play().catch(() => { });
+                  void video.play().catch(() => {});
                 }
               }
             }}
@@ -2660,7 +2989,7 @@ function WorkshopRoundPreview({
               if (!video) return;
               const { startSec } = resolvePreviewWindow(video);
               video.currentTime = startSec;
-              void video.play().catch(() => { });
+              void video.play().catch(() => {});
             }}
           />
         </SfwGuard>
@@ -2702,12 +3031,13 @@ function HeaderAction({
       onClick={() => {
         void onClick();
       }}
-      className={`rounded-xl border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] ${disabled
+      className={`rounded-xl border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] ${
+        disabled
           ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
           : emphasis === "primary"
             ? "border-emerald-300/45 bg-emerald-500/20 text-emerald-100 hover:border-emerald-200/80 hover:bg-emerald-500/35"
             : "border-violet-300/45 bg-violet-500/20 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/35"
-        }`}
+      }`}
     >
       {label}
     </button>
@@ -2824,10 +3154,11 @@ function NewPlaylistDialog({
           <button
             type="button"
             onClick={() => setMode("fully-random")}
-            className={`rounded-xl border px-4 py-3 text-left text-sm ${mode === "fully-random"
+            className={`rounded-xl border px-4 py-3 text-left text-sm ${
+              mode === "fully-random"
                 ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
                 : "border-zinc-600 bg-black/35 text-zinc-200"
-              }`}
+            }`}
           >
             <div className="font-semibold">Fully Random</div>
             <div className="mt-1 text-xs text-zinc-300">
@@ -2837,10 +3168,11 @@ function NewPlaylistDialog({
           <button
             type="button"
             onClick={() => setMode("progressive-random")}
-            className={`rounded-xl border px-4 py-3 text-left text-sm ${mode === "progressive-random"
+            className={`rounded-xl border px-4 py-3 text-left text-sm ${
+              mode === "progressive-random"
                 ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
                 : "border-zinc-600 bg-black/35 text-zinc-200"
-              }`}
+            }`}
           >
             <div className="font-semibold">Progressive Random</div>
             <div className="mt-1 text-xs text-zinc-300">
@@ -2927,10 +3259,11 @@ const ActionMenu = forwardRef<
               void item.onClick();
               onToggle();
             }}
-            className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${item.tone === "danger"
+            className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${
+              item.tone === "danger"
                 ? "border-rose-300/45 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
                 : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
-              }`}
+            }`}
           >
             {item.label}
           </button>
@@ -2970,8 +3303,9 @@ function NumberInput({
         <span className="mb-2 block text-xs leading-5 text-zinc-400">{description}</span>
       ) : null}
       <div
-        className={`flex items-center rounded-xl border bg-black/45 p-1 ${disabled ? "border-zinc-700 opacity-50" : "border-purple-300/30"
-          }`}
+        className={`flex items-center rounded-xl border bg-black/45 p-1 ${
+          disabled ? "border-zinc-700 opacity-50" : "border-purple-300/30"
+        }`}
       >
         <button
           type="button"

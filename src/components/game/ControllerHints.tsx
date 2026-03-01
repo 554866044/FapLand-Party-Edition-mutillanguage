@@ -46,8 +46,11 @@ function ControllerHints({
   useEffect(() => {
     if (!enabled) {
       setHasController(false);
-      return;
     }
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
 
     const updateHasController = () => {
       const gamepads = navigator.getGamepads?.();
@@ -80,7 +83,9 @@ function ControllerHints({
   if (!enabled || !hasController) return null;
 
   return (
-    <div className={`pointer-events-none fixed right-4 z-[40] flex flex-col gap-1 ${bottomClassName}`}>
+    <div
+      className={`pointer-events-none fixed right-4 z-[40] flex flex-col gap-1 ${bottomClassName}`}
+    >
       {hints.map((hint) => (
         <button
           key={hint.label}

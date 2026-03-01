@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { PlaylistMapPreview } from "../components/PlaylistMapPreview";
@@ -7,6 +8,7 @@ import { PlaylistLaunchTransition } from "../components/game/PlaylistLaunchTrans
 import { useControllerSurface } from "../controller";
 import { buildPlaylistWebsiteCacheSummary } from "../features/webVideo/cacheStatus";
 import type { PlaylistConfig } from "../game/playlistSchema";
+import { getSaveModeEmoji } from "../game/saveMode";
 import { describePlaylistBoard } from "../game/playlistStats";
 import { resolvePortableRoundRef } from "../game/playlistRuntime";
 import { db, type InstalledRound } from "../services/db";
@@ -53,16 +55,21 @@ const estimatePlaylistDurationSec = (config: PlaylistConfig, installedRounds: In
 };
 
 const PLAYLIST_LAUNCH_DURATION_MS = 2500;
+const SinglePlayerSetupSearchSchema = z.object({
+  notice: z.string().optional(),
+});
 
 type LaunchState =
   | { kind: "idle" }
   | { kind: "animating"; startedAt: number };
 
 export const Route = createFileRoute("/single-player-setup")({
+  validateSearch: (search) => SinglePlayerSetupSearchSchema.parse(search),
   loader: async () => {
-    const [availablePlaylists, installedRounds] = await Promise.all([
+    const [availablePlaylists, installedRounds, savedRuns] = await Promise.all([
       playlists.list(),
       db.round.findInstalled(),
+      db.singlePlayerSaves.list(),
     ]);
     const activePlaylist = availablePlaylists.length > 0 ? await playlists.getActive() : null;
 
@@ -70,6 +77,7 @@ export const Route = createFileRoute("/single-player-setup")({
       availablePlaylists: withActivePlaylist(availablePlaylists, activePlaylist),
       activePlaylist,
       installedRounds,
+      savedRuns,
     };
   },
   component: SinglePlayerSetupRoute,
@@ -77,14 +85,16 @@ export const Route = createFileRoute("/single-player-setup")({
 
 export function SinglePlayerSetupRoute() {
   const navigate = useNavigate();
-  const { availablePlaylists, activePlaylist, installedRounds } = Route.useLoaderData() as {
+  const search = SinglePlayerSetupSearchSchema.parse(Route.useSearch());
+  const { availablePlaylists, activePlaylist, installedRounds, savedRuns } = Route.useLoaderData() as {
     availablePlaylists: StoredPlaylist[];
     activePlaylist: StoredPlaylist | null;
     installedRounds: InstalledRound[];
+    savedRuns: Awaited<ReturnType<typeof db.singlePlayerSaves.list>>;
   };
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(activePlaylist?.id ?? availablePlaylists[0]?.id ?? null);
   const [pendingAction, setPendingAction] = useState<"start" | "workshop" | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(search.notice ?? null);
   const [launchState, setLaunchState] = useState<LaunchState>({ kind: "idle" });
   const [launchProgress, setLaunchProgress] = useState(0);
   const scopeRef = useRef<HTMLDivElement | null>(null);
@@ -109,6 +119,10 @@ export function SinglePlayerSetupRoute() {
     () => buildPlaylistWebsiteCacheSummary(availablePlaylists, installedRounds),
     [availablePlaylists, installedRounds]
   );
+  const savedRunByPlaylistId = useMemo(
+    () => new Map(savedRuns.map((run) => [run.playlistId, run])),
+    [savedRuns]
+  );
   const selectedPlaylistDurationSec = useMemo(
     () => (selectedPlaylist ? estimatePlaylistDurationSec(selectedPlaylist.config, installedRounds) : 0),
     [installedRounds, selectedPlaylist],
@@ -125,6 +139,8 @@ export function SinglePlayerSetupRoute() {
         pendingRoundNames: [],
       };
   const isLaunchAnimating = launchState.kind === "animating";
+  const selectedSavedRun = selectedPlaylist ? savedRunByPlaylistId.get(selectedPlaylist.id) ?? null : null;
+  const hasResumeRun = Boolean(selectedSavedRun);
 
   useEffect(() => {
     if (launchState.kind !== "animating") {
@@ -157,6 +173,7 @@ export function SinglePlayerSetupRoute() {
     setPendingAction("start");
     setNotice(null);
     try {
+      await db.singlePlayerSaves.deleteByPlaylist(selectedPlaylist.id);
       await activateSelectedPlaylist();
       playPlaylistLaunchSound();
       setLaunchState({ kind: "animating", startedAt: performance.now() });
@@ -179,13 +196,41 @@ export function SinglePlayerSetupRoute() {
     }
   };
 
+  const handleResume = async () => {
+    if (pendingAction || !selectedPlaylist || !selectedSavedRun || selectedPlaylistCacheSummary.hasPending) return;
+    setPendingAction("start");
+    setNotice(null);
+    try {
+      await activateSelectedPlaylist();
+      playPlaylistLaunchSound();
+      setLaunchState({ kind: "animating", startedAt: performance.now() });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, PLAYLIST_LAUNCH_DURATION_MS);
+      });
+      await navigate({
+        to: "/game",
+        search: {
+          playlistId: selectedPlaylist.id,
+          launchNonce: Date.now(),
+          resume: true,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to resume selected playlist", error);
+      setLaunchState({ kind: "idle" });
+      setNotice("Failed to resume selected playlist.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   const handleOpenWorkshop = async () => {
     if (pendingAction) return;
     setPendingAction("workshop");
     setNotice(null);
     try {
       await activateSelectedPlaylist();
-      await navigate({ to: "/playlist-workshop" });
+      await navigate({ to: "/playlist-workshop", search: { open: "active" } });
     } catch (error) {
       console.error("Failed to open playlist workshop", error);
       setNotice("Failed to open playlist workshop.");
@@ -327,6 +372,8 @@ export function SinglePlayerSetupRoute() {
                 const isLinear = summary.modeLabel === "Linear";
                 const cacheSummary = playlistCacheSummaryById.get(playlist.id);
                 const isCachePending = cacheSummary?.hasPending ?? false;
+                const savedRun = savedRunByPlaylistId.get(playlist.id) ?? null;
+                const saveEmoji = savedRun ? getSaveModeEmoji(savedRun.saveMode) : "";
 
                 return (
                   <button
@@ -346,6 +393,11 @@ export function SinglePlayerSetupRoute() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="truncate text-sm font-semibold text-zinc-100">{playlist.name}</span>
                         <div className="flex shrink-0 items-center gap-2">
+                          {savedRun && (
+                            <span className="rounded-full border border-cyan-300/45 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-100">
+                              {saveEmoji ? `${saveEmoji} ` : ""}Resume
+                            </span>
+                          )}
                           {isCachePending && (
                             <span className="rounded-full border border-amber-300/45 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100">
                               Caching ongoing
@@ -442,12 +494,23 @@ export function SinglePlayerSetupRoute() {
                         Caching ongoing
                       </span>
                     )}
+                    {selectedSavedRun && (
+                      <span className="rounded-full border border-cyan-300/45 bg-cyan-500/12 px-3 py-1.5 text-cyan-100">
+                        {getSaveModeEmoji(selectedSavedRun.saveMode)} Resume available
+                      </span>
+                    )}
                   </div>
                   {selectedPlaylistCacheSummary.hasPending && (
                     <p className="mt-3 text-sm text-amber-100/85">
                       {selectedPlaylistCacheSummary.pendingRoundCount} required web round
                       {selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are still caching
                       in the background. Playback unlocks automatically when caching finishes.
+                    </p>
+                  )}
+                  {selectedSavedRun && (
+                    <p className="mt-3 text-sm text-cyan-100/85">
+                      {getSaveModeEmoji(selectedSavedRun.saveMode)} A saved run is available for this playlist.
+                      Resume continues the existing run. Starting fresh overwrites that save.
                     </p>
                   )}
                   {notice && (
@@ -463,13 +526,17 @@ export function SinglePlayerSetupRoute() {
                           Primary Action
                         </span>
                         <span className="rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2 py-1 text-[9px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.18em] text-emerald-100">
-                          Start Here
+                          {hasResumeRun ? "Resume Here" : "Start Here"}
                         </span>
                       </div>
                       <MenuButton
                         label={
                           selectedPlaylistCacheSummary.hasPending
                             ? "Caching Ongoing"
+                            : hasResumeRun
+                              ? pendingAction === "start"
+                                ? "Resuming..."
+                                : "Resume Run"
                             : pendingAction === "start"
                               ? "Starting..."
                               : "Start Selected Playlist"
@@ -477,7 +544,9 @@ export function SinglePlayerSetupRoute() {
                         subLabel={
                           selectedPlaylistCacheSummary.hasPending
                             ? "Wait until the required web rounds finish caching"
-                            : "Fastest path into a round"
+                            : hasResumeRun
+                              ? "Continue the saved run for this playlist"
+                              : "Fastest path into a round"
                         }
                         badge={selectedPlaylistCacheSummary.hasPending ? "Blocked" : undefined}
                         statusTone={selectedPlaylistCacheSummary.hasPending ? "warning" : "default"}
@@ -486,11 +555,24 @@ export function SinglePlayerSetupRoute() {
                         onHover={playHoverSound}
                         onClick={() => {
                           playSelectSound();
+                          void (hasResumeRun ? handleResume() : handleStart());
+                        }}
+                        controllerFocusId={hasResumeRun ? "single-resume" : "single-start"}
+                      />
+                    </div>
+                    {hasResumeRun && (
+                      <MenuButton
+                        label={pendingAction === "start" ? "Starting..." : "Start Selected Playlist"}
+                        subLabel="Begin a fresh run and replace the saved one"
+                        disabled={selectedPlaylistCacheSummary.hasPending}
+                        onHover={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
                           void handleStart();
                         }}
                         controllerFocusId="single-start"
                       />
-                    </div>
+                    )}
                     <MenuButton
                       label={pendingAction === "workshop" ? "Opening Workshop..." : "Open Playlist Workshop"}
                       subLabel="Edit this playlist before playing"

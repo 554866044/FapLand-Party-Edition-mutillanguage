@@ -1,6 +1,8 @@
 import React from "react";
 import { playHoverSound } from "../../../utils/audio";
+import { useSfwMode } from "../../../hooks/useSfwMode";
 import type { InstalledRound } from "../../../services/db";
+import { abbreviateNsfwText } from "../../../utils/sfwText";
 import type { EditorGraphConfig } from "../EditorState";
 import { resolvePortableRoundRef } from "../../../game/playlistRuntime";
 import type { PerkDefinition } from "../../../game/types";
@@ -10,6 +12,8 @@ interface GraphSettingsPanelProps {
   perkPool: EditorGraphConfig["perkPool"];
   probabilityScaling: EditorGraphConfig["probabilityScaling"];
   economy: EditorGraphConfig["economy"];
+  dice: EditorGraphConfig["dice"];
+  saveMode: EditorGraphConfig["saveMode"];
   perkOptions: ReadonlyArray<PerkDefinition>;
   antiPerkOptions: ReadonlyArray<PerkDefinition>;
   cumRoundRefs: EditorGraphConfig["cumRoundRefs"];
@@ -21,6 +25,8 @@ interface GraphSettingsPanelProps {
     key: keyof EditorGraphConfig["probabilityScaling"],
     value: number
   ) => void;
+  onSetDiceLimit: (key: keyof EditorGraphConfig["dice"], value: number) => void;
+  onSetSaveMode: (value: EditorGraphConfig["saveMode"]) => void;
   onSetCumRoundBonusScore: (value: number) => void;
   onTogglePerk: (perkId: string) => void;
   onToggleAntiPerk: (perkId: string) => void;
@@ -60,13 +66,12 @@ function renderPerkToggleList(
             key={perk.id}
             type="button"
             aria-pressed={selected}
-            className={`block w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-all ${
-              selected
+            className={`block w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-all ${selected
                 ? accent === "emerald"
                   ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-100"
                   : "border-rose-400/45 bg-rose-500/10 text-rose-100"
                 : "border-zinc-700/40 text-zinc-400 hover:border-zinc-600/50 hover:text-zinc-300"
-            }`}
+              }`}
             onMouseEnter={playHoverSound}
             onClick={() => onToggle(perk.id)}
           >
@@ -80,13 +85,12 @@ function renderPerkToggleList(
                 )}
               </span>
               <span
-                className={`flex-shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-                  selected
+                className={`flex-shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${selected
                     ? accent === "emerald"
                       ? "border-emerald-300/45 bg-emerald-500/20 text-emerald-100"
                       : "border-rose-300/45 bg-rose-500/20 text-rose-100"
                     : "border-zinc-700/50 bg-zinc-900/70 text-zinc-400"
-                }`}
+                  }`}
               >
                 {selected ? "Active" : "Inactive"}
               </span>
@@ -104,6 +108,8 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
     perkPool,
     probabilityScaling,
     economy,
+    dice,
+    saveMode,
     perkOptions,
     antiPerkOptions,
     cumRoundRefs,
@@ -112,6 +118,8 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
     selectedCumRoundIdSet,
     onSetPerkTriggerChance,
     onSetProbabilityScaling,
+    onSetDiceLimit,
+    onSetSaveMode,
     onSetCumRoundBonusScore,
     onTogglePerk,
     onToggleAntiPerk,
@@ -120,8 +128,98 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
     onToggleCumRound,
     onMoveCumRound,
     onRemoveCumRoundByIndex,
-  }) => (
+  }) => {
+    const sfwMode = useSfwMode();
+
+    return (
     <div className="space-y-3 p-3">
+      <div className="space-y-3 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+            Dice Roll Limits
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            Controls the range of the dice used for movement.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block space-y-1">
+            <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+              Minimum Roll
+            </span>
+            <input
+              aria-label="Minimum Roll"
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={dice.min}
+              onChange={(event) =>
+                onSetDiceLimit("min", Number.parseInt(event.target.value, 10) || 1)
+              }
+              className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+              Maximum Roll
+            </span>
+            <input
+              aria-label="Maximum Roll"
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={dice.max}
+              onChange={(event) =>
+                onSetDiceLimit("max", Number.parseInt(event.target.value, 10) || 6)
+              }
+              className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+            Save Mode
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            Save-enabled runs are marked as assisted in local highscores and run history.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { value: "none" as const, label: "No Saves" },
+            { value: "checkpoint" as const, label: "Only Checkpoint" },
+            { value: "everywhere" as const, label: "Everywhere", fullWidth: true },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => onSetSaveMode(option.value)}
+              className={`min-w-0 rounded-lg border px-2.5 py-2 text-sm leading-tight whitespace-normal transition ${
+                option.fullWidth ? "col-span-2 " : ""
+              }${
+                saveMode === option.value
+                  ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100"
+                  : "border-zinc-700/50 bg-zinc-950 text-zinc-300"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {saveMode !== "none" && (
+          <p className="rounded-lg border border-amber-300/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            {saveMode === "checkpoint" ? "🚩" : "💾"} Warning: runs from this playlist are marked
+            as assisted on the highscore and in run history.
+          </p>
+        )}
+      </div>
+
       <div className="space-y-2 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
@@ -261,10 +359,10 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
           </label>
           <label className="block space-y-1 sm:col-span-2">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Cum round bonus score
+              {abbreviateNsfwText("Cum round bonus score", sfwMode)}
             </span>
             <input
-              aria-label="Cum round bonus score"
+              aria-label={abbreviateNsfwText("Cum round bonus score", sfwMode)}
               type="number"
               min={0}
               max={100000}
@@ -275,7 +373,9 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Score awarded when a cum round succeeds.</p>
+            <p className="text-[10px] text-zinc-600">
+              {abbreviateNsfwText("Score awarded when a cum round succeeds.", sfwMode)}
+            </p>
           </label>
         </div>
       </div>
@@ -354,7 +454,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
 
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-          Cum Rounds
+          {abbreviateNsfwText("Cum Rounds", sfwMode)}
         </p>
         <p className="mt-1 text-[11px] text-zinc-600">
           Landing on any end node queues these rounds in order.
@@ -365,7 +465,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       <div className="space-y-1.5">
         {cumRoundRefs.length === 0 && (
           <p className="rounded-lg border border-dashed border-zinc-700/50 px-3 py-3 text-center text-[11px] text-zinc-600">
-            No cum rounds selected.
+            {abbreviateNsfwText("No cum rounds selected.", sfwMode)}
           </p>
         )}
         {cumRoundRefs.map((ref, index) => {
@@ -428,11 +528,10 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
             <button
               key={round.id}
               type="button"
-              className={`block w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-all ${
-                selected
+              className={`block w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-all ${selected
                   ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-200"
                   : "border-zinc-700/40 text-zinc-400 hover:border-zinc-600/50 hover:text-zinc-300"
-              }`}
+                }`}
               onMouseEnter={playHoverSound}
               onClick={() => onToggleCumRound(round)}
             >
@@ -447,12 +546,13 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
         })}
         {cumRounds.length === 0 && (
           <p className="rounded-lg border border-dashed border-zinc-700/50 px-3 py-3 text-center text-[11px] text-zinc-600">
-            No installed cum rounds found.
+            {abbreviateNsfwText("No installed cum rounds found.", sfwMode)}
           </p>
         )}
       </div>
     </div>
-  )
+    );
+  }
 );
 
 GraphSettingsPanel.displayName = "GraphSettingsPanel";

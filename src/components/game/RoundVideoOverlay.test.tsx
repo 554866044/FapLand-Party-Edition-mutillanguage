@@ -150,7 +150,7 @@ function renderOverlay({
       onCompleteBoardSequence={onCompleteBoardSequence}
       allowDebugRoundControls={allowDebugRoundControls}
       initialShowAntiPerkBeatbar={initialShowAntiPerkBeatbar}
-    />,
+    />
   );
 }
 
@@ -173,7 +173,9 @@ describe("RoundVideoOverlay", () => {
     vi.mocked(handyRuntime.stopHandyPlayback).mockClear();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async () => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
   });
 
@@ -187,7 +189,9 @@ describe("RoundVideoOverlay", () => {
   it("shows a compact lower-left playback timer during normal playback", async () => {
     renderOverlay();
 
-    expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
+    expect((await screen.findByTestId("round-playback-timer")).textContent).toContain(
+      "0:00 / 0:00"
+    );
     expect(screen.queryByText("Segment: Main")).toBeNull();
   });
 
@@ -219,14 +223,11 @@ describe("RoundVideoOverlay", () => {
     await waitFor(() => {
       expect(vi.mocked(booru.getCachedBooruMediaForDisplay)).toHaveBeenCalledWith(
         "animated gif webm",
-        18,
+        18
       );
     });
     await waitFor(() => {
-      expect(vi.mocked(booru.refreshBooruMediaCache)).toHaveBeenCalledWith(
-        "animated gif webm",
-        18,
-      );
+      expect(vi.mocked(booru.refreshBooruMediaCache)).toHaveBeenCalledWith("animated gif webm", 18);
     });
   });
 
@@ -256,7 +257,7 @@ describe("RoundVideoOverlay", () => {
         intermediaryLoadingDurationSec={10}
         intermediaryReturnPauseSec={4}
         onFinishRound={vi.fn()}
-      />,
+      />
     );
 
     expect(vi.mocked(booru.getCachedBooruMediaForDisplay)).toHaveBeenCalledTimes(1);
@@ -277,10 +278,12 @@ describe("RoundVideoOverlay", () => {
         intermediaryLoadingDurationSec={10}
         intermediaryReturnPauseSec={4}
         onFinishRound={vi.fn()}
-      />,
+      />
     );
 
-    expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
+    expect((await screen.findByTestId("round-playback-timer")).textContent).toContain(
+      "0:00 / 0:00"
+    );
   });
 
   it("reveals blocked round video only after confirmation and resets for the next round", async () => {
@@ -314,7 +317,7 @@ describe("RoundVideoOverlay", () => {
         intermediaryLoadingDurationSec={10}
         intermediaryReturnPauseSec={4}
         onFinishRound={vi.fn()}
-      />,
+      />
     );
 
     expect(screen.getByText("Safe Mode Enabled")).not.toBeNull();
@@ -337,7 +340,7 @@ describe("RoundVideoOverlay", () => {
         onClose={onClose}
         cumRequestSignal={0}
         showCumRoundOutcomeMenuOnCumRequest
-      />,
+      />
     );
 
     view.rerender(
@@ -353,7 +356,7 @@ describe("RoundVideoOverlay", () => {
         onClose={onClose}
         cumRequestSignal={1}
         showCumRoundOutcomeMenuOnCumRequest
-      />,
+      />
     );
 
     const proceedButton = await screen.findByRole("button", { name: "Proceed round" });
@@ -386,7 +389,7 @@ describe("RoundVideoOverlay", () => {
         onClose={onClose}
         cumRequestSignal={0}
         showCumRoundOutcomeMenuOnCumRequest
-      />,
+      />
     );
 
     secondView.rerender(
@@ -402,7 +405,7 @@ describe("RoundVideoOverlay", () => {
         onClose={onClose}
         cumRequestSignal={1}
         showCumRoundOutcomeMenuOnCumRequest
-      />,
+      />
     );
 
     (await screen.findByRole("button", { name: "Close" })).click();
@@ -523,7 +526,11 @@ describe("RoundVideoOverlay", () => {
   });
 
   it("hides the beatbar when the setting is disabled", async () => {
-    renderOverlay({ activeRound: null, boardSequence: "milker", initialShowAntiPerkBeatbar: false });
+    renderOverlay({
+      activeRound: null,
+      boardSequence: "milker",
+      initialShowAntiPerkBeatbar: false,
+    });
     await waitFor(() => {
       expect(screen.queryByTestId("anti-perk-beatbar")).toBeNull();
     });
@@ -578,7 +585,7 @@ describe("RoundVideoOverlay", () => {
         onFinishRound={vi.fn()}
         boardSequence="jackhammer"
         initialShowAntiPerkBeatbar
-      />,
+      />
     );
 
     await waitFor(() => {
@@ -625,7 +632,8 @@ describe("RoundVideoOverlay", () => {
           diceMin: 1,
           diceMax: 6,
           roundPauseMs: 0,
-          intermediaryProbability: 0,
+          perkFrequency: 0,
+          perkLuck: 0,
         },
       },
     });
@@ -639,7 +647,9 @@ describe("RoundVideoOverlay", () => {
   it("keeps generated Handy sync marked fresh during a jackhammer sequence", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
 
     mocks.handy.connectionKey = "conn-key";
@@ -669,13 +679,13 @@ describe("RoundVideoOverlay", () => {
     });
 
     const staleResetCountAtSync = mocks.handy.setSyncStatus.mock.calls.filter(
-      ([value]) => value?.synced === false && value?.error === null,
+      ([value]) => value?.synced === false && value?.error === null
     ).length;
 
     await vi.advanceTimersByTimeAsync(2_500);
 
     const staleResetCountAfter = mocks.handy.setSyncStatus.mock.calls.filter(
-      ([value]) => value?.synced === false && value?.error === null,
+      ([value]) => value?.synced === false && value?.error === null
     ).length;
 
     expect(staleResetCountAfter).toBe(staleResetCountAtSync);
@@ -684,7 +694,9 @@ describe("RoundVideoOverlay", () => {
   it("does not play beatbar impact sounds during manual anti-perk overlays", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
     const definition = getAntiPerkSequenceDefinition("jackhammer");
@@ -697,14 +709,18 @@ describe("RoundVideoOverlay", () => {
   it("keeps the manual beatbar silent before and after the first downstroke impact", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
 
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
 
     const definition = getAntiPerkSequenceDefinition("jackhammer");
     const actions = definition.createActions(definition.durationSec * 1000, () => 0.37);
-    const firstImpactAt = extractBeatbarMotionEvents(actions).find((event) => event.kind === "downstroke")?.at;
+    const firstImpactAt = extractBeatbarMotionEvents(actions).find(
+      (event) => event.kind === "downstroke"
+    )?.at;
 
     expect(firstImpactAt).toBeTypeOf("number");
 
@@ -718,7 +734,9 @@ describe("RoundVideoOverlay", () => {
   it("does not play anti-perk beat sounds when only the Handy position ball is shown", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     mocks.handy.connected = true;
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
@@ -732,7 +750,9 @@ describe("RoundVideoOverlay", () => {
   it("stops beatbar activity once the sequence finishes", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
+    );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
     const callsBefore = mocks.playAntiPerkBeatSound.mock.calls.length;
@@ -777,7 +797,7 @@ describe("RoundVideoOverlay", () => {
         boardSequence="jackhammer"
         onCompleteBoardSequence={secondComplete}
         initialShowAntiPerkBeatbar
-      />,
+      />
     );
 
     expect(screen.getByText("14")).not.toBeNull();

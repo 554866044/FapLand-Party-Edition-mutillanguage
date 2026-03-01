@@ -30,7 +30,7 @@ function pushMove(
   state: SequenceState,
   totalDurationMs: number,
   targetPos: number,
-  requestedDurationMs: number,
+  requestedDurationMs: number
 ): boolean {
   if (state.currentTimeMs >= totalDurationMs) return false;
 
@@ -45,9 +45,7 @@ function pushMove(
     // Round toward the current position so a truncated tail move cannot turn
     // into a tiny last-millisecond jump that exceeds the device travel limit.
     const quantizedPartialPos =
-      rawPartialPos >= state.currentPos
-        ? Math.floor(rawPartialPos)
-        : Math.ceil(rawPartialPos);
+      rawPartialPos >= state.currentPos ? Math.floor(rawPartialPos) : Math.ceil(rawPartialPos);
     const partialPos = clamp(quantizedPartialPos, 0, 100);
     state.currentTimeMs = totalDurationMs;
     state.currentPos = partialPos;
@@ -61,15 +59,6 @@ function pushMove(
   return true;
 }
 
-function pushRelativeMove(
-  state: SequenceState,
-  totalDurationMs: number,
-  deltaPos: number,
-  requestedDurationMs: number,
-): boolean {
-  return pushMove(state, totalDurationMs, state.currentPos + deltaPos, requestedDurationMs);
-}
-
 function pushMewtwoBuzz(
   state: SequenceState,
   totalDurationMs: number,
@@ -77,10 +66,12 @@ function pushMewtwoBuzz(
   offsets: number[],
   minStepMs: number,
   maxStepMs: number,
-  rng: () => number,
+  rng: () => number
 ): boolean {
   for (const offset of offsets) {
-    if (!pushMove(state, totalDurationMs, anchorPos + offset, randomRange(rng, minStepMs, maxStepMs))) {
+    if (
+      !pushMove(state, totalDurationMs, anchorPos + offset, randomRange(rng, minStepMs, maxStepMs))
+    ) {
       return false;
     }
   }
@@ -91,7 +82,7 @@ function pushMilkerLadder(
   state: SequenceState,
   totalDurationMs: number,
   topPos: number,
-  rng: () => number,
+  rng: () => number
 ): boolean {
   let currentTop = topPos;
   const rungs = 3 + Math.floor(rng() * 3);
@@ -112,7 +103,7 @@ function pushMilkerVibration(
   state: SequenceState,
   totalDurationMs: number,
   anchorPos: number,
-  rng: () => number,
+  rng: () => number
 ): boolean {
   const amplitude = randomRange(rng, 4, 9);
   const offsets = [0, amplitude, -amplitude * 0.65, amplitude * 0.45, -amplitude * 0.35, 0];
@@ -122,7 +113,7 @@ function pushMilkerVibration(
 function buildJackhammerSequence(
   state: SequenceState,
   totalDurationMs: number,
-  rng: () => number,
+  rng: () => number
 ): void {
   while (state.currentTimeMs < totalDurationMs) {
     const burstCycles = 4 + Math.floor(rng() * 4);
@@ -139,32 +130,13 @@ function buildJackhammerSequence(
 
       if (rng() > 0.58) {
         const buzzAnchor = Math.max(6, Math.min(20, accentLow + randomRange(rng, 1, 6)));
-        if (
-          !pushMewtwoBuzz(
-            state,
-            totalDurationMs,
-            buzzAnchor,
-            [0, -4, 2, -6, 0],
-            30,
-            44,
-            rng,
-          )
-        ) return;
+        if (!pushMewtwoBuzz(state, totalDurationMs, buzzAnchor, [0, -4, 2, -6, 0], 30, 44, rng))
+          return;
       }
 
       if (rng() > 0.68) {
         const topAnchor = Math.min(92, Math.max(74, accentHigh - randomRange(rng, 4, 8)));
-        if (
-          !pushMewtwoBuzz(
-            state,
-            totalDurationMs,
-            topAnchor,
-            [0, 8, 0],
-            30,
-            42,
-            rng,
-          )
-        ) return;
+        if (!pushMewtwoBuzz(state, totalDurationMs, topAnchor, [0, 8, 0], 30, 42, rng)) return;
       }
     }
   }
@@ -173,7 +145,7 @@ function buildJackhammerSequence(
 function buildMilkerSequence(
   state: SequenceState,
   totalDurationMs: number,
-  rng: () => number,
+  rng: () => number
 ): void {
   while (state.currentTimeMs < totalDurationMs) {
     const preload = randomRange(rng, 20, 34);
@@ -192,7 +164,10 @@ function buildMilkerSequence(
     }
 
     if (rng() > 0.52) {
-      const vibrationAnchor = Math.max(30, Math.min(90, state.currentPos - randomRange(rng, 4, 10)));
+      const vibrationAnchor = Math.max(
+        30,
+        Math.min(90, state.currentPos - randomRange(rng, 4, 10))
+      );
       if (!pushMove(state, totalDurationMs, vibrationAnchor, randomRange(rng, 40, 72))) return;
       if (!pushMilkerVibration(state, totalDurationMs, vibrationAnchor, rng)) return;
     } else {
@@ -209,7 +184,7 @@ function buildMilkerSequence(
 function buildNoRestSequence(
   state: SequenceState,
   totalDurationMs: number,
-  rng: () => number,
+  rng: () => number
 ): void {
   while (state.currentTimeMs < totalDurationMs) {
     const low = randomRange(rng, 28, 36);
@@ -225,7 +200,7 @@ function buildNoRestSequence(
 export function createGeneratedSequenceActions(
   durationMs: number,
   mode: GeneratedSequenceMode,
-  rng: () => number = Math.random,
+  rng: () => number = Math.random
 ): FunscriptAction[] {
   const clampedDurationMs = Math.max(2000, Math.floor(durationMs));
   const state: SequenceState = {
@@ -249,7 +224,10 @@ export function createGeneratedSequenceActions(
   return state.actions;
 }
 
-export function getGeneratedSequenceTravelSpeedMmPerSec(from: FunscriptAction, to: FunscriptAction): number {
+export function getGeneratedSequenceTravelSpeedMmPerSec(
+  from: FunscriptAction,
+  to: FunscriptAction
+): number {
   const dtSec = (to.at - from.at) / 1000;
   if (dtSec <= 0) return 0;
   const distanceMm = (Math.abs(to.pos - from.pos) / 100) * DEVICE_MAX_STROKE_MM;

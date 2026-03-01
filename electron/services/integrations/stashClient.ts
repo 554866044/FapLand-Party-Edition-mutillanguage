@@ -134,7 +134,7 @@ async function ensureLoginSessionCookie(source: ExternalSource, forceRefresh = f
   return cookieHeader;
 }
 
-async function buildAuthHeaders(source: ExternalSource, forceRefreshLogin = false): Promise<Record<string, string>> {
+export async function buildAuthHeaders(source: ExternalSource, forceRefreshLogin = false): Promise<Record<string, string>> {
   if (source.authMode === "none") {
     return {};
   }

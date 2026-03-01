@@ -228,6 +228,7 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       audio.removeEventListener("ended", handleEnded);
       audioRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentTime is intentionally read from closure to avoid recreating audio element on every time update
   }, [persist]);
 
   useEffect(() => {

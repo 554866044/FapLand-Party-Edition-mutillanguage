@@ -3,7 +3,9 @@ import type { BoardField } from "../../game/types";
 import type { InstalledRound } from "../../services/db";
 import { buildTileDurationLabelByFieldId } from "./tileDurationLabels";
 
-function createRound(overrides: Partial<InstalledRound> & Pick<InstalledRound, "id" | "name">): InstalledRound {
+function createRound(
+  overrides: Partial<InstalledRound> & Pick<InstalledRound, "id" | "name">
+): InstalledRound {
   return {
     id: overrides.id,
     name: overrides.name,
@@ -35,17 +37,20 @@ describe("buildTileDurationLabelByFieldId", () => {
       createRound({
         id: "r1",
         name: "Round 1",
-        resources: [{
-          id: "res-1",
-          roundId: "r1",
-          videoUri: "file:///round-1.mp4",
-          funscriptUri: null,
-          phash: null,
-          durationMs: 185_000,
-          disabled: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }],
+        resources: [
+          {
+            id: "res-1",
+            roundId: "r1",
+            videoUri: "file:///round-1.mp4",
+            funscriptUri: null,
+            phash: null,
+            durationMs: 185_000,
+            disabled: false,
+            websiteVideoCacheStatus: "not_applicable" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
       }),
     ];
 
@@ -62,17 +67,20 @@ describe("buildTileDurationLabelByFieldId", () => {
       createRound({
         id: "r1",
         name: "Round 1",
-        resources: [{
-          id: "res-1",
-          roundId: "r1",
-          videoUri: "file:///round-1.mp4",
-          funscriptUri: null,
-          phash: null,
-          durationMs: null,
-          disabled: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }],
+        resources: [
+          {
+            id: "res-1",
+            roundId: "r1",
+            videoUri: "file:///round-1.mp4",
+            funscriptUri: null,
+            phash: null,
+            durationMs: null,
+            disabled: false,
+            websiteVideoCacheStatus: "not_applicable" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
       }),
     ];
 
@@ -92,17 +100,20 @@ describe("buildTileDurationLabelByFieldId", () => {
       createRound({
         id: "r1",
         name: "Round 1",
-        resources: [{
-          id: "res-1",
-          roundId: "r1",
-          videoUri: "file:///round-1.mp4",
-          funscriptUri: null,
-          phash: null,
-          durationMs: 90_000,
-          disabled: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }],
+        resources: [
+          {
+            id: "res-1",
+            roundId: "r1",
+            videoUri: "file:///round-1.mp4",
+            funscriptUri: null,
+            phash: null,
+            durationMs: 90_000,
+            disabled: false,
+            websiteVideoCacheStatus: "not_applicable" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
       }),
     ];
 
@@ -120,17 +131,20 @@ describe("buildTileDurationLabelByFieldId", () => {
       createRound({
         id: "r1",
         name: "Round 1",
-        resources: [{
-          id: "res-1",
-          roundId: "r1",
-          videoUri: "file:///round-1.mp4",
-          funscriptUri: null,
-          phash: null,
-          durationMs: 610_000,
-          disabled: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }],
+        resources: [
+          {
+            id: "res-1",
+            roundId: "r1",
+            videoUri: "file:///round-1.mp4",
+            funscriptUri: null,
+            phash: null,
+            durationMs: 610_000,
+            disabled: false,
+            websiteVideoCacheStatus: "not_applicable" as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
       }),
     ];
 

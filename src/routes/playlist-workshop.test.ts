@@ -13,6 +13,9 @@ describe("pruneLinearSetupToRoundCount", () => {
         enabledPerkIds: [],
         enabledAntiPerkIds: [],
         perkTriggerChancePerRound: 0,
+        roundStartDelaySec: 0,
+        diceMin: 1,
+        diceMax: 6,
         probabilities: {
           intermediary: { initial: 0, increasePerRound: 0, max: 0 },
           antiPerk: { initial: 0, increasePerRound: 0, max: 0 },
@@ -37,6 +40,9 @@ describe("pruneLinearSetupToRoundCount", () => {
         enabledPerkIds: [],
         enabledAntiPerkIds: [],
         perkTriggerChancePerRound: 0,
+        roundStartDelaySec: 0,
+        diceMin: 1,
+        diceMax: 6,
         probabilities: {
           intermediary: { initial: 0, increasePerRound: 0, max: 0 },
           antiPerk: { initial: 0, increasePerRound: 0, max: 0 },

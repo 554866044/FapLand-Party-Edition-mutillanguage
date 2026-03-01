@@ -1,8 +1,9 @@
-import React from "react";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CommandPalette } from "../components/CommandPalette";
 import { GlobalMusicOverlay } from "../components/GlobalMusicOverlay";
 import { ControllerProvider } from "../controller";
+import { CommandPaletteGuardProvider } from "../contexts/CommandPaletteGuardContext";
 import { ForegroundMediaProvider } from "../contexts/ForegroundMediaContext";
 import { GlobalMusicProvider } from "../contexts/GlobalMusicContext";
 import { HandyProvider } from "../contexts/HandyContext";
@@ -36,7 +37,10 @@ function RootComponent() {
         <ForegroundMediaProvider>
           <GlobalMusicProvider>
             <HandyProvider>
-              <Outlet />
+              <CommandPaletteGuardProvider>
+                <Outlet />
+                <CommandPalette />
+              </CommandPaletteGuardProvider>
               <GlobalMusicOverlay />
             </HandyProvider>
           </GlobalMusicProvider>

@@ -6,9 +6,24 @@ const makeGraph = (): EditorGraphConfig => ({
   mode: "graph",
   startNodeId: "start",
   nodes: [
-    { id: "start", name: "Start", kind: "start", styleHint: { x: 80, y: 320, width: 190, height: 84, color: "#fff" } },
-    { id: "mid", name: "Mid", kind: "path", styleHint: { x: 480, y: 190, width: 190, height: 84, icon: "m" } },
-    { id: "end", name: "End", kind: "end", styleHint: { x: 920, y: 450, width: 190, height: 84, size: 1.2 } },
+    {
+      id: "start",
+      name: "Start",
+      kind: "start",
+      styleHint: { x: 80, y: 320, width: 190, height: 84, color: "#fff" },
+    },
+    {
+      id: "mid",
+      name: "Mid",
+      kind: "path",
+      styleHint: { x: 480, y: 190, width: 190, height: 84, icon: "m" },
+    },
+    {
+      id: "end",
+      name: "End",
+      kind: "end",
+      styleHint: { x: 920, y: 450, width: 190, height: 84, size: 1.2 },
+    },
   ],
   edges: [
     { id: "edge-start-mid", fromNodeId: "start", toNodeId: "mid", weight: 1, gateCost: 0 },
@@ -28,6 +43,7 @@ const makeGraph = (): EditorGraphConfig => ({
     maxAntiPerkProbability: 0.75,
   },
   economy: { scorePerCumRoundSuccess: 420 },
+  dice: { min: 1, max: 6 },
 });
 
 describe("realignGraph", () => {
@@ -64,7 +80,12 @@ describe("realignGraph", () => {
 
   it("keeps branching siblings on the same rank without overlap", () => {
     const graph = makeGraph();
-    graph.nodes.splice(2, 0, { id: "branch", name: "Branch", kind: "path", styleHint: { x: 460, y: 520, width: 190, height: 84 } });
+    graph.nodes.splice(2, 0, {
+      id: "branch",
+      name: "Branch",
+      kind: "path",
+      styleHint: { x: 460, y: 520, width: 190, height: 84 },
+    });
     graph.edges = [
       { id: "edge-start-mid", fromNodeId: "start", toNodeId: "mid", weight: 1, gateCost: 0 },
       { id: "edge-start-branch", fromNodeId: "start", toNodeId: "branch", weight: 1, gateCost: 0 },
@@ -77,12 +98,20 @@ describe("realignGraph", () => {
     const branch = result.nodes.find((node) => node.id === "branch");
 
     expect(mid?.styleHint?.x).toBe(branch?.styleHint?.x);
-    expect(Math.abs((mid?.styleHint?.y ?? 0) - (branch?.styleHint?.y ?? 0))).toBeGreaterThanOrEqual(180);
+    expect(Math.abs((mid?.styleHint?.y ?? 0) - (branch?.styleHint?.y ?? 0))).toBeGreaterThanOrEqual(
+      180
+    );
   });
 
   it("returns finite positions for cyclic graphs", () => {
     const graph = makeGraph();
-    graph.edges.push({ id: "edge-end-start", fromNodeId: "end", toNodeId: "start", weight: 1, gateCost: 0 });
+    graph.edges.push({
+      id: "edge-end-start",
+      fromNodeId: "end",
+      toNodeId: "start",
+      weight: 1,
+      gateCost: 0,
+    });
 
     const result = realignGraph(graph, "layeredHorizontal");
 
@@ -95,7 +124,12 @@ describe("realignGraph", () => {
 
   it("lays out disconnected nodes deterministically after reachable ones", () => {
     const graph = makeGraph();
-    graph.nodes.push({ id: "orphan", name: "Orphan", kind: "path", styleHint: { x: 30, y: 30, width: 190, height: 84 } });
+    graph.nodes.push({
+      id: "orphan",
+      name: "Orphan",
+      kind: "path",
+      styleHint: { x: 30, y: 30, width: 190, height: 84 },
+    });
 
     const result = realignGraph(graph, "layeredHorizontal");
     const end = result.nodes.find((node) => node.id === "end");
@@ -132,7 +166,7 @@ describe("realignGraph", () => {
     graph.nodes = Array.from({ length: 6 }, (_, index) => ({
       id: `node-${index}`,
       name: `Node ${index}`,
-      kind: index === 0 ? "start" as const : index === 5 ? "end" as const : "path" as const,
+      kind: index === 0 ? ("start" as const) : index === 5 ? ("end" as const) : ("path" as const),
       styleHint: { x: 50 + index * 50, y: 50 + index * 20, width: 190, height: 84 },
     }));
     graph.startNodeId = "node-0";

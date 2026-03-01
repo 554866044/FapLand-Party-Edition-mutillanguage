@@ -9,6 +9,10 @@ const { mockedUseGameAnimation } = vi.hoisted(() => ({
   mockedUseGameAnimation: vi.fn(),
 }));
 
+vi.mock("../../hooks/useSfwMode", () => ({
+  useSfwMode: () => false,
+}));
+
 vi.mock("pixi.js", () => {
   class DisplayObject {
     x = 0;
@@ -25,28 +29,43 @@ vi.mock("pixi.js", () => {
     children: unknown[] = [];
     text = "";
     style: Record<string, unknown> = {};
-    scale = { x: 1, y: 1, set: vi.fn((x: number, y?: number) => {
-      this.scale.x = x;
-      this.scale.y = y ?? x;
-    }) };
-    anchor = { x: 0, y: 0, set: vi.fn((x: number, y?: number) => {
-      this.anchor.x = x;
-      this.anchor.y = y ?? x;
-    }) };
-    pivot = { x: 0, y: 0, set: vi.fn((x: number, y?: number) => {
-      this.pivot.x = x;
-      this.pivot.y = y ?? x;
-    }) };
-    position = { x: 0, y: 0, set: vi.fn((x: number, y?: number) => {
-      this.position.x = x;
-      this.position.y = y ?? x;
-    }) };
+    scale = {
+      x: 1,
+      y: 1,
+      set: vi.fn((x: number, y?: number) => {
+        this.scale.x = x;
+        this.scale.y = y ?? x;
+      }),
+    };
+    anchor = {
+      x: 0,
+      y: 0,
+      set: vi.fn((x: number, y?: number) => {
+        this.anchor.x = x;
+        this.anchor.y = y ?? x;
+      }),
+    };
+    pivot = {
+      x: 0,
+      y: 0,
+      set: vi.fn((x: number, y?: number) => {
+        this.pivot.x = x;
+        this.pivot.y = y ?? x;
+      }),
+    };
+    position = {
+      x: 0,
+      y: 0,
+      set: vi.fn((x: number, y?: number) => {
+        this.position.x = x;
+        this.position.y = y ?? x;
+      }),
+    };
 
     constructor(options?: { text?: string; style?: Record<string, unknown> }) {
       if (options?.text) this.text = options.text;
       if (options?.style) this.style = options.style;
-      let proxy: this;
-      proxy = new Proxy(this, {
+      const proxy: this = new Proxy(this, {
         get: (target, prop, receiver) => {
           if (prop in target) return Reflect.get(target, prop, receiver);
           const fn = vi.fn(() => proxy);
@@ -211,7 +230,10 @@ function makeConfig(): GameConfig {
   };
 }
 
-function withPendingPerkSelection(base: GameState, options: Array<{ id: string; name: string; cost: number }>): GameState {
+function withPendingPerkSelection(
+  base: GameState,
+  options: Array<{ id: string; name: string; cost: number }>
+): GameState {
   return {
     ...base,
     pendingPerkSelection: {
@@ -271,21 +293,30 @@ describe("GameScene keyboard perk selection", () => {
       tickAnim,
     }));
 
-    vi.stubGlobal("ResizeObserver", class {
-      observe() {}
-      disconnect() {}
-    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      }
+    );
 
     let frameId = 0;
     const callbacks = new Map<number, FrameRequestCallback>();
-    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-      const nextId = ++frameId;
-      callbacks.set(nextId, callback);
-      return nextId;
-    }));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn((id: number) => {
-      callbacks.delete(id);
-    }));
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const nextId = ++frameId;
+        callbacks.set(nextId, callback);
+        return nextId;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        callbacks.delete(id);
+      })
+    );
 
     Object.defineProperty(window.navigator, "getGamepads", {
       configurable: true,
@@ -326,7 +357,7 @@ describe("GameScene keyboard perk selection", () => {
           intermediaryReturnPauseSec={4}
           onApplyPerkDirectlyChange={vi.fn()}
         />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
   }
 
@@ -357,7 +388,7 @@ describe("GameScene keyboard perk selection", () => {
           intermediaryReturnPauseSec={4}
           onApplyPerkDirectlyChange={vi.fn()}
         />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
 
     fireEvent.keyDown(window, { key: " " });

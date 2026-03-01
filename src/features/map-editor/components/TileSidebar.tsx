@@ -1,5 +1,7 @@
 import React from "react";
+import { useSfwMode } from "../../../hooks/useSfwMode";
 import { playHoverSound, playSelectSound } from "../../../utils/audio";
+import { abbreviateNsfwText } from "../../../utils/sfwText";
 import type { EditorNode } from "../EditorState";
 import type { TileCatalogCategory, TileCatalogTile } from "../tileCatalog";
 
@@ -33,7 +35,10 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
     onCategoryChange,
     onSearchChange,
     onArmTile,
-}) => (
+}) => {
+    const sfwMode = useSfwMode();
+
+    return (
     <aside className="editor-panel flex min-h-0 w-full flex-col rounded-xl border border-white/8 bg-black/30 xl:w-64 xl:flex-shrink-0">
         {/* ── Header ─────────────────── */}
         <div className="flex-shrink-0 border-b border-white/6 px-3 py-2.5">
@@ -104,7 +109,9 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
                             )}
                         </div>
                         {tile.description && (
-                            <p className="mt-0.5 pl-4 text-[11px] text-zinc-600">{tile.description}</p>
+                            <p className="mt-0.5 pl-4 text-[11px] text-zinc-600">
+                                {abbreviateNsfwText(tile.description, sfwMode)}
+                            </p>
                         )}
                     </button>
                 );
@@ -116,6 +123,7 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
             )}
         </div>
     </aside>
-));
+    );
+});
 
 TileSidebar.displayName = "TileSidebar";

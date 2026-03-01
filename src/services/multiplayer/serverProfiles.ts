@@ -6,7 +6,7 @@ import {
   MULTIPLAYER_DEFAULT_SERVER_ID,
   MULTIPLAYER_DEVELOPMENT_SERVER_ID,
 } from "./defaults";
-import type { MultiplayerServerProfile } from "./types";
+import type { MultiplayerAuthRequirement, MultiplayerServerProfile } from "./types";
 
 const SERVER_PROFILES_STORE_KEY = "multiplayer.serverProfiles.v1";
 
@@ -55,6 +55,7 @@ function normalizeProfile(input: unknown): MultiplayerServerProfile | null {
     isBuiltIn: raw.isBuiltIn === true,
     createdAtIso: asNonEmptyTrimmedString(raw.createdAtIso) ?? nowIso(),
     updatedAtIso: asNonEmptyTrimmedString(raw.updatedAtIso) ?? nowIso(),
+    authRequirement: (raw.authRequirement as MultiplayerAuthRequirement) ?? "anonymous_only",
   };
 }
 
@@ -107,7 +108,7 @@ function normalizePersisted(value: unknown): PersistedMultiplayerServers {
   const requestedActiveServerId = asNonEmptyTrimmedString(raw.activeServerId);
   const activeServerId =
     requestedActiveServerId &&
-    profiles.some((profile) => profile.id === requestedActiveServerId)
+      profiles.some((profile) => profile.id === requestedActiveServerId)
       ? requestedActiveServerId
       : getDefaultActiveServerId(profiles);
 
@@ -208,6 +209,7 @@ export async function saveMultiplayerServerProfile(input: {
   name: string;
   url: string;
   anonKey: string;
+  authRequirement?: MultiplayerAuthRequirement;
 }): Promise<MultiplayerServerProfile> {
   const name = asNonEmptyTrimmedString(input.name);
   const url = asNonEmptyTrimmedString(input.url);
@@ -236,6 +238,7 @@ export async function saveMultiplayerServerProfile(input: {
     isBuiltIn: false,
     createdAtIso: existing?.createdAtIso ?? now,
     updatedAtIso: now,
+    authRequirement: input.authRequirement ?? existing?.authRequirement ?? "anonymous_only",
   };
 
   const nextProfiles = existing

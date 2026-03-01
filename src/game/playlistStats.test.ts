@@ -26,6 +26,7 @@ describe("playlistStats", () => {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    dice: { min: 1, max: 6 },
   } satisfies Omit<PlaylistConfig, "boardConfig">;
 
   it("counts linear round nodes excluding safe points", () => {

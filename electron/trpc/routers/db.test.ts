@@ -97,6 +97,8 @@ type SinglePlayerRunRow = {
   endingPosition: number;
   turn: number;
   cheatModeActive?: boolean;
+  assistedActive?: boolean;
+  assistedSaveMode?: "checkpoint" | "everywhere" | null;
   createdAt: Date;
 };
 
@@ -204,6 +206,9 @@ describe("dbRouter local highscore and multiplayer cache", () => {
       }],
     ]);
     let highscore = 0;
+    let highscoreCheatMode = false;
+    let highscoreAssisted = false;
+    let highscoreAssistedSaveMode: "checkpoint" | "everywhere" | null = null;
     const storeMock = {
       clear: vi.fn(),
     };
@@ -326,7 +331,9 @@ describe("dbRouter local highscore and multiplayer cache", () => {
                 get: async () => (highscore > 0 ? {
                   id: "local",
                   highscore,
-                  highscoreCheatMode: false,
+                  highscoreCheatMode,
+                  highscoreAssisted,
+                  highscoreAssistedSaveMode,
                   createdAt: new Date("2026-03-05T00:00:00.000Z"),
                   updatedAt: new Date("2026-03-05T00:00:00.000Z"),
                 } : null),
@@ -352,6 +359,11 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             returning: async () => {
               if (getTableName(table) === "GameProfile") {
                 highscore = Number(set.highscore ?? (data as { highscore?: number }).highscore ?? 0);
+                highscoreCheatMode = Boolean(set.highscoreCheatMode ?? (data as { highscoreCheatMode?: boolean }).highscoreCheatMode ?? false);
+                highscoreAssisted = Boolean(set.highscoreAssisted ?? (data as { highscoreAssisted?: boolean }).highscoreAssisted ?? false);
+                highscoreAssistedSaveMode =
+                  (set.highscoreAssistedSaveMode as "checkpoint" | "everywhere" | undefined)
+                  ?? ((data as { highscoreAssistedSaveMode?: "checkpoint" | "everywhere" | null }).highscoreAssistedSaveMode ?? null);
                 return [];
               }
 
@@ -381,12 +393,21 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             then: async (resolve: (value: unknown) => unknown) => {
               if (getTableName(table) !== "GameProfile") return resolve([]);
               highscore = Number(set.highscore ?? (data as { highscore?: number }).highscore ?? 0);
+              highscoreCheatMode = Boolean(set.highscoreCheatMode ?? (data as { highscoreCheatMode?: boolean }).highscoreCheatMode ?? false);
+              highscoreAssisted = Boolean(set.highscoreAssisted ?? (data as { highscoreAssisted?: boolean }).highscoreAssisted ?? false);
+              highscoreAssistedSaveMode =
+                (set.highscoreAssistedSaveMode as "checkpoint" | "everywhere" | undefined)
+                ?? ((data as { highscoreAssistedSaveMode?: "checkpoint" | "everywhere" | null }).highscoreAssistedSaveMode ?? null);
               return resolve([]);
             },
           }),
           then: async (resolve: (value: unknown) => unknown) => {
             if (getTableName(table) !== "GameProfile") return resolve([]);
             highscore = Number((data as { highscore?: number }).highscore ?? 0);
+            highscoreCheatMode = Boolean((data as { highscoreCheatMode?: boolean }).highscoreCheatMode ?? false);
+            highscoreAssisted = Boolean((data as { highscoreAssisted?: boolean }).highscoreAssisted ?? false);
+            highscoreAssistedSaveMode =
+              (data as { highscoreAssistedSaveMode?: "checkpoint" | "everywhere" | null }).highscoreAssistedSaveMode ?? null;
             return resolve([]);
           },
           onConflictDoNothing: () => ({
@@ -580,7 +601,12 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             }
             if (tableName === "MultiplayerMatchCache") cacheByLobby.clear();
             if (tableName === "SinglePlayerRunHistory") singleRuns.length = 0;
-            if (tableName === "GameProfile") highscore = 0;
+            if (tableName === "GameProfile") {
+              highscore = 0;
+              highscoreCheatMode = false;
+              highscoreAssisted = false;
+              highscoreAssistedSaveMode = null;
+            }
             if (
               tableName === "Resource" ||
               tableName === "PlaylistTrackPlay" ||
@@ -602,7 +628,12 @@ describe("dbRouter local highscore and multiplayer cache", () => {
           if (tableName === "MultiplayerMatchCache") cacheByLobby.clear();
           if (tableName === "ResultSyncQueue") queueByLobby.clear();
           if (tableName === "SinglePlayerRunHistory") singleRuns.length = 0;
-          if (tableName === "GameProfile") highscore = 0;
+          if (tableName === "GameProfile") {
+            highscore = 0;
+            highscoreCheatMode = false;
+            highscoreAssisted = false;
+            highscoreAssistedSaveMode = null;
+          }
           if (tableName === "Hero") {
             heroesByIdRef.clear();
             for (const entry of roundsByIdRef.values()) {

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState, type RefObject } from "react";
+import { useSfwMode } from "../../hooks/useSfwMode";
 import { playHoverSound } from "../../utils/audio";
+import { abbreviateNsfwText } from "../../utils/sfwText";
 import { DEFAULT_ZOOM_PX_PER_SEC, formatMs, type DragState, type SegmentDraft } from "./types";
 import type { FunscriptAction } from "../../game/media/playback";
 
@@ -71,6 +73,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
         onSelectSegment,
         onZoomChange,
     }) => {
+        const sfwMode = useSfwMode();
         const waveformPath = useMemo(
             () => buildWaveformPath(funscriptActions, durationMs, timelineWidthPx),
             [funscriptActions, durationMs, timelineWidthPx],
@@ -230,7 +233,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
                                     className={`converter-segment-enter absolute top-14 h-8 rounded-md border ${tone} transition-shadow duration-150 ${selected ? "ring-2 ring-white/80 shadow-[0_0_14px_rgba(255,255,255,0.15)]" : "hover:brightness-125"
                                         }`}
                                     style={{ left, width: Math.max(6, width) }}
-                                    title={`${segment.type} • ${formatMs(segment.startTimeMs)}-${formatMs(segment.endTimeMs)}`}
+                                    title={`${abbreviateNsfwText(segment.type, sfwMode)} • ${formatMs(segment.startTimeMs)}-${formatMs(segment.endTimeMs)}`}
                                 >
                                     {selected && (
                                         <>

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
+import { GameDropdown } from "../components/ui/GameDropdown";
 import { useControllerSurface } from "../controller";
 import {
   MULTIPLAYER_MINIMUM_ROUNDS,
@@ -28,8 +29,11 @@ import {
   resolveMultiplayerAuthStatus,
   saveMultiplayerServerProfile,
   setActiveMultiplayerServerProfile,
+  signInWithMultiplayerEmail,
+  signUpWithMultiplayerEmail,
   startDiscordMultiplayerLink,
   subscribeToMultiplayerAuthRefresh,
+  type MultiplayerAuthRequirement,
   type MultiplayerAuthStatus,
   type MultiplayerLobbyJoinPreview,
   type MultiplayerPublicLobbySummary,
@@ -48,6 +52,7 @@ type OnboardingStatus =
   | "ready"
   | "needs_discord"
   | "needs_email"
+  | "needs_login"
   | "oauth_unavailable"
   | "error"
   | "unavailable";
@@ -197,6 +202,8 @@ function MultiplayerRoute() {
   const [newServerUrl, setNewServerUrl] = useState("");
   const [newServerAnonKey, setNewServerAnonKey] = useState("");
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
+  const [editingAuthRequirement, setEditingAuthRequirement] =
+    useState<MultiplayerAuthRequirement>("anonymous_only");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [authStatus, setAuthStatus] = useState<MultiplayerAuthStatus | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>("provisioning");
@@ -204,6 +211,10 @@ function MultiplayerRoute() {
     "Preparing multiplayer authentication on the selected server."
   );
   const [authBootstrapPending, setAuthBootstrapPending] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authPending, setAuthPending] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("fland-multiplayer-username", displayName);
@@ -298,6 +309,7 @@ function MultiplayerRoute() {
     setNewServerName("");
     setNewServerUrl("");
     setNewServerAnonKey("");
+    setEditingAuthRequirement("anonymous_only");
     setError(null);
   };
 
@@ -310,6 +322,7 @@ function MultiplayerRoute() {
     setNewServerName(profile.name);
     setNewServerUrl(profile.url);
     setNewServerAnonKey(profile.anonKey);
+    setEditingAuthRequirement(profile.authRequirement ?? "anonymous_only");
     setError(null);
   };
 
@@ -428,6 +441,29 @@ function MultiplayerRoute() {
       setError(linkError instanceof Error ? linkError.message : "Failed to start Discord linking.");
     } finally {
       setLinkPending(false);
+    }
+  };
+
+  const handleAuthEmail = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    setAuthPending(true);
+    setError(null);
+    try {
+      if (authMode === "signin") {
+        await signInWithMultiplayerEmail(email, password, selectedServer ?? undefined);
+      } else {
+        await signUpWithMultiplayerEmail(email, password, selectedServer ?? undefined);
+      }
+      setEmail("");
+      setPassword("");
+    } catch (authErr) {
+      setError(authErr instanceof Error ? authErr.message : "Authentication failed.");
+    } finally {
+      setAuthPending(false);
     }
   };
 
@@ -560,7 +596,9 @@ function MultiplayerRoute() {
       ? "border-emerald-300/50 bg-emerald-400/15 text-emerald-100"
       : onboardingStatus === "provisioning"
         ? "border-cyan-300/50 bg-cyan-400/15 text-cyan-100"
-        : onboardingStatus === "needs_discord" || onboardingStatus === "needs_email"
+        : onboardingStatus === "needs_discord" ||
+            onboardingStatus === "needs_email" ||
+            onboardingStatus === "needs_login"
           ? "border-fuchsia-300/45 bg-fuchsia-400/15 text-fuchsia-100"
           : "border-amber-300/45 bg-amber-400/15 text-amber-100";
 
@@ -573,11 +611,13 @@ function MultiplayerRoute() {
           ? "Link Discord"
           : onboardingStatus === "needs_email"
             ? "Email Required"
-            : onboardingStatus === "oauth_unavailable"
-              ? "OAuth Unavailable"
-              : onboardingStatus === "error"
-                ? "Connection Failed"
-                : "Unavailable";
+            : onboardingStatus === "needs_login"
+              ? "Login Required"
+              : onboardingStatus === "oauth_unavailable"
+                ? "OAuth Unavailable"
+                : onboardingStatus === "error"
+                  ? "Connection Failed"
+                  : "Unavailable";
 
   const authModeLabel = authStatus
     ? authStatus.hasDiscordIdentity
@@ -594,7 +634,9 @@ function MultiplayerRoute() {
         ? "Discord linking required"
         : onboardingStatus === "needs_email"
           ? "Discord account needs an email"
-          : "Multiplayer setup needs attention";
+          : onboardingStatus === "needs_login"
+            ? "Login required"
+            : "Multiplayer setup needs attention";
   const readinessDetail = canPlay
     ? "Enter a code to join immediately or host a lobby with the current playlist."
     : onboardingMessage;
@@ -611,8 +653,8 @@ function MultiplayerRoute() {
         : null;
   const createWarning =
     hasPlayablePlaylist &&
-      skipRoundsCheck &&
-      installedRounds.length < selectedPlaylistRequiredRounds
+    skipRoundsCheck &&
+    installedRounds.length < selectedPlaylistRequiredRounds
       ? `Experimental override active: ${selectedPlaylist?.name ?? "This playlist"} is tuned for at least ${selectedPlaylistRequiredRounds} installed rounds, and disabling the checks may result in a bad user experience.`
       : null;
   const joinDisabledReason = !canPlay
@@ -740,9 +782,9 @@ function MultiplayerRoute() {
                 {MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required
               </h2>
               <p className="mt-1 text-sm text-rose-200/80">
-                Multiplayer requires at least {MULTIPLAYER_MINIMUM_ROUNDS} installed rounds. You have{" "}
-                <span className="font-bold text-rose-100">{installedRounds.length}</span>. Install
-                more via the{" "}
+                Multiplayer requires at least {MULTIPLAYER_MINIMUM_ROUNDS} installed rounds. You
+                have <span className="font-bold text-rose-100">{installedRounds.length}</span>.
+                Install more via the{" "}
                 <button
                   type="button"
                   onClick={() => void navigate({ to: "/rounds" })}
@@ -800,7 +842,9 @@ function MultiplayerRoute() {
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                 Rounds
               </span>
-              <span className={`text-sm ${hasEnoughRounds ? "text-emerald-200" : "text-amber-200"}`}>
+              <span
+                className={`text-sm ${hasEnoughRounds ? "text-emerald-200" : "text-amber-200"}`}
+              >
                 {installedRounds.length} installed
               </span>
             </div>
@@ -820,14 +864,14 @@ function MultiplayerRoute() {
               {(onboardingStatus === "error" ||
                 onboardingStatus === "unavailable" ||
                 onboardingStatus === "oauth_unavailable") && (
-                  <button
-                    type="button"
-                    onClick={handleRetryBootstrap}
-                    className={`${actionButtonClass} border-cyan-300/40 bg-cyan-400/12 text-cyan-100 hover:border-cyan-300/70`}
-                  >
-                    Retry
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleRetryBootstrap}
+                  className={`${actionButtonClass} border-cyan-300/40 bg-cyan-400/12 text-cyan-100 hover:border-cyan-300/70`}
+                >
+                  Retry
+                </button>
+              )}
               {(onboardingStatus === "needs_email" || onboardingStatus === "needs_discord") && (
                 <button
                   type="button"
@@ -838,10 +882,56 @@ function MultiplayerRoute() {
                   Recheck Account
                 </button>
               )}
+              {onboardingStatus === "needs_login" && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-violet-400/30 bg-black/40 p-5 mt-4 w-full max-w-md">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-violet-100">
+                      {authMode === "signin" ? "Sign In" : "Create Account"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode((m) => (m === "signin" ? "signup" : "signin"))}
+                      className="text-xs text-violet-300 underline"
+                    >
+                      {authMode === "signin" ? "Switch to Sign Up" : "Switch to Sign In"}
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="email"
+                      placeholder="Email Address"
+                      className="rounded-xl border border-white/10 bg-black/50 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-400"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      className="rounded-xl border border-white/10 bg-black/50 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-400"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={authPending}
+                    onClick={handleAuthEmail}
+                    className="w-full rounded-xl border border-violet-400/50 bg-violet-600/30 py-2 text-sm font-bold uppercase tracking-widest text-violet-50 transition hover:bg-violet-600/50 disabled:opacity-50"
+                  >
+                    {authPending
+                      ? "Authenticating..."
+                      : authMode === "signin"
+                        ? "Sign In"
+                        : "Sign Up"}
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
-          <p className="text-lg font-extrabold tracking-tight text-violet-100">{readinessHeadline}</p>
+          <p className="text-lg font-extrabold tracking-tight text-violet-100">
+            {readinessHeadline}
+          </p>
           {!canPlay && readinessDetail && (
             <p className="-mt-5 text-sm text-zinc-400">{readinessDetail}</p>
           )}
@@ -868,7 +958,9 @@ function MultiplayerRoute() {
               />
               <p className="mt-2 text-xs text-zinc-500">
                 Playing on{" "}
-                <span className="text-zinc-300">{selectedServer?.name ?? "No Server Selected"}</span>
+                <span className="text-zinc-300">
+                  {selectedServer?.name ?? "No Server Selected"}
+                </span>
                 {" · "}Codes are case-insensitive.
               </p>
             </div>
@@ -887,7 +979,9 @@ function MultiplayerRoute() {
                   ? "Preparing Account..."
                   : "Join Lobby"}
             </button>
-            {joinDisabledReason && <p className="mt-3 text-xs text-zinc-400">{joinDisabledReason}</p>}
+            {joinDisabledReason && (
+              <p className="mt-3 text-xs text-zinc-400">{joinDisabledReason}</p>
+            )}
           </section>
 
           <section className="animate-entrance rounded-3xl border border-emerald-400/20 bg-zinc-950/55 p-6 backdrop-blur-xl">
@@ -949,20 +1043,21 @@ function MultiplayerRoute() {
                 <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                   Playlist
                 </label>
-                <select
-                  className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm font-semibold text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
+                <GameDropdown
                   value={selectedPlaylistId}
                   disabled={!hasPlayablePlaylist}
-                  onChange={(event) => setSelectedPlaylistId(event.target.value)}
-                >
-                  {!hasPlayablePlaylist && <option value="">No playlists available</option>}
-                  {availablePlaylists.map((playlist: { id: string; name: string }) => (
-                    <option key={playlist.id} value={playlist.id}>
-                      {playlist.name}
-                      {playlist.id === activePlaylist?.id ? " (Active)" : ""}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    ...(!hasPlayablePlaylist
+                      ? [{ value: "" as string, label: "No playlists available" }]
+                      : []),
+                    ...availablePlaylists.map((playlist: { id: string; name: string }) => ({
+                      value: playlist.id,
+                      label:
+                        playlist.name + (playlist.id === activePlaylist?.id ? " (Active)" : ""),
+                    })),
+                  ]}
+                  onChange={(value) => setSelectedPlaylistId(value)}
+                />
               </div>
             </div>
 
@@ -1001,7 +1096,9 @@ function MultiplayerRoute() {
 
             <button
               type="button"
-              disabled={createPending || !hasPlayablePlaylist || !canPlay || selectedPlaylistBlocked}
+              disabled={
+                createPending || !hasPlayablePlaylist || !canPlay || selectedPlaylistBlocked
+              }
               className="mt-5 w-full rounded-2xl border border-cyan-400/60 bg-gradient-to-r from-cyan-600/40 via-sky-600/40 to-indigo-600/40 px-4 py-4 text-base font-black uppercase tracking-[0.15em] text-cyan-50 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)] transition-all hover:scale-[1.01] hover:border-cyan-300/80 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)] hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none active:scale-95"
               onClick={() => {
                 void handleCreateLobby();
@@ -1041,15 +1138,22 @@ function MultiplayerRoute() {
               <div className="mt-5 space-y-4">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                       Active Server
-                    </label>
-                    <select
-                      className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
+                    </span>
+                    <GameDropdown
                       value={selectedServerId}
                       disabled={!hasServerProfiles}
-                      onChange={(event) => {
-                        const nextServerId = event.target.value;
+                      options={[
+                        ...(!hasServerProfiles
+                          ? [{ value: "" as string, label: "No servers saved" }]
+                          : []),
+                        ...serverProfiles.map((profile) => ({
+                          value: profile.id,
+                          label: profile.name + (profile.isDefault ? " (Default)" : ""),
+                        })),
+                      ]}
+                      onChange={(nextServerId) => {
                         const nextServer =
                           serverProfiles.find((profile) => profile.id === nextServerId) ?? null;
                         setSelectedServerId(nextServerId);
@@ -1060,14 +1164,7 @@ function MultiplayerRoute() {
                           ),
                         });
                       }}
-                    >
-                      {!hasServerProfiles && <option value="">No servers saved</option>}
-                      {serverProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name} {profile.isDefault ? "(Default)" : ""}
-                        </option>
-                      ))}
-                    </select>
+                    />
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {!selectedServer?.isBuiltIn && (
@@ -1129,7 +1226,9 @@ function MultiplayerRoute() {
                     </p>
                     <p className="mt-2 text-xs text-zinc-400">
                       Server name:{" "}
-                      <span className="text-zinc-200">{selectedServer?.name ?? "None selected"}</span>
+                      <span className="text-zinc-200">
+                        {selectedServer?.name ?? "None selected"}
+                      </span>
                     </p>
                     {selectedServer?.isBuiltIn && (
                       <p className="mt-1 text-xs text-zinc-500">
@@ -1143,11 +1242,13 @@ function MultiplayerRoute() {
                   Endpoint Editor
                   {" · "}
                   <span className="font-normal text-zinc-500">
-                    {editingServer ? `Editing ${editingServer.name}` : "Create a new custom endpoint"}
+                    {editingServer
+                      ? `Editing ${editingServer.name}`
+                      : "Create a new custom endpoint"}
                   </span>
                 </p>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                     Server Name
                     <input
@@ -1175,6 +1276,20 @@ function MultiplayerRoute() {
                       placeholder="ey..."
                     />
                   </label>
+                  <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    Auth Requirement
+                    <GameDropdown
+                      value={editingAuthRequirement}
+                      options={[
+                        { value: "anonymous_only", label: "Anonymous (Default)" },
+                        { value: "discord_required", label: "Discord Required" },
+                        { value: "email_password_required", label: "Email Required" },
+                      ]}
+                      onChange={(value) =>
+                        setEditingAuthRequirement(value as MultiplayerAuthRequirement)
+                      }
+                    />
+                  </label>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1189,6 +1304,7 @@ function MultiplayerRoute() {
                             name: newServerName.trim() || "Custom Server",
                             url: newServerUrl.trim(),
                             anonKey: newServerAnonKey.trim(),
+                            authRequirement: editingAuthRequirement,
                           });
                           const reloaded = await reloadServers();
                           const nextServer =
@@ -1221,6 +1337,7 @@ function MultiplayerRoute() {
                             name: newServerName.trim() || "Custom Server",
                             url: newServerUrl.trim(),
                             anonKey: newServerAnonKey.trim(),
+                            authRequirement: editingAuthRequirement,
                           });
                           await reloadServers();
                           setEditingServerId(saved.id);

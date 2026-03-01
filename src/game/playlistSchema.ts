@@ -3,6 +3,7 @@ import * as z from "zod";
 export const CURRENT_PLAYLIST_VERSION = 1;
 export const PLAYLIST_FILE_FORMAT = "f-land.playlist";
 export const PLAYLIST_FILE_VERSION = 1;
+export const ZPlaylistSaveMode = z.enum(["none", "checkpoint", "everywhere"]);
 
 export const ZRoundType = z.enum(["Normal", "Interjection", "Cum"]);
 
@@ -302,7 +303,23 @@ export const ZPlaylistConfig = z
   .object({
     playlistVersion: z.number().int().min(1).default(CURRENT_PLAYLIST_VERSION),
     boardConfig: ZBoardConfig,
+    saveMode: ZPlaylistSaveMode.default("none"),
     roundStartDelayMs: z.number().int().min(0).max(300000).default(20000),
+    dice: z
+      .object({
+        min: z.number().int().min(1).max(20).default(1),
+        max: z.number().int().min(1).max(20).default(6),
+      })
+      .default({ min: 1, max: 6 })
+      .superRefine((value, context) => {
+        if (value.min > value.max) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "dice.min must be less than or equal to dice.max",
+            path: ["min"],
+          });
+        }
+      }),
     perkSelection: z
       .object({
         optionsPerPick: z.number().int().min(1).max(10).default(3),
@@ -369,6 +386,7 @@ export type GraphBoardConfig = z.infer<typeof ZGraphBoardConfig>;
 export type BoardConfig = z.infer<typeof ZBoardConfig>;
 export type PlaylistConfig = z.infer<typeof ZPlaylistConfig>;
 export type PlaylistEnvelopeV1 = z.infer<typeof ZPlaylistEnvelopeV1>;
+export type PlaylistSaveMode = z.infer<typeof ZPlaylistSaveMode>;
 
 export function isLinearBoardConfig(config: BoardConfig): config is LinearBoardConfig {
   return config.mode === "linear";

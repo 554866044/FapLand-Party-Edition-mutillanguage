@@ -32,9 +32,11 @@ import { PERK_RARITY_META, resolvePerkRarity } from "../../game/data/perkRarity"
 import type { InstalledRound } from "../../services/db";
 import { trpc } from "../../services/trpc";
 import { describePerkEffects } from "../../game/engine";
+import { useSfwMode } from "../../hooks/useSfwMode";
 import { playRoundRewardSound, playRoundRewardTickSound } from "../../utils/audio";
 
 import { formatDurationLabel } from "../../utils/duration";
+import { abbreviateNsfwText } from "../../utils/sfwText";
 import { RoundVideoOverlay } from "./RoundVideoOverlay";
 import { RoundStartTransition } from "./RoundStartTransition";
 import { getPerkIconGlyph } from "./PerkIcon";
@@ -164,17 +166,17 @@ function buildTileLayout(board: BoardField[]): TileLayout {
     const graphOrigins = board.map((field, index) =>
       hasFiniteStyleHintXY(field)
         ? {
-          x: field.styleHint!.x as number,
-          y: field.styleHint!.y as number,
-        }
+            x: field.styleHint!.x as number,
+            y: field.styleHint!.y as number,
+          }
         : fallbackOrigins[index]!
     );
     const xs = graphOrigins.map((point) => point.x);
     const ys = graphOrigins.map((point) => point.y);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
-    const maxX = Math.max(...xs);
-    const maxY = Math.max(...ys);
+    Math.max(...xs);
+    Math.max(...ys);
     const normalizedOrigins = graphOrigins.map((point) => ({
       x: point.x - minX + GRAPH_PAD_X,
       y: point.y - minY + GRAPH_PAD_Y,
@@ -1060,7 +1062,8 @@ function drawBackground(g: Graphics, w: number, h: number, t: number): void {
 /**
  * Empty static grid (now drawn dynamically in drawBackground context)
  */
-function drawGrid(g: Graphics, w: number, h: number): void {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function drawGrid(_g: Graphics, _w: number, _h: number): void {
   // Dynamic grid implementation moved to drawBackground for animation sync
 }
 
@@ -1080,7 +1083,6 @@ function drawStars(
 const HUD_W = 348;
 const HUD_H = 390;
 const HUD_MARGIN = 16;
-const HUD_TEXT_X_PAD = 24;
 
 function formatHudDurationRounds(rounds: number | null | undefined): string {
   if (rounds === null) return "perm";
@@ -1116,7 +1118,7 @@ function buildHudActiveEffectLines(player: PlayerState | undefined): string[] {
     entries.push(`Roll cap ${player.pendingRollCeiling}`);
   }
   if ((player.pendingIntensityCap ?? 0) > 0) {
-    entries.push(`Intensity <= ${Math.round(player.pendingIntensityCap * 100)}%`);
+    entries.push(`Intensity <= ${Math.round((player.pendingIntensityCap ?? 0) * 100)}%`);
   }
 
   const pauseCharges = Math.max(0, player.roundControl?.pauseCharges ?? 0);
@@ -1381,6 +1383,7 @@ interface GameSceneProps {
   applyPerkDirectly?: boolean;
   onApplyPerkDirectlyChange?: (value: boolean) => void;
   onRoundOverlayUiVisibilityChange?: (visible: boolean) => void;
+  externalNotification?: { nonce: number; message: string } | null;
   intermediaryLoadingPrompt: string;
   intermediaryLoadingDurationSec: number;
   intermediaryReturnPauseSec: number;
@@ -1414,6 +1417,7 @@ export const GameScene = memo(function GameScene({
   applyPerkDirectly = false,
   onApplyPerkDirectlyChange,
   onRoundOverlayUiVisibilityChange,
+  externalNotification = null,
   intermediaryLoadingPrompt,
   intermediaryLoadingDurationSec,
   intermediaryReturnPauseSec,
@@ -1423,6 +1427,7 @@ export const GameScene = memo(function GameScene({
   hideInventoryButton = false,
   controllerSupportEnabled: initialControllerSupportEnabled = false,
 }: GameSceneProps) {
+  const sfwMode = useSfwMode();
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const {
@@ -1519,6 +1524,12 @@ export const GameScene = memo(function GameScene({
   showPerkInventoryMenuRef.current = showPerkInventoryMenu;
   const showDevPerkMenuModalRef = useRef(showDevPerkMenuModal);
   showDevPerkMenuModalRef.current = showDevPerkMenuModal;
+  const onHighscoreChangeRef = useRef(onHighscoreChange);
+  onHighscoreChangeRef.current = onHighscoreChange;
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+  const onRoundPlayedRef = useRef(onRoundPlayed);
+  onRoundPlayedRef.current = onRoundPlayed;
   const shouldShowControllerPromptsRef = useRef(false);
   const canShowDevPerkMenu = showDevPerkMenu;
   const devPerkPool = useMemo(() => getSinglePlayerPerkPool(), []);
@@ -1555,12 +1566,12 @@ export const GameScene = memo(function GameScene({
 
   const handleSelfReportedCum = useCallback(() => {
     void forceStop().catch((err) => console.warn("Failed to stop Handy after cum report", err));
-    onStateChange({
+    onStateChangeRef.current?.({
       ...stateRef.current,
       sessionPhase: "completed",
       completionReason: "self_reported_cum",
     });
-  }, [forceStop, onStateChange]);
+  }, [forceStop]);
 
   const handleHandyManualToggle = useCallback(() => {
     void toggleManualStop().then((result) => {
@@ -1606,6 +1617,11 @@ export const GameScene = memo(function GameScene({
       window.removeEventListener(CONTROLLER_SUPPORT_ENABLED_EVENT, handleControllerSupportChanged);
     };
   }, []);
+
+  useEffect(() => {
+    if (!externalNotification) return;
+    showHandyNotification(externalNotification.message);
+  }, [externalNotification, showHandyNotification]);
 
   useEffect(() => {
     if (!controllerSupportEnabled) {
@@ -1655,15 +1671,15 @@ export const GameScene = memo(function GameScene({
   }, [sessionStartedAtMs, state.sessionPhase]);
 
   useEffect(() => {
-    onHighscoreChange?.(state.highscore);
-  }, [onHighscoreChange, state.highscore]);
+    onHighscoreChangeRef.current?.(state.highscore);
+  }, [state.highscore]);
 
   useEffect(() => {
-    if (!onStateChange) return;
+    if (!onStateChangeRef.current) return;
     if (state.sessionPhase !== "completed" || animPhase.kind === "idle") {
-      onStateChange(state);
+      onStateChangeRef.current(state);
     }
-  }, [animPhase.kind, onStateChange, state]);
+  }, [animPhase.kind, state]);
 
   useEffect(() => {
     setControllerPerkSelectionIndex(0);
@@ -1694,7 +1710,10 @@ export const GameScene = memo(function GameScene({
   }, [state]);
   const [selectedInventoryItemId, setSelectedInventoryItemId] = useState<string | null>(null);
   const currentPlayer = state.players[state.currentPlayerIndex];
-  const currentPlayerInventory = currentPlayer?.inventory ?? [];
+  const currentPlayerInventory = useMemo(
+    () => currentPlayer?.inventory ?? [],
+    [currentPlayer?.inventory]
+  );
   const currentPlayerActiveEffects = currentPlayer?.activePerkEffects ?? [];
   const previousInventoryRef = useRef<{
     playerId: string | null;
@@ -1771,10 +1790,10 @@ export const GameScene = memo(function GameScene({
   shouldShowControllerPromptsRef.current = shouldShowControllerPrompts;
   const controllerPrimaryHint =
     !showPerkInventoryMenu &&
-      !showOptionsMenu &&
-      !showDevPerkMenuModal &&
-      !state.pendingPathChoice &&
-      !state.pendingPerkSelection
+    !showOptionsMenu &&
+    !showDevPerkMenuModal &&
+    !state.pendingPathChoice &&
+    !state.pendingPerkSelection
       ? canRollViaController
         ? "Roll Dice"
         : canStartQueuedRoundViaController
@@ -1821,17 +1840,6 @@ export const GameScene = memo(function GameScene({
     }
     if (action === "UP") {
       setControllerPerkSelectionIndex((previous) => (previous >= perkOptionCount ? 0 : previous));
-      return true;
-    }
-    if (action === "PRIMARY") {
-      const selectedIndex = controllerPerkSelectionIndexRef.current;
-      if (selectedIndex >= perkOptionCount) {
-        handleSkipPerkRef.current();
-        return true;
-      }
-      const perkId = state.pendingPerkSelection.options[selectedIndex]?.id;
-      if (!perkId) return true;
-      handleSelectPerkRef.current(perkId, { applyDirectly: applyPerkDirectlyRef.current });
       return true;
     }
     if (action === "ACTION_X") {
@@ -2003,7 +2011,7 @@ export const GameScene = memo(function GameScene({
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [handleHandyManualToggle, requestCumConfirmation]);
+  }, [handleHandyManualToggle, handleSelfReportedCum, requestCumConfirmation]);
 
   useEffect(() => {
     return () => {
@@ -2067,12 +2075,12 @@ export const GameScene = memo(function GameScene({
     const key = `${activeRound.roundId}:${activeRound.nodeId}:${activeRound.poolId ?? ""}`;
     if (lastRecordedRoundRef.current === key) return;
     lastRecordedRoundRef.current = key;
-    onRoundPlayed?.({
+    onRoundPlayedRef.current?.({
       roundId: activeRound.roundId,
       nodeId: activeRound.nodeId,
       poolId: activeRound.poolId,
     });
-  }, [onRoundPlayed, state.activeRound]);
+  }, [state.activeRound]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -3652,9 +3660,9 @@ export const GameScene = memo(function GameScene({
               phase.kind === "idle" && !!s.queuedRound && !s.pendingPerkSelection && !s.activeRound;
             const controllerPrimaryTarget =
               showOptionsMenuRef.current ||
-                showDevPerkMenuModalRef.current ||
-                s.pendingPathChoice ||
-                s.pendingPerkSelection
+              showDevPerkMenuModalRef.current ||
+              s.pendingPathChoice ||
+              s.pendingPerkSelection
                 ? null
                 : canRoll
                   ? "roll"
@@ -4056,22 +4064,22 @@ export const GameScene = memo(function GameScene({
     null;
   const boardAntiPerkSequence =
     !state.activeRound &&
-      !state.pendingPathChoice &&
-      !state.pendingPerkSelection &&
-      !state.queuedRound &&
-      state.sessionPhase === "normal" &&
-      currentPlayer
+    !state.pendingPathChoice &&
+    !state.pendingPerkSelection &&
+    !state.queuedRound &&
+    state.sessionPhase === "normal" &&
+    currentPlayer
       ? ((["milker", "jackhammer"] as const).find((id) => currentPlayer.antiPerks.includes(id)) ??
         null)
       : null;
 
   const idleBoardSequence =
     !state.activeRound &&
-      !state.queuedRound &&
-      state.sessionPhase === "normal" &&
-      currentPlayer &&
-      !currentPlayer.antiPerks.includes("milker") &&
-      !currentPlayer.antiPerks.includes("jackhammer")
+    !state.queuedRound &&
+    state.sessionPhase === "normal" &&
+    currentPlayer &&
+    !currentPlayer.antiPerks.includes("milker") &&
+    !currentPlayer.antiPerks.includes("jackhammer")
       ? currentPlayer.antiPerks.includes("no-rest")
         ? "no-rest"
         : null
@@ -4207,7 +4215,7 @@ export const GameScene = memo(function GameScene({
               onClick={() => requestCumConfirmation()}
               data-controller-focus-id="game-cum-open"
             >
-              Cum (C)
+              {abbreviateNsfwText("Cum (C)", sfwMode)}
             </button>
             <button
               type="button"
@@ -4325,10 +4333,11 @@ export const GameScene = memo(function GameScene({
                     onClick={() => handleSelectPathEdgeRef.current(option.edgeId)}
                     onMouseEnter={() => setHighlightedPathEdgeId(option.edgeId)}
                     onFocus={() => setHighlightedPathEdgeId(option.edgeId)}
-                    className={`rounded-[24px] border px-4 py-4 text-left transition-all duration-150 ${isActive
-                      ? "border-amber-200/70 bg-amber-300/12 text-white shadow-[0_0_0_1px_rgba(253,224,71,0.28)]"
-                      : "border-slate-300/15 bg-slate-950/40 text-slate-100 hover:border-cyan-200/45 hover:bg-slate-900/70"
-                      }`}
+                    className={`rounded-[24px] border px-4 py-4 text-left transition-all duration-150 ${
+                      isActive
+                        ? "border-amber-200/70 bg-amber-300/12 text-white shadow-[0_0_0_1px_rgba(253,224,71,0.28)]"
+                        : "border-slate-300/15 bg-slate-950/40 text-slate-100 hover:border-cyan-200/45 hover:bg-slate-900/70"
+                    }`}
                     data-controller-focus-id={`game-path-${option.edgeId}`}
                     data-controller-initial={index === 0 ? "true" : undefined}
                   >
@@ -4384,10 +4393,13 @@ export const GameScene = memo(function GameScene({
               Self-Reported Finish
             </p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-rose-100 via-red-100 to-orange-100">
-              Did you cum?
+              {abbreviateNsfwText("Did you cum?", sfwMode)}
             </h3>
             <p className="mt-2 text-sm text-zinc-200/90">
-              Confirm your orgasm. Because this is not a cum round, this will immediately end the round and the entire game as a loss.
+              {abbreviateNsfwText(
+                "Confirm your orgasm. Because this is not a cum round, this will immediately end the round and the entire game as a loss.",
+                sfwMode
+              )}
             </p>
             <div className="mt-5 grid gap-2">
               <button
@@ -4400,7 +4412,7 @@ export const GameScene = memo(function GameScene({
                 data-controller-focus-id="non-cum-outcome-came"
                 data-controller-initial="true"
               >
-                <span>Confirm you came</span>
+                <span>{abbreviateNsfwText("Confirm you came", sfwMode)}</span>
                 <span className="opacity-60 text-xs">Press C</span>
               </button>
             </div>
@@ -4465,10 +4477,11 @@ export const GameScene = memo(function GameScene({
                   key={action.id}
                   type="button"
                   disabled={action.disabled}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${action.tone === "danger"
-                    ? "border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                    : "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-                    }`}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
+                    action.tone === "danger"
+                      ? "border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                      : "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                  }`}
                   onClick={() => {
                     setShowOptionsMenu(false);
                     action.onClick();

@@ -54,6 +54,7 @@ import {
 import { formatDurationLabel } from "../../utils/duration";
 import { isGameDevelopmentMode } from "../../utils/devFeatures";
 import { useSfwMode } from "../../hooks/useSfwMode";
+import { abbreviateNsfwText } from "../../utils/sfwText";
 import { SfwOneTimeOverridePrompt } from "../SfwGuard";
 import {
   extractBeatbarMotionEvents,
@@ -102,19 +103,19 @@ type RoundVideoOverlayProps = {
 type LoadingMediaItem =
   | BooruMediaItem
   | {
-    id: string;
-    source: "fallback";
-    url: string;
-    previewUrl?: string | null;
-  };
+      id: string;
+      source: "fallback";
+      url: string;
+      previewUrl?: string | null;
+    };
 
 type SegmentState =
   | { kind: "main" }
   | {
-    kind: "intermediary";
-    trigger: IntermediaryTrigger;
-    resumeAtSec: number;
-  };
+      kind: "intermediary";
+      trigger: IntermediaryTrigger;
+      resumeAtSec: number;
+    };
 
 type TransitionPlan = {
   nextSegment: SegmentState;
@@ -165,9 +166,9 @@ function isIgnorableVideoPlayError(error: unknown): boolean {
   const name = "name" in error && typeof error.name === "string" ? error.name : "";
   const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
   return (
-    name === "AbortError"
-    || message.includes("interrupted by a call to pause")
-    || message.includes("interrupted by a new load request")
+    name === "AbortError" ||
+    message.includes("interrupted by a call to pause") ||
+    message.includes("interrupted by a new load request")
   );
 }
 
@@ -361,6 +362,10 @@ export function RoundVideoOverlay({
   const generatedSequenceSyncTokenRef = useRef(0);
   const activeGeneratedSequenceRef = useRef<AntiPerkSequenceId | null>(null);
   const onCompleteBoardSequenceRef = useRef(onCompleteBoardSequence);
+  const onUiVisibilityChangeRef = useRef(onUiVisibilityChange);
+  onUiVisibilityChangeRef.current = onUiVisibilityChange;
+  const onPreviewStateChangeRef = useRef(onPreviewStateChange);
+  onPreviewStateChangeRef.current = onPreviewStateChange;
   const antiPerkBeatAnimationFrameRef = useRef<number | null>(null);
   const lastMouseMoveAtRef = useRef(0);
 
@@ -434,12 +439,12 @@ export function RoundVideoOverlay({
     return { videoUri: resource.videoUri, funscriptUri: resource.funscriptUri };
   }, [resolvedRound]);
 
+  const intermediaryVideoUri =
+    segment.kind === "intermediary" ? segment.trigger.resource.videoUri : null;
+
   useEffect(() => {
     setFailedVideoUri(null);
-  }, [
-    resolvedMainResource?.videoUri,
-    segment.kind === "intermediary" ? segment.trigger.resource.videoUri : null,
-  ]);
+  }, [resolvedMainResource?.videoUri, intermediaryVideoUri]);
 
   const mainPlaybackWindowSec = useMemo(() => {
     const startMs =
@@ -555,12 +560,13 @@ export function RoundVideoOverlay({
   const resolvedIntermediaryVideoSrc =
     segment.kind === "intermediary" ? getVideoSrc(segment.trigger.resource.videoUri) : undefined;
   const activeResolvedVideoSrc = activeSegmentResource
-    ? getVideoSrc(activeSegmentResource.videoUri) ?? null
+    ? (getVideoSrc(activeSegmentResource.videoUri) ?? null)
     : null;
   const isRemoteVideoUri = useMemo(
     () =>
       Boolean(
-        activeVideoUri && (/^https?:\/\//i.test(activeVideoUri) || activeVideoUri.startsWith("app://external/"))
+        activeVideoUri &&
+        (/^https?:\/\//i.test(activeVideoUri) || activeVideoUri.startsWith("app://external/"))
       ),
     [activeVideoUri]
   );
@@ -1075,17 +1081,6 @@ export function RoundVideoOverlay({
     [onFinishRound, pendingCumRoundSummary, stopHandyIfNeeded]
   );
 
-  const handleProceedRoundFromCumDialog = useCallback(() => {
-    const summary = pendingCumRoundSummary ?? {
-      intermediaryCount: firedTriggersRef.current.size,
-      activeAntiPerkCount: antiPerkCountAtRoundStartRef.current,
-    };
-    setPendingCumRoundSummary(null);
-    void stopHandyIfNeeded().finally(() => {
-      onFinishRound(summary);
-    });
-  }, [onFinishRound, pendingCumRoundSummary, stopHandyIfNeeded]);
-
   const handleCloseCumDialog = useCallback(() => {
     setPendingCumRoundSummary(null);
     if (!onClose) return;
@@ -1322,8 +1317,8 @@ export function RoundVideoOverlay({
   }, [activeRound, clearUiHideTimer, showUiTemporarily]);
 
   useEffect(() => {
-    onUiVisibilityChange?.(isUiVisible);
-  }, [isUiVisible, onUiVisibilityChange]);
+    onUiVisibilityChangeRef.current?.(isUiVisible);
+  }, [isUiVisible]);
 
   useEffect(() => {
     setShowProgressBarAlways(initialShowProgressBarAlways);
@@ -1695,6 +1690,8 @@ export function RoundVideoOverlay({
     clearAntiPerkBeatUi,
     clearCountdownTimer,
     clearLoadingMediaTimers,
+    foregroundIntermediaryVideo,
+    foregroundMainVideo,
     stopHandyIfNeeded,
   ]);
 
@@ -2278,7 +2275,7 @@ export function RoundVideoOverlay({
     !isWaitingForHandyStart;
 
   useEffect(() => {
-    onPreviewStateChange?.({
+    onPreviewStateChangeRef.current?.({
       active: Boolean(activeRound),
       loading: Boolean(
         activeRound &&
@@ -2289,7 +2286,6 @@ export function RoundVideoOverlay({
     activeRound,
     isWaitingForHandyStart,
     loadingCountdown,
-    onPreviewStateChange,
     showRemoteLoadingIndicator,
   ]);
 
@@ -2344,15 +2340,15 @@ export function RoundVideoOverlay({
       ? undefined
       : onClose
         ? () => {
-          void stopHandyIfNeeded();
-          onClose();
-          return true;
-        }
-        : onOpenOptions
-          ? () => {
-            onOpenOptions();
+            void stopHandyIfNeeded();
+            onClose();
             return true;
           }
+        : onOpenOptions
+          ? () => {
+              onOpenOptions();
+              return true;
+            }
           : undefined,
     onUnhandledAction: (action) => {
       showUiTemporarily(UI_SHOW_AFTER_MOUSEMOVE_MS);
@@ -2393,14 +2389,17 @@ export function RoundVideoOverlay({
     },
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   useControllerSubscription((_action) => {
     showUiTemporarily(UI_SHOW_AFTER_MOUSEMOVE_MS);
   });
 
   useEffect(() => {
+    const mainVideo = mainVideoRef.current;
+    const intermediaryVideo = intermediaryVideoRef.current;
     return () => {
-      teardownVideoElement(mainVideoRef.current);
-      teardownVideoElement(intermediaryVideoRef.current);
+      teardownVideoElement(mainVideo);
+      teardownVideoElement(intermediaryVideo);
     };
   }, []);
 
@@ -2666,10 +2665,11 @@ export function RoundVideoOverlay({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span>{status}</span>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
-                ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                handyConnected
+                  ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+              }`}
               disabled={!handyConnected}
               onClick={() => {
                 playSelectSound();
@@ -2695,10 +2695,11 @@ export function RoundVideoOverlay({
               {handyManuallyStopped ? "Resume Handy" : "Force Stop"}
             </button>
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
-                ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                canResyncHandy
+                  ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+              }`}
               disabled={!canResyncHandy}
               onClick={() => {
                 playSelectSound();
@@ -2713,10 +2714,11 @@ export function RoundVideoOverlay({
             {canUseRoundControls && (
               <>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.pauseCharges ?? 0) > 0
-                    ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
-                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.pauseCharges ?? 0) > 0
+                      ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
+                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={(roundControl?.pauseCharges ?? 0) <= 0 || isIntermediaryScreenActive}
                   onClick={() => {
                     playSelectSound();
@@ -2729,10 +2731,11 @@ export function RoundVideoOverlay({
                   Pause {roundControl?.pauseCharges ?? 0}
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.skipCharges ?? 0) > 0
-                    ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
-                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    (roundControl?.skipCharges ?? 0) > 0
+                      ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
+                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={(roundControl?.skipCharges ?? 0) <= 0}
                   onClick={() => {
                     playSelectSound();
@@ -2761,10 +2764,11 @@ export function RoundVideoOverlay({
               </button>
             )}
             <button
-              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
-                ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
-                }`}
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                showProgressBarAlways
+                  ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
+              }`}
               onClick={() => {
                 playSelectSound();
                 setShowProgressBarAlways((current) => !current);
@@ -2786,7 +2790,7 @@ export function RoundVideoOverlay({
                 type="button"
                 data-controller-focus-id="round-overlay-cum"
               >
-                Cum (C)
+                {abbreviateNsfwText("Cum (C)", sfwMode)}
               </button>
             )}
             {showCloseButton && onClose && (
@@ -2819,10 +2823,11 @@ export function RoundVideoOverlay({
                   Test Intermediary (I)
                 </button>
                 <button
-                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${segment.kind === "intermediary"
-                    ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                    : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
-                    }`}
+                  className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    segment.kind === "intermediary"
+                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                      : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
+                  }`}
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {
                     playSelectSound();
@@ -2868,7 +2873,9 @@ export function RoundVideoOverlay({
               src={resolvedMainVideoSrc}
               onContextMenu={(event) => event.preventDefault()}
               onError={() => {
-                setFailedVideoUri(mainVideoRef.current?.currentSrc ?? resolvedMainResource.videoUri);
+                setFailedVideoUri(
+                  mainVideoRef.current?.currentSrc ?? resolvedMainResource.videoUri
+                );
                 void handleVideoError(resolvedMainResource.videoUri);
               }}
               onEmptied={() => {
@@ -3241,13 +3248,13 @@ export function RoundVideoOverlay({
                 className="w-full max-w-xl rounded-2xl border border-cyan-300/45 bg-[linear-gradient(145deg,rgba(6,15,38,0.96),rgba(17,8,36,0.96))] p-6 text-zinc-100 shadow-[0_0_55px_rgba(56,189,248,0.25)] backdrop-blur-xl"
               >
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.28em] text-cyan-200/85">
-                  Cum Round Check
+                  {abbreviateNsfwText("Cum Round Check", sfwMode)}
                 </p>
                 <h3 className="mt-2 text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-100 via-sky-100 to-fuchsia-100">
-                  Did you cum as instructed?
+                  {abbreviateNsfwText("Did you cum as instructed?", sfwMode)}
                 </h3>
                 <p className="mt-2 text-sm text-zinc-200/90">
-                  Confirm what happened in this cum round.
+                  {abbreviateNsfwText("Confirm what happened in this cum round.", sfwMode)}
                 </p>
                 <div className="mt-5 grid gap-2">
                   <button
@@ -3257,7 +3264,7 @@ export function RoundVideoOverlay({
                     data-controller-focus-id="round-cum-outcome-came"
                     data-controller-initial="true"
                   >
-                    Came as told
+                    {abbreviateNsfwText("Came as told", sfwMode)}
                   </button>
                   <button
                     type="button"
@@ -3265,7 +3272,7 @@ export function RoundVideoOverlay({
                     onClick={() => resolveCumRoundOutcome("did_not_cum")}
                     data-controller-focus-id="round-cum-outcome-no-cum"
                   >
-                    Did not cum
+                    {abbreviateNsfwText("Did not cum", sfwMode)}
                   </button>
                   <button
                     type="button"
@@ -3366,8 +3373,8 @@ export function RoundVideoOverlay({
             <ControllerHints
               contextId="cum-outcome"
               hints={[
-                { label: "Came as Told", action: "ACTION_X" as const },
-                { label: "Did Not Cum", action: "ACTION_Y" as const },
+                { label: abbreviateNsfwText("Came as Told", sfwMode), action: "ACTION_X" as const },
+                { label: abbreviateNsfwText("Did Not Cum", sfwMode), action: "ACTION_Y" as const },
               ]}
             />
           )}

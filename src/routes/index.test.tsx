@@ -258,7 +258,7 @@ describe("Home route update menu", () => {
 
   it("hides the cum load counter while sfw mode is enabled", () => {
     mocks.sfwModeEnabled = true;
-    mocks.loaderData.overallHighscore = { score: 900, localCheatMode: false };
+    mocks.loaderData.overallHighscore = 900;
     mocks.loaderData.cumLoadCount = 7;
 
     const Component = (Route as unknown as { component: () => ReactElement }).component;

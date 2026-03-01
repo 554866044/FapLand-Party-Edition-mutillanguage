@@ -1,4 +1,5 @@
 import ytDlpSupportedDomains from "../../src/constants/ytDlpSupportedDomains.generated.json";
+import { DEFAULT_TRUSTED_REMOTE_SITES } from "../../src/constants/defaultTrustedRemoteSites";
 import { getStore } from "./store";
 import { listExternalSources, normalizeBaseUrl } from "./integrations/store";
 
@@ -166,7 +167,10 @@ export function listTrustedSites(): {
   );
 
   const builtInYtDlpDomains = sortUnique(
-    Array.isArray(ytDlpSupportedDomains.domains) ? ytDlpSupportedDomains.domains : []
+    [
+      ...(Array.isArray(ytDlpSupportedDomains.domains) ? ytDlpSupportedDomains.domains : []),
+      ...DEFAULT_TRUSTED_REMOTE_SITES,
+    ]
   );
 
   const userTrustedBaseDomains = getStoredTrustedBaseDomains();
@@ -280,4 +284,3 @@ export function collectUnknownRemoteSitesFromResources(
     unknownEntries: entries,
   };
 }
-

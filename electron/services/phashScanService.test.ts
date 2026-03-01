@@ -6,14 +6,12 @@ const {
   getDbMock,
   getInstallScanStatusMock,
   generateVideoPhashMock,
-  getCachedWebsiteVideoLocalPathMock,
-  isStashProxyUriMock,
+  resolveDirectPlayableResolutionMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   getInstallScanStatusMock: vi.fn(),
   generateVideoPhashMock: vi.fn(),
-  getCachedWebsiteVideoLocalPathMock: vi.fn(),
-  isStashProxyUriMock: vi.fn(),
+  resolveDirectPlayableResolutionMock: vi.fn(),
 }));
 
 vi.mock("./db", () => ({
@@ -28,19 +26,25 @@ vi.mock("./phash", () => ({
   generateVideoPhash: generateVideoPhashMock,
 }));
 
-vi.mock("./webVideo", () => ({
-  getCachedWebsiteVideoLocalPath: getCachedWebsiteVideoLocalPathMock,
-  isStashProxyUri: isStashProxyUriMock,
+vi.mock("../../../src/constants/phashSettings", () => ({
+  BACKGROUND_PHASH_SCANNING_ENABLED_KEY: "game.backgroundPhashScanning.enabled",
+  normalizeBackgroundPhashScanningEnabled: () => true,
 }));
 
-function buildDbMock(rows: Array<{
-  roundId: string;
-  roundName: string;
-  resourceId: string;
-  videoUri: string;
-  startTime: number | null;
-  endTime: number | null;
-}>) {
+vi.mock("./integrations", () => ({
+  resolveDirectPlayableResolution: resolveDirectPlayableResolutionMock,
+}));
+
+function buildDbMock(
+  rows: Array<{
+    roundId: string;
+    roundName: string;
+    resourceId: string;
+    videoUri: string;
+    startTime: number | null;
+    endTime: number | null;
+  }>
+) {
   const roundUpdates: Array<{ phash: string | null }> = [];
   const resourceUpdates: Array<{ phash: string | null }> = [];
   let updateCallCount = 0;
@@ -55,6 +59,7 @@ function buildDbMock(rows: Array<{
         })),
       })),
     })),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     update: vi.fn((_table: unknown) => ({
       set: vi.fn((values: { phash?: string | null }) => ({
         where: vi.fn(async () => {
@@ -77,36 +82,36 @@ describe("phashScanService", () => {
     vi.useRealTimers();
     getInstallScanStatusMock.mockReturnValue({ state: "idle" });
     generateVideoPhashMock.mockResolvedValue("phash-1");
-    getCachedWebsiteVideoLocalPathMock.mockResolvedValue(null);
-    isStashProxyUriMock.mockReturnValue(false);
+    resolveDirectPlayableResolutionMock.mockResolvedValue(null);
   });
 
-  it("ignores stash proxy URIs", async () => {
+  it("skips rounds when no playable resolution is found", async () => {
     const dbMock = buildDbMock([
       {
-        roundId: "round-stash",
-        roundName: "Stash Round",
-        resourceId: "res-stash",
+        roundId: "round-unavailable",
+        roundName: "Unavailable Video",
+        resourceId: "res-1",
         videoUri: "app://external/stash?target=http://localhost:9999/stream",
         startTime: 0,
         endTime: 1000,
       },
     ]);
     getDbMock.mockReturnValue(dbMock);
-    isStashProxyUriMock.mockImplementation((uri: string) => uri.includes("/stash"));
+    resolveDirectPlayableResolutionMock.mockResolvedValue(null);
 
     const service = await import("./phashScanService");
     const result = await service.startPhashScanManual();
 
-    expect(isStashProxyUriMock).toHaveBeenCalledWith("app://external/stash?target=http://localhost:9999/stream");
-    expect(getCachedWebsiteVideoLocalPathMock).not.toHaveBeenCalled();
+    expect(resolveDirectPlayableResolutionMock).toHaveBeenCalledWith(
+      "app://external/stash?target=http://localhost:9999/stream"
+    );
     expect(generateVideoPhashMock).not.toHaveBeenCalled();
     expect(result.completedCount).toBe(0);
     expect(result.skippedCount).toBe(1);
     expect(result.state).toBe("done");
   });
 
-  it("computes phash for cached website videos via the phash service", async () => {
+  it("computes phash for resolved video paths", async () => {
     const dbMock = buildDbMock([
       {
         roundId: "round-1",
@@ -118,14 +123,19 @@ describe("phashScanService", () => {
       },
     ]);
     getDbMock.mockReturnValue(dbMock);
-    getCachedWebsiteVideoLocalPathMock.mockResolvedValue("/tmp/cached-website.mp4");
+    resolveDirectPlayableResolutionMock.mockResolvedValue({
+      streamUrl: "/tmp/cached-website.mp4",
+    });
 
     const service = await import("./phashScanService");
     const result = await service.startPhashScanManual();
 
-    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith("https://page.example/watch/1");
+    expect(resolveDirectPlayableResolutionMock).toHaveBeenCalledWith(
+      "https://page.example/watch/1"
+    );
     expect(generateVideoPhashMock).toHaveBeenCalledWith("/tmp/cached-website.mp4", 1000, 5000, {
       lowPriority: true,
+      headers: undefined,
     });
     expect(dbMock.roundUpdates).toHaveLength(1);
     expect(dbMock.resourceUpdates).toHaveLength(1);
@@ -133,7 +143,39 @@ describe("phashScanService", () => {
     expect(result.completedCount).toBe(1);
   });
 
-  it("falls back to another resource on the same round when the first website video is not cached", async () => {
+  it("computes phash with headers when provided by resolution", async () => {
+    const dbMock = buildDbMock([
+      {
+        roundId: "round-headers",
+        roundName: "Headers Round",
+        resourceId: "res-1",
+        videoUri: "app://external/stash?target=http://localhost:9999/stream",
+        startTime: 2000,
+        endTime: 6000,
+      },
+    ]);
+    getDbMock.mockReturnValue(dbMock);
+    resolveDirectPlayableResolutionMock.mockResolvedValue({
+      streamUrl: "http://localhost:9999/stream",
+      headers: { Authorization: "Bearer token123" },
+    });
+
+    const service = await import("./phashScanService");
+    const result = await service.startPhashScanManual();
+
+    expect(generateVideoPhashMock).toHaveBeenCalledWith(
+      "http://localhost:9999/stream",
+      2000,
+      6000,
+      {
+        lowPriority: true,
+        headers: { Authorization: "Bearer token123" },
+      }
+    );
+    expect(result.completedCount).toBe(1);
+  });
+
+  it("falls back to another resource on the same round when the first has no resolution", async () => {
     const dbMock = buildDbMock([
       {
         roundId: "round-1",
@@ -153,9 +195,9 @@ describe("phashScanService", () => {
       },
     ]);
     getDbMock.mockReturnValue(dbMock);
-    getCachedWebsiteVideoLocalPathMock.mockImplementation(async (videoUri: string) => {
-      if (videoUri.endsWith("/cached")) {
-        return "/tmp/cached-website.mp4";
+    resolveDirectPlayableResolutionMock.mockImplementation(async (uri: string) => {
+      if (uri.endsWith("/cached")) {
+        return { streamUrl: "/tmp/cached-website.mp4" };
       }
       return null;
     });
@@ -163,14 +205,15 @@ describe("phashScanService", () => {
     const service = await import("./phashScanService");
     const result = await service.startPhashScanManual();
 
-    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith(
+    expect(resolveDirectPlayableResolutionMock).toHaveBeenCalledWith(
       "https://page.example/watch/uncached"
     );
-    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith(
+    expect(resolveDirectPlayableResolutionMock).toHaveBeenCalledWith(
       "https://page.example/watch/cached"
     );
     expect(generateVideoPhashMock).toHaveBeenCalledWith("/tmp/cached-website.mp4", 1000, 5000, {
       lowPriority: true,
+      headers: undefined,
     });
     expect(dbMock.roundUpdates).toHaveLength(1);
     expect(dbMock.resourceUpdates).toEqual([{ phash: "phash-1" }]);
@@ -222,9 +265,9 @@ describe("phashScanService", () => {
     });
 
     const releases = new Map<string, () => void>();
-    getCachedWebsiteVideoLocalPathMock.mockImplementation(async (videoUri: string) => {
-      if (videoUri.endsWith("/1")) return "/tmp/cached-website-1.mp4";
-      if (videoUri.endsWith("/2")) return "/tmp/cached-website-2.mp4";
+    resolveDirectPlayableResolutionMock.mockImplementation(async (uri: string) => {
+      if (uri.endsWith("/1")) return { streamUrl: "/tmp/cached-website-1.mp4" };
+      if (uri.endsWith("/2")) return { streamUrl: "/tmp/cached-website-2.mp4" };
       return null;
     });
     generateVideoPhashMock.mockImplementation(
@@ -240,6 +283,7 @@ describe("phashScanService", () => {
     await vi.waitFor(() => {
       expect(generateVideoPhashMock).toHaveBeenCalledWith("/tmp/cached-website-1.mp4", 1000, 5000, {
         lowPriority: true,
+        headers: undefined,
       });
     });
 
@@ -251,6 +295,7 @@ describe("phashScanService", () => {
     await vi.waitFor(() => {
       expect(generateVideoPhashMock).toHaveBeenCalledWith("/tmp/cached-website-2.mp4", 2000, 6000, {
         lowPriority: true,
+        headers: undefined,
       });
     });
 

@@ -34,7 +34,7 @@ function createCampaignBoard(plan: SinglePlayerSessionPlan): BoardField[] {
 
 export function createSinglePlayerGameConfig(
   plan: SinglePlayerSessionPlan,
-  economyOverrides?: Partial<GameConfig["economy"]>,
+  economyOverrides?: Partial<GameConfig["economy"]>
 ): GameConfig {
   const defaultEconomy: GameConfig["economy"] = {
     startingMoney: 120,
@@ -109,5 +109,6 @@ export function createSinglePlayerGameConfig(
       cumRoundIds: [...plan.cumRoundIds],
     },
     economy,
+    roundStartDelayMs: 20000,
   };
 }

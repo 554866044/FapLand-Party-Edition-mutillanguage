@@ -1,17 +1,25 @@
 import { getDb } from "../db";
 import { eq, inArray, and } from "drizzle-orm";
 import { resource, round } from "../db/schema";
-import { toLocalMediaUri } from "../localMedia";
+import { fromLocalMediaUri, toLocalMediaUri } from "../localMedia";
 import { generateRoundPreviewImageDataUri } from "../roundPreview";
 import { createMediaResponse } from "../protocol/mediaResponse";
 import { resolvePlayableVideoUri, toLocalVideoPath } from "../playableVideo";
-import { findBestSimilarPhashMatch, normalizePhashForSimilarity } from "../../../src/utils/phashSimilarity";
+import {
+  findBestSimilarPhashMatch,
+  normalizePhashForSimilarity,
+} from "../../../src/utils/phashSimilarity";
 import {
   buildWebsiteVideoProxyUri,
   createWebsiteVideoStreamResponse,
+  ensureWebsiteVideoCached,
   getCachedWebsiteVideoLocalPath,
+  getWebsiteVideoTargetUrl,
   isDirectRemoteMediaUri,
+  isStashProxyUri,
   isWebsiteVideoCandidateUri,
+  isWebsiteVideoProxyUri,
+  parseStashProxyUri,
   resolveWebsiteVideoStream,
   warmWebsiteVideoCache,
 } from "../webVideo";
@@ -33,7 +41,13 @@ import {
   type CreateStashSourceInput,
   type UpdateStashSourceInput,
 } from "./store";
-import { fetchStashMediaWithAuth, searchStashTags, testStashConnection, toNormalizedPhash } from "./stashClient";
+import {
+  buildAuthHeaders,
+  fetchStashMediaWithAuth,
+  searchStashTags,
+  testStashConnection,
+  toNormalizedPhash,
+} from "./stashClient";
 import { stashProvider } from "./providers/stashProvider";
 import type {
   ExternalProvider,
@@ -72,7 +86,10 @@ type SyncMutableContext = {
   status: IntegrationSyncStatus;
 };
 
-function resolveManagedPreviewImage(item: NormalizedSceneImportItem, source: ExternalSource): string | null {
+function resolveManagedPreviewImage(
+  item: NormalizedSceneImportItem,
+  source: ExternalSource
+): string | null {
   const previewImageUri = normalizeNullableText(item.previewImageUri);
   if (!previewImageUri) return null;
 
@@ -110,7 +127,10 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-async function hasNonEmptyFunscript(source: ExternalSource, funscriptUri: string | null): Promise<boolean> {
+async function hasNonEmptyFunscript(
+  source: ExternalSource,
+  funscriptUri: string | null
+): Promise<boolean> {
   const normalizedUri = normalizeNullableText(funscriptUri);
   if (!normalizedUri) return true;
 
@@ -123,7 +143,7 @@ async function hasNonEmptyFunscript(source: ExternalSource, funscriptUri: string
         headers: {
           Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
         },
-      }),
+      })
     );
 
     if (!response.ok) {
@@ -155,7 +175,7 @@ function isMissingText(value: string | null | undefined): boolean {
 function rememberRoundPhashCandidate(
   context: SyncMutableContext,
   roundId: string,
-  phash: string | null | undefined,
+  phash: string | null | undefined
 ): void {
   const normalizedForSimilarity = normalizePhashForSimilarity(phash);
   if (!normalizedForSimilarity) return;
@@ -169,12 +189,15 @@ function findSimilarLinkedRoundId(context: SyncMutableContext, phash: string): s
   const similar = findBestSimilarPhashMatch(
     phash,
     context.roundPhashCandidates,
-    (candidate) => candidate.phash,
+    (candidate) => candidate.phash
   );
   return similar?.item.roundId ?? null;
 }
 
-function mergeRoundUpdateData(cachedRound: CachedRound, item: NormalizedSceneImportItem): Partial<typeof round.$inferInsert> {
+function mergeRoundUpdateData(
+  cachedRound: CachedRound,
+  item: NormalizedSceneImportItem
+): Partial<typeof round.$inferInsert> {
   const data: Partial<typeof round.$inferInsert> = {};
 
   if (isMissingText(cachedRound.name) && !isMissingText(item.name)) {
@@ -200,7 +223,10 @@ function mergeRoundUpdateData(cachedRound: CachedRound, item: NormalizedSceneImp
   return data;
 }
 
-async function resolvePreviewImageForVideo(context: SyncMutableContext, videoUri: string): Promise<string | null> {
+async function resolvePreviewImageForVideo(
+  context: SyncMutableContext,
+  videoUri: string
+): Promise<string | null> {
   const cached = context.previewByVideoUri.get(videoUri);
   if (cached !== undefined) {
     return cached;
@@ -214,29 +240,38 @@ async function resolvePreviewImageForVideo(context: SyncMutableContext, videoUri
 async function appendResourceIfMissing(
   context: SyncMutableContext,
   cachedRound: CachedRound,
-  item: NormalizedSceneImportItem,
+  item: NormalizedSceneImportItem
 ): Promise<number> {
   const existing = cachedRound.resourcesByVideoUri.get(item.videoUri);
   if (existing) {
     if (existing.durationMs === null && item.durationMs !== null) {
-      await context.db.update(resource).set({ durationMs: item.durationMs }).where(eq(resource.id, existing.id));
+      await context.db
+        .update(resource)
+        .set({ durationMs: item.durationMs })
+        .where(eq(resource.id, existing.id));
       existing.durationMs = item.durationMs;
     }
     if (existing.disabled) {
-      await context.db.update(resource).set({ disabled: false }).where(eq(resource.id, existing.id));
+      await context.db
+        .update(resource)
+        .set({ disabled: false })
+        .where(eq(resource.id, existing.id));
       existing.disabled = false;
     }
     return 0;
   }
 
-  const [created] = await context.db.insert(resource).values({
-    roundId: cachedRound.id,
-    videoUri: item.videoUri,
-    funscriptUri: item.funscriptUri,
-    phash: item.phash,
-    durationMs: item.durationMs,
-    disabled: false,
-  }).returning();
+  const [created] = await context.db
+    .insert(resource)
+    .values({
+      roundId: cachedRound.id,
+      videoUri: item.videoUri,
+      funscriptUri: item.funscriptUri,
+      phash: item.phash,
+      durationMs: item.durationMs,
+      disabled: false,
+    })
+    .returning();
 
   cachedRound.resourcesByVideoUri.set(item.videoUri, {
     id: created.id,
@@ -275,30 +310,37 @@ async function createManagedRound(
   context: SyncMutableContext,
   source: ExternalSource,
   item: NormalizedSceneImportItem,
-  heroId: string | null,
+  heroId: string | null
 ): Promise<{ round: CachedRound; resourcesAdded: number }> {
-  const previewImage = resolveManagedPreviewImage(item, source)
-    ?? await resolvePreviewImageForVideo(context, item.videoUri);
+  const previewImage =
+    resolveManagedPreviewImage(item, source) ??
+    (await resolvePreviewImageForVideo(context, item.videoUri));
 
-  const [createdRound] = await context.db.insert(round).values({
-    name: item.name,
-    author: item.author,
-    description: item.description,
-    phash: item.phash,
-    previewImage,
-    type: item.roundTypeFallback,
-    heroId,
-    installSourceKey: item.installSourceKey,
-  }).returning();
+  const [createdRound] = await context.db
+    .insert(round)
+    .values({
+      name: item.name,
+      author: item.author,
+      description: item.description,
+      phash: item.phash,
+      previewImage,
+      type: item.roundTypeFallback,
+      heroId,
+      installSourceKey: item.installSourceKey,
+    })
+    .returning();
 
-  const [createdResource] = await context.db.insert(resource).values({
-    roundId: createdRound.id,
-    videoUri: item.videoUri,
-    funscriptUri: item.funscriptUri,
-    phash: item.phash,
-    durationMs: item.durationMs,
-    disabled: false,
-  }).returning();
+  const [createdResource] = await context.db
+    .insert(resource)
+    .values({
+      roundId: createdRound.id,
+      videoUri: item.videoUri,
+      funscriptUri: item.funscriptUri,
+      phash: item.phash,
+      durationMs: item.durationMs,
+      disabled: false,
+    })
+    .returning();
 
   const cached: CachedRound = {
     id: createdRound.id,
@@ -309,11 +351,14 @@ async function createManagedRound(
     previewImage: createdRound.previewImage,
     installSourceKey: createdRound.installSourceKey,
     resourcesByVideoUri: new Map([
-      [createdResource.videoUri, {
-        id: createdResource.id,
-        disabled: createdResource.disabled,
-        durationMs: createdResource.durationMs,
-      }],
+      [
+        createdResource.videoUri,
+        {
+          id: createdResource.id,
+          disabled: createdResource.disabled,
+          durationMs: createdResource.durationMs,
+        },
+      ],
     ]),
   };
 
@@ -328,7 +373,7 @@ async function createManagedRound(
 async function ingestScene(
   context: SyncMutableContext,
   source: ExternalSource,
-  item: NormalizedSceneImportItem,
+  item: NormalizedSceneImportItem
 ): Promise<SceneIngestResult> {
   const existingManagedRoundId = context.roundIdByInstallSourceKey.get(item.installSourceKey);
   if (existingManagedRoundId) {
@@ -339,8 +384,9 @@ async function ingestScene(
 
     const updateData = mergeRoundUpdateData(existingRound, item);
     if (!existingRound.previewImage) {
-      const previewImage = resolveManagedPreviewImage(item, source)
-        ?? await resolvePreviewImageForVideo(context, item.videoUri);
+      const previewImage =
+        resolveManagedPreviewImage(item, source) ??
+        (await resolvePreviewImageForVideo(context, item.videoUri));
       if (previewImage) {
         updateData.previewImage = previewImage;
         existingRound.previewImage = previewImage;
@@ -378,14 +424,16 @@ async function ingestScene(
   }
 
   if (phash) {
-    const matchedRoundId = context.roundIdByPhash.get(phash) ?? findSimilarLinkedRoundId(context, phash);
+    const matchedRoundId =
+      context.roundIdByPhash.get(phash) ?? findSimilarLinkedRoundId(context, phash);
     if (matchedRoundId) {
       const matchedRound = context.roundById.get(matchedRoundId);
       if (matchedRound) {
         const updateData = mergeRoundUpdateData(matchedRound, item);
         if (!matchedRound.previewImage) {
-          const previewImage = resolveManagedPreviewImage(item, source)
-            ?? await resolvePreviewImageForVideo(context, item.videoUri);
+          const previewImage =
+            resolveManagedPreviewImage(item, source) ??
+            (await resolvePreviewImageForVideo(context, item.videoUri));
           if (previewImage) {
             updateData.previewImage = previewImage;
             matchedRound.previewImage = previewImage;
@@ -474,7 +522,10 @@ async function buildSyncContext(status: IntegrationSyncStatus): Promise<SyncMuta
       previewImage: row.previewImage,
       installSourceKey: row.installSourceKey,
       resourcesByVideoUri: new Map(
-        row.resources.map((res) => [res.videoUri, { id: res.id, disabled: res.disabled, durationMs: res.durationMs }]),
+        row.resources.map((res) => [
+          res.videoUri,
+          { id: res.id, disabled: res.disabled, durationMs: res.durationMs },
+        ])
       ),
     };
 
@@ -600,16 +651,22 @@ async function runSync(triggeredBy: "startup" | "manual"): Promise<IntegrationSy
 
       const seenIds = [...seenManagedRoundIds];
       if (seenIds.length > 0) {
-        await context.db.update(resource).set({ disabled: false }).where(
-          and(inArray(resource.roundId, seenIds), eq(resource.disabled, true))
-        );
+        await context.db
+          .update(resource)
+          .set({ disabled: false })
+          .where(and(inArray(resource.roundId, seenIds), eq(resource.disabled, true)));
       }
 
-      const staleManagedRoundIds = managedCandidateIds.filter((candidateId) => !seenManagedRoundIds.has(candidateId));
+      const staleManagedRoundIds = managedCandidateIds.filter(
+        (candidateId) => !seenManagedRoundIds.has(candidateId)
+      );
       if (staleManagedRoundIds.length > 0) {
-        await context.db.update(resource).set({ disabled: true }).where(
-          and(inArray(resource.roundId, staleManagedRoundIds), eq(resource.disabled, false))
-        );
+        await context.db
+          .update(resource)
+          .set({ disabled: true })
+          .where(
+            and(inArray(resource.roundId, staleManagedRoundIds), eq(resource.disabled, false))
+          );
       }
 
       for (const candidateId of managedCandidateIds) {
@@ -685,7 +742,9 @@ export async function searchSourceTags(input: {
   });
 }
 
-export async function syncExternalSources(triggeredBy: "startup" | "manual"): Promise<IntegrationSyncStatus> {
+export async function syncExternalSources(
+  triggeredBy: "startup" | "manual"
+): Promise<IntegrationSyncStatus> {
   if (activeSyncPromise) {
     return activeSyncPromise;
   }
@@ -744,16 +803,15 @@ export function resolveMediaUri(uri: string, purpose: MediaPurpose): string {
   return normalizedUri;
 }
 
-export function resolveResourceUris(resource: {
-  videoUri: string;
-  funscriptUri: string | null;
-}): {
+export function resolveResourceUris(resource: { videoUri: string; funscriptUri: string | null }): {
   videoUri: string;
   funscriptUri: string | null;
 } {
   return {
     videoUri: resolveMediaUri(resource.videoUri, "video"),
-    funscriptUri: resource.funscriptUri ? resolveMediaUri(resource.funscriptUri, "funscript") : null,
+    funscriptUri: resource.funscriptUri
+      ? resolveMediaUri(resource.funscriptUri, "funscript")
+      : null,
   };
 }
 
@@ -827,7 +885,7 @@ function buildForwardHeaders(request: Request, extraHeaders: Record<string, stri
 async function proxyRemoteMediaRequest(
   targetUrl: string,
   request: Request,
-  extraHeaders: Record<string, string> = {},
+  extraHeaders: Record<string, string> = {}
 ): Promise<Response> {
   const upstream = await fetch(targetUrl, {
     method: request.method,
@@ -847,9 +905,21 @@ async function createWebsiteVideoResponse(request: Request, parsedRequest: URL):
     const resolvedPlayable = await resolvePlayableVideoUri(toLocalMediaUri(cachedLocalPath));
     const finalLocalPath = toLocalVideoPath(resolvedPlayable.videoUri);
     if (!finalLocalPath) {
-      return new Response("Cached website video is not backed by a local playable file.", { status: 500 });
+      return new Response("Cached website video is not backed by a local playable file.", {
+        status: 500,
+      });
     }
     return createMediaResponse(finalLocalPath, request);
+  }
+
+  if (target.includes("mega.nz/file/") || target.includes("mega.co.nz/file/")) {
+    try {
+      const metadata = await ensureWebsiteVideoCached(target);
+      return createMediaResponse(metadata.finalFilePath, request);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Website video proxy failed.";
+      return new Response(message, { status: 502 });
+    }
   }
 
   const cachePromise = warmWebsiteVideoCache(target);
@@ -920,7 +990,9 @@ export async function proxyExternalRequest(request: Request): Promise<Response> 
   }
 }
 
-export function inferRoundSourceLabel(input: { installSourceKey: string | null }): "stash" | "local" {
+export function inferRoundSourceLabel(input: {
+  installSourceKey: string | null;
+}): "stash" | "local" {
   if (input.installSourceKey?.startsWith("stash:")) {
     return "stash";
   }
@@ -934,4 +1006,73 @@ export function coerceRoundType(value: string | null | undefined): RoundType {
   if (value === "Interjection") return "Interjection";
   if (value === "Cum") return "Cum";
   return "Normal";
+}
+export type DirectPlayableResolution = {
+  streamUrl: string;
+  headers?: Record<string, string>;
+};
+
+export async function resolveDirectPlayableResolution(
+  uri: string
+): Promise<DirectPlayableResolution | null> {
+  const normalizedUri = normalizeNullableText(uri);
+  if (!normalizedUri) return null;
+
+  if (isWebsiteVideoProxyUri(normalizedUri) || isWebsiteVideoCandidateUri(normalizedUri)) {
+    const targetUrl = getWebsiteVideoTargetUrl(normalizedUri);
+    if (!targetUrl) return null;
+
+    const cachedPath = await getCachedWebsiteVideoLocalPath(targetUrl);
+    if (cachedPath) {
+      return { streamUrl: cachedPath };
+    }
+
+    if (targetUrl.includes("mega.nz/file/") || targetUrl.includes("mega.co.nz/file/")) {
+      try {
+        const metadata = await ensureWebsiteVideoCached(targetUrl);
+        return { streamUrl: metadata.finalFilePath };
+      } catch {
+        return null;
+      }
+    }
+
+    try {
+      const stream = await resolveWebsiteVideoStream(targetUrl);
+      return {
+        streamUrl: stream.streamUrl,
+        headers: stream.headers,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  if (isStashProxyUri(normalizedUri)) {
+    const parsed = parseStashProxyUri(normalizedUri);
+    const sourceId = normalizeNullableText(new URL(normalizedUri).searchParams.get("sourceId"));
+    const target = parsed?.targetUrl;
+
+    if (!sourceId || !target) return null;
+
+    const source = getExternalSourceById(sourceId);
+    if (!source || !source.enabled) return null;
+
+    try {
+      const authHeaders = await buildAuthHeaders(source);
+      return {
+        streamUrl: target,
+        headers: authHeaders,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Fallback for direct local files or unknown formats
+  const localPath = fromLocalMediaUri(normalizedUri);
+  if (localPath) {
+    return { streamUrl: localPath };
+  }
+
+  return null;
 }

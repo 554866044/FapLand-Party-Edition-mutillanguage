@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function makeGraphPlaylist(id: string, name: string) {
@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
     availablePlaylists: [] as unknown[],
     activePlaylist: null as unknown,
   },
+  searchData: {} as Record<string, unknown>,
   navigate: vi.fn(),
   playlists: {
     list: vi.fn(),
@@ -71,6 +72,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => () => ({
     useLoaderData: () => mocks.loaderData,
+    useSearch: () => mocks.searchData,
   }),
   useNavigate: () => mocks.navigate,
 }));
@@ -174,6 +176,10 @@ vi.mock("../hooks/usePlayableVideoFallback", () => ({
   usePlayableVideoFallback: vi.fn(() => null),
 }));
 
+vi.mock("../hooks/useSfwMode", () => ({
+  useSfwMode: vi.fn(() => false),
+}));
+
 vi.mock("../services/db", () => ({
   db: {
     round: {
@@ -201,6 +207,7 @@ beforeEach(() => {
     availablePlaylists: [playlist],
     activePlaylist: playlist,
   };
+  mocks.searchData = {};
   mocks.playlists.setActive.mockResolvedValue(undefined);
   mocks.playlists.create.mockResolvedValue(makeGraphPlaylist("created-playlist", "Created Playlist"));
   mocks.playlists.analyzeImportFile.mockResolvedValue({
@@ -242,23 +249,19 @@ describe("PlaylistWorkshopRoute", () => {
 
     render(<PlaylistWorkshopRoute />);
 
-    expect(screen.getByText("No playlist exists yet.")).toBeDefined();
+    expect(screen.getByText(/no playlist exists yet\./i)).toBeDefined();
     expect(screen.getByRole("button", { name: "Create Playlist" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Import .fplay" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Import .fplay" })).toBeNull();
   });
 
   it("directs graph playlists to the advanced map editor", async () => {
+    mocks.searchData = { open: "active" };
     render(<PlaylistWorkshopRoute />);
 
-    expect(screen.getByText("Use the Advanced Map Editor")).toBeDefined();
+    expect(screen.getByText("Opening Graph Editor")).toBeDefined();
     expect(
-      screen.getByText(/playlist workshop only supports linear playlists/i)
+      screen.getByText(/this playlist uses a graph board, so it opens in the advanced map editor/i)
     ).toBeDefined();
-
-    const openButtons = screen.getAllByRole("button", {
-      name: "Open Advanced Map Editor",
-    });
-    fireEvent.click(openButtons[0]!);
 
     await waitFor(() => {
       expect(mocks.playlists.setActive).toHaveBeenCalledWith("graph-playlist");
@@ -266,5 +269,17 @@ describe("PlaylistWorkshopRoute", () => {
     });
 
     expect(window.sessionStorage.getItem("mapEditor.testPlaylistId")).toBe("graph-playlist");
+  });
+
+  it("keeps the workshop overview accessible for graph playlists by default", async () => {
+    render(<PlaylistWorkshopRoute />);
+
+    expect(screen.getByText("Select Playlist")).toBeDefined();
+    expect(screen.getByText("Open A Playlist")).toBeDefined();
+    expect(screen.getByRole("button", { name: /graph playlist/i })).toBeDefined();
+
+    await waitFor(() => {
+      expect(mocks.navigate).not.toHaveBeenCalledWith({ to: "/map-editor" });
+    });
   });
 });

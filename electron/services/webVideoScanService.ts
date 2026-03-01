@@ -287,8 +287,7 @@ function launchScanRun(): void {
       scanStatus.currentRoundName = null;
       scanStatus.currentUrl = null;
 
-      const message =
-        error instanceof Error ? error.message : "Unknown website video scan error.";
+      const message = error instanceof Error ? error.message : "Unknown website video scan error.";
       scanStatus.errors.push({
         resourceId: "scan",
         roundId: "scan",
@@ -346,6 +345,7 @@ export function requestWebsiteVideoScanAbort(): WebsiteVideoScanStatus {
   return cloneStatus(scanStatus);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function startScanInternal(_ignoreEnabledSetting: boolean): Promise<WebsiteVideoScanStatus> {
   if (activeScanPromise) {
     rerunRequested = true;

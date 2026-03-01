@@ -71,6 +71,8 @@ export const gameProfile = sqliteTable('GameProfile', {
     id: text('id').primaryKey(),
     highscore: integer('highscore').notNull().default(0),
     highscoreCheatMode: integer('highscoreCheatMode', { mode: 'boolean' }).notNull().default(false),
+    highscoreAssisted: integer('highscoreAssisted', { mode: 'boolean' }).notNull().default(false),
+    highscoreAssistedSaveMode: text('highscoreAssistedSaveMode', { enum: ['checkpoint', 'everywhere'] }),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -105,10 +107,24 @@ export const singlePlayerRunHistory = sqliteTable('SinglePlayerRunHistory', {
     endingPosition: integer('endingPosition').notNull(),
     turn: integer('turn').notNull(),
     cheatModeActive: integer('cheatModeActive', { mode: 'boolean' }).notNull().default(false),
+    assistedActive: integer('assistedActive', { mode: 'boolean' }).notNull().default(false),
+    assistedSaveMode: text('assistedSaveMode', { enum: ['checkpoint', 'everywhere'] }),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ({
     historyFinishedAtIdx: index('SinglePlayerRunHistory_finishedAt_idx').on(table.finishedAt),
 }));
+
+export const singlePlayerRunSave = sqliteTable('SinglePlayerRunSave', {
+    id: text('id').primaryKey().$defaultFn(() => createId()),
+    playlistId: text('playlistId').notNull().references(() => playlist.id, { onDelete: 'cascade', onUpdate: 'cascade' }).unique(),
+    playlistName: text('playlistName').notNull(),
+    playlistFormatVersion: integer('playlistFormatVersion'),
+    saveMode: text('saveMode', { enum: ['checkpoint', 'everywhere'] }).notNull(),
+    snapshotJson: text('snapshotJson', { mode: 'json' }).notNull(),
+    savedAt: integer('savedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+});
 
 export const heroRelations = relations(hero, ({ many }) => ({
     rounds: many(round),

@@ -1,5 +1,4 @@
 import { isNull, and, eq } from "drizzle-orm";
-import { fromLocalMediaUri } from "./localMedia";
 import { getDb } from "./db";
 import { round, resource } from "./db/schema";
 import { getStore } from "./store";
@@ -9,7 +8,7 @@ import {
 } from "../../src/constants/phashSettings";
 import { generateVideoPhash } from "./phash";
 import { getInstallScanStatus } from "./installer";
-import { getCachedWebsiteVideoLocalPath, isStashProxyUri } from "./webVideo";
+import { resolveDirectPlayableResolution, type DirectPlayableResolution } from "./integrations";
 
 export type PhashScanState = "idle" | "running" | "done" | "aborted" | "error";
 
@@ -136,17 +135,8 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function resolvePhashVideoPath(videoUri: string): Promise<string | null> {
-  if (isStashProxyUri(videoUri)) {
-    return null;
-  }
-
-  const localVideoPath = fromLocalMediaUri(videoUri);
-  if (localVideoPath) {
-    return localVideoPath;
-  }
-
-  return getCachedWebsiteVideoLocalPath(videoUri);
+async function resolvePhashVideoPath(videoUri: string): Promise<DirectPlayableResolution | null> {
+  return resolveDirectPlayableResolution(videoUri);
 }
 
 async function runPhashScan(): Promise<void> {
@@ -157,8 +147,11 @@ async function runPhashScan(): Promise<void> {
   if (roundsToProcess.length === 0) {
     scanStatus.state = "done";
     scanStatus.finishedAt = new Date().toISOString();
+    console.log("[PhashScan] No rounds without phash found. Scan finished.");
     return;
   }
+
+  console.log(`[PhashScan] Started scanning ${roundsToProcess.length} rounds...`);
 
   const db = getDb();
 
@@ -166,37 +159,47 @@ async function runPhashScan(): Promise<void> {
     if (abortRequested) {
       scanStatus.state = "aborted";
       scanStatus.finishedAt = new Date().toISOString();
+      console.log("[PhashScan] Scan aborted.");
       return;
     }
 
     scanStatus.currentRoundName = row.roundName;
 
-    let localVideoPath: string | null = null;
-    let resolvedResourceId: string | null = null;
-
-    for (const candidate of row.resources) {
-      localVideoPath = await resolvePhashVideoPath(candidate.videoUri);
-      if (!localVideoPath) continue;
-      resolvedResourceId = candidate.resourceId;
-      break;
-    }
-
-    if (!localVideoPath || !resolvedResourceId) {
-      pushScanError(
-        row.roundId,
-        row.roundName,
-        "Video is not available as a local file yet, cannot compute phash."
-      );
-      scanStatus.skippedCount += 1;
-      continue;
-    }
+    const startTime = Date.now();
+    console.log(
+      `[PhashScan] Processing round "${row.roundName}" (${row.resources.length} resources)...`
+    );
 
     try {
+      let resolution: DirectPlayableResolution | null = null;
+      let resolvedResourceId: string | null = null;
+
+      for (const [index, candidate] of row.resources.entries()) {
+        console.log(
+          `[PhashScan] [${row.roundName}] Resolving path for resource ${index + 1}/${row.resources.length}: ${candidate.videoUri}`
+        );
+        resolution = await resolvePhashVideoPath(candidate.videoUri);
+        console.log(`[PhashScan] [${row.roundName}] Result: ${resolution ? "found" : "not found"}`);
+        if (resolution) {
+          resolvedResourceId = candidate.resourceId;
+          break;
+        }
+      }
+
+      if (!resolution || !resolvedResourceId) {
+        console.log(
+          `[PhashScan] [${row.roundName}] Video is not available for phash computation yet.`
+        );
+        scanStatus.skippedCount += 1;
+        continue;
+      }
+
+      console.log(`[PhashScan] [${row.roundName}] Generating phash...`);
       const phash = await generateVideoPhash(
-        localVideoPath,
+        resolution.streamUrl,
         row.startTime ?? undefined,
         row.endTime ?? undefined,
-        { lowPriority: true }
+        { lowPriority: true, headers: resolution.headers }
       );
 
       if (!phash || typeof phash !== "string" || phash.trim().length === 0) {
@@ -205,24 +208,44 @@ async function runPhashScan(): Promise<void> {
         continue;
       }
 
+      const trimmedPhash = phash.trim();
       await db
         .update(round)
-        .set({ phash: phash.trim(), updatedAt: new Date() })
+        .set({ phash: trimmedPhash, updatedAt: new Date() })
         .where(eq(round.id, row.roundId));
 
-      await db.update(resource).set({ phash: phash.trim() }).where(eq(resource.id, resolvedResourceId));
+      await db
+        .update(resource)
+        .set({ phash: trimmedPhash })
+        .where(eq(resource.id, resolvedResourceId));
 
       scanStatus.completedCount += 1;
+      console.log(
+        `[PhashScan] [${scanStatus.completedCount + scanStatus.skippedCount + scanStatus.failedCount}/${
+          scanStatus.totalCount
+        }] Successfully generated phash for "${row.roundName}"`
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown error during phash generation.";
       pushScanError(row.roundId, row.roundName, message);
       scanStatus.skippedCount += 1;
+      console.log(
+        `[PhashScan] [${scanStatus.completedCount + scanStatus.skippedCount + scanStatus.failedCount}/${
+          scanStatus.totalCount
+        }] Failed "${row.roundName}": ${message}`
+      );
+    } finally {
+      const duration = Date.now() - startTime;
+      console.log(`[PhashScan] Finished processing round "${row.roundName}" in ${duration}ms.`);
     }
 
     await sleep(100);
   }
 
+  console.log(
+    `[PhashScan] Finished scanning. Completed: ${scanStatus.completedCount}, Skipped: ${scanStatus.skippedCount}, Failed: ${scanStatus.failedCount}`
+  );
   scanStatus.state = "done";
   scanStatus.finishedAt = new Date().toISOString();
   scanStatus.currentRoundName = null;
@@ -241,6 +264,7 @@ function launchPhashScanRun(): void {
         roundName: "Phash Scan",
         reason: message,
       });
+      console.error(`[PhashScan] Scan failed: ${message}`);
     })
     .finally(() => {
       activeScanPromise = null;

@@ -43,7 +43,12 @@ export function PlaylistPackExportDialog({
   playlistId: string;
   playlistName: string;
   onClose: () => void;
-  onSubmit: (input: { compressionMode: CompressionMode; compressionStrength: number; includeMedia: boolean; asFpack: boolean }) => Promise<boolean>;
+  onSubmit: (input: {
+    compressionMode: CompressionMode;
+    compressionStrength: number;
+    includeMedia: boolean;
+    asFpack: boolean;
+  }) => Promise<boolean>;
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [compressionMode, setCompressionMode] = useState<CompressionMode | null>(null);
@@ -66,34 +71,41 @@ export function PlaylistPackExportDialog({
 
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setAnalyzing(true);
-      playlists
-        .analyzeExportPackage({
-          playlistId,
-          compressionMode: compressionMode ?? undefined,
-          compressionStrength,
-          includeMedia,
-        })
-        .then((result) => {
-          if (cancelled) return;
-          setAnalysis(result);
-          setError(null);
-          if (!userTouchedModeRef.current && compressionMode === null) {
-            setCompressionMode(result.compression.defaultMode);
-          }
-        })
-        .catch((analysisError) => {
-          if (cancelled) return;
-          setAnalysis(null);
-          setError(analysisError instanceof Error ? analysisError.message : "Failed to analyze export package.");
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setAnalyzing(false);
-          }
-        });
-    }, compressionMode === null ? 0 : 220);
+    const timer = window.setTimeout(
+      () => {
+        setAnalyzing(true);
+        playlists
+          .analyzeExportPackage({
+            playlistId,
+            compressionMode: compressionMode ?? undefined,
+            compressionStrength,
+            includeMedia,
+          })
+          .then((result) => {
+            if (cancelled) return;
+            setAnalysis(result);
+            setError(null);
+            if (!userTouchedModeRef.current && compressionMode === null) {
+              setCompressionMode(result.compression.defaultMode);
+            }
+          })
+          .catch((analysisError) => {
+            if (cancelled) return;
+            setAnalysis(null);
+            setError(
+              analysisError instanceof Error
+                ? analysisError.message
+                : "Failed to analyze export package."
+            );
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setAnalyzing(false);
+            }
+          });
+      },
+      compressionMode === null ? 0 : 220
+    );
 
     return () => {
       cancelled = true;
@@ -102,15 +114,22 @@ export function PlaylistPackExportDialog({
   }, [playlistId, compressionMode, compressionStrength, includeMedia]);
 
   const canEnableCompression = analysis?.compression.supported ?? false;
-  const effectiveMode: CompressionMode = compressionMode ?? analysis?.compression.defaultMode ?? "copy";
+  const effectiveMode: CompressionMode =
+    compressionMode ?? analysis?.compression.defaultMode ?? "copy";
   const estimate = analysis?.estimate ?? null;
   const savingsBytes = estimate?.savingsBytes ?? 0;
   const savingsLabel = useMemo(() => formatByteSize(savingsBytes), [savingsBytes]);
-  const sourceSizeLabel = useMemo(() => formatByteSize(estimate?.sourceVideoBytes ?? 0), [estimate?.sourceVideoBytes]);
-  const finalSizeLabel = useMemo(() => formatByteSize(estimate?.expectedVideoBytes ?? 0), [estimate?.expectedVideoBytes]);
+  const sourceSizeLabel = useMemo(
+    () => formatByteSize(estimate?.sourceVideoBytes ?? 0),
+    [estimate?.sourceVideoBytes]
+  );
+  const finalSizeLabel = useMemo(
+    () => formatByteSize(estimate?.expectedVideoBytes ?? 0),
+    [estimate?.expectedVideoBytes]
+  );
   const timeEstimateLabel = useMemo(
     () => formatDurationEstimate(estimate?.estimatedCompressionSeconds ?? 0),
-    [estimate?.estimatedCompressionSeconds],
+    [estimate?.estimatedCompressionSeconds]
   );
 
   const handleSubmit = async () => {
@@ -146,9 +165,12 @@ export function PlaylistPackExportDialog({
                 Playlist Pack Export
               </p>
               <div>
-                <h2 className="text-3xl font-black tracking-tight text-white">Prepare {playlistName}</h2>
+                <h2 className="text-3xl font-black tracking-tight text-white">
+                  Prepare {playlistName}
+                </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                  Review the estimated pack size and compression time before choosing the destination folder.
+                  Review the estimated pack size and compression time before choosing the
+                  destination folder.
                 </p>
               </div>
             </div>
@@ -156,10 +178,11 @@ export function PlaylistPackExportDialog({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${submitting
+              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${
+                submitting
                   ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                   : "border-slate-600/80 bg-black/30 text-slate-300 transition-all duration-200 hover:border-cyan-200/60 hover:text-white"
-                }`}
+              }`}
             >
               Close
             </button>
@@ -172,9 +195,14 @@ export function PlaylistPackExportDialog({
                   Package Options
                 </p>
                 <div className="mt-4 flex flex-col gap-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- label wraps input and has text content */}
+                  <label
+                    htmlFor="export-include-media"
+                    className="flex items-center gap-3 cursor-pointer"
+                  >
                     <input
                       type="checkbox"
+                      id="export-include-media"
                       className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
                       checked={includeMedia}
                       onChange={(e) => {
@@ -186,19 +214,30 @@ export function PlaylistPackExportDialog({
                     />
                     <div>
                       <span className="text-sm font-semibold text-white">Include Media Files</span>
-                      <p className="text-xs text-slate-400">If unchecked, only text files and configurations are exported.</p>
+                      <p className="text-xs text-slate-400">
+                        If unchecked, only text files and configurations are exported.
+                      </p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- label wraps input and has text content */}
+                  <label
+                    htmlFor="export-as-fpack"
+                    className="flex items-center gap-3 cursor-pointer"
+                  >
                     <input
                       type="checkbox"
+                      id="export-as-fpack"
                       className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
                       checked={asFpack}
                       onChange={(e) => setAsFpack(e.target.checked)}
                     />
                     <div>
-                      <span className="text-sm font-semibold text-white">Pack into .fpack File</span>
-                      <p className="text-xs text-slate-400">Packs all exported files into a single ZIP archive (.fpack).</p>
+                      <span className="text-sm font-semibold text-white">
+                        Pack into .fpack File
+                      </span>
+                      <p className="text-xs text-slate-400">
+                        Packs all exported files into a single ZIP archive (.fpack).
+                      </p>
                     </div>
                   </label>
                 </div>
@@ -216,22 +255,28 @@ export function PlaylistPackExportDialog({
                         userTouchedModeRef.current = true;
                         setCompressionMode("copy");
                       }}
-                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${effectiveMode === "copy"
+                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
+                        effectiveMode === "copy"
                           ? "border-emerald-300/65 bg-emerald-500/12"
                           : "border-slate-700/85 bg-slate-900/75 hover:border-emerald-300/30"
-                        }`}
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-100/80">
                             Fastest
                           </p>
-                          <h3 className="mt-2 text-lg font-bold text-white">Copy original videos</h3>
+                          <h3 className="mt-2 text-lg font-bold text-white">
+                            Copy original videos
+                          </h3>
                           <p className="mt-2 text-sm leading-6 text-slate-300">
-                            Export the pack without reencoding. File size stays close to the original sources.
+                            Export the pack without reencoding. File size stays close to the
+                            original sources.
                           </p>
                         </div>
-                        <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "copy" ? "border-emerald-200/70 bg-emerald-400/20 text-emerald-50" : "border-slate-600 text-slate-300"}`}>
+                        <div
+                          className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "copy" ? "border-emerald-200/70 bg-emerald-400/20 text-emerald-50" : "border-slate-600 text-slate-300"}`}
+                        >
                           {effectiveMode === "copy" ? "Selected" : "Select"}
                         </div>
                       </div>
@@ -245,12 +290,13 @@ export function PlaylistPackExportDialog({
                         setCompressionMode("av1");
                       }}
                       disabled={!canEnableCompression}
-                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${effectiveMode === "av1"
+                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
+                        effectiveMode === "av1"
                           ? "border-cyan-200/70 bg-cyan-400/14 shadow-[0_0_30px_rgba(34,211,238,0.12)]"
                           : canEnableCompression
                             ? "border-slate-700/85 bg-slate-900/75 hover:border-cyan-300/35"
                             : "cursor-not-allowed border-slate-800 bg-slate-900/55 opacity-60"
-                        }`}
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -259,22 +305,40 @@ export function PlaylistPackExportDialog({
                               Smallest Packs
                             </p>
                             {analysis?.compression.encoderName && (
-                              <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${analysis.compression.encoderKind === "hardware"
-                                  ? "border-emerald-300/55 bg-emerald-500/15 text-emerald-100"
-                                  : "border-amber-300/55 bg-amber-500/15 text-amber-100"
-                                }`}>
-                                {analysis.compression.encoderKind === "hardware" ? "Hardware" : "Software"} {analysis.compression.encoderName}
+                              <span
+                                className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                                  analysis.compression.encoderKind === "hardware"
+                                    ? "border-emerald-300/55 bg-emerald-500/15 text-emerald-100"
+                                    : "border-amber-300/55 bg-amber-500/15 text-amber-100"
+                                }`}
+                              >
+                                {analysis.compression.encoderKind === "hardware"
+                                  ? "Hardware"
+                                  : "Software"}{" "}
+                                {analysis.compression.encoderName}
                               </span>
                             )}
                           </div>
-                          <h3 className="mt-2 text-lg font-bold text-white">Compress non-AV1 videos to AV1</h3>
+                          <h3 className="mt-2 text-lg font-bold text-white">
+                            Compress non-AV1 videos to AV1
+                          </h3>
                           <p className="mt-2 text-sm leading-6 text-slate-300">
-                            Skip videos that are already AV1 and recompress the rest to reduce sharing size.
+                            Skip videos that are already AV1 and recompress the rest to reduce
+                            sharing size.
                           </p>
                         </div>
-                        <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "av1" ? "border-cyan-100/75 bg-cyan-300/20 text-cyan-50" : "border-slate-600 text-slate-300"
-                          }`}>
-                          {effectiveMode === "av1" ? "Selected" : canEnableCompression ? "Select" : "Unavailable"}
+                        <div
+                          className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
+                            effectiveMode === "av1"
+                              ? "border-cyan-100/75 bg-cyan-300/20 text-cyan-50"
+                              : "border-slate-600 text-slate-300"
+                          }`}
+                        >
+                          {effectiveMode === "av1"
+                            ? "Selected"
+                            : canEnableCompression
+                              ? "Select"
+                              : "Unavailable"}
                         </div>
                       </div>
                     </button>
@@ -317,12 +381,15 @@ export function PlaylistPackExportDialog({
               )}
 
               {(error || analysis?.compression.warning) && (
-                <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${error
-                    ? "border-rose-300/35 bg-rose-500/15 text-rose-100"
-                    : analysis?.compression.encoderKind === "software"
-                      ? "border-amber-300/35 bg-amber-500/15 text-amber-100"
-                      : "border-slate-700/70 bg-slate-900/60 text-slate-200"
-                  }`}>
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${
+                    error
+                      ? "border-rose-300/35 bg-rose-500/15 text-rose-100"
+                      : analysis?.compression.encoderKind === "software"
+                        ? "border-amber-300/35 bg-amber-500/15 text-amber-100"
+                        : "border-slate-700/70 bg-slate-900/60 text-slate-200"
+                  }`}
+                >
                   {error ?? analysis?.compression.warning}
                 </div>
               )}
@@ -350,13 +417,17 @@ export function PlaylistPackExportDialog({
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
                       Expected Savings
                     </p>
-                    <p className="mt-2 text-xl font-bold text-white">{!includeMedia ? "N/A" : savingsLabel}</p>
+                    <p className="mt-2 text-xl font-bold text-white">
+                      {!includeMedia ? "N/A" : savingsLabel}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
                       Compression Time
                     </p>
-                    <p className="mt-2 text-xl font-bold text-white">{!includeMedia ? "0 min" : timeEstimateLabel}</p>
+                    <p className="mt-2 text-xl font-bold text-white">
+                      {!includeMedia ? "0 min" : timeEstimateLabel}
+                    </p>
                   </div>
                 </div>
                 {analysis?.estimate.approximate && (
@@ -368,24 +439,44 @@ export function PlaylistPackExportDialog({
 
               <div className="grid gap-3 rounded-[1.5rem] border border-slate-700/80 bg-black/25 p-5 text-sm text-slate-200 sm:grid-cols-2">
                 <div>
-                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">Unique Videos</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{analysis?.videoTotals.uniqueVideos ?? "..."}</p>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Unique Videos
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {analysis?.videoTotals.uniqueVideos ?? "..."}
+                  </p>
                 </div>
                 <div>
-                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">Already AV1</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{analysis?.videoTotals.alreadyAv1Videos ?? "..."}</p>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Already AV1
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {analysis?.videoTotals.alreadyAv1Videos ?? "..."}
+                  </p>
                 </div>
                 <div>
-                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">Local Videos</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{analysis?.videoTotals.localVideos ?? "..."}</p>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Local Videos
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {analysis?.videoTotals.localVideos ?? "..."}
+                  </p>
                 </div>
                 <div>
-                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">Remote Videos</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{analysis?.videoTotals.remoteVideos ?? "..."}</p>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Remote Videos
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {analysis?.videoTotals.remoteVideos ?? "..."}
+                  </p>
                 </div>
                 <div className="sm:col-span-2">
-                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">Parallel Jobs</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{analysis?.settings.parallelJobs ?? "..."}</p>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Parallel Jobs
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {analysis?.settings.parallelJobs ?? "..."}
+                  </p>
                 </div>
               </div>
             </div>
@@ -395,9 +486,9 @@ export function PlaylistPackExportDialog({
             <p className="text-sm text-slate-400">
               {analyzing
                 ? "Refreshing export analysis..."
-                : (!includeMedia && asFpack)
+                : !includeMedia && asFpack
                   ? "The export will skip media files and package into a single .fpack file."
-                  : (!includeMedia)
+                  : !includeMedia
                     ? "The export will skip media files and save to a folder."
                     : effectiveMode === "av1"
                       ? "The folder picker opens next. Export starts after you choose the destination."
@@ -417,11 +508,20 @@ export function PlaylistPackExportDialog({
                 onClick={() => {
                   void handleSubmit();
                 }}
-                disabled={analyzing || submitting || !analysis || (includeMedia && effectiveMode === "av1" && !canEnableCompression)}
-                className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${analyzing || submitting || !analysis || (includeMedia && effectiveMode === "av1" && !canEnableCompression)
+                disabled={
+                  analyzing ||
+                  submitting ||
+                  !analysis ||
+                  (includeMedia && effectiveMode === "av1" && !canEnableCompression)
+                }
+                className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${
+                  analyzing ||
+                  submitting ||
+                  !analysis ||
+                  (includeMedia && effectiveMode === "av1" && !canEnableCompression)
                     ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                     : "border-cyan-300/60 bg-cyan-500/22 text-cyan-100 hover:border-cyan-200/85 hover:bg-cyan-500/36"
-                  }`}
+                }`}
                 data-controller-focus-id="playlist-pack-export-submit"
                 data-controller-initial="true"
               >

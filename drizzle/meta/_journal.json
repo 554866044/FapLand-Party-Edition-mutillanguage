@@ -22,6 +22,13 @@
       "when": 1773964800000,
       "tag": "0002_single_player_survival_time",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775001600000,
+      "tag": "0003_single_player_saves_and_assisted_scores",
+      "breakpoints": true
     }
   ]
 }

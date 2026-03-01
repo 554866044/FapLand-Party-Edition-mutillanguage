@@ -1,16 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { GameScene } from "../components/game/GameScene";
+import { BlockCommandPalette } from "../contexts/CommandPaletteGuardContext";
 import {
   clearMapEditorTestSession,
   getMapEditorTestPlaylistId,
   setMapEditorTestSession,
 } from "../features/map-editor/testSession";
 import { createInitialGameState } from "../game/engine";
-import type { GameConfig, GameState } from "../game/types";
-import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
 import { filterPerkIdsByHandyConnection } from "../game/data/perks";
+import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
+import { ZSinglePlayerRunSaveSnapshot, type SinglePlayerRunSaveSnapshot } from "../game/saveSchema";
+import type { GameConfig, GameState } from "../game/types";
+import { shouldClearSinglePlayerSaveOnCompletion } from "./gameSavePolicy";
+import { isAssistedSaveMode } from "../game/saveMode";
 import {
   ANTI_PERK_BEATBAR_ENABLED_KEY,
   DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
@@ -50,21 +54,31 @@ const ECONOMY_STORE_KEYS = {
 const GameSearchSchema = z.object({
   playlistId: z.string().min(1).optional(),
   launchNonce: z.coerce.number().int().nonnegative().optional(),
+  resume: z.coerce.boolean().optional(),
 });
 
 const getInitialHighscore = async (): Promise<{
   highscore: number;
   highscoreCheatMode: boolean;
+  highscoreAssisted: boolean;
+  highscoreAssistedSaveMode: "checkpoint" | "everywhere" | null;
 }> => {
   try {
     const result = await db.gameProfile.getLocalHighscore();
     return {
       highscore: Math.max(0, Math.floor(result.highscore)),
       highscoreCheatMode: result.highscoreCheatMode ?? false,
+      highscoreAssisted: result.highscoreAssisted ?? false,
+      highscoreAssistedSaveMode: result.highscoreAssistedSaveMode ?? null,
     };
   } catch (error) {
     console.warn("Failed to read highscore from DB", error);
-    return { highscore: 0, highscoreCheatMode: false };
+    return {
+      highscore: 0,
+      highscoreCheatMode: false,
+      highscoreAssisted: false,
+      highscoreAssistedSaveMode: null,
+    };
   }
 };
 
@@ -182,11 +196,49 @@ const getApplyPerkDirectly = async (): Promise<boolean> => {
   }
 };
 
+function getCheckpointNodeId(state: GameState): string | null {
+  const player = state.players[state.currentPlayerIndex];
+  if (!player) return null;
+  const field = state.config.board.find((entry) => entry.id === player.currentNodeId);
+  return field?.kind === "safePoint" ? field.id : null;
+}
+
+function shouldAutosaveOnStateChange(
+  previousState: GameState | null,
+  nextState: GameState,
+  saveMode: "none" | "checkpoint" | "everywhere"
+): string | null {
+  if (saveMode === "none") return null;
+  if (nextState.sessionPhase === "completed") return null;
+  const checkpointNodeId = getCheckpointNodeId(nextState);
+  if (!checkpointNodeId) return null;
+  if (!previousState) return null;
+
+  const previousCheckpointNodeId = getCheckpointNodeId(previousState);
+  const playerChangedNode =
+    previousState.players[previousState.currentPlayerIndex]?.currentNodeId !==
+    nextState.players[nextState.currentPlayerIndex]?.currentNodeId;
+  const turnChanged = previousState.turn !== nextState.turn;
+  const playerIndexChanged = previousState.currentPlayerIndex !== nextState.currentPlayerIndex;
+
+  if (
+    previousCheckpointNodeId === checkpointNodeId &&
+    !playerChangedNode &&
+    !turnChanged &&
+    !playerIndexChanged
+  ) {
+    return null;
+  }
+
+  return checkpointNodeId;
+}
+
 export const Route = createFileRoute("/game")({
   validateSearch: (search) => GameSearchSchema.parse(search),
   loaderDeps: ({ search }) => ({
     playlistId: search.playlistId ?? null,
     launchNonce: search.launchNonce ?? null,
+    resume: search.resume ?? false,
   }),
   loader: async ({ deps }) => {
     const [
@@ -214,14 +266,44 @@ export const Route = createFileRoute("/game")({
       getApplyPerkDirectly(),
       deps.playlistId ? playlists.getById(deps.playlistId) : playlists.getActive(),
     ]);
+
     if (!activePlaylist) {
       throw new Error("No playlist available.");
     }
+
     const playedByPool = await playlists.getDistinctPlayedByPool(activePlaylist.id);
+    let savedSnapshot: SinglePlayerRunSaveSnapshot | null = null;
+    let resumeRedirectNotice: string | null = null;
+
+    if (deps.resume && deps.playlistId) {
+      const savedRun = await db.singlePlayerSaves.getByPlaylist(deps.playlistId).catch(() => null);
+      if (!savedRun) {
+        resumeRedirectNotice = "Saved run could not be resumed and was cleared.";
+      } else {
+        try {
+          const parsedSnapshot = ZSinglePlayerRunSaveSnapshot.parse(
+            typeof savedRun.snapshotJson === "string"
+              ? JSON.parse(savedRun.snapshotJson)
+              : savedRun.snapshotJson
+          );
+          if (parsedSnapshot.playlistId !== activePlaylist.id) {
+            throw new Error("Saved run playlist mismatch.");
+          }
+          savedSnapshot = parsedSnapshot;
+        } catch (error) {
+          console.warn("Failed to validate saved single-player run", error);
+          await db.singlePlayerSaves.deleteByPlaylist(deps.playlistId).catch(() => undefined);
+          resumeRedirectNotice = "Saved run could not be resumed and was cleared.";
+        }
+      }
+    }
+
     return {
       installedRounds,
       initialHighscore: initialHighscoreResult.highscore,
       initialHighscoreCheatMode: initialHighscoreResult.highscoreCheatMode,
+      initialHighscoreAssisted: initialHighscoreResult.highscoreAssisted,
+      initialHighscoreAssistedSaveMode: initialHighscoreResult.highscoreAssistedSaveMode,
       economyOverrides,
       intermediaryLoadingPrompt,
       intermediaryLoadingDurationSec,
@@ -232,6 +314,9 @@ export const Route = createFileRoute("/game")({
       initialApplyPerkDirectly,
       activePlaylist,
       playedByPool,
+      savedSnapshot,
+      resumeRequested: deps.resume,
+      resumeRedirectNotice,
     };
   },
   component: GameRoute,
@@ -241,7 +326,6 @@ function GameRoute() {
   const {
     installedRounds,
     initialHighscore,
-
     economyOverrides,
     intermediaryLoadingPrompt,
     intermediaryLoadingDurationSec,
@@ -252,14 +336,25 @@ function GameRoute() {
     initialApplyPerkDirectly,
     activePlaylist,
     playedByPool,
+    savedSnapshot,
+    resumeRequested,
+    resumeRedirectNotice,
   } = Route.useLoaderData();
   const navigate = useNavigate();
   const hasNavigatedToResultRef = useRef(false);
-  const sessionStartedAtMsRef = useRef(Date.now());
+  const sessionStartedAtMsRef = useRef(savedSnapshot?.sessionStartedAtMs ?? Date.now());
   const mapEditorTestPlaylistIdRef = useRef<string | null>(getMapEditorTestPlaylistId());
   const isMapEditorTestRun = mapEditorTestPlaylistIdRef.current !== null;
   const [applyPerkDirectly, setApplyPerkDirectly] = useState(initialApplyPerkDirectly);
+  const [saveNotification, setSaveNotification] = useState<{ nonce: number; message: string } | null>(null);
   const { connected: handyConnected } = useHandy();
+
+  const currentPlaylistSaveMode = activePlaylist.config.saveMode;
+  const scoringSaveMode = savedSnapshot?.saveMode ?? (currentPlaylistSaveMode === "none" ? null : currentPlaylistSaveMode);
+  const effectiveCheatMode = cheatModeEnabled;
+  const effectiveAssisted = Boolean(scoringSaveMode) && isAssistedSaveMode(scoringSaveMode);
+  const effectiveAssistedSaveMode = scoringSaveMode;
+  const canPersistSinglePlayerSave = !isMapEditorTestRun && currentPlaylistSaveMode !== "none";
 
   const config = useMemo(() => {
     const baseConfig = toGameConfigFromPlaylist(activePlaylist.config, installedRounds);
@@ -280,21 +375,83 @@ function GameRoute() {
         ),
       },
     };
-  }, [activePlaylist.config, economyOverrides, installedRounds, handyConnected]);
+  }, [activePlaylist.config, economyOverrides, handyConnected, installedRounds]);
+
   const initialState = useMemo(
-    () => createInitialGameState(config, { initialHighscore, playedRoundIdsByPool: playedByPool }),
-    [config, initialHighscore, playedByPool]
+    () =>
+      savedSnapshot?.gameState ??
+      createInitialGameState(config, { initialHighscore, playedRoundIdsByPool: playedByPool }),
+    [config, initialHighscore, playedByPool, savedSnapshot]
   );
+
+  const [latestState, setLatestState] = useState<GameState>(initialState);
+  const latestStateRef = useRef<GameState>(initialState);
+  const previousStateRef = useRef<GameState | null>(initialState);
+  const lastAutosaveKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!resumeRequested || !resumeRedirectNotice) return;
+    void navigate({
+      to: "/single-player-setup",
+      search: { notice: resumeRedirectNotice },
+      replace: true,
+    });
+  }, [navigate, resumeRedirectNotice, resumeRequested]);
+
+  const clearRunSnapshot = useCallback(async () => {
+    if (isMapEditorTestRun) return;
+    await db.singlePlayerSaves.deleteByPlaylist(activePlaylist.id);
+  }, [activePlaylist.id, isMapEditorTestRun]);
+
+  const persistRunSnapshot = useCallback(
+    async (state: GameState) => {
+      if (!canPersistSinglePlayerSave || !effectiveAssistedSaveMode) return false;
+      const snapshot = ZSinglePlayerRunSaveSnapshot.parse({
+        version: 1,
+        playlistId: activePlaylist.id,
+        playlistFormatVersion: activePlaylist.formatVersion ?? null,
+        playlistConfig: activePlaylist.config,
+        saveMode: currentPlaylistSaveMode,
+        gameState: state,
+        sessionStartedAtMs: sessionStartedAtMsRef.current,
+        savedAtMs: Date.now(),
+      });
+      await db.singlePlayerSaves.upsert({
+        playlistId: activePlaylist.id,
+        playlistName: activePlaylist.name,
+        playlistFormatVersion: activePlaylist.formatVersion,
+        saveMode: currentPlaylistSaveMode,
+        snapshot,
+      });
+      return true;
+    },
+    [
+      activePlaylist.config,
+      activePlaylist.formatVersion,
+      activePlaylist.id,
+      activePlaylist.name,
+      canPersistSinglePlayerSave,
+      currentPlaylistSaveMode,
+    ]
+  );
+
+  const showSaveNotification = useCallback((message: string) => {
+    setSaveNotification({ nonce: Date.now(), message });
+  }, []);
 
   const handleHighscoreChange = useCallback(
     (highscore: number) => {
       void db.gameProfile
-        .setLocalHighscore(Math.max(0, Math.floor(highscore)), cheatModeEnabled)
+        .setLocalHighscore(Math.max(0, Math.floor(highscore)), {
+          cheatMode: effectiveCheatMode,
+          assisted: effectiveAssisted,
+          assistedSaveMode: effectiveAssistedSaveMode,
+        })
         .catch((error) => {
           console.warn("Failed to persist highscore to DB", error);
         });
     },
-    [cheatModeEnabled]
+    [effectiveAssisted, effectiveAssistedSaveMode, effectiveCheatMode]
   );
 
   const handleBack = useMemo(
@@ -306,7 +463,7 @@ function GameRoute() {
       }
       void navigate({ to: "/" });
     },
-    [navigate]
+    [clearRunSnapshot, navigate]
   );
 
   const handleRoundPlayed = useCallback(
@@ -327,11 +484,37 @@ function GameRoute() {
 
   const handleStateChange = useCallback(
     (nextState: GameState) => {
+      const previousState = previousStateRef.current;
+      previousStateRef.current = nextState;
+      latestStateRef.current = nextState;
+      setLatestState(nextState);
+
+      const checkpointNodeId = shouldAutosaveOnStateChange(
+        previousState,
+        nextState,
+        currentPlaylistSaveMode
+      );
+      if (checkpointNodeId) {
+        const autosaveKey = `${nextState.turn}:${nextState.currentPlayerIndex}:${checkpointNodeId}`;
+        if (lastAutosaveKeyRef.current !== autosaveKey) {
+          lastAutosaveKeyRef.current = autosaveKey;
+          void persistRunSnapshot(nextState)
+            .then((saved) => {
+              if (saved) showSaveNotification("Checkpoint reached. Game saved.");
+            })
+            .catch((error) => {
+              console.warn("Failed to autosave single-player run", error);
+            });
+        }
+      }
+
       if (hasNavigatedToResultRef.current) return;
       if (nextState.sessionPhase !== "completed") return;
+
       const player = nextState.players[nextState.currentPlayerIndex];
       if (!player) return;
       hasNavigatedToResultRef.current = true;
+
       const score = Math.max(0, Math.floor(player.score));
       const survivedDurationSec = Math.max(
         0,
@@ -339,6 +522,12 @@ function GameRoute() {
       );
       const highscoreBefore = Math.max(0, Math.floor(initialHighscore));
       const highscoreAfter = Math.max(0, Math.floor(nextState.highscore));
+
+      if (shouldClearSinglePlayerSaveOnCompletion(nextState.completionReason ?? null)) {
+        void clearRunSnapshot().catch((error) => {
+          console.warn("Failed to clear single-player save after completion", error);
+        });
+      }
 
       void db.singlePlayerHistory
         .recordRun({
@@ -354,7 +543,9 @@ function GameRoute() {
           playlistFormatVersion: activePlaylist.formatVersion,
           endingPosition: Math.max(0, Math.floor(player.position)),
           turn: Math.max(0, Math.floor(nextState.turn)),
-          cheatModeActive: cheatModeEnabled,
+          cheatModeActive: effectiveCheatMode,
+          assistedActive: effectiveAssisted,
+          assistedSaveMode: effectiveAssistedSaveMode,
         })
         .catch((error) => {
           console.warn("Failed to persist single-player run history", error);
@@ -371,18 +562,28 @@ function GameRoute() {
           highscore: highscoreAfter,
           survivedDurationSec,
           reason: nextState.completionReason ?? "finished",
+          cheatMode: effectiveCheatMode,
+          assisted: effectiveAssisted,
+          assistedSaveMode: effectiveAssistedSaveMode ?? undefined,
         },
         replace: true,
       });
     },
     [
+      activePlaylist.config.saveMode,
       activePlaylist.formatVersion,
       activePlaylist.id,
       activePlaylist.name,
+      clearRunSnapshot,
+      effectiveAssisted,
+      effectiveAssistedSaveMode,
+      effectiveCheatMode,
       initialHighscore,
       isMapEditorTestRun,
       navigate,
-      cheatModeEnabled,
+      currentPlaylistSaveMode,
+      persistRunSnapshot,
+      showSaveNotification,
     ]
   );
 
@@ -393,25 +594,60 @@ function GameRoute() {
     });
   }, []);
 
+  const optionsActions = useMemo(() => {
+    if (!canPersistSinglePlayerSave || currentPlaylistSaveMode !== "everywhere") return [];
+    return [
+      {
+        id: "save-game",
+        label: "Save Game",
+        disabled: Boolean(latestState.activeRound),
+        tone: "default" as const,
+        onClick: () => {
+          void persistRunSnapshot(latestStateRef.current)
+            .then((saved) => {
+              if (saved) showSaveNotification("Game saved.");
+            })
+            .catch((error) => {
+              console.warn("Failed to manually save single-player run", error);
+            });
+        },
+      },
+    ];
+  }, [
+    canPersistSinglePlayerSave,
+    currentPlaylistSaveMode,
+    latestState.activeRound,
+    persistRunSnapshot,
+    showSaveNotification,
+  ]);
+
+  if (resumeRequested && resumeRedirectNotice) {
+    return null;
+  }
+
   return (
-    <GameScene
-      initialState={initialState}
-      sessionStartedAtMs={sessionStartedAtMsRef.current}
-      installedRounds={installedRounds}
-      onGiveUp={handleBack}
-      giveUpLabel={isMapEditorTestRun ? "Back to Editor" : "Give Up"}
-      allowDebugRoundControls={isMapEditorTestRun || cheatModeEnabled}
-      showDevPerkMenu={isGameDevelopmentMode() || cheatModeEnabled}
-      onHighscoreChange={handleHighscoreChange}
-      onRoundPlayed={handleRoundPlayed}
-      onStateChange={handleStateChange}
-      intermediaryLoadingPrompt={intermediaryLoadingPrompt}
-      intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
-      intermediaryReturnPauseSec={intermediaryReturnPauseSec}
-      initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
-      initialShowAntiPerkBeatbar={antiPerkBeatbarEnabled}
-      applyPerkDirectly={applyPerkDirectly}
-      onApplyPerkDirectlyChange={handleApplyPerkDirectlyChange}
-    />
+    <BlockCommandPalette>
+      <GameScene
+        initialState={initialState}
+        sessionStartedAtMs={sessionStartedAtMsRef.current}
+        installedRounds={installedRounds}
+        onGiveUp={handleBack}
+        giveUpLabel={isMapEditorTestRun ? "Back to Editor" : "Give Up"}
+        optionsActions={optionsActions}
+        allowDebugRoundControls={isMapEditorTestRun || cheatModeEnabled}
+        showDevPerkMenu={isGameDevelopmentMode() || cheatModeEnabled}
+        onHighscoreChange={handleHighscoreChange}
+        onRoundPlayed={handleRoundPlayed}
+        onStateChange={handleStateChange}
+        externalNotification={saveNotification}
+        intermediaryLoadingPrompt={intermediaryLoadingPrompt}
+        intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
+        intermediaryReturnPauseSec={intermediaryReturnPauseSec}
+        initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
+        initialShowAntiPerkBeatbar={antiPerkBeatbarEnabled}
+        applyPerkDirectly={applyPerkDirectly}
+        onApplyPerkDirectlyChange={handleApplyPerkDirectlyChange}
+      />
+    </BlockCommandPalette>
   );
 }

@@ -9,6 +9,7 @@ export type MultiplayerServerProfile = {
   isBuiltIn: boolean;
   createdAtIso: string;
   updatedAtIso: string;
+  authRequirement?: MultiplayerAuthRequirement;
 };
 
 export type MultiplayerLobbyStatus = "waiting" | "running" | "finished" | "closed";
@@ -158,7 +159,7 @@ export type MultiplayerSendAntiPerkResult = {
   createdAt: string;
 };
 
-export type MultiplayerAuthRequirement = "anonymous_only" | "discord_required";
+export type MultiplayerAuthRequirement = "anonymous_only" | "discord_required" | "email_password_required";
 
 export type MultiplayerAuthStatus = {
   profile: MultiplayerServerProfile;
@@ -169,6 +170,6 @@ export type MultiplayerAuthStatus = {
   hasDiscordIdentity: boolean;
   hasEmail: boolean;
   discordLinkUrl: string | null;
-  status: "ready" | "needs_discord" | "needs_email" | "oauth_unavailable" | "error";
+  status: "ready" | "needs_discord" | "needs_email" | "needs_login" | "oauth_unavailable" | "error";
   message: string;
 };

@@ -347,6 +347,7 @@ export function toGameConfigFromPlaylist(
   return {
     ...config,
     roundStartDelayMs: playlistConfig.roundStartDelayMs,
+    dice: playlistConfig.dice,
     perkSelection: playlistConfig.perkSelection,
     perkPool: playlistConfig.perkPool,
     probabilityScaling: playlistConfig.probabilityScaling,
@@ -399,6 +400,10 @@ export function createDefaultPlaylistConfig(installedRounds: ReadonlyArray<Insta
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
+    },
+    dice: {
+      min: 1,
+      max: 6,
     },
   };
 }

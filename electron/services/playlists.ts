@@ -143,7 +143,7 @@ async function createDefaultConfigFromInstalledRounds(): Promise<PlaylistConfig>
     },
     perkSelection: {
       optionsPerPick: 3,
-      triggerChancePerCompletedRound: 0.35,
+      triggerChancePerCompletedRound: 0.51,
     },
     perkPool: {
       enabledPerkIds: [],

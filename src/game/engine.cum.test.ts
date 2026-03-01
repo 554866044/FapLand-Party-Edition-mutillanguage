@@ -13,7 +13,9 @@ function makeConfig(): GameConfig {
       startNodeId: "start",
       pathChoiceTimeoutMs: 6000,
       edges: [{ id: "e1", fromNodeId: "start", toNodeId: "round-1", gateCost: 0, weight: 1 }],
-      edgesById: { e1: { id: "e1", fromNodeId: "start", toNodeId: "round-1", gateCost: 0, weight: 1 } },
+      edgesById: {
+        e1: { id: "e1", fromNodeId: "start", toNodeId: "round-1", gateCost: 0, weight: 1 },
+      },
       outgoingEdgeIdsByNodeId: { start: ["e1"] },
       randomRoundPoolsById: {},
       nodeIndexById: { start: 0, "round-1": 1 },
@@ -50,10 +52,15 @@ function makeConfig(): GameConfig {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
-function makeInstalledRound(id: string, name: string, type: "Normal" | "Cum" = "Cum"): InstalledRound {
+function makeInstalledRound(
+  id: string,
+  name: string,
+  type: "Normal" | "Cum" = "Cum"
+): InstalledRound {
   return {
     id,
     name,
@@ -77,7 +84,7 @@ function makeInstalledRound(id: string, name: string, type: "Normal" | "Cum" = "
     heroId: null,
     startTime: null,
     endTime: null,
-  } as InstalledRound;
+  } as unknown as InstalledRound;
 }
 
 function withActiveCumRound(state: GameState, score = 0): GameState {
@@ -88,9 +95,7 @@ function withActiveCumRound(state: GameState, score = 0): GameState {
     ...state,
     sessionPhase: "cum",
     nextCumRoundIndex: 1,
-    players: state.players.map((entry) => (
-      entry.id === player.id ? { ...entry, score } : entry
-    )),
+    players: state.players.map((entry) => (entry.id === player.id ? { ...entry, score } : entry)),
     activeRound: {
       fieldId: "cum-1",
       nodeId: "cum-1",
@@ -123,20 +128,28 @@ describe("engine cum flow", () => {
   it("awards cum bonus when cum round outcome is success", () => {
     const initial = withActiveCumRound(createInitialGameState(makeConfig()), 15);
 
-    const cameAsTold = completeRound(initial, {
-      intermediaryCount: 0,
-      activeAntiPerkCount: 0,
-      cumOutcome: "came_as_told",
-    }, []);
+    const cameAsTold = completeRound(
+      initial,
+      {
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+        cumOutcome: "came_as_told",
+      },
+      []
+    );
     expect(cameAsTold.players[cameAsTold.currentPlayerIndex]?.score).toBe(135);
     expect(cameAsTold.sessionPhase).toBe("completed");
     expect(cameAsTold.completionReason).toBe("finished");
 
-    const didNotCum = completeRound(initial, {
-      intermediaryCount: 0,
-      activeAntiPerkCount: 0,
-      cumOutcome: "did_not_cum",
-    }, []);
+    const didNotCum = completeRound(
+      initial,
+      {
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+        cumOutcome: "did_not_cum",
+      },
+      []
+    );
     expect(didNotCum.players[didNotCum.currentPlayerIndex]?.score).toBe(135);
     expect(didNotCum.sessionPhase).toBe("completed");
     expect(didNotCum.completionReason).toBe("finished");
@@ -144,11 +157,15 @@ describe("engine cum flow", () => {
 
   it("fails the run when cum instruction is failed", () => {
     const initial = withActiveCumRound(createInitialGameState(makeConfig()), 40);
-    const next = completeRound(initial, {
-      intermediaryCount: 0,
-      activeAntiPerkCount: 0,
-      cumOutcome: "failed_instruction",
-    }, []);
+    const next = completeRound(
+      initial,
+      {
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+        cumOutcome: "failed_instruction",
+      },
+      []
+    );
 
     expect(next.players[next.currentPlayerIndex]?.score).toBe(40);
     expect(next.sessionPhase).toBe("completed");
@@ -160,11 +177,15 @@ describe("engine cum flow", () => {
     config.singlePlayer.cumRoundIds = ["cum-1", "cum-2"];
     const initial = withActiveCumRound(createInitialGameState(config), 15);
 
-    const next = completeRound(initial, {
-      intermediaryCount: 0,
-      activeAntiPerkCount: 0,
-      cumOutcome: "came_as_told",
-    }, [makeInstalledRound("cum-1", "Cum Round 1"), makeInstalledRound("cum-2", "Cum Round 2")]);
+    const next = completeRound(
+      initial,
+      {
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+        cumOutcome: "came_as_told",
+      },
+      [makeInstalledRound("cum-1", "Cum Round 1"), makeInstalledRound("cum-2", "Cum Round 2")]
+    );
 
     expect(next.sessionPhase).toBe("completed");
     expect(next.completionReason).toBe("finished");
@@ -188,9 +209,11 @@ describe("engine cum flow", () => {
     };
     config.singlePlayer.cumRoundIds = [];
 
-    const state = rollTurn(createInitialGameState(config), [
-      makeInstalledRound("fallback-cum", "Fallback Cum"),
-    ], 1);
+    const state = rollTurn(
+      createInitialGameState(config),
+      [makeInstalledRound("fallback-cum", "Fallback Cum")],
+      1
+    );
 
     expect(state.sessionPhase).toBe("cum");
     expect(state.queuedRound?.roundId).toBe("fallback-cum");

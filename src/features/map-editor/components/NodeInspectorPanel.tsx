@@ -3,6 +3,7 @@ import { resolvePortableRoundRef } from "../../../game/playlistRuntime";
 import { usePlayableVideoFallback } from "../../../hooks/usePlayableVideoFallback";
 import { SfwGuard } from "../../../components/SfwGuard";
 import { playHoverSound, playSelectSound } from "../../../utils/audio";
+import { GameDropdown } from "../../../components/ui/GameDropdown";
 import type { InstalledRound } from "../../../services/db";
 import type { EditorEdge, EditorNode, EditorSelectionState } from "../EditorState";
 import { getNodeKindColor, toColorInputValue } from "../nodeVisuals";
@@ -75,16 +76,16 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
         </label>
 
         {/* ── Kind ─────────────────── */}
-        <label className="block">
+        <div className="block">
           <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
             Kind
           </span>
-          <select
+          <GameDropdown
             value={selectedNode.kind}
-            onChange={(event) => {
-              const kind = event.target.value as EditorNode["kind"];
+            options={NODE_KIND_OPTIONS.map((kind) => ({ value: kind, label: kind }))}
+            onChange={(kind) => {
               onPatchNode(selectedNode.id, {
-                kind,
+                kind: kind as EditorNode["kind"],
                 roundRef:
                   kind === "round" ? (selectedNode.roundRef ?? { name: "Round" }) : undefined,
                 forceStop: kind === "round" || kind === "perk" ? selectedNode.forceStop : undefined,
@@ -96,15 +97,8 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   kind === "randomRound" ? (selectedNode.randomPoolId ?? "pool-1") : undefined,
               });
             }}
-            className="mt-1 w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
-          >
-            {NODE_KIND_OPTIONS.map((kind) => (
-              <option key={kind} value={kind}>
-                {kind}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
 
         <div className="rounded-lg border border-white/6 bg-black/20 p-2.5">
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
@@ -204,14 +198,21 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                 className="mt-1 w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none transition-colors focus:border-cyan-500/50"
               />
             </label>
-            <label className="block">
+            <div className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
                 Installed round
               </span>
-              <select
+              <GameDropdown
                 value={selectedNode.roundRef?.idHint ?? ""}
-                onChange={(event) => {
-                  const round = installedRounds.find((entry) => entry.id === event.target.value);
+                options={[
+                  { value: "" as string, label: "Custom / none" },
+                  ...installedRounds.map((round) => ({
+                    value: round.id,
+                    label: round.name,
+                  })),
+                ]}
+                onChange={(id) => {
+                  const round = installedRounds.find((entry) => entry.id === id);
                   if (!round) return;
                   onPatchNode(selectedNode.id, {
                     roundRef: {
@@ -224,16 +225,8 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                     },
                   });
                 }}
-                className="mt-1 w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
-              >
-                <option value="">Custom / none</option>
-                {installedRounds.map((round) => (
-                  <option key={round.id} value={round.id}>
-                    {round.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
                 Force stop
@@ -337,23 +330,22 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                 </span>
               </label>
             </label>
-            <label className="block">
+            <div className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
                 Guaranteed perk
               </span>
-              <select
+              <GameDropdown
                 value={selectedNode.visualId ?? ""}
-                onChange={(event) => onPatchNode(selectedNode.id, { visualId: event.target.value })}
-                className="mt-1 w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
-              >
-                <option value="">None</option>
-                {perkOptions.map((perk) => (
-                  <option key={perk.id} value={perk.id}>
-                    {perk.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={[
+                  { value: "" as string, label: "None" },
+                  ...perkOptions.map((perk) => ({
+                    value: perk.id,
+                    label: perk.name,
+                  })),
+                ]}
+                onChange={(value) => onPatchNode(selectedNode.id, { visualId: value })}
+              />
+            </div>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
                 Gift guaranteed perk

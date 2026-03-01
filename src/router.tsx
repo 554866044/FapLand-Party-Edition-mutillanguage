@@ -1,14 +1,13 @@
 import { createHashHistory, createRouter } from "@tanstack/react-router";
-
-// Import the generated route tree
 import { routeTree } from "./routeTree.gen";
+import { DefaultErrorComponent } from "./components/ErrorFallback";
+import { RoutePendingComponent } from "./components/RoutePending";
 
-// Create a new router instance
 export const getRouter = () => {
   const history =
     typeof window !== "undefined" &&
-      window.location.protocol !== "http:" &&
-      window.location.protocol !== "https:"
+    window.location.protocol !== "http:" &&
+    window.location.protocol !== "https:"
       ? createHashHistory()
       : undefined;
 
@@ -18,6 +17,8 @@ export const getRouter = () => {
     history,
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
+    defaultErrorComponent: DefaultErrorComponent,
+    defaultPendingComponent: RoutePendingComponent,
   });
 
   return router;

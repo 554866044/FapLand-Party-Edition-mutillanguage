@@ -376,7 +376,9 @@ function setCompressionStatus(input: Partial<PlaylistExportPackageCompressionSta
   };
 }
 
-function createCompressionLiveProgress(totalDurationMs = 0): PlaylistExportPackageCompressionStatus["liveProgress"] {
+function createCompressionLiveProgress(
+  totalDurationMs = 0
+): PlaylistExportPackageCompressionStatus["liveProgress"] {
   return {
     completedDurationMs: 0,
     totalDurationMs,
@@ -414,10 +416,11 @@ function syncCompressionLiveProgress(tracker: CompressionLiveTracker): void {
 
   const completedDurationMs = Math.min(
     tracker.totalDurationMs,
-    Math.max(0, tracker.completedDurationMs + activeDurationMs),
+    Math.max(0, tracker.completedDurationMs + activeDurationMs)
   );
   const totalDurationMs = Math.max(0, tracker.totalDurationMs);
-  const percent = totalDurationMs > 0 ? Math.max(0, Math.min(1, completedDurationMs / totalDurationMs)) : 0;
+  const percent =
+    totalDurationMs > 0 ? Math.max(0, Math.min(1, completedDurationMs / totalDurationMs)) : 0;
 
   let etaSecondsRemaining: number | null = null;
   if (totalDurationMs > 0) {
@@ -425,15 +428,20 @@ function syncCompressionLiveProgress(tracker: CompressionLiveTracker): void {
     if (remainingDurationMs === 0) {
       etaSecondsRemaining = 0;
     } else {
-      const baselineEtaSeconds = Math.ceil((exportStatus.compression.estimatedCompressionSeconds || 0) * (1 - percent));
+      const baselineEtaSeconds = Math.ceil(
+        (exportStatus.compression.estimatedCompressionSeconds || 0) * (1 - percent)
+      );
       etaSecondsRemaining = baselineEtaSeconds > 0 ? baselineEtaSeconds : null;
 
       if (tracker.startedAtMs !== null && completedDurationMs > 0) {
         const elapsedSeconds = Math.max(0, (Date.now() - tracker.startedAtMs) / 1000);
         if (elapsedSeconds >= 5) {
-          const processedDurationPerSecond = (completedDurationMs / 1000) / elapsedSeconds;
+          const processedDurationPerSecond = completedDurationMs / 1000 / elapsedSeconds;
           if (processedDurationPerSecond > 0) {
-            etaSecondsRemaining = Math.max(1, Math.ceil((remainingDurationMs / 1000) / processedDurationPerSecond));
+            etaSecondsRemaining = Math.max(
+              1,
+              Math.ceil(remainingDurationMs / 1000 / processedDurationPerSecond)
+            );
           }
         }
       }
@@ -453,13 +461,16 @@ function syncCompressionLiveProgress(tracker: CompressionLiveTracker): void {
 function ensureExpectedTaskDuration(
   tracker: CompressionLiveTracker,
   taskKey: string,
-  durationMs: number | null | undefined,
+  durationMs: number | null | undefined
 ): number {
   const normalizedDurationMs = Math.max(0, durationMs ?? 0);
   const previousDurationMs = tracker.expectedDurationMsByTaskKey.get(taskKey) ?? 0;
   if (previousDurationMs !== normalizedDurationMs) {
     tracker.expectedDurationMsByTaskKey.set(taskKey, normalizedDurationMs);
-    tracker.totalDurationMs = Math.max(0, tracker.totalDurationMs - previousDurationMs + normalizedDurationMs);
+    tracker.totalDurationMs = Math.max(
+      0,
+      tracker.totalDurationMs - previousDurationMs + normalizedDurationMs
+    );
   }
   syncCompressionLiveProgress(tracker);
   return normalizedDurationMs;
@@ -468,7 +479,7 @@ function ensureExpectedTaskDuration(
 function startCompressionJob(
   tracker: CompressionLiveTracker,
   taskKey: string,
-  durationMs: number | null | undefined,
+  durationMs: number | null | undefined
 ): number {
   const normalizedDurationMs = ensureExpectedTaskDuration(tracker, taskKey, durationMs);
   if (tracker.startedAtMs === null) {
@@ -485,13 +496,14 @@ function startCompressionJob(
 function updateCompressionJobProgress(
   tracker: CompressionLiveTracker,
   taskKey: string,
-  progress: Av1TranscodeProgress,
+  progress: Av1TranscodeProgress
 ): void {
   const activeEntry = tracker.activeByTaskKey.get(taskKey);
   if (!activeEntry) return;
-  const nextDurationMs = activeEntry.durationMs > 0
-    ? Math.min(activeEntry.durationMs, Math.max(0, progress.encodedDurationMs))
-    : Math.max(0, progress.encodedDurationMs);
+  const nextDurationMs =
+    activeEntry.durationMs > 0
+      ? Math.min(activeEntry.durationMs, Math.max(0, progress.encodedDurationMs))
+      : Math.max(0, progress.encodedDurationMs);
   tracker.activeByTaskKey.set(taskKey, {
     ...activeEntry,
     encodedDurationMs: nextDurationMs,
@@ -507,10 +519,7 @@ function finishCompressionJob(tracker: CompressionLiveTracker, taskKey: string):
   syncCompressionLiveProgress(tracker);
 }
 
-function skipCompressionJob(
-  tracker: CompressionLiveTracker,
-  taskKey: string,
-): void {
+function skipCompressionJob(tracker: CompressionLiveTracker, taskKey: string): void {
   const previousDurationMs = tracker.expectedDurationMsByTaskKey.get(taskKey) ?? 0;
   tracker.totalDurationMs = Math.max(0, tracker.totalDurationMs - previousDurationMs);
   tracker.expectedDurationMsByTaskKey.delete(taskKey);
@@ -529,12 +538,15 @@ function toSafeIsoTimestamp(date: Date): string {
 export function sanitizeFileSystemName(value: string, fallback = "unnamed"): string {
   const trimmed = value.trim();
   const stripped = trimmed
+    // eslint-disable-next-line no-control-regex
     .replace(/[<>:"/\\|?*\u0000-\u001F]+/g, " ")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "")
     .trim();
   const normalized = stripped.length > 0 ? stripped : fallback;
-  const reservedSafe = WINDOWS_RESERVED_BASENAMES.has(normalized.toUpperCase()) ? `${normalized}_` : normalized;
+  const reservedSafe = WINDOWS_RESERVED_BASENAMES.has(normalized.toUpperCase())
+    ? `${normalized}_`
+    : normalized;
   return reservedSafe || fallback;
 }
 
@@ -596,7 +608,10 @@ function collectPortableRefs(config: PlaylistConfig): PortableRefEntry[] {
   }
   for (const pool of config.boardConfig.randomRoundPools) {
     for (const [index, candidate] of pool.candidates.entries()) {
-      refs.push({ key: `graph.randomRoundPools.${pool.id}.candidates.${index}`, ref: candidate.roundRef });
+      refs.push({
+        key: `graph.randomRoundPools.${pool.id}.candidates.${index}`,
+        ref: candidate.roundRef,
+      });
     }
   }
   for (const [index, ref] of config.boardConfig.cumRoundRefs.entries()) {
@@ -633,21 +648,21 @@ async function ensurePathDoesNotExist(targetPath: string): Promise<void> {
 
 async function loadPlaylistForExport(playlistId: string): Promise<ResolvedPlaylistExport> {
   throwIfAbortRequested();
-  const playlistRow = await getDb().query.playlist.findFirst({
+  const playlistRow = (await getDb().query.playlist.findFirst({
     where: eq(playlistTable.id, playlistId),
-  }) as PlaylistRow | null;
+  })) as PlaylistRow | null;
 
   if (!playlistRow) {
     throw new Error("Playlist not found.");
   }
 
   const config = parsePlaylistConfig(playlistRow.configJson);
-  const installedRounds = await getDb().query.round.findMany({
+  const installedRounds = (await getDb().query.round.findMany({
     with: {
       hero: true,
       resources: true,
     },
-  }) as ExportableRound[];
+  })) as ExportableRound[];
 
   const unresolvedKeys: string[] = [];
   const roundById = new Map<string, ExportableRound>();
@@ -661,7 +676,9 @@ async function loadPlaylistForExport(playlistId: string): Promise<ResolvedPlayli
   }
 
   if (unresolvedKeys.length > 0) {
-    throw new Error(`Playlist export failed because some round refs are unresolved: ${unresolvedKeys.join(", ")}`);
+    throw new Error(
+      `Playlist export failed because some round refs are unresolved: ${unresolvedKeys.join(", ")}`
+    );
   }
 
   return {
@@ -672,7 +689,10 @@ async function loadPlaylistForExport(playlistId: string): Promise<ResolvedPlayli
       config,
     },
     rounds: Array.from(roundById.values()).sort((a, b) => {
-      const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
+      const byName = a.name.localeCompare(b.name, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       if (byName !== 0) return byName;
       return a.id.localeCompare(b.id);
     }),
@@ -687,7 +707,7 @@ async function writeJsonFile(filePath: string, payload: unknown): Promise<void> 
 function toUniqueCaseInsensitiveFileName(
   usedNames: Set<string>,
   baseName: string,
-  extension: string,
+  extension: string
 ): string {
   const normalizedExtension = extension.startsWith(".") ? extension : `.${extension}`;
   let candidate = `${baseName}${normalizedExtension}`;
@@ -708,7 +728,9 @@ function unregisterTransferController(controller: AbortController): void {
   activeTransferAbortControllers.delete(controller);
 }
 
-async function withTransferAbort<T>(runner: (controller: AbortController) => Promise<T>): Promise<T> {
+async function withTransferAbort<T>(
+  runner: (controller: AbortController) => Promise<T>
+): Promise<T> {
   throwIfAbortRequested();
   const controller = new AbortController();
   registerTransferController(controller);
@@ -729,12 +751,14 @@ type ExternalSourceRecord = ReturnType<typeof listExternalSources>[number];
 async function resolveRemoteResponse(
   uri: string,
   installSourceKey: string | null,
-  request: Request,
+  request: Request
 ): Promise<Response> {
   const enabledSources = listExternalSources().filter((source) => source.enabled);
   for (const source of enabledSources) {
     if (source.kind !== "stash") continue;
-    const shouldUseByInstallSource = installSourceKey?.startsWith(`stash:${normalizeBaseUrl(source.baseUrl)}:scene:`);
+    const shouldUseByInstallSource = installSourceKey?.startsWith(
+      `stash:${normalizeBaseUrl(source.baseUrl)}:scene:`
+    );
     const shouldUseByUri = stashProvider.canHandleUri(uri, source);
     if (!shouldUseByInstallSource && !shouldUseByUri) continue;
     return fetchStashMediaWithAuth(source as ExternalSourceRecord, uri, request);
@@ -757,7 +781,7 @@ async function copyLocalFile(sourcePath: string, destinationPath: string): Promi
       completed = true;
     } finally {
       if (!completed) {
-        await fs.rm(destinationPath, { force: true }).catch(() => { });
+        await fs.rm(destinationPath, { force: true }).catch(() => {});
       }
     }
   });
@@ -778,17 +802,23 @@ async function ensureLocalSourceExists(sourcePath: string, resourceLabel: string
   }
 }
 
-async function downloadRemoteResource(uri: string, installSourceKey: string | null, destinationPath: string): Promise<void> {
+async function downloadRemoteResource(
+  uri: string,
+  installSourceKey: string | null,
+  destinationPath: string
+): Promise<void> {
   await withTransferAbort(async (controller) => {
     let completed = false;
     try {
       const response = await resolveRemoteResponse(
         uri,
         installSourceKey,
-        new Request(uri, { method: "GET", signal: controller.signal }),
+        new Request(uri, { method: "GET", signal: controller.signal })
       );
       if (!response.ok) {
-        throw new Error(`Failed to download resource: ${response.status} ${response.statusText}`.trim());
+        throw new Error(
+          `Failed to download resource: ${response.status} ${response.statusText}`.trim()
+        );
       }
       if (!response.body) {
         throw new Error("Failed to download resource: empty response body.");
@@ -796,13 +826,13 @@ async function downloadRemoteResource(uri: string, installSourceKey: string | nu
       await pipeline(
         Readable.fromWeb(response.body as unknown as import("node:stream/web").ReadableStream),
         createWriteStream(destinationPath),
-        { signal: controller.signal },
+        { signal: controller.signal }
       );
       throwIfAbortRequested();
       completed = true;
     } finally {
       if (!completed) {
-        await fs.rm(destinationPath, { force: true }).catch(() => { });
+        await fs.rm(destinationPath, { force: true }).catch(() => {});
       }
     }
   });
@@ -833,7 +863,7 @@ async function fetchRemoteVideoMetadata(task: VideoTask): Promise<PlaylistExport
         const headResponse = await resolveRemoteResponse(
           task.uri,
           task.installSourceKey,
-          new Request(task.uri, { method: "HEAD", signal: controller.signal }),
+          new Request(task.uri, { method: "HEAD", signal: controller.signal })
         );
         if (headResponse.ok) {
           fileSizeBytes = parseContentLength(headResponse.headers);
@@ -857,10 +887,11 @@ async function fetchRemoteVideoMetadata(task: VideoTask): Promise<PlaylistExport
               method: "GET",
               headers: new Headers({ Range: "bytes=0-0" }),
               signal: controller.signal,
-            }),
+            })
           );
           if (rangeResponse.ok || rangeResponse.status === 206) {
-            fileSizeBytes = parseContentRange(rangeResponse.headers) ?? parseContentLength(rangeResponse.headers);
+            fileSizeBytes =
+              parseContentRange(rangeResponse.headers) ?? parseContentLength(rangeResponse.headers);
           }
         } catch {
           // Best effort only.
@@ -941,7 +972,10 @@ function buildResourceInventory(loaded: ResolvedPlaylistExport): {
     }
   }
 
-  const sortByKey = <T extends { preferredBaseName: string; canonicalKey: string }>(left: T, right: T) => {
+  const sortByKey = <T extends { preferredBaseName: string; canonicalKey: string }>(
+    left: T,
+    right: T
+  ) => {
     const byName = left.preferredBaseName.localeCompare(right.preferredBaseName, undefined, {
       sensitivity: "base",
       numeric: true,
@@ -960,7 +994,9 @@ function buildResourceInventory(loaded: ResolvedPlaylistExport): {
   };
 }
 
-async function preparePlaylistExport(input: AnalyzeExportPackageInput): Promise<PreparedPlaylistExport> {
+async function preparePlaylistExport(
+  input: AnalyzeExportPackageInput
+): Promise<PreparedPlaylistExport> {
   const loaded = await loadPlaylistForExport(input.playlistId);
   const binaries = await resolvePhashBinaries();
   const encoder = await detectAv1Encoder(binaries.ffmpegPath);
@@ -976,7 +1012,9 @@ async function preparePlaylistExport(input: AnalyzeExportPackageInput): Promise<
     if (localPath) {
       task.probe = await probeLocalVideo(binaries.ffprobePath, localPath);
       if (task.probe.durationMs === null && resourceReferences.length > 0) {
-        const matching = resourceReferences.find((entry) => canonicalizeResourceKey(entry.resource.videoUri) === task.canonicalKey);
+        const matching = resourceReferences.find(
+          (entry) => canonicalizeResourceKey(entry.resource.videoUri) === task.canonicalKey
+        );
         task.probe.durationMs = matching?.resource.durationMs ?? null;
       }
       continue;
@@ -987,30 +1025,40 @@ async function preparePlaylistExport(input: AnalyzeExportPackageInput): Promise<
   const localVideos = videoTasks.filter((task) => fromLocalMediaUri(task.uri)).length;
   const remoteVideos = videoTasks.length - localVideos;
   const alreadyAv1Videos = videoTasks.filter((task) => isAv1Codec(task.probe.codecName)).length;
-  const estimatedReencodeVideos = effectiveCompressionMode === "av1"
-    ? videoTasks.filter((task) => !isAv1Codec(task.probe.codecName)).length
-    : 0;
+  const estimatedReencodeVideos =
+    effectiveCompressionMode === "av1"
+      ? videoTasks.filter((task) => !isAv1Codec(task.probe.codecName)).length
+      : 0;
 
-  const estimate = effectiveCompressionMode === "av1" && encoder
-    ? estimateCompressionForProbes({
-      probes: videoTasks.map((task) => task.probe),
-      strength: compressionStrength,
-      encoderKind: encoder.kind,
-      parallelJobs,
-    })
-    : {
-      sourceVideoBytes: videoTasks.reduce((sum, task) => sum + (task.probe.fileSizeBytes ?? 0), 0),
-      expectedVideoBytes: videoTasks.reduce((sum, task) => sum + (task.probe.fileSizeBytes ?? 0), 0),
-      savingsBytes: 0,
-      estimatedCompressionSeconds: 0,
-      approximate: videoTasks.some((task) => task.probe.fileSizeBytes === null),
-    } satisfies PlaylistExportEstimate;
+  const estimate =
+    effectiveCompressionMode === "av1" && encoder
+      ? estimateCompressionForProbes({
+          probes: videoTasks.map((task) => task.probe),
+          strength: compressionStrength,
+          encoderKind: encoder.kind,
+          parallelJobs,
+        })
+      : ({
+          sourceVideoBytes: videoTasks.reduce(
+            (sum, task) => sum + (task.probe.fileSizeBytes ?? 0),
+            0
+          ),
+          expectedVideoBytes: videoTasks.reduce(
+            (sum, task) => sum + (task.probe.fileSizeBytes ?? 0),
+            0
+          ),
+          savingsBytes: 0,
+          estimatedCompressionSeconds: 0,
+          approximate: videoTasks.some((task) => task.probe.fileSizeBytes === null),
+        } satisfies PlaylistExportEstimate);
 
   let warning: string | null = null;
   if (!encoder) {
-    warning = "No AV1 encoder is available in the configured ffmpeg build. Compression is disabled.";
+    warning =
+      "No AV1 encoder is available in the configured ffmpeg build. Compression is disabled.";
   } else if (encoder.kind === "software") {
-    warning = "No AV1 hardware encoder was detected. Reencoding on this system may take multiple hours.";
+    warning =
+      "No AV1 hardware encoder was detected. Reencoding on this system may take multiple hours.";
   }
 
   return {
@@ -1067,7 +1115,12 @@ function estimateExportWork(input: PreparedPlaylistExport) {
     videoFiles: input.videoTasks.length,
     funscriptFiles: input.funscriptTasks.length,
     sidecarFiles: standaloneSidecars + heroGroups.size,
-    total: input.videoTasks.length + input.funscriptTasks.length + standaloneSidecars + heroGroups.size + 1,
+    total:
+      input.videoTasks.length +
+      input.funscriptTasks.length +
+      standaloneSidecars +
+      heroGroups.size +
+      1,
   };
 }
 
@@ -1084,14 +1137,23 @@ function toRoundSidecarPayload(entry: RoundResourceEntry, includeMedia: boolean)
     type: entry.round.type,
     resources: [
       {
-        videoUri: includeMedia && entry.materialized?.video ? entry.materialized.video.relativePath : entry.resource.videoUri,
-        funscriptUri: entry.materialized?.funscript ? entry.materialized.funscript.relativePath : entry.resource.funscriptUri,
+        videoUri:
+          includeMedia && entry.materialized?.video
+            ? entry.materialized.video.relativePath
+            : entry.resource.videoUri,
+        funscriptUri: entry.materialized?.funscript
+          ? entry.materialized.funscript.relativePath
+          : entry.resource.funscriptUri,
       },
     ],
   });
 }
 
-function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEntry[], includeMedia: boolean) {
+function createHeroSidecarPayload(
+  hero: ExportableHero,
+  entries: RoundResourceEntry[],
+  includeMedia: boolean
+) {
   return ZHeroSidecar.parse({
     name: hero.name,
     author: hero.author ?? undefined,
@@ -1114,8 +1176,13 @@ function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEn
         type: entry.round.type,
         resources: [
           {
-            videoUri: includeMedia && entry.materialized?.video ? entry.materialized.video.relativePath : entry.resource.videoUri,
-            funscriptUri: entry.materialized?.funscript ? entry.materialized.funscript.relativePath : entry.resource.funscriptUri,
+            videoUri:
+              includeMedia && entry.materialized?.video
+                ? entry.materialized.video.relativePath
+                : entry.resource.videoUri,
+            funscriptUri: entry.materialized?.funscript
+              ? entry.materialized.funscript.relativePath
+              : entry.resource.funscriptUri,
           },
         ],
       })),
@@ -1146,7 +1213,11 @@ function formatDurationEstimate(seconds: number): string {
   return `${Math.max(1, minutes)} min`;
 }
 
-async function runLimited<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+async function runLimited<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
   if (items.length === 0) return;
   const concurrency = Math.max(1, limit);
   let index = 0;
@@ -1172,11 +1243,12 @@ function allocateMediaOutputs(input: {
 }): void {
   for (const task of input.tasks) {
     const baseName = sanitizeFileSystemName(task.preferredBaseName, "media");
-    const extension = "probe" in task && input.compressionMode === "av1" && !isAv1Codec(task.probe.codecName)
-      ? ".mp4"
-      : "probe" in task
-        ? sanitizeExtension(task.originalExtension, ".mp4")
-        : sanitizeExtension(inferExtensionFromUri(task.uri, ".funscript"), ".funscript");
+    const extension =
+      "probe" in task && input.compressionMode === "av1" && !isAv1Codec(task.probe.codecName)
+        ? ".mp4"
+        : "probe" in task
+          ? sanitizeExtension(task.originalExtension, ".mp4")
+          : sanitizeExtension(inferExtensionFromUri(task.uri, ".funscript"), ".funscript");
     const fileName = toUniqueCaseInsensitiveFileName(input.usedNames, baseName, extension);
     const absolutePath = path.join(input.packageDir, fileName);
     task.output = {
@@ -1220,7 +1292,11 @@ async function materializeVideoTask(input: {
       await ensureLocalSourceExists(localPath, "video");
       await copyLocalFile(localPath, output.absolutePath);
     } else {
-      await downloadRemoteResource(input.task.uri, input.task.installSourceKey, output.absolutePath);
+      await downloadRemoteResource(
+        input.task.uri,
+        input.task.installSourceKey,
+        output.absolutePath
+      );
     }
     const stats = await fs.stat(output.absolutePath);
     incrementExportStat("videoFiles");
@@ -1255,7 +1331,7 @@ async function materializeVideoTask(input: {
     await ensureLocalSourceExists(localPath, "video");
     const stagedSourcePath = path.join(
       input.workDir,
-      `${crypto.randomUUID()}${sanitizeExtension(input.task.originalExtension, ".mp4")}`,
+      `${crypto.randomUUID()}${sanitizeExtension(input.task.originalExtension, ".mp4")}`
     );
     updateExportPhase("copying", `Preparing source video ${outputFileName}...`);
     await copyLocalFile(localPath, stagedSourcePath);
@@ -1264,7 +1340,7 @@ async function materializeVideoTask(input: {
   } else if (!sourcePath) {
     const tempSourcePath = path.join(
       input.workDir,
-      `${crypto.randomUUID()}${sanitizeExtension(input.task.originalExtension, ".mp4")}`,
+      `${crypto.randomUUID()}${sanitizeExtension(input.task.originalExtension, ".mp4")}`
     );
     updateExportPhase("copying", `Downloading source video ${outputFileName}...`);
     await downloadRemoteResource(input.task.uri, input.task.installSourceKey, tempSourcePath);
@@ -1310,7 +1386,11 @@ async function materializeVideoTask(input: {
     }
 
     if (input.compressionLiveTracker) {
-      startCompressionJob(input.compressionLiveTracker, input.task.canonicalKey, probedSource.durationMs);
+      startCompressionJob(
+        input.compressionLiveTracker,
+        input.task.canonicalKey,
+        probedSource.durationMs
+      );
     }
     updateExportPhase("compressing", `Compressing video ${outputFileName} to AV1...`);
     setCompressionStatus({
@@ -1328,8 +1408,12 @@ async function materializeVideoTask(input: {
         onSpawn: registerEncodeChild,
         onProgress: compressionLiveTracker
           ? (progress) => {
-            updateCompressionJobProgress(compressionLiveTracker, input.task.canonicalKey, progress);
-          }
+              updateCompressionJobProgress(
+                compressionLiveTracker,
+                input.task.canonicalKey,
+                progress
+              );
+            }
           : undefined,
       });
       encodedSuccessfully = true;
@@ -1370,7 +1454,7 @@ async function materializeVideoTask(input: {
     };
   } finally {
     if (shouldDeleteSourcePath && sourcePath) {
-      await fs.rm(sourcePath, { force: true }).catch(() => { });
+      await fs.rm(sourcePath, { force: true }).catch(() => {});
     }
   }
 }
@@ -1405,9 +1489,9 @@ function buildReadmeContent(input: {
     "",
     "## Installation Instructions",
     "",
-    "1.  Download and install \"Fap Land Party Edition\" from the link above.",
+    '1.  Download and install "Fap Land Party Edition" from the link above.',
     "2.  Launch the application.",
-    "3.  Click **\"Install rounds\"**.",
+    '3.  Click **"Install rounds"**.',
     "4.  Select this folder as the source.",
     "",
     "## Video Compression",
@@ -1446,7 +1530,10 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
 
   const safeFolderName = sanitizeFileSystemName(prepared.loaded.playlist.name, "playlist");
   const finalDir = path.join(parentDirectory, safeFolderName);
-  const tempDir = path.join(parentDirectory, `${safeFolderName}.tmp-${toSafeIsoTimestamp(new Date())}-${crypto.randomUUID()}`);
+  const tempDir = path.join(
+    parentDirectory,
+    `${safeFolderName}.tmp-${toSafeIsoTimestamp(new Date())}-${crypto.randomUUID()}`
+  );
   const workDir = path.join(tempDir, ".work");
   await ensurePathDoesNotExist(finalDir);
   await ensurePathDoesNotExist(tempDir);
@@ -1477,9 +1564,10 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     const includeMedia = input.includeMedia ?? true;
 
     if (includeMedia) {
-      const compressionLiveTracker = prepared.effectiveCompressionMode === "av1"
-        ? createCompressionLiveTracker(prepared.videoTasks)
-        : null;
+      const compressionLiveTracker =
+        prepared.effectiveCompressionMode === "av1"
+          ? createCompressionLiveTracker(prepared.videoTasks)
+          : null;
       if (compressionLiveTracker) {
         syncCompressionLiveProgress(compressionLiveTracker);
       }
@@ -1501,7 +1589,7 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
           actualVideoBytes += result.outputBytes;
           if (result.reencoded) reencodedVideos += 1;
           if (result.alreadyAv1Copied) alreadyAv1Copied += 1;
-        },
+        }
       );
     }
 
@@ -1512,16 +1600,20 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     const videoOutputByKey = new Map<string, ExportedMediaFile>(
       prepared.videoTasks
         .filter((task): task is VideoTask & { output: ExportedMediaFile } => Boolean(task.output))
-        .map((task) => [`video:${task.canonicalKey}`, task.output]),
+        .map((task) => [`video:${task.canonicalKey}`, task.output])
     );
     const funscriptOutputByKey = new Map<string, ExportedMediaFile>(
       prepared.funscriptTasks
-        .filter((task): task is FunscriptTask & { output: ExportedMediaFile } => Boolean(task.output))
-        .map((task) => [`funscript:${task.canonicalKey}`, task.output]),
+        .filter((task): task is FunscriptTask & { output: ExportedMediaFile } =>
+          Boolean(task.output)
+        )
+        .map((task) => [`funscript:${task.canonicalKey}`, task.output])
     );
 
     const materializedEntries: RoundResourceEntry[] = prepared.resourceReferences.map((entry) => {
-      const funscriptKey = entry.resource.funscriptUri ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}` : null;
+      const funscriptKey = entry.resource.funscriptUri
+        ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}`
+        : null;
       let video = null;
 
       if (includeMedia) {
@@ -1546,7 +1638,7 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     const playlistFileName = toUniqueCaseInsensitiveFileName(
       usedSidecarNames,
       sanitizeFileSystemName(prepared.loaded.playlist.name, "playlist"),
-      ".fplay",
+      ".fplay"
     );
     const playlistFilePath = path.join(tempDir, playlistFileName);
     updateExportPhase("writing", `Writing playlist ${playlistFileName}...`);
@@ -1578,7 +1670,10 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     }
 
     const sortedHeroGroups = Array.from(heroGroups.values()).sort((a, b) => {
-      const byName = a.hero.name.localeCompare(b.hero.name, undefined, { sensitivity: "base", numeric: true });
+      const byName = a.hero.name.localeCompare(b.hero.name, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
       if (byName !== 0) return byName;
       return a.hero.id.localeCompare(b.hero.id);
     });
@@ -1586,7 +1681,10 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
       const sidecarBaseName = sanitizeFileSystemName(group.hero.name, `hero__${group.hero.id}`);
       const fileName = toUniqueCaseInsensitiveFileName(usedSidecarNames, sidecarBaseName, ".hero");
       updateExportPhase("writing", `Writing sidecar ${fileName}...`);
-      await writeJsonFile(path.join(tempDir, fileName), createHeroSidecarPayload(group.hero, group.entries, includeMedia));
+      await writeJsonFile(
+        path.join(tempDir, fileName),
+        createHeroSidecarPayload(group.hero, group.entries, includeMedia)
+      );
       incrementExportStat("sidecarFiles");
       incrementExportProgress();
       sidecarFiles += 1;
@@ -1617,12 +1715,12 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
           encoder: prepared.encoder,
           parallelJobs: prepared.parallelJobs,
         }),
-        "utf8",
+        "utf8"
       );
     }
 
     updateExportPhase("writing", "Finalizing export package...");
-    await fs.rm(workDir, { recursive: true, force: true }).catch(() => { });
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
     await fs.rename(tempDir, finalDir);
     return {
       exportDir: finalDir,
@@ -1642,13 +1740,13 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
       },
     };
   } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => { });
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     throw error;
   }
 }
 
 export async function analyzePlaylistExportPackage(
-  input: AnalyzeExportPackageInput,
+  input: AnalyzeExportPackageInput
 ): Promise<PlaylistExportPackageAnalysis> {
   const prepared = await preparePlaylistExport(input);
   return prepared.analysis;
@@ -1694,7 +1792,9 @@ export function requestPlaylistExportPackageAbort(): PlaylistExportPackageStatus
   return cloneStatus(exportStatus);
 }
 
-export async function exportPlaylistPackage(input: ExportPackageInput): Promise<ExportPackageResult> {
+export async function exportPlaylistPackage(
+  input: ExportPackageInput
+): Promise<ExportPackageResult> {
   if (activeExportPromise) {
     throw new Error("A playlist export is already running.");
   }
@@ -1719,22 +1819,23 @@ export async function exportPlaylistPackage(input: ExportPackageInput): Promise<
       videoFiles: 0,
       funscriptFiles: 0,
     },
-    compression: input.compressionMode === "av1"
-      ? {
-        enabled: true,
-        encoderName: null,
-        encoderKind: null,
-        strength: normalizedStrength,
-        reencodedCompleted: 0,
-        reencodedTotal: 0,
-        alreadyAv1Copied: 0,
-        activeJobs: 0,
-        expectedVideoBytes: 0,
-        estimatedCompressionSeconds: 0,
-        approximate: true,
-        liveProgress: createCompressionLiveProgress(),
-      }
-      : null,
+    compression:
+      input.compressionMode === "av1"
+        ? {
+            enabled: true,
+            encoderName: null,
+            encoderKind: null,
+            strength: normalizedStrength,
+            reencodedCompleted: 0,
+            reencodedTotal: 0,
+            alreadyAv1Copied: 0,
+            activeJobs: 0,
+            expectedVideoBytes: 0,
+            estimatedCompressionSeconds: 0,
+            approximate: true,
+            liveProgress: createCompressionLiveProgress(),
+          }
+        : null,
   };
 
   activeExportPromise = (async () => {
@@ -1761,7 +1862,7 @@ export async function exportPlaylistPackage(input: ExportPackageInput): Promise<
           liveProgress: createCompressionLiveProgress(
             prepared.videoTasks
               .filter((task) => !isAv1Codec(task.probe.codecName))
-              .reduce((sum, task) => sum + Math.max(0, task.probe.durationMs ?? 0), 0),
+              .reduce((sum, task) => sum + Math.max(0, task.probe.durationMs ?? 0), 0)
           ),
         },
       };
@@ -1785,13 +1886,13 @@ export async function exportPlaylistPackage(input: ExportPackageInput): Promise<
       state: "done",
       phase: "done",
       finishedAt: new Date().toISOString(),
-      lastMessage:
-        result.compression.enabled
-          ? `Export finished. ${result.compression.reencodedVideos} videos reencoded, ${result.sidecarFiles} sidecars written.`
-          : `Export finished. ${result.sidecarFiles} sidecars, ${result.videoFiles} videos, ${result.funscriptFiles} funscripts.`,
+      lastMessage: result.compression.enabled
+        ? `Export finished. ${result.compression.reencodedVideos} videos reencoded, ${result.sidecarFiles} sidecars written.`
+        : `Export finished. ${result.sidecarFiles} sidecars, ${result.videoFiles} videos, ${result.funscriptFiles} funscripts.`,
     };
     return result;
-  } catch (error) {
+  } catch (caughtError) {
+    let error: unknown = caughtError;
     if (abortRequested && isAbortLikeError(error)) {
       error = new ExportAbortError();
     }

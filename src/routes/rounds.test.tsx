@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     controllerSupportEnabled: false,
     installWebFunscriptUrlEnabled: false,
   },
+  search: {} as { open?: "install-rounds" | "install-web" },
   navigate: vi.fn(),
   db: {
     hero: {
@@ -65,6 +66,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => () => ({
     useLoaderData: () => mocks.loaderData,
+    useSearch: () => mocks.search,
   }),
   useNavigate: () => mocks.navigate,
 }));
@@ -87,6 +89,10 @@ vi.mock("../services/trpc", () => ({
   },
 }));
 
+vi.mock("../hooks/useSfwMode", () => ({
+  useSfwMode: () => false,
+}));
+
 vi.mock("../utils/audio", () => ({
   playHoverSound: vi.fn(),
   playSelectSound: vi.fn(),
@@ -106,6 +112,10 @@ vi.mock("../components/MenuButton", () => ({
       {label}
     </button>
   ),
+}));
+
+vi.mock("../components/ui/ToastHost", () => ({
+  useToast: () => ({ showToast: vi.fn() }),
 }));
 
 import { InstalledRoundsPage } from "./rounds";
@@ -235,6 +245,8 @@ function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlayl
         scorePerActiveAntiPerk: 25,
         scorePerCumRoundSuccess: 420,
       },
+      roundStartDelayMs: 20000,
+      dice: { min: 1, max: 6 },
     },
   };
 }
@@ -252,7 +264,7 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
-        selectMusicCacheDirectory: vi.fn(),
+      selectMusicCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
       selectMusicFiles: vi.fn(),
       addMusicFromUrl: vi.fn(),
@@ -277,6 +289,7 @@ beforeEach(() => {
   mocks.loaderData.availablePlaylists = [];
   mocks.loaderData.roundProgressBarAlwaysVisible = false;
   mocks.loaderData.controllerSupportEnabled = false;
+  mocks.search = {};
   mocks.db.webVideoCache.getScanStatus.mockResolvedValue({
     state: "idle",
     startedAt: null,
@@ -715,7 +728,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     render(<InstalledRoundsPage />);
 
     expect(screen.getAllByText("Web").length).toBeGreaterThan(0);
-    expect(screen.getByText((content, node) => node?.textContent === "Source: Web")).toBeDefined();
+    expect(screen.getByText((_content, node) => node?.textContent === "Source: Web")).toBeDefined();
   });
 
   it("shows preview generation text for website rounds while web caching is running", async () => {
@@ -1420,6 +1433,47 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(screen.getByRole("button", { name: /Select Local Funscript/i })).toBeDefined();
   });
 
+  it("opens install from web when requested by rounds search params", async () => {
+    mocks.search = { open: "install-web" };
+
+    render(<InstalledRoundsPage />);
+
+    expect(await screen.findByRole("dialog", { name: "Install from web" })).toBeTruthy();
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/rounds",
+      search: {},
+      replace: true,
+    });
+  });
+
+  it("closes install from web on escape", () => {
+    render(<InstalledRoundsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    expect(screen.getByRole("dialog", { name: "Install from web" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Install from web" })).toBeNull();
+  });
+
+  it("opens the install folder picker when requested by rounds search params", async () => {
+    mocks.search = { open: "install-rounds" };
+    vi.mocked(window.electronAPI.dialog.selectFolders).mockResolvedValue(["/tmp/round-pack"]);
+
+    render(<InstalledRoundsPage />);
+
+    await waitFor(() => {
+      expect(window.electronAPI.dialog.selectFolders).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.db.install.inspectFolder).toHaveBeenCalledWith("/tmp/round-pack");
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/rounds",
+      search: {},
+      replace: true,
+    });
+  });
+
   it("autofills the round name from the extracted website title while the field is untouched", async () => {
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
@@ -1429,7 +1483,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
 
     await screen.findByText("Supported via PornHub: Demo title");
-    expect(screen.getByLabelText("Round Name")).toHaveValue("Demo title");
+    expect((screen.getByLabelText("Round Name") as HTMLInputElement).value).toBe("Demo title");
   });
 
   it("does not overwrite a manually entered round name with the extracted website title", async () => {
@@ -1444,7 +1498,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
 
     await screen.findByText("Supported via PornHub: Demo title");
-    expect(screen.getByLabelText("Round Name")).toHaveValue("Manual Name");
+    expect((screen.getByLabelText("Round Name") as HTMLInputElement).value).toBe("Manual Name");
   });
 
   it("installs a website-backed round from the import view with an optional local funscript", async () => {
@@ -1553,8 +1607,12 @@ describe("InstalledRoundsPage hero grouping", () => {
     const oldestHeading = screen.getByRole("heading", { name: "Oldest Round" });
     const middleHeading = screen.getByRole("heading", { name: "Middle Round" });
     const newestHeading = screen.getByRole("heading", { name: "Newest Round" });
-    expect(oldestHeading.compareDocumentPosition(middleHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(middleHeading.compareDocumentPosition(newestHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(oldestHeading.compareDocumentPosition(middleHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(middleHeading.compareDocumentPosition(newestHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
   });
 
   it("sorts installed rounds by length", async () => {
@@ -1591,8 +1649,12 @@ describe("InstalledRoundsPage hero grouping", () => {
     const longHeading = screen.getByRole("heading", { name: "Long Round" });
     const mediumHeading = screen.getByRole("heading", { name: "Medium Round" });
     const shortHeading = screen.getByRole("heading", { name: "Short Round" });
-    expect(longHeading.compareDocumentPosition(mediumHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(mediumHeading.compareDocumentPosition(shortHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(longHeading.compareDocumentPosition(mediumHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(mediumHeading.compareDocumentPosition(shortHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
   });
 
   it("shows template actions and repairs a template round from installed content", async () => {

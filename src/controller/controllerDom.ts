@@ -8,15 +8,19 @@ const FOCUSABLE_SELECTOR = [
   "select",
   "textarea",
   "[tabindex]",
-  "[role=\"button\"]",
+  '[role="button"]',
 ].join(",");
 
 function isElementDisabled(element: HTMLElement): boolean {
   if (element.dataset.controllerDisabled === "true") return true;
-  if (element.closest("[data-controller-skip=\"true\"]")) return true;
+  if (element.closest('[data-controller-skip="true"]')) return true;
   if (element.getAttribute("aria-disabled") === "true") return true;
 
-  const maybeDisabled = element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+  const maybeDisabled = element as
+    | HTMLButtonElement
+    | HTMLInputElement
+    | HTMLSelectElement
+    | HTMLTextAreaElement;
   return Boolean(maybeDisabled.disabled);
 }
 
@@ -49,7 +53,9 @@ function isSelectElement(element: HTMLElement | null): element is HTMLSelectElem
 }
 
 function isNumberStepperElement(element: HTMLElement | null): element is HTMLInputElement {
-  return element instanceof HTMLInputElement && (element.type === "number" || element.type === "range");
+  return (
+    element instanceof HTMLInputElement && (element.type === "number" || element.type === "range")
+  );
 }
 
 export function getSurfaceRoot(surface: Pick<ControllerSurfaceOptions, "scopeRef">): HTMLElement {
@@ -66,19 +72,28 @@ export function getFocusableElements(root: HTMLElement): HTMLElement[] {
   });
 }
 
-export function findFocusableById(root: HTMLElement, id: string | null | undefined): HTMLElement | null {
+export function findFocusableById(
+  root: HTMLElement,
+  id: string | null | undefined
+): HTMLElement | null {
   if (!id) return null;
-  return Array.from(root.querySelectorAll<HTMLElement>("[data-controller-focus-id]"))
-    .find((element) => element.dataset.controllerFocusId === id) ?? null;
+  return (
+    Array.from(root.querySelectorAll<HTMLElement>("[data-controller-focus-id]")).find(
+      (element) => element.dataset.controllerFocusId === id
+    ) ?? null
+  );
 }
 
-export function findInitialFocusable(root: HTMLElement, initialFocusId?: string): HTMLElement | null {
+export function findInitialFocusable(
+  root: HTMLElement,
+  initialFocusId?: string
+): HTMLElement | null {
   const explicit = findFocusableById(root, initialFocusId);
   if (explicit && !isElementDisabled(explicit) && isElementVisible(explicit)) {
     return explicit;
   }
 
-  const marked = root.querySelector<HTMLElement>("[data-controller-initial=\"true\"]");
+  const marked = root.querySelector<HTMLElement>('[data-controller-initial="true"]');
   if (marked && !isElementDisabled(marked) && isElementVisible(marked)) {
     return marked;
   }
@@ -93,7 +108,10 @@ export function focusElement(element: HTMLElement | null): boolean {
   return document.activeElement === element;
 }
 
-function getDirectionalOverride(element: HTMLElement, action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">): string | null {
+function getDirectionalOverride(
+  element: HTMLElement,
+  action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">
+): string | null {
   switch (action) {
     case "UP":
       return element.dataset.controllerUp ?? null;
@@ -106,7 +124,11 @@ function getDirectionalOverride(element: HTMLElement, action: Extract<Controller
   }
 }
 
-function directionMatches(deltaX: number, deltaY: number, action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">): boolean {
+function directionMatches(
+  deltaX: number,
+  deltaY: number,
+  action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">
+): boolean {
   switch (action) {
     case "UP":
       return deltaY < -4;
@@ -119,7 +141,11 @@ function directionMatches(deltaX: number, deltaY: number, action: Extract<Contro
   }
 }
 
-function getDirectionScore(deltaX: number, deltaY: number, action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">): number {
+function getDirectionScore(
+  deltaX: number,
+  deltaY: number,
+  action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">
+): number {
   const primary = action === "UP" || action === "DOWN" ? Math.abs(deltaY) : Math.abs(deltaX);
   const secondary = action === "UP" || action === "DOWN" ? Math.abs(deltaX) : Math.abs(deltaY);
   return primary + secondary * 0.35;
@@ -128,12 +154,17 @@ function getDirectionScore(deltaX: number, deltaY: number, action: Extract<Contr
 export function moveFocus(
   root: HTMLElement,
   current: HTMLElement | null,
-  action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">,
+  action: Extract<ControllerAction, "UP" | "DOWN" | "LEFT" | "RIGHT">
 ): boolean {
   const focusables = getFocusableElements(root);
   if (focusables.length === 0) return false;
 
-  if (!current || !root.contains(current) || isElementDisabled(current) || !isElementVisible(current)) {
+  if (
+    !current ||
+    !root.contains(current) ||
+    isElementDisabled(current) ||
+    !isElementVisible(current)
+  ) {
     return focusElement(focusables[0] ?? null);
   }
 
@@ -178,7 +209,10 @@ export function moveFocus(
 }
 
 function stepSelect(element: HTMLSelectElement, direction: -1 | 1): boolean {
-  const nextIndex = Math.max(0, Math.min(element.options.length - 1, element.selectedIndex + direction));
+  const nextIndex = Math.max(
+    0,
+    Math.min(element.options.length - 1, element.selectedIndex + direction)
+  );
   if (nextIndex === element.selectedIndex) return false;
   element.selectedIndex = nextIndex;
   element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -203,9 +237,13 @@ function stepNumber(element: HTMLInputElement, direction: -1 | 1): boolean {
   return true;
 }
 
-export function handleDomAction(surface: ControllerSurfaceOptions, action: ControllerAction): boolean {
+export function handleDomAction(
+  surface: ControllerSurfaceOptions,
+  action: ControllerAction
+): boolean {
   const root = getSurfaceRoot(surface);
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const focused = activeElement && root.contains(activeElement) ? activeElement : null;
 
   if ((action === "SECONDARY" || action === "BACK") && isTextEntryElement(focused)) {
@@ -222,8 +260,8 @@ export function handleDomAction(surface: ControllerSurfaceOptions, action: Contr
   }
 
   if (
-    (action === "UP" || action === "DOWN" || action === "LEFT" || action === "RIGHT")
-    && (!focused || !isTextEntryElement(focused))
+    (action === "UP" || action === "DOWN" || action === "LEFT" || action === "RIGHT") &&
+    (!focused || !isTextEntryElement(focused))
   ) {
     return moveFocus(root, focused, action);
   }
@@ -238,7 +276,7 @@ export function handleDomAction(surface: ControllerSurfaceOptions, action: Contr
       return true;
     }
 
-    focused.click();
+    (focused as HTMLElement).click();
     return true;
   }
 

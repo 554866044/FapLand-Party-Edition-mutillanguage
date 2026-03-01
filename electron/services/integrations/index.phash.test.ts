@@ -155,7 +155,8 @@ function createDbMock(initialRounds: CachedRoundRow[]) {
         }),
       },
     },
-    insert: vi.fn((table: unknown) => ({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    insert: vi.fn((_table: unknown) => ({
       values: (input: unknown) => ({
         returning: async () => {
           if (typeof input === "object" && input !== null && "roundId" in input) {
@@ -277,12 +278,14 @@ describe("integration phash linking", () => {
     setDisabledRoundIdsMock.mockImplementation((ids: Iterable<string>) => [...ids]);
     normalizeBaseUrlMock.mockImplementation((input: string) => input.replace(/\/+$/, ""));
     sourcePrefixForManagedRoundsMock.mockImplementation(
-      (input: ExternalSource) => `stash:${input.baseUrl.replace(/\/+$/, "")}:scene:`,
+      (input: ExternalSource) => `stash:${input.baseUrl.replace(/\/+$/, "")}:scene:`
     );
     toStashInstallSourceKeyMock.mockImplementation(
-      (baseUrl: string, sceneId: string) => `stash:${baseUrl.replace(/\/+$/, "")}:scene:${sceneId}`,
+      (baseUrl: string, sceneId: string) => `stash:${baseUrl.replace(/\/+$/, "")}:scene:${sceneId}`
     );
-    fetchStashMediaWithAuthMock.mockResolvedValue(new Response("{\"actions\":[{\"at\":0,\"pos\":50}]}", { status: 200 }));
+    fetchStashMediaWithAuthMock.mockResolvedValue(
+      new Response('{"actions":[{"at":0,"pos":50}]}', { status: 200 })
+    );
   });
 
   afterEach(() => {
@@ -290,18 +293,28 @@ describe("integration phash linking", () => {
   });
 
   it("links to an existing round when phash is similar", async () => {
-    getDbMock.mockReturnValue(createDbMock([
-      {
-        id: "round-existing",
-        name: "Existing",
-        author: "Author",
-        description: null,
-        phash: "0",
-        previewImage: "preview",
-        installSourceKey: null,
-        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, durationMs: null, disabled: false }],
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      createDbMock([
+        {
+          id: "round-existing",
+          name: "Existing",
+          author: "Author",
+          description: null,
+          phash: "0",
+          previewImage: "preview",
+          installSourceKey: null,
+          resources: [
+            {
+              id: "res-1",
+              videoUri: "https://stash.example/old.mp4",
+              phash: null,
+              durationMs: null,
+              disabled: false,
+            },
+          ],
+        },
+      ])
+    );
 
     syncSourceMock.mockImplementationOnce(async (_source, context) => {
       context.onSceneSeen();
@@ -331,18 +344,28 @@ describe("integration phash linking", () => {
   });
 
   it("does not fuzzy-match non-hex fallback hashes", async () => {
-    getDbMock.mockReturnValue(createDbMock([
-      {
-        id: "round-existing",
-        name: "Existing",
-        author: "Author",
-        description: null,
-        phash: "sha256:abc@0-1000",
-        previewImage: "preview",
-        installSourceKey: null,
-        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, durationMs: null, disabled: false }],
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      createDbMock([
+        {
+          id: "round-existing",
+          name: "Existing",
+          author: "Author",
+          description: null,
+          phash: "sha256:abc@0-1000",
+          previewImage: "preview",
+          installSourceKey: null,
+          resources: [
+            {
+              id: "res-1",
+              videoUri: "https://stash.example/old.mp4",
+              phash: null,
+              durationMs: null,
+              disabled: false,
+            },
+          ],
+        },
+      ])
+    );
 
     syncSourceMock.mockImplementationOnce(async (_source, context) => {
       context.onSceneSeen();
@@ -372,7 +395,9 @@ describe("integration phash linking", () => {
 
   it("skips creating managed rounds for empty funscripts", async () => {
     getDbMock.mockReturnValue(createDbMock([]));
-    fetchStashMediaWithAuthMock.mockResolvedValueOnce(new Response("{\"actions\":[]}", { status: 200 }));
+    fetchStashMediaWithAuthMock.mockResolvedValueOnce(
+      new Response('{"actions":[]}', { status: 200 })
+    );
 
     syncSourceMock.mockImplementationOnce(async (_source, context) => {
       context.onSceneSeen();
@@ -401,19 +426,31 @@ describe("integration phash linking", () => {
   });
 
   it("treats managed rounds with empty funscripts as not installed", async () => {
-    getDbMock.mockReturnValue(createDbMock([
-      {
-        id: "round-managed",
-        name: "Managed",
-        author: "Author",
-        description: null,
-        phash: "abc",
-        previewImage: "preview",
-        installSourceKey: "stash:https://stash.example:scene:scene-empty",
-        resources: [{ id: "res-1", videoUri: "https://stash.example/existing.mp4", phash: "abc", durationMs: null, disabled: false }],
-      },
-    ]));
-    fetchStashMediaWithAuthMock.mockResolvedValueOnce(new Response("{\"actions\":[]}", { status: 200 }));
+    getDbMock.mockReturnValue(
+      createDbMock([
+        {
+          id: "round-managed",
+          name: "Managed",
+          author: "Author",
+          description: null,
+          phash: "abc",
+          previewImage: "preview",
+          installSourceKey: "stash:https://stash.example:scene:scene-empty",
+          resources: [
+            {
+              id: "res-1",
+              videoUri: "https://stash.example/existing.mp4",
+              phash: "abc",
+              durationMs: null,
+              disabled: false,
+            },
+          ],
+        },
+      ])
+    );
+    fetchStashMediaWithAuthMock.mockResolvedValueOnce(
+      new Response('{"actions":[]}', { status: 200 })
+    );
 
     syncSourceMock.mockImplementationOnce(async (_source, context) => {
       context.onSceneSeen();

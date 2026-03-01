@@ -16,7 +16,7 @@ import {
   type InstallResource,
   type InstallRound,
 } from "../../src/zod/installSidecar";
-import { extractFpackToTemp } from "./fpack";
+import { extractFpackToPersistent } from "./fpack";
 import { approveDialogPath, assertApprovedDialogPath } from "./dialogPathApproval";
 import { getDb } from "./db";
 import { eq, asc, isNotNull } from "drizzle-orm";
@@ -54,14 +54,6 @@ const AUTO_SCAN_FOLDERS_KEY = "install.autoScanFolders";
 const MAX_TRACKED_ERRORS = 50;
 const SIDECAR_EXTENSIONS = new Set([".round", ".hero", ".fplay"]);
 const SIDECAR_AND_FPACK_EXTENSIONS = new Set([".round", ".hero", ".fplay", ".fpack"]);
-const pendingFpackTempDirs: string[] = [];
-
-async function cleanupFpackTempDirs(): Promise<void> {
-  const dirs = pendingFpackTempDirs.splice(0);
-  await Promise.all(
-    dirs.map((dir) => fs.rm(dir, { recursive: true, force: true }).catch(() => { }))
-  );
-}
 
 export function isSupportedVideoFileExtension(extension: string): boolean {
   return isVideoExtension(extension);
@@ -691,8 +683,7 @@ async function collectSidecarFiles(folderPath: string): Promise<string[]> {
       const ext = path.extname(entry.name).toLowerCase();
       if (ext === ".fpack") {
         try {
-          const { dir } = await extractFpackToTemp(fullPath);
-          pendingFpackTempDirs.push(dir);
+          const { dir } = await extractFpackToPersistent(fullPath);
           const inner = await collectSidecarFiles(dir);
           output.push(...inner);
         } catch {
@@ -2473,22 +2464,18 @@ export async function inspectInstallSidecarFile(
   }
 
   if (ext === ".fpack") {
-    const { dir, cleanup } = await extractFpackToTemp(normalizedFile);
-    try {
-      const sidecars = await collectSidecarFiles(dir);
-      const allResources: { videoUri: string; funscriptUri: string | null }[] = [];
-      for (const sidecarPath of sidecars) {
-        const parsed = await parseSidecarForInspection(sidecarPath);
-        allResources.push(...parsed.resources);
-      }
-      return collectUnknownRemoteSitesFromResources(
-        normalizedFile,
-        path.basename(normalizedFile, ".fpack"),
-        allResources
-      );
-    } finally {
-      await cleanup();
+    const { dir } = await extractFpackToPersistent(normalizedFile);
+    const sidecars = await collectSidecarFiles(dir);
+    const allResources: { videoUri: string; funscriptUri: string | null }[] = [];
+    for (const sidecarPath of sidecars) {
+      const parsed = await parseSidecarForInspection(sidecarPath);
+      allResources.push(...parsed.resources);
     }
+    return collectUnknownRemoteSitesFromResources(
+      normalizedFile,
+      path.basename(normalizedFile, ".fpack"),
+      allResources
+    );
   }
 
   const parsed = await parseSidecarForInspection(normalizedFile);
@@ -2514,13 +2501,9 @@ export async function importInstallSidecarFile(
     }
 
     if (ext === ".fpack") {
-      const { dir, cleanup } = await extractFpackToTemp(normalizedFile);
-      try {
-        const result = await scanInstallFolderOnceWithLegacySupportResolved(dir);
-        return result;
-      } finally {
-        await cleanup();
-      }
+      const { dir } = await extractFpackToPersistent(normalizedFile);
+      const result = await scanInstallFolderOnceWithLegacySupportResolved(dir);
+      return result;
     }
 
     const nextStatus: InstallScanStatus = {
@@ -2788,7 +2771,6 @@ async function runScanWithFolders(
   nextStatus.finishedAt = new Date().toISOString();
   nextStatus.lastMessage = `Scan finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
-  await cleanupFpackTempDirs();
   scanStatus = nextStatus;
   return cloneStatus(nextStatus);
 }

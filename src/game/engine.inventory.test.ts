@@ -23,7 +23,9 @@ function makeConfig(): GameConfig {
       startNodeId: "start",
       pathChoiceTimeoutMs: 6000,
       edges: [{ id: "e1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 }],
-      edgesById: { e1: { id: "e1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 } },
+      edgesById: {
+        e1: { id: "e1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 },
+      },
       outgoingEdgeIdsByNodeId: { start: ["e1"] },
       randomRoundPoolsById: {},
       nodeIndexById: { start: 0, "path-1": 1 },
@@ -61,6 +63,7 @@ function makeConfig(): GameConfig {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
@@ -120,7 +123,11 @@ describe("engine inventory flow", () => {
   });
 
   it("applies stored perk item to self and consumes it", () => {
-    const stored = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "loaded-dice"), "loaded-dice", { applyDirectly: false });
+    const stored = selectPerk(
+      withPendingSelection(createInitialGameState(makeConfig()), "loaded-dice"),
+      "loaded-dice",
+      { applyDirectly: false }
+    );
     const playerBefore = stored.players[stored.currentPlayerIndex]!;
     const itemId = playerBefore.inventory[0]?.itemId;
     if (!itemId) throw new Error("Missing inventory item");
@@ -138,12 +145,18 @@ describe("engine inventory flow", () => {
       ...initial,
       players: initial.players.map((player) => ({ ...player, money: 500 })),
     };
-    const stored = selectPerk(withPendingSelection(withMoney, "jammed-dice"), "jammed-dice", { applyDirectly: false });
+    const stored = selectPerk(withPendingSelection(withMoney, "jammed-dice"), "jammed-dice", {
+      applyDirectly: false,
+    });
     const playerBefore = stored.players[stored.currentPlayerIndex]!;
     const itemId = playerBefore.inventory[0]?.itemId;
     if (!itemId) throw new Error("Missing inventory item");
 
-    const next = consumeInventoryItem(stored, { playerId: playerBefore.id, itemId, reason: "Sent anti-perk." });
+    const next = consumeInventoryItem(stored, {
+      playerId: playerBefore.id,
+      itemId,
+      reason: "Sent anti-perk.",
+    });
     const playerAfter = next.players[next.currentPlayerIndex]!;
 
     expect(playerAfter.inventory).toHaveLength(0);

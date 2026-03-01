@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { PlaylistMapPreview } from "./PlaylistMapPreview";
-import type { PlaylistConfig } from "../game/playlistSchema";
+import type { GraphBoardConfig, PlaylistConfig } from "../game/playlistSchema";
 
 const baseEconomy = {
   startingMoney: 120,
@@ -40,7 +40,13 @@ const graphConfig: PlaylistConfig = {
     nodes: [
       { id: "start", name: "Start", kind: "start", styleHint: { x: 100, y: 100 } },
       { id: "path-1", name: "Path", kind: "path", styleHint: { x: 280, y: 100 } },
-      { id: "round-1", name: "Round", kind: "round", roundRef: { name: "Round 1" }, styleHint: { x: 460, y: 100 } },
+      {
+        id: "round-1",
+        name: "Round",
+        kind: "round",
+        roundRef: { name: "Round 1" },
+        styleHint: { x: 460, y: 100 },
+      },
       { id: "end", name: "End", kind: "end", styleHint: { x: 640, y: 100 } },
     ],
     edges: [
@@ -56,6 +62,8 @@ const graphConfig: PlaylistConfig = {
   perkPool: basePerkPool,
   probabilityScaling: baseProbabilityScaling,
   economy: baseEconomy,
+  roundStartDelayMs: 20000,
+  dice: { min: 1, max: 6 },
 };
 
 const linearConfig: PlaylistConfig = {
@@ -73,6 +81,8 @@ const linearConfig: PlaylistConfig = {
   perkPool: basePerkPool,
   probabilityScaling: baseProbabilityScaling,
   economy: baseEconomy,
+  roundStartDelayMs: 20000,
+  dice: { min: 1, max: 6 },
 };
 
 describe("PlaylistMapPreview", () => {
@@ -132,15 +142,16 @@ describe("PlaylistMapPreview", () => {
   });
 
   it("applies custom node color and size overrides", () => {
+    const graphBoard = graphConfig.boardConfig as GraphBoardConfig;
     const config: PlaylistConfig = {
       ...graphConfig,
       boardConfig: {
-        ...graphConfig.boardConfig,
-        nodes: graphConfig.boardConfig.nodes.map((node) => (
+        ...graphBoard,
+        nodes: graphBoard.nodes.map((node) =>
           node.id === "path-1"
             ? { ...node, styleHint: { ...node.styleHint, color: "#10b981", size: 2 } }
             : node
-        )),
+        ),
       },
     };
 

@@ -221,6 +221,7 @@ describe("Settings website video caching", () => {
 
     render(<SettingsPage />);
 
+    fireEvent.click(screen.getAllByRole("button", { name: /Data & Storage/ })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Manage & Clear Data" }));
 
     expect(screen.getByText("Video Cache")).toBeDefined();
@@ -252,7 +253,7 @@ describe("Settings website video caching", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Data & Storage/ })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Choose Folder" }));
 
     await waitFor(() => {
@@ -273,7 +274,7 @@ describe("Settings website video caching", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Data & Storage/ })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Use Default" }));
 
     await waitFor(() => {

@@ -25,6 +25,7 @@ export function VirtualizedRoundLibraryGrid({
   renderGroupHeader,
 }: VirtualizedRoundLibraryGridProps) {
   const [columns, setColumns] = useState(1);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [shouldVirtualize, setShouldVirtualize] = useState(false);
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const hasGroupedRows = useMemo(() => rows.some((row) => row.kind !== "standalone"), [rows]);
@@ -42,6 +43,7 @@ export function VirtualizedRoundLibraryGrid({
         1,
         Math.min(MAX_COLUMNS, Math.floor((width + SHELF_GAP_PX) / (CARD_MIN_WIDTH_PX + SHELF_GAP_PX))),
       );
+      setContainerWidth(width);
       setColumns(nextColumns);
       setShouldVirtualize(scrollContainer.clientHeight > 0);
     };
@@ -131,6 +133,18 @@ export function VirtualizedRoundLibraryGrid({
 
     return () => window.cancelAnimationFrame(frame);
   }, [canVirtualize, columns, shelves, virtualizer]);
+
+  useEffect(() => {
+    if (!canVirtualize || containerWidth <= 0) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      virtualizer.measure();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [canVirtualize, containerWidth, virtualizer]);
 
   useEffect(() => {
     if (!canVirtualize || typeof document === "undefined" || !document.fonts?.ready) {

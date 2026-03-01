@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { useEffect, useRef, useState } from "react";
 import { useControllerSurface } from "../controller";
+import { getAssistedTooltip, getSaveModeEmoji } from "../game/saveMode";
 import { formatDurationLabel } from "../utils/duration";
 
 const SingleResultSearchSchema = z.object({
@@ -9,6 +10,9 @@ const SingleResultSearchSchema = z.object({
   highscore: z.coerce.number().int().min(0).default(0),
   survivedDurationSec: z.coerce.number().int().min(0).default(0),
   reason: z.enum(["finished", "self_reported_cum", "cum_instruction_failed"]).default("finished"),
+  cheatMode: z.coerce.boolean().optional(),
+  assisted: z.coerce.boolean().optional(),
+  assistedSaveMode: z.enum(["checkpoint", "everywhere"]).optional(),
 });
 
 const reasonLabel: Record<z.infer<typeof SingleResultSearchSchema>["reason"], string> = {
@@ -35,6 +39,12 @@ export function SingleResultRoute() {
   const isNewBest = search.score > 0 && search.score >= search.highscore;
   const isCum = search.reason === "self_reported_cum";
   const survivedLabel = formatDurationLabel(search.survivedDurationSec);
+  const statusMarkers = [
+    search.cheatMode ? { icon: "🎭", label: "Cheat mode active" } : null,
+    search.assisted && search.assistedSaveMode
+      ? { icon: getSaveModeEmoji(search.assistedSaveMode), label: getAssistedTooltip(search.assistedSaveMode) ?? "Assisted run" }
+      : null,
+  ].filter((entry): entry is { icon: string; label: string } => Boolean(entry));
 
   // State for animated score counting
   const [displayScore, setDisplayScore] = useState(0);
@@ -154,6 +164,20 @@ export function SingleResultRoute() {
         <div className={`mt-8 mx-auto w-full max-w-sm rounded-2xl border px-6 py-4 text-center font-mono text-sm uppercase tracking-widest transition-all animate-entrance ${isNewBest ? 'border-amber-400/50 bg-amber-500/10 text-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.2)] animate-pulse' : 'border-white/5 bg-white/5 text-zinc-500'}`} style={{ animationDelay: '600ms' }}>
           {isNewBest ? "★ New Peak Record ★" : "No New Record Set"}
         </div>
+
+        {statusMarkers.length > 0 && (
+          <div className="mt-4 mx-auto flex flex-wrap items-center justify-center gap-3">
+            {statusMarkers.map((marker) => (
+              <div
+                key={marker.label}
+                className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
+                title={marker.label}
+              >
+                {marker.icon} {marker.label}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4 animate-entrance" style={{ animationDelay: '800ms' }}>

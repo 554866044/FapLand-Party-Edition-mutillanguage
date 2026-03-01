@@ -47,18 +47,21 @@ vi.mock("./phashScanService", () => ({
   startPhashScanManual: startPhashScanManualMock,
 }));
 
-function buildDbMock(rows: Array<{
-  resourceId: string;
-  roundId: string;
-  roundName: string;
-  videoUri: string;
-}>, previewRows: Array<{
-  roundId: string;
-  resourceId: string;
-  startTime: number | null;
-  endTime: number | null;
-  previewImage: string | null;
-}> = []) {
+function buildDbMock(
+  rows: Array<{
+    resourceId: string;
+    roundId: string;
+    roundName: string;
+    videoUri: string;
+  }>,
+  previewRows: Array<{
+    roundId: string;
+    resourceId: string;
+    startTime: number | null;
+    endTime: number | null;
+    previewImage: string | null;
+  }> = []
+) {
   const queryRows = [rows, previewRows];
   const updatedRounds: Array<{ id: string; previewImage: string | null }> = [];
   return {
@@ -104,26 +107,30 @@ describe("webVideoScanService", () => {
   });
 
   it("ignores stash proxy URIs even if not marked in installSourceKey", async () => {
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-stash",
-        roundId: "round-stash",
-        roundName: "Stash Round",
-        videoUri: "app://external/stash?target=http://localhost:9999/stream",
-      },
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-stash",
+          roundId: "round-stash",
+          roundName: "Stash Round",
+          videoUri: "app://external/stash?target=http://localhost:9999/stream",
+        },
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+      ])
+    );
     isStashProxyUriMock.mockImplementation((uri: string) => uri.includes("/stash"));
 
     const service = await import("./webVideoScanService");
     const result = await service.startWebsiteVideoScanManual();
 
-    expect(isStashProxyUriMock).toHaveBeenCalledWith("app://external/stash?target=http://localhost:9999/stream");
+    expect(isStashProxyUriMock).toHaveBeenCalledWith(
+      "app://external/stash?target=http://localhost:9999/stream"
+    );
     expect(ensureWebsiteVideoCachedMock).toHaveBeenCalledTimes(1);
     expect(ensureWebsiteVideoCachedMock).toHaveBeenCalledWith("https://page.example/watch/1");
     expect(result.totalCount).toBe(1); // The stash one was filtered out in findUncachedWebsiteVideos
@@ -131,32 +138,34 @@ describe("webVideoScanService", () => {
   });
 
   it("downloads only distinct uncached website URLs", async () => {
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-      {
-        resourceId: "res-2",
-        roundId: "round-2",
-        roundName: "Round Two",
-        videoUri: "https://page.example/watch/1",
-      },
-      {
-        resourceId: "res-3",
-        roundId: "round-3",
-        roundName: "Round Three",
-        videoUri: "file:///tmp/local.mp4",
-      },
-      {
-        resourceId: "res-4",
-        roundId: "round-4",
-        roundName: "Round Four",
-        videoUri: "https://page.example/watch/2",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+        {
+          resourceId: "res-2",
+          roundId: "round-2",
+          roundName: "Round Two",
+          videoUri: "https://page.example/watch/1",
+        },
+        {
+          resourceId: "res-3",
+          roundId: "round-3",
+          roundName: "Round Three",
+          videoUri: "file:///tmp/local.mp4",
+        },
+        {
+          resourceId: "res-4",
+          roundId: "round-4",
+          roundName: "Round Four",
+          videoUri: "https://page.example/watch/2",
+        },
+      ])
+    );
     getCachedWebsiteVideoMetadataMock.mockImplementation(async (uri: string) => {
       if (uri === "https://page.example/watch/2") {
         return {
@@ -178,14 +187,16 @@ describe("webVideoScanService", () => {
   });
 
   it("starts non-manual scans without a user-configurable disable switch", async () => {
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+      ])
+    );
 
     const service = await import("./webVideoScanService");
     const result = await service.startWebsiteVideoScan();
@@ -197,14 +208,16 @@ describe("webVideoScanService", () => {
 
   it("waits for install scanning to finish before downloading", async () => {
     vi.useFakeTimers();
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+      ])
+    );
 
     const installStates = [{ state: "running" }, { state: "running" }, { state: "idle" }];
     getInstallScanStatusMock.mockImplementation(() => installStates.shift() ?? { state: "idle" });
@@ -223,21 +236,24 @@ describe("webVideoScanService", () => {
 
   it("aborts after the current download finishes", async () => {
     vi.useFakeTimers();
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-      {
-        resourceId: "res-2",
-        roundId: "round-2",
-        roundName: "Round Two",
-        videoUri: "https://page.example/watch/2",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+        {
+          resourceId: "res-2",
+          roundId: "round-2",
+          roundName: "Round Two",
+          videoUri: "https://page.example/watch/2",
+        },
+      ])
+    );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let releaseFirst: any = null;
     ensureWebsiteVideoCachedMock.mockImplementation((url: string) => {
       if (url === "https://page.example/watch/1") {
@@ -268,26 +284,28 @@ describe("webVideoScanService", () => {
 
   it("processes multiple downloads in parallel", async () => {
     vi.useFakeTimers();
-    getDbMock.mockReturnValue(buildDbMock([
-      {
-        resourceId: "res-1",
-        roundId: "round-1",
-        roundName: "Round One",
-        videoUri: "https://page.example/watch/1",
-      },
-      {
-        resourceId: "res-2",
-        roundId: "round-2",
-        roundName: "Round Two",
-        videoUri: "https://page.example/watch/2",
-      },
-      {
-        resourceId: "res-3",
-        roundId: "round-3",
-        roundName: "Round Three",
-        videoUri: "https://page.example/watch/3",
-      },
-    ]));
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Round One",
+          videoUri: "https://page.example/watch/1",
+        },
+        {
+          resourceId: "res-2",
+          roundId: "round-2",
+          roundName: "Round Two",
+          videoUri: "https://page.example/watch/2",
+        },
+        {
+          resourceId: "res-3",
+          roundId: "round-3",
+          roundName: "Round Three",
+          videoUri: "https://page.example/watch/3",
+        },
+      ])
+    );
 
     const releases = new Map<string, () => void>();
     ensureWebsiteVideoCachedMock.mockImplementation(

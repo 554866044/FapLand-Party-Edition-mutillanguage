@@ -4,6 +4,7 @@ import { AnimatedBackground } from "../components/AnimatedBackground";
 import { PlaylistPackExportDialog } from "../components/PlaylistPackExportDialog";
 import { PlaylistExportOverlay } from "../components/PlaylistExportOverlay";
 import { PlaylistResolutionModal } from "../components/PlaylistResolutionModal";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
 import {
   analyzePlaylistResolution,
@@ -12,14 +13,43 @@ import {
 } from "../game/playlistResolution";
 import { resolvePortableRoundRef, toPortableRoundRef } from "../game/playlistRuntime";
 import { EditorCanvas } from "../features/map-editor/EditorCanvas";
-import { createEditorId, EMPTY_EDITOR_SELECTION, layoutLinearGraphFromPlaylist, toEditorGraphConfig, toGraphBoardConfig, type EditorEdge, type EditorGraphConfig, type EditorNode, type EditorSelectionState, type MapEditorTool, type ViewportState } from "../features/map-editor/EditorState";
+import {
+  createEditorId,
+  EMPTY_EDITOR_SELECTION,
+  layoutLinearGraphFromPlaylist,
+  toEditorGraphConfig,
+  toGraphBoardConfig,
+  type EditorEdge,
+  type EditorGraphConfig,
+  type EditorNode,
+  type EditorSelectionState,
+  type MapEditorTool,
+  type ViewportState,
+} from "../features/map-editor/EditorState";
 import { UndoManager } from "../features/map-editor/UndoManager";
-import { buildTileHotkeyMap, deleteSelectionFromConfig, isTextInputElement } from "../features/map-editor/editorInteractions";
-import { loadTileCatalog, type TileCatalog, type TileCatalogCategory, type TileCatalogTile } from "../features/map-editor/tileCatalog";
-import { clearMapEditorTestSession, getMapEditorTestPlaylistId, setMapEditorTestSession } from "../features/map-editor/testSession";
+import {
+  buildTileHotkeyMap,
+  deleteSelectionFromConfig,
+  isTextInputElement,
+} from "../features/map-editor/editorInteractions";
+import {
+  loadTileCatalog,
+  type TileCatalog,
+  type TileCatalogCategory,
+  type TileCatalogTile,
+} from "../features/map-editor/tileCatalog";
+import {
+  clearMapEditorTestSession,
+  getMapEditorTestPlaylistId,
+  setMapEditorTestSession,
+} from "../features/map-editor/testSession";
 import { validateGraphConfig } from "../features/map-editor/validateGraphConfig";
 import { db, type InstalledRound } from "../services/db";
-import { playlists, type PlaylistExportPackageStatus, type StoredPlaylist } from "../services/playlists";
+import {
+  playlists,
+  type PlaylistExportPackageStatus,
+  type StoredPlaylist,
+} from "../services/playlists";
 import {
   playHoverSound,
   playMapConnectNodesSound,
@@ -54,16 +84,16 @@ const DEFAULT_EDITOR_VIEWPORT: ViewportState = {
 type InspectorTab = "node" | "edge" | "settings" | "validation";
 type ResolutionModalState =
   | {
-    context: "import";
-    title: string;
-    filePath: string;
-    analysis: PlaylistResolutionAnalysis;
-  }
+      context: "import";
+      title: string;
+      filePath: string;
+      analysis: PlaylistResolutionAnalysis;
+    }
   | {
-    context: "playlist";
-    title: string;
-    analysis: PlaylistResolutionAnalysis;
-  };
+      context: "playlist";
+      title: string;
+      analysis: PlaylistResolutionAnalysis;
+    };
 type ImportedPlaylistReview = {
   playlistId: string;
   analysis: PlaylistResolutionAnalysis;
@@ -76,8 +106,12 @@ const INSPECTOR_TABS: ReadonlyArray<{ id: InspectorTab; label: string }> = [
   { id: "validation", label: "Checks" },
 ];
 
-function toManualMappingRecord(overrides: Record<string, string | null | undefined>): Record<string, string | null> {
-  return Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined)) as Record<string, string | null>;
+function toManualMappingRecord(
+  overrides: Record<string, string | null | undefined>
+): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined)
+  ) as Record<string, string | null>;
 }
 
 const getInstalledRounds = async (): Promise<InstalledRound[]> => {
@@ -89,7 +123,10 @@ const getInstalledRounds = async (): Promise<InstalledRound[]> => {
   }
 };
 
-const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: StoredPlaylist | null): StoredPlaylist[] => {
+const withActivePlaylist = (
+  playlistsToShow: StoredPlaylist[],
+  activePlaylist: StoredPlaylist | null
+): StoredPlaylist[] => {
   if (!activePlaylist) return playlistsToShow;
   if (playlistsToShow.some((playlist) => playlist.id === activePlaylist.id)) {
     return playlistsToShow;
@@ -99,7 +136,8 @@ const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: S
 
 const toEditorConfigFromPlaylist = (playlist: StoredPlaylist): EditorGraphConfig => {
   const board = playlist.config.boardConfig;
-  const graphConfig = board.mode === "graph" ? toEditorGraphConfig(board) : layoutLinearGraphFromPlaylist(board);
+  const graphConfig =
+    board.mode === "graph" ? toEditorGraphConfig(board) : layoutLinearGraphFromPlaylist(board);
   return {
     ...graphConfig,
     perkSelection: {
@@ -111,7 +149,8 @@ const toEditorConfigFromPlaylist = (playlist: StoredPlaylist): EditorGraphConfig
       enabledAntiPerkIds: [...playlist.config.perkPool.enabledAntiPerkIds],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: playlist.config.probabilityScaling.initialIntermediaryProbability,
+      initialIntermediaryProbability:
+        playlist.config.probabilityScaling.initialIntermediaryProbability,
       initialAntiPerkProbability: playlist.config.probabilityScaling.initialAntiPerkProbability,
       intermediaryIncreasePerRound: playlist.config.probabilityScaling.intermediaryIncreasePerRound,
       antiPerkIncreasePerRound: playlist.config.probabilityScaling.antiPerkIncreasePerRound,
@@ -121,6 +160,8 @@ const toEditorConfigFromPlaylist = (playlist: StoredPlaylist): EditorGraphConfig
     economy: {
       scorePerCumRoundSuccess: playlist.config.economy.scorePerCumRoundSuccess,
     },
+    dice: { ...playlist.config.dice },
+    saveMode: playlist.config.saveMode ?? "none",
   };
 };
 
@@ -172,7 +213,13 @@ const makeStartingConfig = (): EditorGraphConfig => ({
   ],
   edges: [
     { id: "edge-start-path-1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 },
-    { id: "edge-path-1-round-1", fromNodeId: "path-1", toNodeId: "round-1", gateCost: 0, weight: 1 },
+    {
+      id: "edge-path-1-round-1",
+      fromNodeId: "path-1",
+      toNodeId: "round-1",
+      gateCost: 0,
+      weight: 1,
+    },
     { id: "edge-round-1-end", fromNodeId: "round-1", toNodeId: "end", gateCost: 0, weight: 1 },
   ],
   randomRoundPools: [],
@@ -197,6 +244,11 @@ const makeStartingConfig = (): EditorGraphConfig => ({
   economy: {
     scorePerCumRoundSuccess: 120,
   },
+  dice: {
+    min: 1,
+    max: 6,
+  },
+  saveMode: "none",
 });
 
 const toTitleCase = (input: string): string =>
@@ -211,19 +263,15 @@ const idsEqual = (left: string[], right: string[]): boolean => {
 };
 
 const selectionsEqual = (left: EditorSelectionState, right: EditorSelectionState): boolean =>
-  left.primaryNodeId === right.primaryNodeId
-  && left.selectedEdgeId === right.selectedEdgeId
-  && idsEqual(left.selectedNodeIds, right.selectedNodeIds);
+  left.primaryNodeId === right.primaryNodeId &&
+  left.selectedEdgeId === right.selectedEdgeId &&
+  idsEqual(left.selectedNodeIds, right.selectedNodeIds);
 
 type GraphUpdateFn = (previous: EditorGraphConfig) => EditorGraphConfig;
 
 export function MapEditorRoute() {
   const navigate = useNavigate();
-  const {
-    installedRounds,
-    availablePlaylists,
-    activePlaylist,
-  } = Route.useLoaderData() as {
+  const { installedRounds, availablePlaylists, activePlaylist } = Route.useLoaderData() as {
     installedRounds: InstalledRound[];
     availablePlaylists: StoredPlaylist[];
     activePlaylist: StoredPlaylist | null;
@@ -241,9 +289,15 @@ export function MapEditorRoute() {
   const [showPackExportDialog, setShowPackExportDialog] = useState(false);
   const [showExportOverlay, setShowExportOverlay] = useState(false);
   const [isAbortingExport, setIsAbortingExport] = useState(false);
-  const [resolutionModalState, setResolutionModalState] = useState<ResolutionModalState | null>(null);
-  const [importedPlaylistReview, setImportedPlaylistReview] = useState<ImportedPlaylistReview | null>(null);
+  const [resolutionModalState, setResolutionModalState] = useState<ResolutionModalState | null>(
+    null
+  );
+  const [importedPlaylistReview, setImportedPlaylistReview] =
+    useState<ImportedPlaylistReview | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [discardPlaylistDialogOpen, setDiscardPlaylistDialogOpen] = useState(false);
+  const [discardImportDialogOpen, setDiscardImportDialogOpen] = useState(false);
   const [config, setConfig] = useState<EditorGraphConfig>(makeStartingConfig);
   const configRef = useRef(config);
   configRef.current = config;
@@ -252,7 +306,8 @@ export function MapEditorRoute() {
   const [connectFromNodeId, setConnectFromNodeId] = useState<string | null>(null);
   const [tool, setTool] = useState<MapEditorTool>("select");
   const [showGrid, setShowGrid] = useState(true);
-  const [alignmentStrategy, setAlignmentStrategy] = useState<GraphAlignmentStrategy>("layeredHorizontal");
+  const [alignmentStrategy, setAlignmentStrategy] =
+    useState<GraphAlignmentStrategy>("layeredHorizontal");
   const [viewport, setViewport] = useState<ViewportState>(DEFAULT_EDITOR_VIEWPORT);
   const [spacePanActive, setSpacePanActive] = useState(false);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
@@ -269,11 +324,16 @@ export function MapEditorRoute() {
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const editorScopeRef = useRef<HTMLDivElement | null>(null);
 
-  const undoManagerRef = useRef(new UndoManager<EditorGraphConfig>(makeStartingConfig(), {
-    isEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right),
-  }));
+  const undoManagerRef = useRef(
+    new UndoManager<EditorGraphConfig>(makeStartingConfig(), {
+      isEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right),
+    })
+  );
 
-  const dragSessionRef = useRef<{ active: boolean; moved: boolean }>({ active: false, moved: false });
+  const dragSessionRef = useRef<{ active: boolean; moved: boolean }>({
+    active: false,
+    moved: false,
+  });
 
   const syncHistoryState = useCallback(() => {
     const manager = undoManagerRef.current;
@@ -283,30 +343,37 @@ export function MapEditorRoute() {
     });
   }, []);
 
-  const updateGraphConfig = useCallback((updater: GraphUpdateFn, commit = true): boolean => {
-    const previous = configRef.current;
-    const next = updater(previous);
-    if (next === previous) return false;
-    configRef.current = next;
-    setConfig(next);
-    setIsDirty(true);
-    setSaveNotice(null);
-    if (commit) {
-      undoManagerRef.current.push(next);
-      syncHistoryState();
-    }
-    return true;
-  }, [syncHistoryState]);
+  const updateGraphConfig = useCallback(
+    (updater: GraphUpdateFn, commit = true): boolean => {
+      const previous = configRef.current;
+      const next = updater(previous);
+      if (next === previous) return false;
+      configRef.current = next;
+      setConfig(next);
+      setIsDirty(true);
+      setSaveNotice(null);
+      if (commit) {
+        undoManagerRef.current.push(next);
+        syncHistoryState();
+      }
+      return true;
+    },
+    [syncHistoryState]
+  );
 
   const flashPlacedNode = useCallback((nodeId: string) => {
-    setRecentlyPlacedNodeIds((previous) => (previous.includes(nodeId) ? previous : [...previous, nodeId]));
+    setRecentlyPlacedNodeIds((previous) =>
+      previous.includes(nodeId) ? previous : [...previous, nodeId]
+    );
     window.setTimeout(() => {
       setRecentlyPlacedNodeIds((previous) => previous.filter((id) => id !== nodeId));
     }, 220);
   }, []);
 
   const flashTouchedEdge = useCallback((edgeId: string) => {
-    setRecentlyTouchedEdgeIds((previous) => (previous.includes(edgeId) ? previous : [...previous, edgeId]));
+    setRecentlyTouchedEdgeIds((previous) =>
+      previous.includes(edgeId) ? previous : [...previous, edgeId]
+    );
     window.setTimeout(() => {
       setRecentlyTouchedEdgeIds((previous) => previous.filter((id) => id !== edgeId));
     }, 260);
@@ -319,11 +386,11 @@ export function MapEditorRoute() {
         if (!active) return;
         setTileCatalog(catalog);
         if (catalog.tiles.length > 0) {
-          setActivePlacementKind((previous) => (
+          setActivePlacementKind((previous) =>
             catalog.tiles.some((tile) => tile.kind === previous)
               ? previous
-              : catalog.tiles[0]?.kind ?? previous
-          ));
+              : (catalog.tiles[0]?.kind ?? previous)
+          );
         }
       })
       .catch((error) => {
@@ -398,31 +465,39 @@ export function MapEditorRoute() {
     }
   }, [tool]);
 
-  const selectedPlaylist = useMemo(() => (
-    selectedPlaylistId
-      ? playlistList.find((playlist) => playlist.id === selectedPlaylistId) ?? null
-      : null
-  ), [playlistList, selectedPlaylistId]);
+  const selectedPlaylist = useMemo(
+    () =>
+      selectedPlaylistId
+        ? (playlistList.find((playlist) => playlist.id === selectedPlaylistId) ?? null)
+        : null,
+    [playlistList, selectedPlaylistId]
+  );
 
-  const applyEditorConfig = useCallback((nextConfig: EditorGraphConfig) => {
-    setConfig(nextConfig);
-    configRef.current = nextConfig;
-    undoManagerRef.current.reset(nextConfig);
-    syncHistoryState();
-    setSelection(EMPTY_EDITOR_SELECTION);
-    setConnectFromNodeId(null);
-    setTool("select");
-    setViewport(DEFAULT_EDITOR_VIEWPORT);
-    setSpacePanActive(false);
-    setIsDirty(false);
-    setSaveNotice(null);
-  }, [syncHistoryState]);
+  const applyEditorConfig = useCallback(
+    (nextConfig: EditorGraphConfig) => {
+      setConfig(nextConfig);
+      configRef.current = nextConfig;
+      undoManagerRef.current.reset(nextConfig);
+      syncHistoryState();
+      setSelection(EMPTY_EDITOR_SELECTION);
+      setConnectFromNodeId(null);
+      setTool("select");
+      setViewport(DEFAULT_EDITOR_VIEWPORT);
+      setSpacePanActive(false);
+      setIsDirty(false);
+      setSaveNotice(null);
+    },
+    [syncHistoryState]
+  );
 
-  const openPlaylistForEditing = useCallback((playlist: StoredPlaylist) => {
-    playSelectSound();
-    setSelectedPlaylistId(playlist.id);
-    applyEditorConfig(toEditorConfigFromPlaylist(playlist));
-  }, [applyEditorConfig]);
+  const openPlaylistForEditing = useCallback(
+    (playlist: StoredPlaylist) => {
+      playSelectSound();
+      setSelectedPlaylistId(playlist.id);
+      applyEditorConfig(toEditorConfigFromPlaylist(playlist));
+    },
+    [applyEditorConfig]
+  );
 
   const updatePlaylistListEntry = useCallback((updated: StoredPlaylist) => {
     setPlaylistList((previous) => {
@@ -460,42 +535,70 @@ export function MapEditorRoute() {
 
   const perkOptions = useMemo(() => getSinglePlayerPerkPool(), []);
   const antiPerkOptions = useMemo(() => getSinglePlayerAntiPerkPool(), []);
-  const cumRounds = useMemo(() => installedRounds.filter((round) => round.type === "Cum"), [installedRounds]);
+  const cumRounds = useMemo(
+    () => installedRounds.filter((round) => round.type === "Cum"),
+    [installedRounds]
+  );
   const selectedCumRoundIds = useMemo(
-    () => config.cumRoundRefs.map((ref) => resolvePortableRoundRef(ref, installedRounds)?.id ?? ref.idHint ?? ""),
-    [config.cumRoundRefs, installedRounds],
+    () =>
+      config.cumRoundRefs.map(
+        (ref) => resolvePortableRoundRef(ref, installedRounds)?.id ?? ref.idHint ?? ""
+      ),
+    [config.cumRoundRefs, installedRounds]
   );
   const selectedCumRoundIdSet = useMemo(
     () => new Set(selectedCumRoundIds.filter((id) => id.length > 0)),
-    [selectedCumRoundIds],
+    [selectedCumRoundIds]
   );
-  const validation = useMemo(() => validateGraphConfig(config, installedRounds), [config, installedRounds]);
+  const validation = useMemo(
+    () => validateGraphConfig(config, installedRounds),
+    [config, installedRounds]
+  );
   const selectedPlaylistResolution = useMemo(
-    () => (selectedPlaylist
-      ? analyzePlaylistResolution({
-        ...selectedPlaylist.config,
-        boardConfig: toGraphBoardConfig(config),
-      }, installedRounds)
-      : null),
-    [config, installedRounds, selectedPlaylist],
+    () =>
+      selectedPlaylist
+        ? analyzePlaylistResolution(
+            {
+              ...selectedPlaylist.config,
+              boardConfig: toGraphBoardConfig(config),
+            },
+            installedRounds
+          )
+        : null,
+    [config, installedRounds, selectedPlaylist]
   );
-  const selectedImportReview = selectedPlaylist && importedPlaylistReview?.playlistId === selectedPlaylist.id
-    ? importedPlaylistReview
-    : null;
-  const selectedResolutionReview = selectedPlaylistResolution && selectedPlaylistResolution.issues.length > 0
-    ? selectedPlaylistResolution
-    : selectedImportReview?.analysis ?? null;
-  const selectedResolutionActionLabel = selectedPlaylistResolution && selectedPlaylistResolution.issues.length > 0
-    ? (selectedPlaylistResolution.counts.missing > 0 ? "Resolve Missing" : "Review Auto-Resolve")
-    : (selectedImportReview ? "Review Auto-Resolve" : null);
+  const selectedImportReview =
+    selectedPlaylist && importedPlaylistReview?.playlistId === selectedPlaylist.id
+      ? importedPlaylistReview
+      : null;
+  const selectedResolutionReview =
+    selectedPlaylistResolution && selectedPlaylistResolution.issues.length > 0
+      ? selectedPlaylistResolution
+      : (selectedImportReview?.analysis ?? null);
+  const selectedResolutionActionLabel =
+    selectedPlaylistResolution && selectedPlaylistResolution.issues.length > 0
+      ? selectedPlaylistResolution.counts.missing > 0
+        ? "Resolve Missing"
+        : "Review Auto-Resolve"
+      : selectedImportReview
+        ? "Review Auto-Resolve"
+        : null;
 
-  const selectedNode = useMemo(() => (
-    selection.primaryNodeId ? config.nodes.find((node) => node.id === selection.primaryNodeId) ?? null : null
-  ), [config.nodes, selection.primaryNodeId]);
+  const selectedNode = useMemo(
+    () =>
+      selection.primaryNodeId
+        ? (config.nodes.find((node) => node.id === selection.primaryNodeId) ?? null)
+        : null,
+    [config.nodes, selection.primaryNodeId]
+  );
 
-  const selectedEdge = useMemo(() => (
-    selection.selectedEdgeId ? config.edges.find((edge) => edge.id === selection.selectedEdgeId) ?? null : null
-  ), [config.edges, selection.selectedEdgeId]);
+  const selectedEdge = useMemo(
+    () =>
+      selection.selectedEdgeId
+        ? (config.edges.find((edge) => edge.id === selection.selectedEdgeId) ?? null)
+        : null,
+    [config.edges, selection.selectedEdgeId]
+  );
 
   const outgoingEdgesForSelectedNode = useMemo(() => {
     if (!selectedNode) return [];
@@ -517,7 +620,8 @@ export function MapEditorRoute() {
     return tileCatalog.tiles.filter((tile) => {
       if (activeCategory !== "all" && tile.category !== activeCategory) return false;
       if (!query) return true;
-      const haystack = `${tile.label} ${tile.description ?? ""} ${tile.kind} ${(tile.tags ?? []).join(" ")}`.toLowerCase();
+      const haystack =
+        `${tile.label} ${tile.description ?? ""} ${tile.kind} ${(tile.tags ?? []).join(" ")}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [activeCategory, tileCatalog.tiles, tileSearch]);
@@ -533,9 +637,12 @@ export function MapEditorRoute() {
   const hotkeyMap = useMemo(() => buildTileHotkeyMap(filteredTiles), [filteredTiles]);
 
   const activeTile = useMemo(() => {
-    return tileCatalog.tiles.find((tile) => tile.kind === activePlacementKind) ?? filteredTiles[0] ?? null;
+    return (
+      tileCatalog.tiles.find((tile) => tile.kind === activePlacementKind) ??
+      filteredTiles[0] ??
+      null
+    );
   }, [activePlacementKind, filteredTiles, tileCatalog.tiles]);
-
 
   const selectedEdgeLabel = useMemo(() => {
     if (!selection.selectedEdgeId) return "None";
@@ -554,317 +661,401 @@ export function MapEditorRoute() {
     setTool("place");
   }, []);
 
-  const patchNode = useCallback((nodeId: string, patch: Partial<EditorNode>) => {
-    updateGraphConfig((previous) => {
-      const nextNodes = previous.nodes.map((node) => {
-        if (node.id !== nodeId) return node;
+  const patchNode = useCallback(
+    (nodeId: string, patch: Partial<EditorNode>) => {
+      updateGraphConfig((previous) => {
+        const nextNodes = previous.nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          return {
+            ...node,
+            ...patch,
+            styleHint: patch.styleHint ? { ...node.styleHint, ...patch.styleHint } : node.styleHint,
+          };
+        });
         return {
-          ...node,
-          ...patch,
-          styleHint: patch.styleHint ? { ...node.styleHint, ...patch.styleHint } : node.styleHint,
+          ...previous,
+          nodes: nextNodes,
         };
       });
-      return {
-        ...previous,
-        nodes: nextNodes,
-      };
-    });
-  }, [updateGraphConfig]);
+    },
+    [updateGraphConfig]
+  );
 
-  const toggleCumRound = useCallback((round: InstalledRound) => {
-    updateGraphConfig((previous) => {
-      const nextCumRoundRefs = [...previous.cumRoundRefs];
-      const existingIndex = nextCumRoundRefs.findIndex((ref) => resolvePortableRoundRef(ref, installedRounds)?.id === round.id || ref.idHint === round.id);
-      if (existingIndex >= 0) {
-        nextCumRoundRefs.splice(existingIndex, 1);
-      } else {
-        nextCumRoundRefs.push(toPortableRoundRef(round));
-      }
-      return {
-        ...previous,
-        cumRoundRefs: nextCumRoundRefs,
-      };
-    });
-  }, [installedRounds, updateGraphConfig]);
-
-  const moveCumRound = useCallback((roundId: string, direction: -1 | 1) => {
-    updateGraphConfig((previous) => {
-      const currentIndex = previous.cumRoundRefs.findIndex((ref) => resolvePortableRoundRef(ref, installedRounds)?.id === roundId || ref.idHint === roundId);
-      if (currentIndex < 0) return previous;
-      const nextIndex = currentIndex + direction;
-      if (nextIndex < 0 || nextIndex >= previous.cumRoundRefs.length) return previous;
-      const nextCumRoundRefs = [...previous.cumRoundRefs];
-      const [moved] = nextCumRoundRefs.splice(currentIndex, 1);
-      if (!moved) return previous;
-      nextCumRoundRefs.splice(nextIndex, 0, moved);
-      return {
-        ...previous,
-        cumRoundRefs: nextCumRoundRefs,
-      };
-    });
-  }, [installedRounds, updateGraphConfig]);
-
-  const removeCumRoundByIndex = useCallback((index: number) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      cumRoundRefs: previous.cumRoundRefs.filter((_, refIndex) => refIndex !== index),
-    }));
-  }, [updateGraphConfig]);
-
-  const setPerkTriggerChance = useCallback((value: number) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      perkSelection: {
-        ...previous.perkSelection,
-        triggerChancePerCompletedRound: Math.max(0, Math.min(1, value)),
-      },
-    }));
-  }, [updateGraphConfig]);
-
-  const setProbabilityScaling = useCallback((
-    key: keyof EditorGraphConfig["probabilityScaling"],
-    value: number,
-  ) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      probabilityScaling: {
-        ...previous.probabilityScaling,
-        [key]: Math.max(0, Math.min(1, value)),
-      },
-    }));
-  }, [updateGraphConfig]);
-
-  const setCumRoundBonusScore = useCallback((value: number) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      economy: {
-        ...previous.economy,
-        scorePerCumRoundSuccess: Math.max(0, Math.floor(value)),
-      },
-    }));
-  }, [updateGraphConfig]);
-
-  const togglePerkEnabled = useCallback((perkId: string) => {
-    updateGraphConfig((previous) => {
-      const enabled = previous.perkPool.enabledPerkIds.includes(perkId);
-      return {
-        ...previous,
-        perkPool: {
-          ...previous.perkPool,
-          enabledPerkIds: enabled
-            ? previous.perkPool.enabledPerkIds.filter((id) => id !== perkId)
-            : [...previous.perkPool.enabledPerkIds, perkId],
-        },
-      };
-    });
-  }, [updateGraphConfig]);
-
-  const toggleAntiPerkEnabled = useCallback((perkId: string) => {
-    updateGraphConfig((previous) => {
-      const enabled = previous.perkPool.enabledAntiPerkIds.includes(perkId);
-      return {
-        ...previous,
-        perkPool: {
-          ...previous.perkPool,
-          enabledAntiPerkIds: enabled
-            ? previous.perkPool.enabledAntiPerkIds.filter((id) => id !== perkId)
-            : [...previous.perkPool.enabledAntiPerkIds, perkId],
-        },
-      };
-    });
-  }, [updateGraphConfig]);
-
-  const setAllPerksEnabled = useCallback((enabled: boolean) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      perkPool: {
-        ...previous.perkPool,
-        enabledPerkIds: enabled ? perkOptions.map((perk) => perk.id) : [],
-      },
-    }));
-  }, [perkOptions, updateGraphConfig]);
-
-  const setAllAntiPerksEnabled = useCallback((enabled: boolean) => {
-    updateGraphConfig((previous) => ({
-      ...previous,
-      perkPool: {
-        ...previous.perkPool,
-        enabledAntiPerkIds: enabled ? antiPerkOptions.map((perk) => perk.id) : [],
-      },
-    }));
-  }, [antiPerkOptions, updateGraphConfig]);
-
-  const patchEdge = useCallback((edgeId: string, patch: Partial<EditorEdge>) => {
-    updateGraphConfig((previous) => {
-      const nextEdges = previous.edges.map((edge) => (edge.id === edgeId ? { ...edge, ...patch } : edge));
-      return {
-        ...previous,
-        edges: nextEdges,
-      };
-    });
-  }, [updateGraphConfig]);
-
-  const createEdge = useCallback((fromNodeId: string, toNodeId: string) => {
-    let edgeId: string | null = null;
-    const changed = updateGraphConfig((previous) => {
-      const sourceNode = previous.nodes.find((node) => node.id === fromNodeId);
-      if (sourceNode?.kind === "end") return previous;
-      const alreadyConnected = previous.edges.some((edge) => edge.fromNodeId === fromNodeId && edge.toNodeId === toNodeId);
-      if (alreadyConnected) return previous;
-      const nextEdge: EditorEdge = {
-        id: createEditorId("edge"),
-        fromNodeId,
-        toNodeId,
-        gateCost: 0,
-        weight: 1,
-      };
-      edgeId = nextEdge.id;
-      return {
-        ...previous,
-        edges: [...previous.edges, nextEdge],
-      };
-    });
-
-    if (!changed || !edgeId) {
-      playMapInvalidActionSound();
-      return;
-    }
-
-    playMapConnectNodesSound();
-    flashTouchedEdge(edgeId);
-    commitSelection({
-      selectedNodeIds: [toNodeId],
-      primaryNodeId: toNodeId,
-      selectedEdgeId: null,
-    });
-  }, [commitSelection, flashTouchedEdge, updateGraphConfig]);
-
-  const deleteEdgeBetween = useCallback((fromNodeId: string, toNodeId: string) => {
-    let removedEdgeId: string | null = null;
-    const changed = updateGraphConfig((previous) => {
-      const edge = previous.edges.find((candidate) => candidate.fromNodeId === fromNodeId && candidate.toNodeId === toNodeId);
-      if (!edge) return previous;
-      removedEdgeId = edge.id;
-      return {
-        ...previous,
-        edges: previous.edges.filter((candidate) => candidate.id !== edge.id),
-      };
-    });
-
-    if (!changed) {
-      playMapInvalidActionSound();
-      return;
-    }
-    if (removedEdgeId) {
-      flashTouchedEdge(removedEdgeId);
-    }
-  }, [flashTouchedEdge, updateGraphConfig]);
-
-  const deleteEdgeById = useCallback((edgeId: string) => {
-    let removed = false;
-    const changed = updateGraphConfig((previous) => {
-      const nextEdges = previous.edges.filter((edge) => edge.id !== edgeId);
-      removed = nextEdges.length !== previous.edges.length;
-      if (!removed) return previous;
-      return {
-        ...previous,
-        edges: nextEdges,
-      };
-    });
-
-    if (!changed || !removed) {
-      playMapInvalidActionSound();
-      return;
-    }
-
-    flashTouchedEdge(edgeId);
-    if (selection.selectedEdgeId === edgeId) {
-      commitSelection(EMPTY_EDITOR_SELECTION);
-    }
-  }, [commitSelection, flashTouchedEdge, selection.selectedEdgeId, updateGraphConfig]);
-
-  const moveNodes = useCallback((nodeIds: string[], deltaWorldX: number, deltaWorldY: number) => {
-    if (nodeIds.length === 0) return;
-    if (deltaWorldX === 0 && deltaWorldY === 0) return;
-    const selectedNodeIds = new Set(nodeIds);
-    const changed = updateGraphConfig((previous) => {
-      let moved = false;
-      const nextNodes = previous.nodes.map((node) => {
-        if (!selectedNodeIds.has(node.id)) return node;
-        const baseX = Number(node.styleHint?.x ?? 0);
-        const baseY = Number(node.styleHint?.y ?? 0);
-        moved = true;
+  const toggleCumRound = useCallback(
+    (round: InstalledRound) => {
+      updateGraphConfig((previous) => {
+        const nextCumRoundRefs = [...previous.cumRoundRefs];
+        const existingIndex = nextCumRoundRefs.findIndex(
+          (ref) =>
+            resolvePortableRoundRef(ref, installedRounds)?.id === round.id ||
+            ref.idHint === round.id
+        );
+        if (existingIndex >= 0) {
+          nextCumRoundRefs.splice(existingIndex, 1);
+        } else {
+          nextCumRoundRefs.push(toPortableRoundRef(round));
+        }
         return {
-          ...node,
-          styleHint: {
-            ...node.styleHint,
-            x: baseX + deltaWorldX,
-            y: baseY + deltaWorldY,
+          ...previous,
+          cumRoundRefs: nextCumRoundRefs,
+        };
+      });
+    },
+    [installedRounds, updateGraphConfig]
+  );
+
+  const moveCumRound = useCallback(
+    (roundId: string, direction: -1 | 1) => {
+      updateGraphConfig((previous) => {
+        const currentIndex = previous.cumRoundRefs.findIndex(
+          (ref) =>
+            resolvePortableRoundRef(ref, installedRounds)?.id === roundId || ref.idHint === roundId
+        );
+        if (currentIndex < 0) return previous;
+        const nextIndex = currentIndex + direction;
+        if (nextIndex < 0 || nextIndex >= previous.cumRoundRefs.length) return previous;
+        const nextCumRoundRefs = [...previous.cumRoundRefs];
+        const [moved] = nextCumRoundRefs.splice(currentIndex, 1);
+        if (!moved) return previous;
+        nextCumRoundRefs.splice(nextIndex, 0, moved);
+        return {
+          ...previous,
+          cumRoundRefs: nextCumRoundRefs,
+        };
+      });
+    },
+    [installedRounds, updateGraphConfig]
+  );
+
+  const removeCumRoundByIndex = useCallback(
+    (index: number) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        cumRoundRefs: previous.cumRoundRefs.filter((_, refIndex) => refIndex !== index),
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setPerkTriggerChance = useCallback(
+    (value: number) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        perkSelection: {
+          ...previous.perkSelection,
+          triggerChancePerCompletedRound: Math.max(0, Math.min(1, value)),
+        },
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setProbabilityScaling = useCallback(
+    (key: keyof EditorGraphConfig["probabilityScaling"], value: number) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        probabilityScaling: {
+          ...previous.probabilityScaling,
+          [key]: Math.max(0, Math.min(1, value)),
+        },
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setCumRoundBonusScore = useCallback(
+    (value: number) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        economy: {
+          ...previous.economy,
+          scorePerCumRoundSuccess: Math.max(0, Math.floor(value)),
+        },
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setDiceLimit = useCallback(
+    (key: keyof EditorGraphConfig["dice"], value: number) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        dice: {
+          ...previous.dice,
+          [key]: Math.max(1, Math.min(20, Math.floor(value))),
+        },
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setSaveMode = useCallback(
+    (value: EditorGraphConfig["saveMode"]) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        saveMode: value,
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const togglePerkEnabled = useCallback(
+    (perkId: string) => {
+      updateGraphConfig((previous) => {
+        const enabled = previous.perkPool.enabledPerkIds.includes(perkId);
+        return {
+          ...previous,
+          perkPool: {
+            ...previous.perkPool,
+            enabledPerkIds: enabled
+              ? previous.perkPool.enabledPerkIds.filter((id) => id !== perkId)
+              : [...previous.perkPool.enabledPerkIds, perkId],
           },
         };
       });
-      return moved
-        ? {
+    },
+    [updateGraphConfig]
+  );
+
+  const toggleAntiPerkEnabled = useCallback(
+    (perkId: string) => {
+      updateGraphConfig((previous) => {
+        const enabled = previous.perkPool.enabledAntiPerkIds.includes(perkId);
+        return {
           ...previous,
-          nodes: nextNodes,
-        }
-        : previous;
-    }, false);
+          perkPool: {
+            ...previous.perkPool,
+            enabledAntiPerkIds: enabled
+              ? previous.perkPool.enabledAntiPerkIds.filter((id) => id !== perkId)
+              : [...previous.perkPool.enabledAntiPerkIds, perkId],
+          },
+        };
+      });
+    },
+    [updateGraphConfig]
+  );
 
-    if (changed) {
-      dragSessionRef.current.moved = true;
-    }
-  }, [updateGraphConfig]);
-
-  const placeNodeAtWorld = useCallback((kind: EditorNode["kind"], worldX: number, worldY: number) => {
-    const tileDefinition = tilesByKind.get(kind);
-    let createdNodeId: string | null = null;
-
-    const changed = updateGraphConfig((previous) => {
-      const width = Math.max(160, Number(tileDefinition?.width ?? 190));
-      const height = Math.max(58, Number(tileDefinition?.height ?? 84));
-      const baseName = tileDefinition?.defaultName ?? tileDefinition?.label ?? toTitleCase(kind);
-      const kindCount = previous.nodes.filter((node) => node.kind === kind).length + 1;
-      const nextNode: EditorNode = {
-        id: createEditorId(kind),
-        name: kindCount === 1 ? baseName : `${baseName} ${kindCount}`,
-        kind,
-        styleHint: {
-          x: worldX - width / 2,
-          y: worldY - height / 2,
-          width,
-          height,
-          color: tileDefinition?.color,
-          icon: tileDefinition?.icon,
-          size: tileDefinition?.size,
-        },
-      };
-      if (kind === "round") {
-        nextNode.roundRef = { name: `Round ${kindCount}` };
-      }
-      if (kind === "perk") {
-        nextNode.visualId = perkOptions[0]?.id;
-      }
-      createdNodeId = nextNode.id;
-      return {
+  const setAllPerksEnabled = useCallback(
+    (enabled: boolean) => {
+      updateGraphConfig((previous) => ({
         ...previous,
-        nodes: [...previous.nodes, nextNode],
-      };
-    });
+        perkPool: {
+          ...previous.perkPool,
+          enabledPerkIds: enabled ? perkOptions.map((perk) => perk.id) : [],
+        },
+      }));
+    },
+    [perkOptions, updateGraphConfig]
+  );
 
-    if (!changed || !createdNodeId) {
-      playMapInvalidActionSound();
-      return;
-    }
+  const setAllAntiPerksEnabled = useCallback(
+    (enabled: boolean) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        perkPool: {
+          ...previous.perkPool,
+          enabledAntiPerkIds: enabled ? antiPerkOptions.map((perk) => perk.id) : [],
+        },
+      }));
+    },
+    [antiPerkOptions, updateGraphConfig]
+  );
 
-    playMapPlaceNodeSound();
-    flashPlacedNode(createdNodeId);
-    commitSelection({
-      selectedNodeIds: [createdNodeId],
-      primaryNodeId: createdNodeId,
-      selectedEdgeId: null,
-    });
-  }, [commitSelection, flashPlacedNode, perkOptions, tilesByKind, updateGraphConfig]);
+  const patchEdge = useCallback(
+    (edgeId: string, patch: Partial<EditorEdge>) => {
+      updateGraphConfig((previous) => {
+        const nextEdges = previous.edges.map((edge) =>
+          edge.id === edgeId ? { ...edge, ...patch } : edge
+        );
+        return {
+          ...previous,
+          edges: nextEdges,
+        };
+      });
+    },
+    [updateGraphConfig]
+  );
+
+  const createEdge = useCallback(
+    (fromNodeId: string, toNodeId: string) => {
+      let edgeId: string | null = null;
+      const changed = updateGraphConfig((previous) => {
+        const sourceNode = previous.nodes.find((node) => node.id === fromNodeId);
+        if (sourceNode?.kind === "end") return previous;
+        const alreadyConnected = previous.edges.some(
+          (edge) => edge.fromNodeId === fromNodeId && edge.toNodeId === toNodeId
+        );
+        if (alreadyConnected) return previous;
+        const nextEdge: EditorEdge = {
+          id: createEditorId("edge"),
+          fromNodeId,
+          toNodeId,
+          gateCost: 0,
+          weight: 1,
+        };
+        edgeId = nextEdge.id;
+        return {
+          ...previous,
+          edges: [...previous.edges, nextEdge],
+        };
+      });
+
+      if (!changed || !edgeId) {
+        playMapInvalidActionSound();
+        return;
+      }
+
+      playMapConnectNodesSound();
+      flashTouchedEdge(edgeId);
+      commitSelection({
+        selectedNodeIds: [toNodeId],
+        primaryNodeId: toNodeId,
+        selectedEdgeId: null,
+      });
+    },
+    [commitSelection, flashTouchedEdge, updateGraphConfig]
+  );
+
+  const deleteEdgeBetween = useCallback(
+    (fromNodeId: string, toNodeId: string) => {
+      let removedEdgeId: string | null = null;
+      const changed = updateGraphConfig((previous) => {
+        const edge = previous.edges.find(
+          (candidate) => candidate.fromNodeId === fromNodeId && candidate.toNodeId === toNodeId
+        );
+        if (!edge) return previous;
+        removedEdgeId = edge.id;
+        return {
+          ...previous,
+          edges: previous.edges.filter((candidate) => candidate.id !== edge.id),
+        };
+      });
+
+      if (!changed) {
+        playMapInvalidActionSound();
+        return;
+      }
+      if (removedEdgeId) {
+        flashTouchedEdge(removedEdgeId);
+      }
+    },
+    [flashTouchedEdge, updateGraphConfig]
+  );
+
+  const deleteEdgeById = useCallback(
+    (edgeId: string) => {
+      let removed = false;
+      const changed = updateGraphConfig((previous) => {
+        const nextEdges = previous.edges.filter((edge) => edge.id !== edgeId);
+        removed = nextEdges.length !== previous.edges.length;
+        if (!removed) return previous;
+        return {
+          ...previous,
+          edges: nextEdges,
+        };
+      });
+
+      if (!changed || !removed) {
+        playMapInvalidActionSound();
+        return;
+      }
+
+      flashTouchedEdge(edgeId);
+      if (selection.selectedEdgeId === edgeId) {
+        commitSelection(EMPTY_EDITOR_SELECTION);
+      }
+    },
+    [commitSelection, flashTouchedEdge, selection.selectedEdgeId, updateGraphConfig]
+  );
+
+  const moveNodes = useCallback(
+    (nodeIds: string[], deltaWorldX: number, deltaWorldY: number) => {
+      if (nodeIds.length === 0) return;
+      if (deltaWorldX === 0 && deltaWorldY === 0) return;
+      const selectedNodeIds = new Set(nodeIds);
+      const changed = updateGraphConfig((previous) => {
+        let moved = false;
+        const nextNodes = previous.nodes.map((node) => {
+          if (!selectedNodeIds.has(node.id)) return node;
+          const baseX = Number(node.styleHint?.x ?? 0);
+          const baseY = Number(node.styleHint?.y ?? 0);
+          moved = true;
+          return {
+            ...node,
+            styleHint: {
+              ...node.styleHint,
+              x: baseX + deltaWorldX,
+              y: baseY + deltaWorldY,
+            },
+          };
+        });
+        return moved
+          ? {
+              ...previous,
+              nodes: nextNodes,
+            }
+          : previous;
+      }, false);
+
+      if (changed) {
+        dragSessionRef.current.moved = true;
+      }
+    },
+    [updateGraphConfig]
+  );
+
+  const placeNodeAtWorld = useCallback(
+    (kind: EditorNode["kind"], worldX: number, worldY: number) => {
+      const tileDefinition = tilesByKind.get(kind);
+      let createdNodeId: string | null = null;
+
+      const changed = updateGraphConfig((previous) => {
+        const width = Math.max(160, Number(tileDefinition?.width ?? 190));
+        const height = Math.max(58, Number(tileDefinition?.height ?? 84));
+        const baseName = tileDefinition?.defaultName ?? tileDefinition?.label ?? toTitleCase(kind);
+        const kindCount = previous.nodes.filter((node) => node.kind === kind).length + 1;
+        const nextNode: EditorNode = {
+          id: createEditorId(kind),
+          name: kindCount === 1 ? baseName : `${baseName} ${kindCount}`,
+          kind,
+          styleHint: {
+            x: worldX - width / 2,
+            y: worldY - height / 2,
+            width,
+            height,
+            color: tileDefinition?.color,
+            icon: tileDefinition?.icon,
+            size: tileDefinition?.size,
+          },
+        };
+        if (kind === "round") {
+          nextNode.roundRef = { name: `Round ${kindCount}` };
+        }
+        if (kind === "perk") {
+          nextNode.visualId = perkOptions[0]?.id;
+        }
+        createdNodeId = nextNode.id;
+        return {
+          ...previous,
+          nodes: [...previous.nodes, nextNode],
+        };
+      });
+
+      if (!changed || !createdNodeId) {
+        playMapInvalidActionSound();
+        return;
+      }
+
+      playMapPlaceNodeSound();
+      flashPlacedNode(createdNodeId);
+      commitSelection({
+        selectedNodeIds: [createdNodeId],
+        primaryNodeId: createdNodeId,
+        selectedEdgeId: null,
+      });
+    },
+    [commitSelection, flashPlacedNode, perkOptions, tilesByKind, updateGraphConfig]
+  );
 
   const deleteSelection = useCallback(() => {
     const selectedNodeIds = new Set(selection.selectedNodeIds);
@@ -935,11 +1126,11 @@ export function MapEditorRoute() {
   }, []);
 
   const resetGraph = useCallback(() => {
-    const shouldReset = window.confirm(
-      "Are you sure you want to reset the graph? This will delete all progress made.",
-    );
-    if (!shouldReset) return;
+    setResetDialogOpen(true);
+  }, []);
 
+  const confirmResetGraph = useCallback(() => {
+    setResetDialogOpen(false);
     playSelectSound();
     const nextConfig = makeStartingConfig();
     setConfig(nextConfig);
@@ -974,39 +1165,50 @@ export function MapEditorRoute() {
         ...playlist.config.economy,
         ...configRef.current.economy,
       },
+      dice: { ...configRef.current.dice },
+      saveMode: configRef.current.saveMode,
     };
   }, []);
 
-  const persistEditedPlaylist = useCallback(async (playlist: StoredPlaylist): Promise<StoredPlaylist | null> => {
-    const validation = validateGraphConfig(configRef.current, installedRounds);
-    if (validation.hardBlocked) {
-      playMapInvalidActionSound();
-      const firstError = validation.errors[0]?.message ?? "Map contains validation errors.";
-      setSaveNotice(`Cannot continue: ${firstError}`);
-      return null;
-    }
+  const persistEditedPlaylist = useCallback(
+    async (playlist: StoredPlaylist): Promise<StoredPlaylist | null> => {
+      const validation = validateGraphConfig(configRef.current, installedRounds);
+      if (validation.hardBlocked) {
+        playMapInvalidActionSound();
+        const firstError = validation.errors[0]?.message ?? "Map contains validation errors.";
+        setSaveNotice(`Cannot continue: ${firstError}`);
+        return null;
+      }
 
-    const updated = await playlists.update({
-      playlistId: playlist.id,
-      config: createUpdatedPlaylistConfig(playlist),
-    });
-    updatePlaylistListEntry(updated);
-    if (importedPlaylistReview?.playlistId === playlist.id) {
-      setImportedPlaylistReview(null);
-    }
-    setIsDirty(false);
-    if (validation.warnings.length > 0) {
-      setSaveNotice(`Saved with ${validation.warnings.length} warning(s).`);
-    } else {
-      setSaveNotice(`Saved "${updated.name}".`);
-    }
-    return updated;
-  }, [createUpdatedPlaylistConfig, importedPlaylistReview?.playlistId, installedRounds, updatePlaylistListEntry]);
+      const updated = await playlists.update({
+        playlistId: playlist.id,
+        config: createUpdatedPlaylistConfig(playlist),
+      });
+      updatePlaylistListEntry(updated);
+      if (importedPlaylistReview?.playlistId === playlist.id) {
+        setImportedPlaylistReview(null);
+      }
+      setIsDirty(false);
+      if (validation.warnings.length > 0) {
+        setSaveNotice(`Saved with ${validation.warnings.length} warning(s).`);
+      } else {
+        setSaveNotice(`Saved "${updated.name}".`);
+      }
+      return updated;
+    },
+    [
+      createUpdatedPlaylistConfig,
+      importedPlaylistReview?.playlistId,
+      installedRounds,
+      updatePlaylistListEntry,
+    ]
+  );
 
   const handleCreatePlaylist = useCallback(async () => {
     if (createPlaylistPending) return;
     const trimmedName = newPlaylistName.trim();
-    const playlistName = trimmedName.length > 0 ? trimmedName : `Map Playlist ${playlistList.length + 1}`;
+    const playlistName =
+      trimmedName.length > 0 ? trimmedName : `Map Playlist ${playlistList.length + 1}`;
     setCreatePlaylistPending(true);
     setSaveNotice(null);
     try {
@@ -1021,12 +1223,18 @@ export function MapEditorRoute() {
     } finally {
       setCreatePlaylistPending(false);
     }
-  }, [createPlaylistPending, newPlaylistName, openPlaylistForEditing, playlistList.length, updatePlaylistListEntry]);
+  }, [
+    createPlaylistPending,
+    newPlaylistName,
+    openPlaylistForEditing,
+    playlistList.length,
+    updatePlaylistListEntry,
+  ]);
 
   const handleOpenPlaylistPicker = useCallback(() => {
     if (isDirty) {
-      const shouldDiscard = window.confirm("Discard unsaved map changes and choose another playlist?");
-      if (!shouldDiscard) return;
+      setDiscardPlaylistDialogOpen(true);
+      return;
     }
     playSelectSound();
     setSelectedPlaylistId(null);
@@ -1034,11 +1242,19 @@ export function MapEditorRoute() {
     void refreshPlaylistPickerData();
   }, [isDirty, refreshPlaylistPickerData]);
 
+  const confirmDiscardAndOpenPicker = useCallback(() => {
+    setDiscardPlaylistDialogOpen(false);
+    playSelectSound();
+    setSelectedPlaylistId(null);
+    setSaveNotice(null);
+    void refreshPlaylistPickerData();
+  }, [refreshPlaylistPickerData]);
+
   const handleImportPlaylist = useCallback(async () => {
     if (importPending || savePending || testMapPending) return;
     if (selectedPlaylist && isDirty) {
-      const shouldDiscard = window.confirm("Discard unsaved map changes and import another playlist?");
-      if (!shouldDiscard) return;
+      setDiscardImportDialogOpen(true);
+      return;
     }
 
     playSelectSound();
@@ -1072,7 +1288,7 @@ export function MapEditorRoute() {
       setSaveNotice(
         analysis.resolution.counts.suggested > 0
           ? `Imported "${imported.playlist.name}" with ${analysis.resolution.counts.suggested} auto-resolved ref(s).`
-          : `Imported "${imported.playlist.name}".`,
+          : `Imported "${imported.playlist.name}".`
       );
     } catch (error) {
       console.error("Failed to import playlist from map editor", error);
@@ -1081,7 +1297,60 @@ export function MapEditorRoute() {
     } finally {
       setImportPending(false);
     }
-  }, [importPending, isDirty, openPlaylistForEditing, savePending, selectedPlaylist, testMapPending, updatePlaylistListEntry]);
+  }, [
+    importPending,
+    isDirty,
+    openPlaylistForEditing,
+    savePending,
+    selectedPlaylist,
+    testMapPending,
+    updatePlaylistListEntry,
+  ]);
+
+  const doImportPlaylist = useCallback(async () => {
+    setDiscardImportDialogOpen(false);
+    playSelectSound();
+    setImportPending(true);
+    setSaveNotice(null);
+    setIsDirty(false);
+    try {
+      const filePath = await window.electronAPI.dialog.selectPlaylistImportFile();
+      if (!filePath) return;
+      const analysis = await playlists.analyzeImportFile(filePath);
+      if (analysis.resolution.counts.missing > 0) {
+        setResolutionModalState({
+          context: "import",
+          title: `Import ${analysis.metadata.name}`,
+          filePath,
+          analysis: analysis.resolution,
+        });
+        return;
+      }
+      const imported = await playlists.importFromFile({ filePath });
+      updatePlaylistListEntry(imported.playlist);
+      setActivePlaylistId(imported.playlist.id);
+      openPlaylistForEditing(imported.playlist);
+      if (analysis.resolution.issues.length > 0) {
+        setImportedPlaylistReview({
+          playlistId: imported.playlist.id,
+          analysis: analysis.resolution,
+        });
+      } else {
+        setImportedPlaylistReview(null);
+      }
+      setSaveNotice(
+        analysis.resolution.counts.suggested > 0
+          ? `Imported "${imported.playlist.name}" with ${analysis.resolution.counts.suggested} auto-resolved ref(s).`
+          : `Imported "${imported.playlist.name}".`
+      );
+    } catch (error) {
+      console.error("Failed to import playlist from map editor", error);
+      setSaveNotice(error instanceof Error ? error.message : "Failed to import playlist.");
+      playMapInvalidActionSound();
+    } finally {
+      setImportPending(false);
+    }
+  }, [openPlaylistForEditing, updatePlaylistListEntry]);
 
   const handleExportPlaylist = useCallback(async () => {
     if (!selectedPlaylist) return;
@@ -1091,7 +1360,9 @@ export function MapEditorRoute() {
     setSavePending(true);
     setSaveNotice(null);
     try {
-      const filePath = await window.electronAPI.dialog.selectPlaylistExportPath(selectedPlaylist.name);
+      const filePath = await window.electronAPI.dialog.selectPlaylistExportPath(
+        selectedPlaylist.name
+      );
       if (!filePath) return;
 
       const playlistToExport = isDirty
@@ -1108,7 +1379,14 @@ export function MapEditorRoute() {
     } finally {
       setSavePending(false);
     }
-  }, [importPending, isDirty, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
+  }, [
+    importPending,
+    isDirty,
+    persistEditedPlaylist,
+    savePending,
+    selectedPlaylist,
+    testMapPending,
+  ]);
 
   const handleExportPlaylistPackage = useCallback(async () => {
     if (!selectedPlaylist) return;
@@ -1118,52 +1396,61 @@ export function MapEditorRoute() {
     setShowPackExportDialog(true);
   }, [importPending, savePending, selectedPlaylist, testMapPending]);
 
-  const handleStartPlaylistPackageExport = useCallback(async (input: {
-    compressionMode: "copy" | "av1";
-    compressionStrength: number;
-  }): Promise<boolean> => {
-    if (!selectedPlaylist) return false;
-    if (importPending || savePending || testMapPending) return false;
+  const handleStartPlaylistPackageExport = useCallback(
+    async (input: {
+      compressionMode: "copy" | "av1";
+      compressionStrength: number;
+    }): Promise<boolean> => {
+      if (!selectedPlaylist) return false;
+      if (importPending || savePending || testMapPending) return false;
 
-    setSavePending(true);
-    setSaveNotice(null);
-    try {
-      const directoryPath = await window.electronAPI.dialog.selectPlaylistExportDirectory(selectedPlaylist.name);
-      if (!directoryPath) return false;
+      setSavePending(true);
+      setSaveNotice(null);
+      try {
+        const directoryPath = await window.electronAPI.dialog.selectPlaylistExportDirectory(
+          selectedPlaylist.name
+        );
+        if (!directoryPath) return false;
 
-      const playlistToExport = isDirty
-        ? await persistEditedPlaylist(selectedPlaylist)
-        : selectedPlaylist;
-      if (!playlistToExport) return false;
+        const playlistToExport = isDirty
+          ? await persistEditedPlaylist(selectedPlaylist)
+          : selectedPlaylist;
+        if (!playlistToExport) return false;
 
-      setShowExportOverlay(true);
-      void (async () => {
-        try {
-          const result = await playlists.exportPackage({
-            playlistId: playlistToExport.id,
-            directoryPath,
-            compressionMode: input.compressionMode,
-            compressionStrength: input.compressionStrength,
-          });
-          setSaveNotice(`Exported "${playlistToExport.name}" pack to ${result.exportDir}.`);
-        } catch (error) {
-          console.error("Failed to export playlist package from map editor", error);
-          setSaveNotice(error instanceof Error ? error.message : "Failed to export playlist package.");
-          setShowExportOverlay(false);
-          playMapInvalidActionSound();
-        } finally {
-          setSavePending(false);
-        }
-      })();
+        setShowExportOverlay(true);
+        void (async () => {
+          try {
+            const result = await playlists.exportPackage({
+              playlistId: playlistToExport.id,
+              directoryPath,
+              compressionMode: input.compressionMode,
+              compressionStrength: input.compressionStrength,
+            });
+            setSaveNotice(`Exported "${playlistToExport.name}" pack to ${result.exportDir}.`);
+          } catch (error) {
+            console.error("Failed to export playlist package from map editor", error);
+            setSaveNotice(
+              error instanceof Error ? error.message : "Failed to export playlist package."
+            );
+            setShowExportOverlay(false);
+            playMapInvalidActionSound();
+          } finally {
+            setSavePending(false);
+          }
+        })();
 
-      return true;
-    } catch (error) {
-      console.error("Failed to export playlist package from map editor", error);
-      setSaveNotice(error instanceof Error ? error.message : "Failed to export playlist package.");
-      playMapInvalidActionSound();
-      return false;
-    }
-  }, [importPending, isDirty, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
+        return true;
+      } catch (error) {
+        console.error("Failed to export playlist package from map editor", error);
+        setSaveNotice(
+          error instanceof Error ? error.message : "Failed to export playlist package."
+        );
+        playMapInvalidActionSound();
+        return false;
+      }
+    },
+    [importPending, isDirty, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]
+  );
 
   const handleAbortPlaylistExport = useCallback(async () => {
     setIsAbortingExport(true);
@@ -1217,7 +1504,14 @@ export function MapEditorRoute() {
     } finally {
       setTestMapPending(false);
     }
-  }, [importPending, navigate, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
+  }, [
+    importPending,
+    navigate,
+    persistEditedPlaylist,
+    savePending,
+    selectedPlaylist,
+    testMapPending,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1338,7 +1632,19 @@ export function MapEditorRoute() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onWindowBlur);
     };
-  }, [armTile, commitSelection, deleteSelection, handleRealignGraph, handleRedo, handleSavePlaylist, handleUndo, hotkeyMap, resetView, selectedPlaylist, tileById]);
+  }, [
+    armTile,
+    commitSelection,
+    deleteSelection,
+    handleRealignGraph,
+    handleRedo,
+    handleSavePlaylist,
+    handleUndo,
+    hotkeyMap,
+    resetView,
+    selectedPlaylist,
+    tileById,
+  ]);
 
   // Auto-switch inspector tab based on selection
   useEffect(() => {
@@ -1351,11 +1657,10 @@ export function MapEditorRoute() {
     }
   }, [selection.primaryNodeId, selection.selectedEdgeId]);
 
-
-
-  const categoryTabs = useMemo<Array<{ id: TileCatalogCategory["id"] | "all"; label: string }>>(() => (
-    [{ id: "all", label: "All" }, ...tileCatalog.categories]
-  ), [tileCatalog.categories]);
+  const categoryTabs = useMemo<Array<{ id: TileCatalogCategory["id"] | "all"; label: string }>>(
+    () => [{ id: "all", label: "All" }, ...tileCatalog.categories],
+    [tileCatalog.categories]
+  );
 
   const handleToggleGrid = useCallback(() => {
     playSelectSound();
@@ -1380,7 +1685,7 @@ export function MapEditorRoute() {
     scopeRef: editorScopeRef,
     priority: 20,
     enabled: Boolean(selectedPlaylist),
-    initialFocusId: "map-editor-import",
+    initialFocusId: "map-editor-export-fplay",
     onBack: () => {
       navigateBack();
       return true;
@@ -1397,10 +1702,10 @@ export function MapEditorRoute() {
         newPlaylistName={newPlaylistName}
         createPlaylistPending={createPlaylistPending}
         saveNotice={saveNotice}
-        importPending={importPending}
         onNewPlaylistNameChange={setNewPlaylistName}
-        onCreatePlaylist={() => { void handleCreatePlaylist(); }}
-        onImportPlaylist={() => { void handleImportPlaylist(); }}
+        onCreatePlaylist={() => {
+          void handleCreatePlaylist();
+        }}
         onOpenPlaylist={openPlaylistForEditing}
         onNavigateBack={navigateBack}
       />
@@ -1426,22 +1731,14 @@ export function MapEditorRoute() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="rounded-lg border border-violet-500/45 bg-violet-500/12 px-3 py-1.5 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400/60 hover:bg-violet-500/20 disabled:opacity-40"
-              onMouseEnter={playHoverSound}
-              onClick={() => { void handleImportPlaylist(); }}
-              disabled={importPending || savePending || testMapPending}
-              data-controller-focus-id="map-editor-import"
-              data-controller-initial="true"
-            >
-              {importPending ? "Importing..." : "Import"}
-            </button>
-            <button
-              type="button"
               className="rounded-lg border border-emerald-500/45 bg-emerald-500/12 px-3 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:border-emerald-400/60 hover:bg-emerald-500/20 disabled:opacity-40"
               onMouseEnter={playHoverSound}
-              onClick={() => { void handleExportPlaylist(); }}
+              onClick={() => {
+                void handleExportPlaylist();
+              }}
               disabled={importPending || savePending || testMapPending}
               data-controller-focus-id="map-editor-export-fplay"
+              data-controller-initial="true"
             >
               {savePending ? "Working..." : "Export Fplay"}
             </button>
@@ -1449,7 +1746,9 @@ export function MapEditorRoute() {
               type="button"
               className="rounded-lg border border-cyan-500/45 bg-cyan-500/12 px-3 py-1.5 text-xs font-medium text-cyan-100 transition-colors hover:border-cyan-400/60 hover:bg-cyan-500/20 disabled:opacity-40"
               onMouseEnter={playHoverSound}
-              onClick={() => { void handleExportPlaylistPackage(); }}
+              onClick={() => {
+                void handleExportPlaylistPackage();
+              }}
               disabled={importPending || savePending || testMapPending}
               data-controller-focus-id="map-editor-export-pack"
             >
@@ -1496,10 +1795,13 @@ export function MapEditorRoute() {
 
         {/* ── Save notice ─────────────────── */}
         {saveNotice && (
-          <div className={`flex-shrink-0 border-b px-4 py-1.5 text-xs ${saveNotice.startsWith("Cannot continue")
-            ? "border-rose-500/30 bg-rose-950/30 text-rose-200"
-            : "border-emerald-500/30 bg-emerald-950/30 text-emerald-200"
-            }`}>
+          <div
+            className={`flex-shrink-0 border-b px-4 py-1.5 text-xs ${
+              saveNotice.startsWith("Cannot continue")
+                ? "border-rose-500/30 bg-rose-950/30 text-rose-200"
+                : "border-emerald-500/30 bg-emerald-950/30 text-emerald-200"
+            }`}
+          >
             {saveNotice}
           </div>
         )}
@@ -1549,8 +1851,12 @@ export function MapEditorRoute() {
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 onResetGraph={resetGraph}
-                onSave={() => { void handleSavePlaylist(); }}
-                onTestMap={() => { void handleTestMap(); }}
+                onSave={() => {
+                  void handleSavePlaylist();
+                }}
+                onTestMap={() => {
+                  void handleTestMap();
+                }}
               />
             </div>
 
@@ -1621,15 +1927,16 @@ export function MapEditorRoute() {
                 <div className="flex flex-shrink-0 border-b border-white/6">
                   {INSPECTOR_TABS.map((tab) => {
                     const isActive = inspectorTab === tab.id;
-                    const hasIssue = tab.id === "validation" && (validation.errors.length > 0 || validation.warnings.length > 0);
+                    const hasIssue =
+                      tab.id === "validation" &&
+                      (validation.errors.length > 0 || validation.warnings.length > 0);
                     return (
                       <button
                         key={tab.id}
                         type="button"
-                        className={`editor-tab relative flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${isActive
-                          ? "text-cyan-300"
-                          : "text-zinc-600 hover:text-zinc-400"
-                          }`}
+                        className={`editor-tab relative flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${
+                          isActive ? "text-cyan-300" : "text-zinc-600 hover:text-zinc-400"
+                        }`}
                         onClick={() => setInspectorTab(tab.id)}
                       >
                         {tab.label}
@@ -1672,6 +1979,8 @@ export function MapEditorRoute() {
                       perkPool={config.perkPool}
                       probabilityScaling={config.probabilityScaling}
                       economy={config.economy}
+                      dice={config.dice}
+                      saveMode={config.saveMode}
                       perkOptions={perkOptions}
                       antiPerkOptions={antiPerkOptions}
                       cumRoundRefs={config.cumRoundRefs}
@@ -1680,6 +1989,8 @@ export function MapEditorRoute() {
                       selectedCumRoundIdSet={selectedCumRoundIdSet}
                       onSetPerkTriggerChance={setPerkTriggerChance}
                       onSetProbabilityScaling={setProbabilityScaling}
+                      onSetDiceLimit={setDiceLimit}
+                      onSetSaveMode={setSaveMode}
                       onSetCumRoundBonusScore={setCumRoundBonusScore}
                       onTogglePerk={togglePerkEnabled}
                       onToggleAntiPerk={toggleAntiPerkEnabled}
@@ -1690,9 +2001,7 @@ export function MapEditorRoute() {
                       onRemoveCumRoundByIndex={removeCumRoundByIndex}
                     />
                   )}
-                  {inspectorTab === "validation" && (
-                    <ValidationPanel validation={validation} />
-                  )}
+                  {inspectorTab === "validation" && <ValidationPanel validation={validation} />}
                 </div>
               </>
             )}
@@ -1706,8 +2015,14 @@ export function MapEditorRoute() {
           title={resolutionModalState.title}
           installedRounds={installedRounds}
           analysis={resolutionModalState.analysis}
-          primaryActionLabel={resolutionModalState.context === "import" ? "Import with Selected Resolutions" : "Apply Resolutions"}
-          secondaryActionLabel={resolutionModalState.context === "import" ? "Continue Unresolved" : undefined}
+          primaryActionLabel={
+            resolutionModalState.context === "import"
+              ? "Import with Selected Resolutions"
+              : "Apply Resolutions"
+          }
+          secondaryActionLabel={
+            resolutionModalState.context === "import" ? "Continue Unresolved" : undefined
+          }
           onClose={() => setResolutionModalState(null)}
           onPrimaryAction={(overrides) => {
             void (async () => {
@@ -1722,10 +2037,10 @@ export function MapEditorRoute() {
                 setImportedPlaylistReview(
                   resolutionModalState.analysis.issues.length > 0
                     ? {
-                      playlistId: imported.playlist.id,
-                      analysis: resolutionModalState.analysis,
-                    }
-                    : null,
+                        playlistId: imported.playlist.id,
+                        analysis: resolutionModalState.analysis,
+                      }
+                    : null
                 );
                 setSaveNotice(`Imported "${imported.playlist.name}".`);
                 setResolutionModalState(null);
@@ -1737,10 +2052,14 @@ export function MapEditorRoute() {
                 ...resolutionModalState.analysis.suggestedMapping,
                 ...overrides,
               };
-              const nextConfig = applyPlaylistResolutionMapping({
-                ...selectedPlaylist.config,
-                boardConfig: toGraphBoardConfig(config),
-              }, combinedMapping, installedRounds);
+              const nextConfig = applyPlaylistResolutionMapping(
+                {
+                  ...selectedPlaylist.config,
+                  boardConfig: toGraphBoardConfig(config),
+                },
+                combinedMapping,
+                installedRounds
+              );
               const updated = await playlists.update({
                 playlistId: selectedPlaylist.id,
                 config: nextConfig,
@@ -1778,7 +2097,9 @@ export function MapEditorRoute() {
         <PlaylistExportOverlay
           status={exportStatus}
           aborting={isAbortingExport}
-          onAbort={() => { void handleAbortPlaylistExport(); }}
+          onAbort={() => {
+            void handleAbortPlaylistExport();
+          }}
         />
       )}
       {showPackExportDialog && selectedPlaylist && (
@@ -1791,6 +2112,33 @@ export function MapEditorRoute() {
           onSubmit={handleStartPlaylistPackageExport}
         />
       )}
+      <ConfirmDialog
+        isOpen={resetDialogOpen}
+        title="Reset Graph?"
+        message="Are you sure you want to reset the graph? This will delete all progress made."
+        confirmLabel="Reset Graph"
+        variant="danger"
+        onConfirm={confirmResetGraph}
+        onCancel={() => setResetDialogOpen(false)}
+      />
+      <ConfirmDialog
+        isOpen={discardPlaylistDialogOpen}
+        title="Discard Changes?"
+        message="Discard unsaved map changes and choose another playlist?"
+        confirmLabel="Discard Changes"
+        variant="warning"
+        onConfirm={confirmDiscardAndOpenPicker}
+        onCancel={() => setDiscardPlaylistDialogOpen(false)}
+      />
+      <ConfirmDialog
+        isOpen={discardImportDialogOpen}
+        title="Discard Changes?"
+        message="Discard unsaved map changes and import another playlist?"
+        confirmLabel="Discard Changes"
+        variant="warning"
+        onConfirm={doImportPlaylist}
+        onCancel={() => setDiscardImportDialogOpen(false)}
+      />
     </div>
   );
 }

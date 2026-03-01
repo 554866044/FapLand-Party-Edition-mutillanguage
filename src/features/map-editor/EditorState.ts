@@ -77,6 +77,8 @@ export interface EditorGraphConfig {
   perkPool: PlaylistConfig["perkPool"];
   probabilityScaling: PlaylistConfig["probabilityScaling"];
   economy: Pick<PlaylistConfig["economy"], "scorePerCumRoundSuccess">;
+  dice: PlaylistConfig["dice"];
+  saveMode: PlaylistConfig["saveMode"];
 }
 
 export interface ViewportState {
@@ -232,6 +234,11 @@ export const toEditorGraphConfig = (input: GraphBoardConfig): EditorGraphConfig 
     economy: {
       scorePerCumRoundSuccess: 420,
     },
+    dice: {
+      min: 1,
+      max: 6,
+    },
+    saveMode: "none",
   };
 };
 
@@ -348,6 +355,11 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
     economy: {
       scorePerCumRoundSuccess: 420,
     },
+    dice: {
+      min: 1,
+      max: 6,
+    },
+    saveMode: "none",
   };
 };
 

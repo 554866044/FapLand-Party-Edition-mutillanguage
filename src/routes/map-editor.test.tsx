@@ -628,23 +628,11 @@ describe("MapEditorRoute", () => {
     });
   });
 
-  it("imports a .fplay playlist into the graph editor", async () => {
-    vi.mocked(window.electronAPI.dialog.selectPlaylistImportFile).mockResolvedValue(
-      "/tmp/imported.fplay"
-    );
-
+  it("does not show a playlist import button in the graph editor", async () => {
     render(<MapEditorRoute />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Import .fplay" }));
-
-    await waitFor(() => {
-      expect(mocks.playlists.analyzeImportFile).toHaveBeenCalledWith("/tmp/imported.fplay");
-      expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({
-        filePath: "/tmp/imported.fplay",
-      });
-      expect(screen.getByText("Imported Playlist")).toBeDefined();
-      expect(screen.getByTestId("tool-value")).toBeDefined();
-    });
+    expect(screen.queryByRole("button", { name: "Import .fplay" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
   });
 
   it("exports the current graph playlist after persisting dirty changes", async () => {

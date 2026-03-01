@@ -3,7 +3,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { YtDlpBinary } from "./types";
-import { getBundledYtDlpCandidatePaths, getSystemYtDlpCandidatePaths, selectYtDlpBinary } from "./binaries";
+import { getBundledYtDlpCandidatePaths, selectYtDlpBinary } from "./binaries";
 
 const bundled: YtDlpBinary = {
   ytDlpPath: "/bundled/yt-dlp",
@@ -25,10 +25,10 @@ describe("webVideo binaries", () => {
       isPackaged: false,
     });
 
-    expect(candidates).toContain(path.normalize("/workspace/f-land/build/vendor/yt-dlp/linux-x64/yt-dlp"));
+    expect(candidates).toContain(
+      path.normalize("/workspace/f-land/build/vendor/yt-dlp/linux-x64/yt-dlp")
+    );
   });
-
-
 
   it("prefers the bundled binary in auto mode when available", () => {
     expect(selectYtDlpBinary("auto", bundled, system)).toBe(bundled);
@@ -40,10 +40,14 @@ describe("webVideo binaries", () => {
 
   it("falls back to the system binary in auto mode when the bundled binary is not runnable", () => {
     expect(
-      selectYtDlpBinary("auto", {
-        ...bundled,
-        version: null,
-      }, system),
+      selectYtDlpBinary(
+        "auto",
+        {
+          ...bundled,
+          version: null,
+        },
+        system
+      )
     ).toBe(system);
   });
 
@@ -61,10 +65,14 @@ describe("webVideo binaries", () => {
 
   it("throws when bundled selection is forced but the bundled binary is not runnable", () => {
     expect(() =>
-      selectYtDlpBinary("bundled", {
-        ...bundled,
-        version: null,
-      }, system),
+      selectYtDlpBinary(
+        "bundled",
+        {
+          ...bundled,
+          version: null,
+        },
+        system
+      )
     ).toThrow(/forced to bundled\/local/i);
   });
 

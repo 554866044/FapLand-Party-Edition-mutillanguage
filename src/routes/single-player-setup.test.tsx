@@ -43,6 +43,7 @@ function makePlaylist(id: string, name: string) {
         scorePerActiveAntiPerk: 25,
         scorePerCumRoundSuccess: 420,
       },
+      saveMode: "none" as const,
     },
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -95,16 +96,19 @@ const mocks = vi.hoisted(() => ({
     availablePlaylists: [] as unknown[],
     activePlaylist: null as unknown,
     installedRounds: [] as unknown[],
+    savedRuns: [] as unknown[],
   },
   navigate: vi.fn(),
   playlists: {
     setActive: vi.fn(),
   },
+  search: {},
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => () => ({
     useLoaderData: () => mocks.loaderData,
+    useSearch: () => mocks.search,
   }),
   useNavigate: () => mocks.navigate,
 }));
@@ -159,6 +163,7 @@ describe("SinglePlayerSetupRoute", () => {
       availablePlaylists: [],
       activePlaylist: null,
       installedRounds: [],
+      savedRuns: [],
     };
 
     render(<SinglePlayerSetupRoute />);
@@ -175,6 +180,7 @@ describe("SinglePlayerSetupRoute", () => {
       availablePlaylists: [first, second],
       activePlaylist: second,
       installedRounds: [],
+      savedRuns: [],
     };
 
     render(<SinglePlayerSetupRoute />);
@@ -198,6 +204,7 @@ describe("SinglePlayerSetupRoute", () => {
       availablePlaylists: [first, second],
       activePlaylist: first,
       installedRounds: [],
+      savedRuns: [],
     };
 
     render(<SinglePlayerSetupRoute />);
@@ -206,7 +213,10 @@ describe("SinglePlayerSetupRoute", () => {
 
     await waitFor(() => {
       expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
-      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: "/playlist-workshop",
+        search: { open: "active" },
+      });
     });
   });
 
@@ -218,6 +228,7 @@ describe("SinglePlayerSetupRoute", () => {
       availablePlaylists: [first],
       activePlaylist: active,
       installedRounds: [],
+      savedRuns: [],
     };
 
     render(<SinglePlayerSetupRoute />);
@@ -238,6 +249,7 @@ describe("SinglePlayerSetupRoute", () => {
       availablePlaylists: [playlist],
       activePlaylist: playlist,
       installedRounds: [],
+      savedRuns: [],
     };
 
     render(<SinglePlayerSetupRoute />);

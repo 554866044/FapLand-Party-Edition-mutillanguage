@@ -1,8 +1,17 @@
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoundStartTransition } from "./RoundStartTransition";
 
+const mocks = vi.hoisted(() => ({
+  sfwMode: false,
+}));
+
+vi.mock("../../hooks/useSfwMode", () => ({
+  useSfwMode: () => mocks.sfwMode,
+}));
+
 afterEach(() => {
+  mocks.sfwMode = false;
   cleanup();
 });
 
@@ -61,5 +70,32 @@ describe("RoundStartTransition", () => {
       "In this round, you may cum when the video instructs you to do so.",
     );
     expect(view.getByTestId("cinematic-transition-countdown").textContent).toBe("1");
+  });
+
+  it("abbreviates obscene round text while safe mode is enabled", () => {
+    mocks.sfwMode = true;
+
+    const view = render(
+      <RoundStartTransition
+        queuedRound={{
+          fieldId: "field-1",
+          nodeId: "node-1",
+          roundId: "round-1",
+          roundName: "Cum Finale",
+          selectionKind: "random",
+          poolId: "pool-1",
+          phaseKind: "cum",
+          campaignIndex: 2,
+        }}
+        remaining={0.4}
+        duration={2.1}
+      />,
+    );
+
+    expect(view.getByText("C ROUND")).toBeDefined();
+    expect(view.getByTestId("cinematic-transition-title").textContent).toBe("C Finale");
+    expect(view.getByTestId("cinematic-transition-hint").textContent).toContain(
+      "In this round, you may c when the video instructs you to do so.",
+    );
   });
 });

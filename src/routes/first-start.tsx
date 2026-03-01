@@ -4,10 +4,12 @@ import { AnimatedBackground } from "../components/AnimatedBackground";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
+import { useSfwMode } from "../hooks/useSfwMode";
 import { db } from "../services/db";
 import { importOpenedFile } from "../services/openedFiles";
 import { trpc } from "../services/trpc";
 import { playHoverSound, playSelectSound } from "../utils/audio";
+import { abbreviateNsfwText } from "../utils/sfwText";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
@@ -147,6 +149,7 @@ export const Route = createFileRoute("/first-start")({
 });
 
 function FirstStartPage() {
+  const sfwMode = useSfwMode();
   const navigate = useNavigate();
   const search = Route.useSearch();
   const { queue, addTracks, addTrackFromUrl, addPlaylistFromUrl } = useGlobalMusic();
@@ -173,6 +176,11 @@ function FirstStartPage() {
   const stepNavRef = useRef<HTMLDivElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const currentStep = STEPS[stepIndex] ?? STEPS[0]!;
+  const displayStepTitle = abbreviateNsfwText(currentStep.title, sfwMode);
+  const displayStepDescription = abbreviateNsfwText(currentStep.description, sfwMode);
+  const displayStepDetails = currentStep.details.map((detail) =>
+    abbreviateNsfwText(detail, sfwMode)
+  );
   const isLastStep = stepIndex >= STEPS.length - 1;
   const isContinueDisabled = isBusy || (currentStep.id === "booru" && isLoadingPrompt);
   const progressPercent = ((stepIndex + 1) / STEPS.length) * 100;
@@ -409,7 +417,7 @@ function FirstStartPage() {
                 style={{ animationDelay: "0.2s" }}
               >
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]">
-                  Welcome to Fap Land
+                  {abbreviateNsfwText("Welcome to Fap Land", sfwMode)}
                 </span>
               </h1>
               <p
@@ -564,12 +572,12 @@ function FirstStartPage() {
 
                 {/* Title */}
                 <h2 className="mt-2 max-w-[28ch] text-xl font-bold leading-tight tracking-tight text-white sm:text-2xl xl:text-3xl">
-                  {currentStep.title}
+                  {displayStepTitle}
                 </h2>
 
                 {/* Description */}
                 <p className="mt-2 text-sm leading-relaxed text-zinc-300 sm:text-base">
-                  {currentStep.description}
+                  {displayStepDescription}
                 </p>
               </div>
 
@@ -578,7 +586,7 @@ function FirstStartPage() {
                 ref={contentScrollRef}
                 className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1"
               >
-                {currentStep.details.map((detail, idx) => (
+                {displayStepDetails.map((detail, idx) => (
                   <div
                     key={detail}
                     className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 px-3.5 py-3 text-sm leading-relaxed text-zinc-400 animate-entrance"

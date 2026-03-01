@@ -9,7 +9,12 @@ import {
   toggleNodeSelection,
 } from "./editorInteractions";
 
-const sampleNode = (id: string, x: number, y: number, kind: EditorNode["kind"] = "path"): EditorNode => ({
+const sampleNode = (
+  id: string,
+  x: number,
+  y: number,
+  kind: EditorNode["kind"] = "path"
+): EditorNode => ({
   id,
   name: id,
   kind,
@@ -59,6 +64,7 @@ const makeConfig = (): EditorGraphConfig => ({
     maxAntiPerkProbability: 0.75,
   },
   economy: { scorePerCumRoundSuccess: 420 },
+  dice: { min: 1, max: 6 },
 });
 
 describe("editorInteractions", () => {
@@ -70,7 +76,7 @@ describe("editorInteractions", () => {
         selectedEdgeId: "edge-a",
       },
       ["node-a"],
-      "node-a",
+      "node-a"
     );
     const toggledOff = toggleNodeSelection(base, "node-a");
     expect(toggledOff.selectedNodeIds).toEqual([]);
@@ -90,7 +96,7 @@ describe("editorInteractions", () => {
         selectedEdgeId: null,
       },
       ["node-a"],
-      "node-a",
+      "node-a"
     );
     const merged = mergeNodeSelection(base, ["node-b", "node-c"], "node-b");
     expect(merged.selectedNodeIds).toEqual(["node-a", "node-b", "node-c"]);
@@ -98,10 +104,7 @@ describe("editorInteractions", () => {
   });
 
   it("returns intersecting node ids from marquee rectangle in screen space", () => {
-    const nodes = [
-      sampleNode("node-a", 100, 100),
-      sampleNode("node-b", 460, 120),
-    ];
+    const nodes = [sampleNode("node-a", 100, 100), sampleNode("node-b", 460, 120)];
     const hits = getNodesIntersectingScreenRect(
       nodes,
       { x: 0, y: 0, zoom: 1 },
@@ -110,7 +113,7 @@ describe("editorInteractions", () => {
         startY: 80,
         endX: 360,
         endY: 260,
-      },
+      }
     );
     expect(hits).toEqual(["node-a"]);
   });

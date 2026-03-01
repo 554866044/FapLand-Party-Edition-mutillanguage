@@ -11,34 +11,30 @@ export { resolvePhashBinaries, toVideoHashRangeCacheKey };
 export async function getNormalizedVideoHashRange(
   videoPath: string,
   startTimeMs?: number,
-  endTimeMs?: number
+  endTimeMs?: number,
+  headers?: Record<string, string>
 ): Promise<NormalizedVideoHashRange> {
   const binaries = await resolvePhashBinaries();
-  const durationMs = await probeVideoDurationMs(binaries.ffprobePath, videoPath);
+  const durationMs = await probeVideoDurationMs(binaries.ffprobePath, videoPath, headers);
   return normalizeVideoHashRange(durationMs, startTimeMs, endTimeMs);
 }
 
 export async function generateVideoPhashForNormalizedRange(
   videoPath: string,
   range: NormalizedVideoHashRange,
-  options?: { lowPriority?: boolean }
+  options?: { lowPriority?: boolean; headers?: Record<string, string> }
 ): Promise<string> {
   const binaries = await resolvePhashBinaries();
 
-  return computePhashInWorker(
-    binaries.ffmpegPath,
-    videoPath,
-    range,
-    options
-  );
+  return computePhashInWorker(binaries.ffmpegPath, videoPath, range, options);
 }
 
 export async function generateVideoPhash(
   path: string,
   startTime?: number,
   endTime?: number,
-  options?: { lowPriority?: boolean }
+  options?: { lowPriority?: boolean; headers?: Record<string, string> }
 ): Promise<string> {
-  const normalizedRange = await getNormalizedVideoHashRange(path, startTime, endTime);
+  const normalizedRange = await getNormalizedVideoHashRange(path, startTime, endTime, options?.headers);
   return generateVideoPhashForNormalizedRange(path, normalizedRange, options);
 }

@@ -21,6 +21,7 @@ describe("mediaRouter.resolvePlayableVideoUri", () => {
       cacheHit: false,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const caller = mediaRouter.createCaller({} as any);
     const result = await caller.resolvePlayableVideoUri({
       videoUri: "app://media/%2Ftmp%2Fsource.hevc",
@@ -36,9 +37,10 @@ describe("mediaRouter.resolvePlayableVideoUri", () => {
   it("maps service failures to BAD_REQUEST", async () => {
     vi.mocked(resolvePlayableVideoUri).mockRejectedValue(new Error("Transcode failed"));
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const caller = mediaRouter.createCaller({} as any);
     await expect(
-      caller.resolvePlayableVideoUri({ videoUri: "app://media/%2Ftmp%2Fsource.hevc" }),
+      caller.resolvePlayableVideoUri({ videoUri: "app://media/%2Ftmp%2Fsource.hevc" })
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Transcode failed",

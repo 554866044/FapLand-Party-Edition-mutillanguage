@@ -2,100 +2,176 @@ import { utilityProcess, type UtilityProcess } from "electron";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import type { NormalizedVideoHashRange } from "./phash/types";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type PhashTask = {
-    taskId: string;
-    payload: {
-        ffmpegPath: string;
-        videoPath: string;
-        range: any;
-        options?: { lowPriority?: boolean };
-    };
-    resolve: (phash: string) => void;
-    reject: (error: Error) => void;
+  taskId: string;
+  payload: {
+    ffmpegPath: string;
+    videoPath: string;
+    range: NormalizedVideoHashRange;
+    options?: { lowPriority?: boolean; headers?: Record<string, string> };
+  };
+  resolve: (phash: string) => void;
+  reject: (error: Error) => void;
 };
 
-let worker: UtilityProcess | null = null;
+let workerReadyPromise: Promise<UtilityProcess> | null = null;
 const pendingTasks = new Map<string, PhashTask>();
 let taskCounter = 0;
 
+const TASK_TIMEOUT_MS = 60_000 * 3; // 3 minutes
+
 function getWorkerPath(): string {
-    // Both dev and prod should have phashWorker.js in the same directory as main.js
-    return path.join(__dirname, "phashWorker.js");
+  return path.join(__dirname, "phashWorker.js");
 }
 
-function ensureWorker(): UtilityProcess {
-    if (worker) {
-        return worker;
+let currentWorker: UtilityProcess | null = null;
+
+function killWorker(): void {
+  if (currentWorker) {
+    try {
+      currentWorker.kill();
+    } catch {
+      // Best effort
     }
+    currentWorker = null;
+  }
+  workerReadyPromise = null;
+}
 
-    worker = utilityProcess.fork(getWorkerPath(), [], {
-        stdio: "inherit",
-        serviceName: "phash-worker"
+function ensureWorker(): Promise<UtilityProcess> {
+  if (workerReadyPromise) {
+    return workerReadyPromise;
+  }
+
+  workerReadyPromise = new Promise((resolve, reject) => {
+    const workerPath = getWorkerPath();
+    console.log(`[PhashWorkerClient] Spawning worker: ${workerPath}`);
+
+    const w = utilityProcess.fork(workerPath, [], {
+      stdio: "inherit",
+      serviceName: "phash-worker",
     });
+    currentWorker = w;
 
-    worker.on("message", (message: any) => {
-        if (!message || typeof message !== "object") return;
-        const { type, taskId, payload } = message;
+    const startTimeout = setTimeout(() => {
+      console.error(`[PhashWorkerClient] Worker failed to send ready message within timeout`);
+      workerReadyPromise = null;
+      currentWorker = null;
+      w.kill();
+      reject(new Error("Worker initialization timed out"));
+    }, 30000);
 
-        const task = pendingTasks.get(taskId);
-        if (!task) return;
+    w.on("message", (message: Record<string, unknown>) => {
+      console.log(`[PhashWorkerClient] DEBUG: Received message:`, JSON.stringify(message));
+      if (!message || typeof message !== "object") return;
 
-        if (type === "phash-result") {
-            pendingTasks.delete(taskId);
-            task.resolve(payload.phash);
-        } else if (type === "phash-error") {
-            pendingTasks.delete(taskId);
-            const error = new Error(payload.message);
-            error.stack = payload.stack;
-            task.reject(error);
+      const { type, taskId, payload } = message;
+      const msgPayload = payload as Record<string, unknown> | undefined;
+
+      if (type === "worker-log" && msgPayload) {
+        if (msgPayload.isError) {
+          console.error(msgPayload.message);
+        } else {
+          console.log(msgPayload.message);
         }
+        return;
+      }
+
+      if (type === "worker-ready") {
+        console.log(`[PhashWorkerClient] Worker reported ready`);
+        clearTimeout(startTimeout);
+        resolve(w);
+        return;
+      }
+
+      const task = pendingTasks.get(taskId as string);
+      if (!task) return;
+
+      if (type === "phash-result" && msgPayload) {
+        console.log(`[PhashWorkerClient] [${taskId}] Received result`);
+        pendingTasks.delete(taskId as string);
+        task.resolve(msgPayload.phash as string);
+      } else if (type === "phash-error" && msgPayload) {
+        console.error(`[PhashWorkerClient] [${taskId}] Received error: ${msgPayload.message}`);
+        pendingTasks.delete(taskId as string);
+        const error = new Error(msgPayload.message as string);
+        error.stack = msgPayload.stack as string | undefined;
+        task.reject(error);
+      }
     });
 
-    worker.on("exit", (code) => {
-        console.log(`Phash worker exited with code ${code}`);
-        worker = null;
-        // Reject all pending tasks if the worker crashes
-        for (const [taskId, task] of pendingTasks.entries()) {
-            task.reject(new Error(`Worker exited unexpectedly with code ${code}`));
-            pendingTasks.delete(taskId);
-        }
+    w.on("exit", (code) => {
+      console.log(`[PhashWorkerClient] Worker exited with code ${code}`);
+      clearTimeout(startTimeout);
+      workerReadyPromise = null;
+      currentWorker = null;
+
+      for (const [taskId, task] of pendingTasks.entries()) {
+        task.reject(new Error(`Worker exited unexpectedly with code ${code}`));
+        pendingTasks.delete(taskId);
+      }
+
+      reject(new Error(`Worker exited with code ${code}`));
     });
 
-    return worker;
+    w.on("error", (err) => {
+      console.error(`[PhashWorkerClient] Worker error:`, err);
+      reject(err);
+    });
+  });
+
+  return workerReadyPromise;
 }
 
 export async function computePhashInWorker(
-    ffmpegPath: string,
-    videoPath: string,
-    range: any,
-    options?: { lowPriority?: boolean }
+  ffmpegPath: string,
+  videoPath: string,
+  range: NormalizedVideoHashRange,
+  options?: { lowPriority?: boolean; headers?: Record<string, string> }
 ): Promise<string> {
-    const w = ensureWorker();
-    const taskId = `${Date.now()}-${taskCounter++}`;
+  const w = await ensureWorker();
+  const taskId = `${Date.now()}-${taskCounter++}`;
 
-    if (options?.lowPriority && w.pid) {
-        try {
-            os.setPriority(w.pid, os.constants.priority.PRIORITY_LOW);
-        } catch {
-            // Best effort
-        }
+  if (options?.lowPriority && w.pid) {
+    try {
+      os.setPriority(w.pid, os.constants.priority.PRIORITY_LOW);
+    } catch {
+      // Best effort
     }
+  }
 
-    return new Promise((resolve, reject) => {
-        pendingTasks.set(taskId, {
-            taskId,
-            payload: { ffmpegPath, videoPath, range, options },
-            resolve,
-            reject,
-        });
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      if (pendingTasks.has(taskId)) {
+        console.error(`[PhashWorkerClient] [${taskId}] Task timed out after ${TASK_TIMEOUT_MS}ms`);
+        pendingTasks.delete(taskId);
+        killWorker();
+        reject(new Error(`Phash computation timed out after ${TASK_TIMEOUT_MS}ms`));
+      }
+    }, TASK_TIMEOUT_MS);
 
-        w.postMessage({
-            type: "compute-phash",
-            taskId,
-            payload: { ffmpegPath, videoPath, range, options },
-        });
+    pendingTasks.set(taskId, {
+      taskId,
+      payload: { ffmpegPath, videoPath, range, options },
+      resolve: (phash) => {
+        clearTimeout(timeout);
+        resolve(phash);
+      },
+      reject: (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      },
     });
+
+    console.log(`[PhashWorkerClient] [${taskId}] Sending task to worker`);
+    w.postMessage({
+      type: "compute-phash",
+      taskId,
+      payload: { ffmpegPath, videoPath, range, options },
+    });
+  });
 }

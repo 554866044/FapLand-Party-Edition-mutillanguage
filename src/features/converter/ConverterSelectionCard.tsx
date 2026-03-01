@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SfwGuard } from "../../components/SfwGuard";
 import { usePlayableVideoFallback } from "../../hooks/usePlayableVideoFallback";
+import { useSfwMode } from "../../hooks/useSfwMode";
+import { abbreviateNsfwText } from "../../utils/sfwText";
 import { playHoverSound, playSelectSound } from "../../utils/audio";
 
 type ConverterSelectionCardProps = {
@@ -51,6 +53,11 @@ export const ConverterSelectionCard: React.FC<ConverterSelectionCardProps> = Rea
     previewEndTimeMs,
     onClick,
   }) => {
+    const sfwMode = useSfwMode();
+    const displayName = abbreviateNsfwText(name, sfwMode);
+    const displayAuthor = author ? abbreviateNsfwText(author, sfwMode) : author;
+    const displayDescription = description ? abbreviateNsfwText(description, sfwMode) : description;
+    const displayType = type ? abbreviateNsfwText(type, sfwMode) : type;
     const typeStyle = type ? (TYPE_STYLES[type] ?? TYPE_STYLES.Normal) : null;
     const [hasActivatedPreview, setHasActivatedPreview] = useState(false);
     const [isPreviewActive, setIsPreviewActive] = useState(false);
@@ -85,7 +92,7 @@ export const ConverterSelectionCard: React.FC<ConverterSelectionCardProps> = Rea
               <SfwGuard>
                 <img
                   src={previewImage}
-                  alt={`${name} preview`}
+                  alt={`${displayName} preview`}
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover/video:scale-[1.04] group-focus-within/video:scale-[1.04]"
                   loading="lazy"
                   decoding="async"
@@ -112,11 +119,11 @@ export const ConverterSelectionCard: React.FC<ConverterSelectionCardProps> = Rea
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-base font-bold text-violet-100 group-hover:text-violet-50">
-              {name}
+              {displayName}
             </h3>
-            {author && (
+            {displayAuthor && (
               <p className="mt-0.5 truncate text-xs text-zinc-400">
-                by {author}
+                by {displayAuthor}
               </p>
             )}
           </div>
@@ -124,13 +131,13 @@ export const ConverterSelectionCard: React.FC<ConverterSelectionCardProps> = Rea
             <span
               className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] ${typeStyle}`}
             >
-              {type}
+              {displayType}
             </span>
           )}
         </div>
 
-        {description && (
-          <p className="line-clamp-2 text-xs text-zinc-400">{description}</p>
+        {displayDescription && (
+          <p className="line-clamp-2 text-xs text-zinc-400">{displayDescription}</p>
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 text-[11px] font-[family-name:var(--font-jetbrains-mono)]">

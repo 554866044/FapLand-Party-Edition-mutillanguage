@@ -1,11 +1,12 @@
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import archiver from "archiver";
 import { app } from "electron";
 import { once } from "node:events";
 import yauzl from "yauzl";
+import { getStore } from "./store";
+import { FPACK_EXTRACTION_PATH_KEY } from "../../src/constants/fpackSettings";
 
 export function isFpackFile(filePath: string): boolean {
   return filePath.trim().toLowerCase().endsWith(".fpack");
@@ -101,10 +102,36 @@ export async function extractFpackToTemp(
   await extractFpack(fpackPath, tempDir);
 
   const cleanup = async () => {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => { });
   };
 
   return { dir: tempDir, cleanup };
+}
+
+export async function getFpackExtractionRoot(): Promise<string> {
+  const store = getStore();
+  const configuredPath = store.get(FPACK_EXTRACTION_PATH_KEY);
+
+  if (typeof configuredPath === "string" && configuredPath.trim().length > 0) {
+    return path.resolve(configuredPath.trim());
+  }
+
+  // Default to a persistent folder in userData
+  return path.join(app.getPath("userData"), "fpacks");
+}
+
+export async function extractFpackToPersistent(
+  fpackPath: string
+): Promise<{ dir: string }> {
+  const root = await getFpackExtractionRoot();
+  const destDir = path.join(
+    root,
+    `fpack-extract-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
+
+  await extractFpack(fpackPath, destDir);
+
+  return { dir: destDir };
 }
 
 export async function createFpackFromDirectory(dirPath: string, outputPath: string): Promise<void> {

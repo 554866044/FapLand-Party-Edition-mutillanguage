@@ -16,10 +16,7 @@ import {
 } from "../../utils/audio";
 import { buildDetectedSegments } from "./detection";
 import { applyAutoMetadataToSegments } from "./metadata";
-import {
-  CONVERTER_SHORTCUTS,
-  type ConverterShortcutContext,
-} from "./shortcuts";
+import { CONVERTER_SHORTCUTS, type ConverterShortcutContext } from "./shortcuts";
 import {
   clamp,
   CONVERTER_MIN_ROUND_KEY,
@@ -44,6 +41,7 @@ import {
   type SegmentType,
 } from "./types";
 import { usePlayableVideoFallback } from "../../hooks/usePlayableVideoFallback";
+import { UndoManager } from "../map-editor/UndoManager";
 
 type ConverterSearchParams = {
   sourceRoundId: string;
@@ -117,6 +115,21 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const [detectedSegments, setDetectedSegments] = useState<SegmentDraft[]>([]);
   const [funscriptActions, setFunscriptActions] = useState<FunscriptAction[]>([]);
 
+  const latestSegmentsRef = useRef<SegmentDraft[]>([]);
+
+  const [canUndoState, setCanUndoState] = useState(false);
+  const [canRedoState, setCanRedoState] = useState(false);
+  const undoManagerRef = useRef(
+    new UndoManager<SegmentDraft[]>([], {
+      isEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    })
+  );
+  const syncUndoState = useCallback(() => {
+    const manager = undoManagerRef.current;
+    setCanUndoState(manager.canUndo());
+    setCanRedoState(manager.canRedo());
+  }, []);
+
   const [zoomPxPerSec, setZoomPxPerSec] = useState(DEFAULT_ZOOM_PX_PER_SEC);
   const [pauseGapMs, setPauseGapMs] = useState(DEFAULT_PAUSE_GAP_MS);
   const [minRoundMs, setMinRoundMs] = useState(DEFAULT_MIN_ROUND_MS);
@@ -164,133 +177,145 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setHeroDescription("");
     setMessage(null);
     setError(null);
-  }, []);
+    undoManagerRef.current.reset([]);
+    syncUndoState();
+  }, [syncUndoState]);
 
-  const selectRoundAndEdit = useCallback(async (
-    roundId: string,
-    options?: { silent?: boolean }
-  ) => {
-    const rounds = await db.round.findInstalled(true);
-    const round = rounds.find((r) => r.id === roundId);
-    if (!round) {
-      setError("Round not found.");
-      return;
-    }
+  const selectRoundAndEdit = useCallback(
+    async (roundId: string, options?: { silent?: boolean }) => {
+      const rounds = await db.round.findInstalled(true);
+      const round = rounds.find((r) => r.id === roundId);
+      if (!round) {
+        setError("Round not found.");
+        return;
+      }
 
-    const resource =
-      round.resources.find((entry) => !entry.disabled && entry.videoUri.trim().length > 0) ??
-      round.resources.find((entry) => entry.videoUri.trim().length > 0);
-    if (!resource) {
-      setError("Round has no usable video resource.");
-      return;
-    }
+      const resource =
+        round.resources.find((entry) => !entry.disabled && entry.videoUri.trim().length > 0) ??
+        round.resources.find((entry) => entry.videoUri.trim().length > 0);
+      if (!resource) {
+        setError("Round has no usable video resource.");
+        return;
+      }
 
-    setSelectedSourceInfo({ kind: "round", id: roundId, name: round.name });
-    setSourceMode("installed");
-    setDeleteSourceRound(true);
-    setSelectedInstalledId(roundId);
-    setVideoUri(resource.videoUri);
-    setFunscriptUri(resource.funscriptUri ?? null);
-    setHeroName(round.hero?.name ?? round.name);
-    setHeroAuthor(round.hero?.author ?? round.author ?? "");
-    setHeroDescription(round.hero?.description ?? round.description ?? "");
+      setSelectedSourceInfo({ kind: "round", id: roundId, name: round.name });
+      setSourceMode("installed");
+      setDeleteSourceRound(true);
+      setSelectedInstalledId(roundId);
+      setVideoUri(resource.videoUri);
+      setFunscriptUri(resource.funscriptUri ?? null);
+      setHeroName(round.hero?.name ?? round.name);
+      setHeroAuthor(round.hero?.author ?? round.author ?? "");
+      setHeroDescription(round.hero?.description ?? round.description ?? "");
 
-    if (round.startTime != null && round.endTime != null) {
-      const draft: SegmentDraft = {
-        id: createSegmentId(),
-        startTimeMs: round.startTime,
-        endTimeMs: round.endTime,
-        type: round.type ?? "Normal",
-        customName: round.name,
-        bpm: round.bpm ?? null,
-        difficulty: round.difficulty ?? null,
-        bpmOverride: round.bpm != null,
-        difficultyOverride: round.difficulty != null,
-      };
-      setSegments([draft]);
-      setSelectedSegmentId(draft.id);
-    } else {
-      setSegments([]);
-      setSelectedSegmentId(null);
-    }
+      let resetSegments: SegmentDraft[] = [];
+      if (round.startTime != null && round.endTime != null) {
+        const draft: SegmentDraft = {
+          id: createSegmentId(),
+          startTimeMs: round.startTime,
+          endTimeMs: round.endTime,
+          type: round.type ?? "Normal",
+          customName: round.name,
+          bpm: round.bpm ?? null,
+          difficulty: round.difficulty ?? null,
+          bpmOverride: round.bpm != null,
+          difficultyOverride: round.difficulty != null,
+        };
+        resetSegments = [draft];
+        setSegments(resetSegments);
+        setSelectedSegmentId(draft.id);
+      } else {
+        setSegments([]);
+        setSelectedSegmentId(null);
+      }
 
-    setDetectedSegments([]);
-    setMarkInMs(null);
-    setMarkOutMs(null);
-    setCurrentTimeMs(0);
-    setDurationMs(0);
-    setMessage(null);
-    setError(null);
-    if (!options?.silent) {
+      setDetectedSegments([]);
+      setMarkInMs(null);
+      setMarkOutMs(null);
+      setCurrentTimeMs(0);
+      setDurationMs(0);
+      setMessage(null);
+      setError(null);
+      undoManagerRef.current.reset(resetSegments);
+      syncUndoState();
+      if (!options?.silent) {
+        playSelectSound();
+      }
+      setStep("edit");
+    },
+    [syncUndoState]
+  );
+
+  const selectHeroAndEdit = useCallback(
+    async (heroId: string) => {
+      const heroes = await db.hero.findMany();
+      const hero = heroes.find((h) => h.id === heroId);
+      if (!hero) {
+        setError("Hero not found.");
+        return;
+      }
+
+      const rounds = await db.round.findInstalled(true);
+      const heroRounds = rounds.filter((r) => r.heroId === heroId && r.resources.length > 0);
+
+      if (heroRounds.length === 0) {
+        setError("Hero has no rounds with usable resources.");
+        return;
+      }
+
+      const firstRound = heroRounds[0];
+      const resource =
+        firstRound?.resources.find(
+          (entry) => !entry.disabled && entry.videoUri.trim().length > 0
+        ) ?? firstRound?.resources.find((entry) => entry.videoUri.trim().length > 0);
+      if (!resource || !firstRound) {
+        setError("Hero rounds have no usable video resource.");
+        return;
+      }
+
+      setSelectedSourceInfo({ kind: "hero", id: heroId, name: hero.name });
+      setSourceMode("installed");
+      setDeleteSourceRound(true);
+      setSelectedInstalledId(firstRound.id);
+      setVideoUri(resource.videoUri);
+      setFunscriptUri(resource.funscriptUri ?? null);
+      setHeroName(hero.name);
+      setHeroAuthor(hero.author ?? "");
+      setHeroDescription(hero.description ?? "");
+
+      const segmentDrafts: SegmentDraft[] = heroRounds
+        .filter((round) => round.startTime != null && round.endTime != null)
+        .map((round) => ({
+          id: createSegmentId(),
+          startTimeMs: round.startTime!,
+          endTimeMs: round.endTime!,
+          type: round.type ?? "Normal",
+          customName: round.name,
+          bpm: round.bpm ?? null,
+          difficulty: round.difficulty ?? null,
+          bpmOverride: round.bpm != null,
+          difficultyOverride: round.difficulty != null,
+        }));
+      const sortedSegmentDrafts = sortSegments(segmentDrafts);
+      pendingInstalledSegmentsRef.current = sortedSegmentDrafts;
+      pendingInstalledLoadMessageRef.current = `Loaded hero "${hero.name}" from installed rounds.`;
+      setSegments(sortedSegmentDrafts);
+      setSelectedSegmentId(sortedSegmentDrafts[0]?.id ?? null);
+
+      setDetectedSegments([]);
+      setMarkInMs(null);
+      setMarkOutMs(null);
+      setCurrentTimeMs(0);
+      setDurationMs(0);
+      setMessage(null);
+      setError(null);
+      undoManagerRef.current.reset(sortedSegmentDrafts);
+      syncUndoState();
       playSelectSound();
-    }
-    setStep("edit");
-  }, []);
-
-  const selectHeroAndEdit = useCallback(async (heroId: string) => {
-    const heroes = await db.hero.findMany();
-    const hero = heroes.find((h) => h.id === heroId);
-    if (!hero) {
-      setError("Hero not found.");
-      return;
-    }
-
-    const rounds = await db.round.findInstalled(true);
-    const heroRounds = rounds.filter((r) => r.heroId === heroId && r.resources.length > 0);
-
-    if (heroRounds.length === 0) {
-      setError("Hero has no rounds with usable resources.");
-      return;
-    }
-
-    const firstRound = heroRounds[0];
-    const resource =
-      firstRound?.resources.find((entry) => !entry.disabled && entry.videoUri.trim().length > 0) ??
-      firstRound?.resources.find((entry) => entry.videoUri.trim().length > 0);
-    if (!resource || !firstRound) {
-      setError("Hero rounds have no usable video resource.");
-      return;
-    }
-
-    setSelectedSourceInfo({ kind: "hero", id: heroId, name: hero.name });
-    setSourceMode("installed");
-    setDeleteSourceRound(true);
-    setSelectedInstalledId(firstRound.id);
-    setVideoUri(resource.videoUri);
-    setFunscriptUri(resource.funscriptUri ?? null);
-    setHeroName(hero.name);
-    setHeroAuthor(hero.author ?? "");
-    setHeroDescription(hero.description ?? "");
-
-    const segmentDrafts: SegmentDraft[] = heroRounds
-      .filter((round) => round.startTime != null && round.endTime != null)
-      .map((round) => ({
-        id: createSegmentId(),
-        startTimeMs: round.startTime!,
-        endTimeMs: round.endTime!,
-        type: round.type ?? "Normal",
-        customName: round.name,
-        bpm: round.bpm ?? null,
-        difficulty: round.difficulty ?? null,
-        bpmOverride: round.bpm != null,
-        difficultyOverride: round.difficulty != null,
-      }));
-    const sortedSegmentDrafts = sortSegments(segmentDrafts);
-    pendingInstalledSegmentsRef.current = sortedSegmentDrafts;
-    pendingInstalledLoadMessageRef.current = `Loaded hero "${hero.name}" from installed rounds.`;
-    setSegments(sortedSegmentDrafts);
-    setSelectedSegmentId(sortedSegmentDrafts[0]?.id ?? null);
-
-    setDetectedSegments([]);
-    setMarkInMs(null);
-    setMarkOutMs(null);
-    setCurrentTimeMs(0);
-    setDurationMs(0);
-    setMessage(null);
-    setError(null);
-    playSelectSound();
-    setStep("edit");
-  }, []);
+      setStep("edit");
+    },
+    [syncUndoState]
+  );
 
   const selectLocalAndEdit = useCallback(async () => {
     const path = await window.electronAPI.dialog.selectConverterVideoFile();
@@ -319,9 +344,11 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setDurationMs(0);
     setMessage("Local video loaded. Add funscript for auto-detection.");
     setError(null);
+    undoManagerRef.current.reset([]);
+    syncUndoState();
     playSelectSound();
     setStep("edit");
-  }, []);
+  }, [syncUndoState]);
 
   const attachLocalFunscript = useCallback(async () => {
     const path = await window.electronAPI.dialog.selectConverterFunscriptFile();
@@ -473,6 +500,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   }, [cachingUrl]);
 
   const sortedSegments = useMemo(() => sortSegments(segments), [segments]);
+
+  useEffect(() => {
+    latestSegmentsRef.current = sortedSegments;
+  }, [sortedSegments]);
   const selectedSegment = useMemo(
     () => sortedSegments.find((segment) => segment.id === selectedSegmentId) ?? null,
     [sortedSegments, selectedSegmentId]
@@ -697,7 +728,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       if (!drag || durationMs <= 0) return;
 
       const scrollLeft = timelineScrollRef.current?.scrollLeft ?? drag.initialScrollLeft;
-      const deltaPx = (drag.currentPointerX - drag.pointerX) + (scrollLeft - drag.initialScrollLeft);
+      const deltaPx = drag.currentPointerX - drag.pointerX + (scrollLeft - drag.initialScrollLeft);
       const deltaMs = Math.round((deltaPx / zoomPxPerSec) * 1000);
 
       setSegments((previous) => {
@@ -753,7 +784,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       }
 
       if (scrollDelta !== 0) {
-        const maxScrollLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth);
+        const maxScrollLeft = Math.max(
+          0,
+          scrollContainer.scrollWidth - scrollContainer.clientWidth
+        );
         const nextScrollLeft = clamp(scrollContainer.scrollLeft + scrollDelta, 0, maxScrollLeft);
         if (nextScrollLeft !== scrollContainer.scrollLeft) {
           scrollContainer.scrollLeft = nextScrollLeft;
@@ -780,6 +814,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
 
     const onPointerUp = () => {
       stopAutoScroll();
+      if (dragStateRef.current) {
+        undoManagerRef.current.push(latestSegmentsRef.current);
+        syncUndoState();
+      }
       dragStateRef.current = null;
     };
 
@@ -882,7 +920,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   /* ─── Segment CRUD ─────────────────────────────────────────────── */
 
   const applySegments = useCallback(
-    (nextSegments: SegmentDraft[]) => {
+    (nextSegments: SegmentDraft[], pushUndo = true) => {
       if (durationMs <= 0) {
         setError("Load a source video before editing segments.");
         playConverterValidationErrorSound();
@@ -897,10 +935,15 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       }
 
       setError(null);
-      setSegments(sortSegments(withAutoMetadata(nextSegments)));
+      const sorted = sortSegments(withAutoMetadata(nextSegments));
+      if (pushUndo) {
+        undoManagerRef.current.push(sorted);
+        syncUndoState();
+      }
+      setSegments(sorted);
       return true;
     },
-    [durationMs, withAutoMetadata]
+    [durationMs, syncUndoState, withAutoMetadata]
   );
 
   const addSegmentFromMarks = useCallback(() => {
@@ -940,73 +983,110 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const removeSegment = useCallback(
     (segmentId: string) => {
       const next = segments.filter((segment) => segment.id !== segmentId);
-      setSegments(sortSegments(withAutoMetadata(next)));
+      const sorted = sortSegments(withAutoMetadata(next));
+      undoManagerRef.current.push(sorted);
+      syncUndoState();
+      setSegments(sorted);
       if (selectedSegmentId === segmentId) {
         setSelectedSegmentId(next[0]?.id ?? null);
       }
       playConverterSegmentDeleteSound();
     },
-    [segments, selectedSegmentId, withAutoMetadata]
+    [segments, selectedSegmentId, syncUndoState, withAutoMetadata]
   );
 
-  const setSegmentType = useCallback((segmentId: string, type: SegmentType) => {
-    setSegments((previous) =>
-      previous.map((segment) => (segment.id === segmentId ? { ...segment, type } : segment))
-    );
-  }, []);
+  const setSegmentType = useCallback(
+    (segmentId: string, type: SegmentType) => {
+      setSegments((previous) => {
+        const next = previous.map((segment) =>
+          segment.id === segmentId ? { ...segment, type } : segment
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
+    },
+    [syncUndoState]
+  );
 
-  const setSegmentCustomName = useCallback((segmentId: string, customName: string) => {
-    setSegments((previous) =>
-      previous.map((segment) => (segment.id === segmentId ? { ...segment, customName } : segment))
-    );
-  }, []);
+  const setSegmentCustomName = useCallback(
+    (segmentId: string, customName: string) => {
+      setSegments((previous) => {
+        const next = previous.map((segment) =>
+          segment.id === segmentId ? { ...segment, customName } : segment
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
+    },
+    [syncUndoState]
+  );
 
-  const setSegmentBpm = useCallback((segmentId: string, rawValue: string) => {
-    const bpm = normalizeOptionalNumberInput(rawValue, 1, 400, true);
-    setSegments((previous) =>
-      previous.map((segment) =>
-        segment.id === segmentId ? { ...segment, bpm, bpmOverride: true } : segment
-      )
-    );
-  }, []);
+  const setSegmentBpm = useCallback(
+    (segmentId: string, rawValue: string) => {
+      const bpm = normalizeOptionalNumberInput(rawValue, 1, 400, true);
+      setSegments((previous) => {
+        const next = previous.map((segment) =>
+          segment.id === segmentId ? { ...segment, bpm, bpmOverride: true } : segment
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
+    },
+    [syncUndoState]
+  );
 
   const resetSegmentBpm = useCallback(
     (segmentId: string) => {
-      setSegments((previous) =>
-        sortSegments(
+      setSegments((previous) => {
+        const next = sortSegments(
           withAutoMetadata(
             previous.map((segment) =>
               segment.id === segmentId ? { ...segment, bpmOverride: false } : segment
             )
           )
-        )
-      );
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
     },
-    [withAutoMetadata]
+    [syncUndoState, withAutoMetadata]
   );
 
-  const setSegmentDifficulty = useCallback((segmentId: string, rawValue: string) => {
-    const difficulty = normalizeOptionalNumberInput(rawValue, 1, 5, true);
-    setSegments((previous) =>
-      previous.map((segment) =>
-        segment.id === segmentId ? { ...segment, difficulty, difficultyOverride: true } : segment
-      )
-    );
-  }, []);
+  const setSegmentDifficulty = useCallback(
+    (segmentId: string, rawValue: string) => {
+      const difficulty = normalizeOptionalNumberInput(rawValue, 1, 5, true);
+      setSegments((previous) => {
+        const next = previous.map((segment) =>
+          segment.id === segmentId ? { ...segment, difficulty, difficultyOverride: true } : segment
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
+    },
+    [syncUndoState]
+  );
 
   const resetSegmentDifficulty = useCallback(
     (segmentId: string) => {
-      setSegments((previous) =>
-        sortSegments(
+      setSegments((previous) => {
+        const next = sortSegments(
           withAutoMetadata(
             previous.map((segment) =>
               segment.id === segmentId ? { ...segment, difficultyOverride: false } : segment
             )
           )
-        )
-      );
+        );
+        undoManagerRef.current.push(next);
+        syncUndoState();
+        return next;
+      });
     },
-    [withAutoMetadata]
+    [syncUndoState, withAutoMetadata]
   );
 
   const updateSegmentTiming = useCallback(
@@ -1159,6 +1239,32 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setError(null);
     return true;
   }, [selectedSegmentId]);
+
+  const handleUndo = useCallback(() => {
+    const nextState = undoManagerRef.current.undo();
+    if (!nextState) {
+      playConverterValidationErrorSound();
+      return;
+    }
+    setSegments(nextState);
+    syncUndoState();
+    setMessage("Undo.");
+    setError(null);
+    playSelectSound();
+  }, [syncUndoState]);
+
+  const handleRedo = useCallback(() => {
+    const nextState = undoManagerRef.current.redo();
+    if (!nextState) {
+      playConverterValidationErrorSound();
+      return;
+    }
+    setSegments(nextState);
+    syncUndoState();
+    setMessage("Redo.");
+    setError(null);
+    playSelectSound();
+  }, [syncUndoState]);
 
   const toggleHotkeys = useCallback(() => {
     setShowHotkeys((previous) => {
@@ -1642,12 +1748,16 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       runAutoDetect,
       applyDetectedSuggestions,
       saveConvertedRounds,
+      undo: handleUndo,
+      redo: handleRedo,
     }),
     [
       addSegmentFromMarks,
       applyDetectedSuggestions,
       clearTransientEditorState,
       currentTimeMs,
+      handleUndo,
+      handleRedo,
       jumpToRandomPoint,
       mergeSegmentWithNext,
       moveSelectedSegmentEndToPlayhead,
@@ -1818,5 +1928,11 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     toggleHotkeys,
     showHotkeysOverlay,
     hideHotkeysOverlay,
+
+    // Undo/Redo
+    canUndo: canUndoState,
+    canRedo: canRedoState,
+    undo: handleUndo,
+    redo: handleRedo,
   };
 }

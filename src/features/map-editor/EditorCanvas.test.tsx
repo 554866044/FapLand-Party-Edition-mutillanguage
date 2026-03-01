@@ -43,6 +43,7 @@ const baseConfig: EditorGraphConfig = {
     maxAntiPerkProbability: 0.75,
   },
   economy: { scorePerCumRoundSuccess: 420 },
+  dice: { min: 1, max: 6 },
 };
 
 const selection: EditorSelectionState = {
@@ -81,10 +82,12 @@ describe("EditorCanvas", () => {
         onDeleteEdgeBetween={vi.fn()}
         onDeleteSelection={vi.fn()}
         onPlaceNodeAtWorld={vi.fn()}
-      />,
+      />
     );
 
-    const edgeLine = container.querySelector<SVGLineElement>('[data-edge-id="edge-1"] .editor-edge-line');
+    const edgeLine = container.querySelector<SVGLineElement>(
+      '[data-edge-id="edge-1"] .editor-edge-line'
+    );
     expect(edgeLine).not.toBeNull();
     expect(edgeLine?.getAttribute("x1")).toBe("300");
     expect(edgeLine?.getAttribute("y1")).toBe("140");
@@ -96,11 +99,9 @@ describe("EditorCanvas", () => {
   it("applies custom node color overrides", () => {
     const config: EditorGraphConfig = {
       ...baseConfig,
-      nodes: baseConfig.nodes.map((node) => (
-        node.id === "start"
-          ? { ...node, styleHint: { ...node.styleHint, color: "#10b981" } }
-          : node
-      )),
+      nodes: baseConfig.nodes.map((node) =>
+        node.id === "start" ? { ...node, styleHint: { ...node.styleHint, color: "#10b981" } } : node
+      ),
     };
 
     const { container } = render(
@@ -121,11 +122,15 @@ describe("EditorCanvas", () => {
         onDeleteEdgeBetween={vi.fn()}
         onDeleteSelection={vi.fn()}
         onPlaceNodeAtWorld={vi.fn()}
-      />,
+      />
     );
 
-    const borderRect = container.querySelector<SVGRectElement>('[data-node-id="start"] .editor-node-border');
-    const secondaryLabel = container.querySelectorAll<SVGTextElement>('[data-node-id="start"] text')[1];
+    const borderRect = container.querySelector<SVGRectElement>(
+      '[data-node-id="start"] .editor-node-border'
+    );
+    const secondaryLabel = container.querySelectorAll<SVGTextElement>(
+      '[data-node-id="start"] text'
+    )[1];
     expect(borderRect?.getAttribute("stroke")).toBe("#10b981");
     expect(secondaryLabel?.getAttribute("fill")).toBe("#10b981");
   });
@@ -163,11 +168,15 @@ describe("EditorCanvas", () => {
         onDeleteEdgeBetween={vi.fn()}
         onDeleteSelection={vi.fn()}
         onPlaceNodeAtWorld={vi.fn()}
-      />,
+      />
     );
 
-    const borderRect = container.querySelector<SVGRectElement>('[data-node-id="start"] .editor-node-border');
-    const edgeLine = container.querySelector<SVGLineElement>('[data-edge-id="edge-1"] .editor-edge-line');
+    const borderRect = container.querySelector<SVGRectElement>(
+      '[data-node-id="start"] .editor-node-border'
+    );
+    const edgeLine = container.querySelector<SVGLineElement>(
+      '[data-edge-id="edge-1"] .editor-edge-line'
+    );
 
     expect(borderRect?.getAttribute("width")).toBe("300");
     expect(borderRect?.getAttribute("height")).toBe("120");

@@ -1,78 +1,87 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  globalMusic: {
-    enabled: true,
-    queue: [
-      { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
-      { id: "track-2", filePath: "/music/two.mp3", name: "two.mp3" },
-    ],
-    currentIndex: 0,
-    currentTrack: { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
-    isPlaying: false,
-    isSuppressedByVideo: false,
-    volume: 0.45,
-    shuffle: false,
-    loopMode: "queue" as const,
-    setEnabled: vi.fn(async () => {}),
-    addTracks: vi.fn(async () => {}),
-    removeTrack: vi.fn(async () => {}),
-    moveTrack: vi.fn(async () => {}),
-    clearQueue: vi.fn(async () => {}),
-    play: vi.fn(async () => {}),
-    pause: vi.fn(),
-    next: vi.fn(async () => {}),
-    previous: vi.fn(async () => {}),
-    setCurrentTrack: vi.fn(async () => {}),
-    setVolume: vi.fn(async () => {}),
-    setShuffle: vi.fn(async () => {}),
-    setLoopMode: vi.fn(async () => {}),
-  },
-  handy: {
-    connectionKey: "",
-    appApiKey: "default-app-key",
-    appApiKeyOverride: "",
-    isUsingDefaultAppApiKey: true,
-    localIp: "",
-    connected: false,
-    manuallyStopped: false,
-    synced: false,
-    syncError: null,
-    isConnecting: false,
-    error: null,
-    connect: vi.fn(async () => {}),
-    disconnect: vi.fn(async () => {}),
-    forceStop: vi.fn(async () => {}),
-    toggleManualStop: vi.fn(async () => "unavailable" as const),
-    setSyncStatus: vi.fn(),
-  },
-  appUpdate: {
-    state: {
-      status: "up_to_date" as const,
-      currentVersion: "0.1.2",
-      latestVersion: "0.1.2",
-      checkedAtIso: "2026-03-20T00:00:00.000Z",
-      releasePageUrl: "https://example.com/release",
-      downloadUrl: null,
-      releaseNotes: null,
-      publishedAtIso: null,
-      canAutoUpdate: false,
-      errorMessage: null,
+const mocks = vi.hoisted(() => {
+  const search = { section: undefined as string | undefined };
+
+  return {
+    search,
+    navigate: vi.fn((options?: { search?: { section?: string } }) => {
+      if (options?.search) {
+        Object.assign(search, options.search);
+      }
+    }),
+    globalMusic: {
+      enabled: true,
+      queue: [
+        { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
+        { id: "track-2", filePath: "/music/two.mp3", name: "two.mp3" },
+      ],
+      currentIndex: 0,
+      currentTrack: { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
+      isPlaying: false,
+      isSuppressedByVideo: false,
+      volume: 0.45,
+      shuffle: false,
+      loopMode: "queue" as const,
+      setEnabled: vi.fn(async () => {}),
+      addTracks: vi.fn(async () => {}),
+      removeTrack: vi.fn(async () => {}),
+      moveTrack: vi.fn(async () => {}),
+      clearQueue: vi.fn(async () => {}),
+      play: vi.fn(async () => {}),
+      pause: vi.fn(),
+      next: vi.fn(async () => {}),
+      previous: vi.fn(async () => {}),
+      setCurrentTrack: vi.fn(async () => {}),
+      setVolume: vi.fn(async () => {}),
+      setShuffle: vi.fn(async () => {}),
+      setLoopMode: vi.fn(async () => {}),
     },
-    isBusy: false,
-    actionLabel: "Check Again",
-    menuBadge: undefined,
-    menuTone: "success" as const,
-    systemMessage: "Installed build is current.",
-    triggerPrimaryAction: vi.fn(async () => {}),
-  },
-}));
+    handy: {
+      connectionKey: "",
+      appApiKey: "default-app-key",
+      appApiKeyOverride: "",
+      isUsingDefaultAppApiKey: true,
+      localIp: "",
+      connected: false,
+      manuallyStopped: false,
+      synced: false,
+      syncError: null,
+      isConnecting: false,
+      error: null,
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      forceStop: vi.fn(async () => {}),
+      toggleManualStop: vi.fn(async () => "unavailable" as const),
+      setSyncStatus: vi.fn(),
+    },
+    appUpdate: {
+      state: {
+        status: "up_to_date" as const,
+        currentVersion: "0.1.2",
+        latestVersion: "0.1.2",
+        checkedAtIso: "2026-03-20T00:00:00.000Z",
+        releasePageUrl: "https://example.com/release",
+        downloadUrl: null,
+        releaseNotes: null,
+        publishedAtIso: null,
+        canAutoUpdate: false,
+        errorMessage: null,
+      },
+      isBusy: false,
+      actionLabel: "Check Again",
+      menuBadge: undefined,
+      menuTone: "success" as const,
+      systemMessage: "Installed build is current.",
+      triggerPrimaryAction: vi.fn(async () => {}),
+    },
+  };
+});
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => () => ({
-    useSearch: () => ({ section: undefined }),
+    useSearch: () => mocks.search,
   }),
   useNavigate: () => mocks.navigate,
 }));
@@ -167,6 +176,8 @@ import { getVisibleShortcutGroups, SettingsPage } from "./settings";
 
 describe("Settings music section", () => {
   beforeEach(() => {
+    mocks.search.section = undefined;
+    mocks.navigate.mockClear();
     mocks.globalMusic.addTracks.mockClear();
     mocks.globalMusic.moveTrack.mockClear();
     mocks.globalMusic.removeTrack.mockClear();
@@ -213,7 +224,7 @@ describe("Settings music section", () => {
   it("adds tracks through the music picker and forwards queue actions", async () => {
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Music/ })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: /Audio/ })[0]!);
     fireEvent.click(screen.getByText("Add Tracks"));
 
     await waitFor(() => {
@@ -235,10 +246,28 @@ describe("Settings music section", () => {
     });
   });
 
-  it("shows the updated multiplayer safeguards warning in experimental settings", async () => {
+  it("keeps the selected settings section when sidebar navigation follows a command palette deep link", async () => {
+    mocks.search.section = "general";
+
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: /Audio/ })[0]!);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Add Tracks")).not.toBeNull();
+    });
+
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings",
+      search: { section: "audio" },
+      replace: true,
+    });
+  });
+
+  it("shows the updated multiplayer safeguards warning in gameplay settings", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Gameplay/ })[0]!);
 
     await waitFor(() => {
       expect(screen.getByText("Skip Multiplayer Safeguards")).toBeDefined();
@@ -302,7 +331,7 @@ describe("Settings music section", () => {
   it("only persists settings volume when slider interaction completes", async () => {
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Music/ })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: /Audio/ })[0]!);
 
     const volume = screen.getByLabelText("Music volume");
     fireEvent.change(volume, { target: { value: "72" } });

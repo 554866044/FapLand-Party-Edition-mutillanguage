@@ -78,6 +78,7 @@ describe("playlistSchema", () => {
     );
 
     expect(parsed.playlistVersion).toBe(CURRENT_PLAYLIST_VERSION);
+    expect(parsed.saveMode).toBe("none");
     expect(parsed.boardConfig.mode).toBe("linear");
   });
 
@@ -455,5 +456,46 @@ describe("playlistSchema", () => {
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
     expect(config.board.find((field) => field.id === "round-1")?.skippable).toBe(true);
+  });
+
+  it("parses and defaults dice configuration", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "linear",
+        totalIndices: 10,
+        safePointIndices: [],
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [],
+        cumRoundRefs: [],
+      }),
+    );
+
+    expect(parsed.dice).toEqual({ min: 1, max: 6 });
+
+    const withDice = ZPlaylistConfig.parse({
+      ...buildConfig({
+        mode: "linear",
+        totalIndices: 10,
+        safePointIndices: [],
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [],
+        cumRoundRefs: [],
+      }),
+      dice: { min: 2, max: 12 },
+    });
+    expect(withDice.dice).toEqual({ min: 2, max: 12 });
+
+    const invalidDice = ZPlaylistConfig.safeParse({
+      ...buildConfig({
+        mode: "linear",
+        totalIndices: 10,
+        safePointIndices: [],
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [],
+        cumRoundRefs: [],
+      }),
+      dice: { min: 10, max: 5 },
+    });
+    expect(invalidDice.success).toBe(false);
   });
 });

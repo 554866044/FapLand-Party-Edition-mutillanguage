@@ -9,7 +9,9 @@ import {
 } from "./playlistResolution";
 import { type PlaylistConfig } from "./playlistSchema";
 
-function makeRound(input: Partial<PlaylistResolutionRoundLike> & Pick<PlaylistResolutionRoundLike, "id" | "name">): PlaylistResolutionRoundLike {
+function makeRound(
+  input: Partial<PlaylistResolutionRoundLike> & Pick<PlaylistResolutionRoundLike, "id" | "name">
+): PlaylistResolutionRoundLike {
   return {
     id: input.id,
     name: input.name,
@@ -37,9 +39,7 @@ function makeLinearConfig(): PlaylistConfig {
         { name: "Exact Match", author: "Alice", type: "Normal", phash: "match-1" },
         { name: "Close Match Deluxe", author: "Bob", type: "Normal" },
       ],
-      cumRoundRefs: [
-        { name: "Missing Cum", author: "Nobody", type: "Cum" },
-      ],
+      cumRoundRefs: [{ name: "Missing Cum", author: "Nobody", type: "Cum" }],
     },
     perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
     perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
@@ -60,6 +60,8 @@ function makeLinearConfig(): PlaylistConfig {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
+    dice: { min: 1, max: 6 },
   };
 }
 
@@ -92,9 +94,7 @@ function makeGraphConfig(): PlaylistConfig {
           ],
         },
       ],
-      cumRoundRefs: [
-        { name: "Graph Cum", author: "GC", type: "Cum" },
-      ],
+      cumRoundRefs: [{ name: "Graph Cum", author: "GC", type: "Cum" }],
       pathChoiceTimeoutMs: 6000,
     },
     perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
@@ -116,6 +116,8 @@ function makeGraphConfig(): PlaylistConfig {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
+    dice: { min: 1, max: 6 },
   };
 }
 
@@ -175,7 +177,9 @@ describe("playlistResolution", () => {
 
   it("respects difficulty hints when ranking suggestions", () => {
     const config = makeLinearConfig();
-    config.boardConfig.normalRoundOrder[1] = { name: "Difficulty Target", type: "Normal" };
+    if (config.boardConfig.mode === "linear") {
+      config.boardConfig.normalRoundOrder[1] = { name: "Difficulty Target", type: "Normal" };
+    }
 
     const installedRounds = [
       makeRound({ id: "easy", name: "Difficulty Target Easy", difficulty: 1 }),
@@ -201,11 +205,15 @@ describe("playlistResolution", () => {
       makeRound({ id: "graph-cum", name: "Resolved Graph Cum", author: "GC", type: "Cum" }),
     ];
 
-    const linearResolved = applyPlaylistResolutionMapping(makeLinearConfig(), {
-      "linear.normalRoundOrder.0": "linear-1",
-      "linear.normalRoundRefsByIndex.2": "linear-2",
-      "linear.cumRoundRefs.0": "linear-cum",
-    }, installedRounds);
+    const linearResolved = applyPlaylistResolutionMapping(
+      makeLinearConfig(),
+      {
+        "linear.normalRoundOrder.0": "linear-1",
+        "linear.normalRoundRefsByIndex.2": "linear-2",
+        "linear.cumRoundRefs.0": "linear-cum",
+      },
+      installedRounds
+    );
 
     expect(linearResolved.boardConfig.mode).toBe("linear");
     if (linearResolved.boardConfig.mode !== "linear") {
@@ -215,18 +223,24 @@ describe("playlistResolution", () => {
     expect(linearResolved.boardConfig.normalRoundRefsByIndex["2"]?.idHint).toBe("linear-2");
     expect(linearResolved.boardConfig.cumRoundRefs[0]?.idHint).toBe("linear-cum");
 
-    const graphResolved = applyPlaylistResolutionMapping(makeGraphConfig(), {
-      "graph.node.node-round": "graph-node",
-      "graph.randomPool.pool-1.0": "graph-pool",
-      "graph.cumRoundRefs.0": "graph-cum",
-    }, installedRounds);
+    const graphResolved = applyPlaylistResolutionMapping(
+      makeGraphConfig(),
+      {
+        "graph.node.node-round": "graph-node",
+        "graph.randomPool.pool-1.0": "graph-pool",
+        "graph.cumRoundRefs.0": "graph-cum",
+      },
+      installedRounds
+    );
 
     expect(graphResolved.boardConfig.mode).toBe("graph");
     if (graphResolved.boardConfig.mode !== "graph") {
       throw new Error("Expected graph config");
     }
     expect(graphResolved.boardConfig.nodes[1]?.roundRef?.idHint).toBe("graph-node");
-    expect(graphResolved.boardConfig.randomRoundPools[0]?.candidates[0]?.roundRef.idHint).toBe("graph-pool");
+    expect(graphResolved.boardConfig.randomRoundPools[0]?.candidates[0]?.roundRef.idHint).toBe(
+      "graph-pool"
+    );
     expect(graphResolved.boardConfig.cumRoundRefs[0]?.idHint).toBe("graph-cum");
   });
 
@@ -238,9 +252,15 @@ describe("playlistResolution", () => {
     ];
     const resolver = createPortableRoundRefResolver(installedRounds);
 
-    expect(resolver.resolve({ name: "Ignored", author: "Nope", type: "Normal", phash: "match-1" })?.id).toBe("phash");
-    expect(resolver.resolve({ name: "Target", author: "Dex", type: "Normal" })?.id).toBe("metadata");
-    expect(resolver.resolve({ idHint: "id-only", name: "Unknown", type: "Normal" })?.id).toBe("id-only");
+    expect(
+      resolver.resolve({ name: "Ignored", author: "Nope", type: "Normal", phash: "match-1" })?.id
+    ).toBe("phash");
+    expect(resolver.resolve({ name: "Target", author: "Dex", type: "Normal" })?.id).toBe(
+      "metadata"
+    );
+    expect(resolver.resolve({ idHint: "id-only", name: "Unknown", type: "Normal" })?.id).toBe(
+      "id-only"
+    );
   });
 
   it("keeps exact resolution behavior aligned with playlist runtime", () => {
@@ -252,12 +272,17 @@ describe("playlistResolution", () => {
       resources: [{ phash: null }],
     });
 
-    expect(resolvePortableRoundRefExact({
-      name: "Match Me",
-      author: "Author",
-      type: "Normal",
-      phash: "hash-1",
-    }, [round])?.id).toBe("round-1");
+    expect(
+      resolvePortableRoundRefExact(
+        {
+          name: "Match Me",
+          author: "Author",
+          type: "Normal",
+          phash: "hash-1",
+        },
+        [round]
+      )?.id
+    ).toBe("round-1");
   });
 
   it("resolves by similar phash when distance is within threshold", () => {
@@ -269,12 +294,17 @@ describe("playlistResolution", () => {
       resources: [{ phash: null }],
     });
 
-    expect(resolvePortableRoundRefExact({
-      name: "Different Name",
-      author: "Different Author",
-      type: "Normal",
-      phash: "0",
-    }, [round])?.id).toBe("round-similar");
+    expect(
+      resolvePortableRoundRefExact(
+        {
+          name: "Different Name",
+          author: "Different Author",
+          type: "Normal",
+          phash: "0",
+        },
+        [round]
+      )?.id
+    ).toBe("round-similar");
   });
 
   it("does not resolve by phash when similarity threshold is exceeded", () => {
@@ -286,12 +316,17 @@ describe("playlistResolution", () => {
       resources: [{ phash: null }],
     });
 
-    expect(resolvePortableRoundRefExact({
-      name: "Different Name",
-      author: "Different Author",
-      type: "Normal",
-      phash: "0",
-    }, [round])).toBeNull();
+    expect(
+      resolvePortableRoundRefExact(
+        {
+          name: "Different Name",
+          author: "Different Author",
+          type: "Normal",
+          phash: "0",
+        },
+        [round]
+      )
+    ).toBeNull();
   });
 
   it("keeps sha fallback hashes exact-only", () => {
@@ -303,18 +338,28 @@ describe("playlistResolution", () => {
       resources: [{ phash: null }],
     });
 
-    expect(resolvePortableRoundRefExact({
-      name: "Different Name",
-      author: "Different Author",
-      type: "Normal",
-      phash: "sha256:abd@0-1000",
-    }, [round])).toBeNull();
+    expect(
+      resolvePortableRoundRefExact(
+        {
+          name: "Different Name",
+          author: "Different Author",
+          type: "Normal",
+          phash: "sha256:abd@0-1000",
+        },
+        [round]
+      )
+    ).toBeNull();
 
-    expect(resolvePortableRoundRefExact({
-      name: "Different Name",
-      author: "Different Author",
-      type: "Normal",
-      phash: "sha256:abc@0-1000",
-    }, [round])?.id).toBe("round-sha");
+    expect(
+      resolvePortableRoundRefExact(
+        {
+          name: "Different Name",
+          author: "Different Author",
+          type: "Normal",
+          phash: "sha256:abc@0-1000",
+        },
+        [round]
+      )?.id
+    ).toBe("round-sha");
   });
 });

@@ -42,6 +42,8 @@ export type ConverterShortcutContext = {
   runAutoDetect: () => Promise<void> | void;
   applyDetectedSuggestions: () => void;
   saveConvertedRounds: () => Promise<void> | void;
+  undo: () => void;
+  redo: () => void;
 };
 
 type ConverterShortcutBinding = ConverterShortcutDisplay & {
@@ -313,6 +315,22 @@ export const CONVERTER_SHORTCUTS: readonly ConverterShortcutBinding[] = [
     trigger: (context) => context.clearTransientEditorState(),
   },
   {
+    id: "undo",
+    keysLabel: "Ctrl/Cmd+Z",
+    description: "Undo the last segment edit.",
+    category: "Segment Editing",
+    matches: (event) => keyMatch(event, "z", { ctrlOrMeta: true }) && !event.shiftKey,
+    trigger: (context) => context.undo(),
+  },
+  {
+    id: "redo",
+    keysLabel: "Ctrl/Cmd+Shift+Z",
+    description: "Redo the last undone segment edit.",
+    category: "Segment Editing",
+    matches: (event) => keyMatch(event, "Z", { ctrlOrMeta: true, shiftKey: true }),
+    trigger: (context) => context.redo(),
+  },
+  {
     id: "run-auto-detect",
     keysLabel: "A",
     description: "Run auto-detection on the current funscript.",
@@ -335,7 +353,8 @@ export const CONVERTER_SHORTCUTS: readonly ConverterShortcutBinding[] = [
     keysLabel: "Ctrl/Cmd+S",
     description: "Save converted rounds to the current hero.",
     category: "Detection & Save",
-    matches: (event) => keyMatch(event, "s", { ctrlOrMeta: true }) || keyMatch(event, "S", { ctrlOrMeta: true }),
+    matches: (event) =>
+      keyMatch(event, "s", { ctrlOrMeta: true }) || keyMatch(event, "S", { ctrlOrMeta: true }),
     trigger: (context) => {
       void context.saveConvertedRounds();
     },

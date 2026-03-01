@@ -3,10 +3,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let userDataPath = "";
 let storeValues = new Map<string, unknown>();
+const megaMocks = vi.hoisted(() => ({
+  fromURL: vi.fn(),
+}));
 
 vi.mock("electron", () => ({
   app: {
@@ -33,6 +37,12 @@ vi.mock("./store", () => ({
   }),
 }));
 
+vi.mock("megajs", () => ({
+  File: {
+    fromURL: megaMocks.fromURL,
+  },
+}));
+
 import { runCommand } from "./phash/extract";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../../src/constants/websiteVideoCacheSettings";
 import {
@@ -47,6 +57,9 @@ import {
   removeCachedWebsiteVideo,
 } from "./webVideo";
 
+const MULTI_FILE_WEBSITE_VIDEO_ERROR =
+  "This hoster URL resolves to multiple files. Install rounds only support single-file downloads.";
+
 describe("webVideo", () => {
   beforeEach(async () => {
     userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-web-video-"));
@@ -54,6 +67,7 @@ describe("webVideo", () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     __resetWebsiteVideoCachesForTests();
+    megaMocks.fromURL.mockReset();
   });
 
   afterEach(async () => {
@@ -625,6 +639,286 @@ describe("webVideo", () => {
       contentType: "video/mp4",
       playbackStrategy: "remote",
     });
+  });
+
+  it("inspects mega shared files without invoking yt-dlp", async () => {
+    megaMocks.fromURL.mockReturnValue({
+      directory: false,
+      name: "demo.mp4",
+      size: 123,
+      loadAttributes: vi.fn(async function(this: unknown) {
+        return this;
+      }),
+    });
+
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+    const result = await resolveWebsiteVideoStream("https://mega.nz/file/demo#key");
+
+    expect(result).toEqual({
+      streamUrl: "https://mega.nz/file/demo#key",
+      headers: {},
+      extractor: "mega",
+      title: "demo.mp4",
+      durationMs: null,
+      contentType: "video/mp4",
+      playbackStrategy: "ytdlp",
+    });
+    expect(vi.mocked(runCommand)).not.toHaveBeenCalled();
+  });
+
+  it("downloads mega shared files into the website cache", async () => {
+    megaMocks.fromURL.mockReturnValue({
+      directory: false,
+      name: "demo.mp4",
+      size: 5,
+      loadAttributes: vi.fn(async function(this: unknown) {
+        return this;
+      }),
+      download: vi.fn(() => Readable.from([Buffer.from("video", "utf8")])),
+    });
+
+    const cached = await ensureWebsiteVideoCached("https://mega.nz/file/demo#key");
+
+    expect(cached.extractor).toBe("mega");
+    expect(cached.title).toBe("demo.mp4");
+    expect(cached.fileExtension).toBe("mp4");
+    expect(await fs.readFile(cached.finalFilePath, "utf8")).toBe("video");
+    expect(vi.mocked(runCommand)).not.toHaveBeenCalled();
+  });
+
+  it("rejects mega folder urls as multi-file sources", async () => {
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+
+    await expect(resolveWebsiteVideoStream("https://mega.nz/folder/demo#key")).rejects.toThrow(
+      MULTI_FILE_WEBSITE_VIDEO_ERROR
+    );
+    expect(megaMocks.fromURL).not.toHaveBeenCalled();
+  });
+
+  it("resolves pixeldrain file urls through the public file api", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://pixeldrain.com/api/file/demo/info") {
+          return new Response(
+            JSON.stringify({
+              id: "demo",
+              name: "demo.mp4",
+              size: 5,
+              mime_type: "video/mp4",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      })
+    );
+
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+    const result = await resolveWebsiteVideoStream("https://pixeldrain.com/u/demo");
+
+    expect(result).toEqual({
+      streamUrl: "https://pixeldrain.com/api/file/demo?download",
+      headers: {},
+      extractor: "pixeldrain",
+      title: "demo.mp4",
+      durationMs: null,
+      contentType: "video/mp4",
+      playbackStrategy: "remote",
+    });
+  });
+
+  it("downloads pixeldrain files into the website cache", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://pixeldrain.com/api/file/demo/info") {
+          return new Response(
+            JSON.stringify({
+              id: "demo",
+              name: "demo.mp4",
+              size: 5,
+              mime_type: "video/mp4",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (url === "https://pixeldrain.com/api/file/demo?download") {
+          return new Response(Readable.toWeb(Readable.from([Buffer.from("video", "utf8")])), {
+            status: 200,
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      })
+    );
+
+    const cached = await ensureWebsiteVideoCached("https://pixeldrain.com/u/demo");
+
+    expect(cached.extractor).toBe("pixeldrain");
+    expect(cached.fileExtension).toBe("mp4");
+    expect(await fs.readFile(cached.finalFilePath, "utf8")).toBe("video");
+  });
+
+  it("rejects pixeldrain list urls as multi-file sources", async () => {
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+
+    await expect(resolveWebsiteVideoStream("https://pixeldrain.com/l/demo")).rejects.toThrow(
+      MULTI_FILE_WEBSITE_VIDEO_ERROR
+    );
+  });
+
+  it("resolves gofile download pages that contain a single file", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "https://gofile.io/dist/js/wt.obf.js") {
+          return new Response("function generateWT(token){ return `wt:${token}`; }", {
+            status: 200,
+          });
+        }
+        if (url === "https://api.gofile.io/accounts") {
+          return new Response(JSON.stringify({ status: "ok", data: { token: "guest-token" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.startsWith("https://api.gofile.io/contents/demo")) {
+          expect(init?.headers).toMatchObject({
+            Authorization: "Bearer guest-token",
+            "X-Website-Token": "wt:guest-token",
+            "X-BL": "en-US",
+          });
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              data: {
+                childrenCount: 1,
+                children: {
+                  child1: {
+                    type: "file",
+                    link: "https://store.gofile.io/download/web/demo/demo.mp4",
+                    name: "demo.mp4",
+                    mimetype: "video/mp4",
+                    size: 5,
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      })
+    );
+
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+    const result = await resolveWebsiteVideoStream("https://gofile.io/d/demo");
+
+    expect(result).toEqual({
+      streamUrl: "https://store.gofile.io/download/web/demo/demo.mp4",
+      headers: {},
+      extractor: "gofile",
+      title: "demo.mp4",
+      durationMs: null,
+      contentType: "video/mp4",
+      playbackStrategy: "remote",
+    });
+  });
+
+  it("downloads gofile files into the website cache", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://gofile.io/dist/js/wt.obf.js") {
+          return new Response("function generateWT(token){ return `wt:${token}`; }", {
+            status: 200,
+          });
+        }
+        if (url === "https://api.gofile.io/accounts") {
+          return new Response(JSON.stringify({ status: "ok", data: { token: "guest-token" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.startsWith("https://api.gofile.io/contents/demo")) {
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              data: {
+                childrenCount: 1,
+                children: {
+                  child1: {
+                    type: "file",
+                    link: "https://store.gofile.io/download/web/demo/demo.mp4",
+                    name: "demo.mp4",
+                    mimetype: "video/mp4",
+                    size: 5,
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (url === "https://store.gofile.io/download/web/demo/demo.mp4") {
+          return new Response(Readable.toWeb(Readable.from([Buffer.from("video", "utf8")])), {
+            status: 200,
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      })
+    );
+
+    const cached = await ensureWebsiteVideoCached("https://gofile.io/d/demo");
+
+    expect(cached.extractor).toBe("gofile");
+    expect(cached.fileExtension).toBe("mp4");
+    expect(await fs.readFile(cached.finalFilePath, "utf8")).toBe("video");
+  });
+
+  it("rejects gofile pages that expose multiple files", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://gofile.io/dist/js/wt.obf.js") {
+          return new Response("function generateWT(token){ return `wt:${token}`; }", {
+            status: 200,
+          });
+        }
+        if (url === "https://api.gofile.io/accounts") {
+          return new Response(JSON.stringify({ status: "ok", data: { token: "guest-token" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.startsWith("https://api.gofile.io/contents/demo")) {
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              data: {
+                childrenCount: 2,
+                children: {
+                  child1: { type: "file", link: "https://store.gofile.io/1.mp4", name: "1.mp4" },
+                  child2: { type: "file", link: "https://store.gofile.io/2.mp4", name: "2.mp4" },
+                },
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      })
+    );
+
+    const { resolveWebsiteVideoStream } = await import("./webVideo");
+    await expect(resolveWebsiteVideoStream("https://gofile.io/d/demo")).rejects.toThrow(
+      MULTI_FILE_WEBSITE_VIDEO_ERROR
+    );
   });
 
   it("treats extensionless progressive candidates as direct remote playback", async () => {

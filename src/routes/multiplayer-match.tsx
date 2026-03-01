@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { InventoryDockButton } from "../components/game/InventoryDockButton";
+import { BlockCommandPalette } from "../contexts/CommandPaletteGuardContext";
 import { PerkIcon } from "../components/game/PerkIcon";
 import { PerkInventoryPanel } from "../components/game/PerkInventoryPanel";
 import { GameScene } from "../components/game/GameScene";
@@ -233,7 +234,7 @@ function deriveInitialMultiplayerState(input: {
 
   const resolvedNodeId =
     ownProgress?.positionNodeId &&
-      base.config.runtimeGraph.nodeIndexById[ownProgress.positionNodeId] !== undefined
+    base.config.runtimeGraph.nodeIndexById[ownProgress.positionNodeId] !== undefined
       ? ownProgress.positionNodeId
       : (base.config.board[resolvedPosition]?.id ?? fallbackPlayer.currentNodeId);
 
@@ -542,6 +543,28 @@ function MultiplayerMatchRoute() {
       void flushSync();
     }, 280);
   }, [flushSync]);
+
+  const handleGameStateChange = useCallback((nextState: GameState) => {
+    setLocalState(nextState);
+    scheduleSync();
+  }, [scheduleSync]);
+
+  const handleExternalAntiPerkEventHandled = useCallback((eventId: string) => {
+    setIncomingAntiPerkEvent((prev) => (prev?.eventId === eventId ? null : prev));
+  }, []);
+
+  const handleExternalInventoryActionHandled = useCallback((actionId: string) => {
+    setPendingInventoryAction((prev) => (prev?.actionId === actionId ? null : prev));
+  }, []);
+
+  const handleApplyPerkDirectlyChange = useCallback((value: boolean) => {
+    setApplyPerkDirectly(value);
+    void trpc.store.set
+      .mutate({ key: MULTIPLAYER_APPLY_DIRECTLY_KEY, value })
+      .catch(() => {
+        // noop
+      });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1028,11 +1051,11 @@ function MultiplayerMatchRoute() {
     : undefined;
   const activeInventoryRarityMeta =
     PERK_RARITY_META[
-    activeInventoryPerk
-      ? resolvePerkRarity(activeInventoryPerk)
-      : activeInventoryFx
-        ? fallbackRarityFromCost(activeInventoryFx.item.cost)
-        : "common"
+      activeInventoryPerk
+        ? resolvePerkRarity(activeInventoryPerk)
+        : activeInventoryFx
+          ? fallbackRarityFromCost(activeInventoryFx.item.cost)
+          : "common"
     ];
   const inVideoView = Boolean(localState.activeRound);
   const controlsVisible = !inVideoView || videoUiVisible;
@@ -1087,12 +1110,12 @@ function MultiplayerMatchRoute() {
       setSnapshot((prev) =>
         prev
           ? {
-            ...prev,
-            lobby: {
-              ...prev.lobby,
-              isOpen: !prev.lobby.isOpen,
-            },
-          }
+              ...prev,
+              lobby: {
+                ...prev.lobby,
+                isOpen: !prev.lobby.isOpen,
+              },
+            }
           : prev
       );
       await requestSnapshotRefresh();
@@ -1133,455 +1156,464 @@ function MultiplayerMatchRoute() {
   }, [isHost]);
 
   return (
-    <MultiplayerUpdateGuard>
-      <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
-        {error && (
-          <div className="pointer-events-none fixed left-1/2 top-6 z-[120] -translate-x-1/2 rounded border border-rose-500/60 bg-rose-500/15 px-4 py-2 text-sm text-rose-100">
-            {error}
-          </div>
-        )}
-
-        {activeSessionNotification && (
-          <div className="pointer-events-none fixed left-1/2 top-20 z-[121] -translate-x-1/2">
-            <div className="rounded-xl border border-cyan-300/40 bg-zinc-950/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl backdrop-blur">
-              {activeSessionNotification.message}
+    <BlockCommandPalette>
+      <MultiplayerUpdateGuard>
+        <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
+          {error && (
+            <div className="pointer-events-none fixed left-1/2 top-6 z-[120] -translate-x-1/2 rounded border border-rose-500/60 bg-rose-500/15 px-4 py-2 text-sm text-rose-100">
+              {error}
             </div>
-          </div>
-        )}
+          )}
 
-        {activeInventoryFx && (
-          <div className="pointer-events-none fixed inset-0 z-[121]">
-            <div
-              className={`inventory-fly-item rounded-lg border bg-zinc-950/92 px-3 py-2 text-xs shadow-[0_0_24px_rgba(0,0,0,0.35)] ${activeInventoryRarityMeta.tailwind.inventorySelected}`}
-            >
-              <div className="flex items-center gap-2">
-                <PerkIcon iconKey={activeInventoryPerk?.iconKey ?? "unknown"} className="h-4 w-4" />
-                <span>Stored: {activeInventoryFx.item.name}</span>
-                <span
-                  className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${activeInventoryRarityMeta.tailwind.badge}`}
-                >
-                  {activeInventoryRarityMeta.label}
-                </span>
+          {activeSessionNotification && (
+            <div className="pointer-events-none fixed left-1/2 top-20 z-[121] -translate-x-1/2">
+              <div className="rounded-xl border border-cyan-300/40 bg-zinc-950/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl backdrop-blur">
+                {activeSessionNotification.message}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <GameScene
-          key={`${search.lobbyId}:${ownPlayerId}`}
-          initialState={initialState}
-          sessionStartedAtMs={sessionStartedAtMsRef.current}
-          installedRounds={installedRounds}
-          multiplayerRemotePlayers={remotePlayers}
-          showMultiplayerPlayerNames
-          optionsActions={
-            isHost
-              ? [
-                {
-                  id: "toggle-lobby-lock",
-                  label: snapshot?.lobby.isOpen ? "Lock Lobby" : "Unlock Lobby",
-                  onClick: () => {
-                    void handleToggleLobbyOpen();
-                  },
-                  disabled: pending,
-                },
-              ]
-              : []
-          }
-          externalAntiPerkEvent={incomingAntiPerkEvent}
-          externalInventoryAction={pendingInventoryAction}
-          onExternalAntiPerkEventHandled={(eventId) => {
-            setIncomingAntiPerkEvent((prev) => (prev?.eventId === eventId ? null : prev));
-          }}
-          onExternalInventoryActionHandled={(actionId) => {
-            setPendingInventoryAction((prev) => (prev?.actionId === actionId ? null : prev));
-          }}
-          onStateChange={(nextState) => {
-            setLocalState(nextState);
-            scheduleSync();
-          }}
-          onGiveUp={() => {
-            void (async () => {
-              try {
-                const player = localState.players[localState.currentPlayerIndex];
-                const finalScore = Math.max(0, Math.floor(player?.score ?? 0));
-                const finalPayload = {
-                  completionReason: "gave_up",
-                  finalScore,
-                  completedAtIso: new Date().toISOString(),
-                };
-
-                await finishPlayer(search.lobbyId, ownPlayerId, finalScore, {
-                  finalState: "forfeited",
-                  finalPayload,
-                });
-                await finalizeMatchIfComplete(search.lobbyId);
-              } catch (giveUpError) {
-                setError(giveUpError instanceof Error ? giveUpError.message : "Failed to give up.");
-                return;
-              }
-              await navigate({
-                to: "/multiplayer-result",
-                search: {
-                  lobbyId: search.lobbyId,
-                  playerId: ownPlayerId,
-                },
-                replace: true,
-              });
-            })();
-          }}
-          applyPerkDirectly={applyPerkDirectly}
-          onApplyPerkDirectlyChange={(value) => {
-            setApplyPerkDirectly(value);
-            void trpc.store.set.mutate({ key: MULTIPLAYER_APPLY_DIRECTLY_KEY, value }).catch(() => {
-              // noop
-            });
-          }}
-          onRoundOverlayUiVisibilityChange={setVideoUiVisible}
-          intermediaryLoadingPrompt={intermediaryLoadingPrompt}
-          intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
-          intermediaryReturnPauseSec={intermediaryReturnPauseSec}
-          initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
-          hideInventoryButton
-        />
-
-        {showVideoHotzoneHint && (
-          <div
-            className="pointer-events-none fixed top-1/2 z-[113] -translate-y-1/2"
-            style={{ left: "2px" }}
-            aria-hidden="true"
-          >
-            <div className="video-left-hotzone-hint">
-              {[0, 1, 2].map((index) => (
-                <span
-                  key={`left-hotzone-arrow-${index}`}
-                  className="video-left-hotzone-hint-arrow"
-                  style={{ animationDelay: `${index * 150}ms` }}
-                >
-                  ◀
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {remoteHudPlayers.length > 0 && (
-          <aside
-            className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${inVideoView
-              ? "border-cyan-200/25 bg-[linear-gradient(150deg,rgba(5,20,44,0.5),rgba(4,10,26,0.34))] shadow-[0_14px_34px_rgba(2,8,22,0.35),0_0_18px_rgba(34,211,238,0.09)]"
-              : "border-cyan-300/35 bg-[linear-gradient(150deg,rgba(5,20,44,0.92),rgba(4,10,26,0.88))] shadow-[0_18px_48px_rgba(2,8,22,0.6),0_0_26px_rgba(34,211,238,0.15)]"
-              } ${otherPlayersVisible
-                ? "translate-x-0 opacity-100"
-                : "pointer-events-none -translate-x-2 opacity-0"
-              } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
-          >
-            <div
-              className={`flex items-center justify-between border-b px-4 py-2.5 ${inVideoView
-                ? "border-cyan-200/15 bg-[linear-gradient(180deg,rgba(10,30,56,0.46),rgba(7,18,38,0.42))]"
-                : "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(10,30,56,0.78),rgba(7,18,38,0.75))]"
-                }`}
-            >
-              <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-cyan-100">
-                Other Players
-              </div>
-              <div className="rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
-                {remoteHudPlayers.length}
-              </div>
-            </div>
-            <div className="space-y-2.5 overflow-y-auto p-2.5">
-              {remoteHudPlayers.map((remote) => (
-                <div
-                  key={remote.id}
-                  className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${inVideoView
-                    ? "border-blue-200/20 bg-[linear-gradient(145deg,rgba(8,26,53,0.56),rgba(6,16,34,0.52))]"
-                    : "border-blue-300/30 bg-[linear-gradient(145deg,rgba(8,26,53,0.9),rgba(6,16,34,0.9))]"
-                    }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="truncate text-[27px] leading-none font-semibold text-zinc-100 [font-size:clamp(1rem,1.5vw,1.65rem)]">
-                      {remote.name}
-                    </div>
-                    <div className="shrink-0 rounded-md border border-zinc-500/60 bg-zinc-800/65 px-2 py-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-zinc-200">
-                      {remote.state}
-                    </div>
-                  </div>
-                  <div className="mt-0.5 truncate font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.1em] text-zinc-400/95">
-                    Field {remote.positionIndex + 1}: {remote.boardFieldName}
-                  </div>
-
-                  <div className="mt-2 rounded-lg border border-cyan-300/20 bg-[#081b37]/78 px-2 py-1.5">
-                    <div className="mb-1 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.09em] text-cyan-100/90">
-                      <span>Board Progress</span>
-                      <span>{remote.boardProgressPct.toFixed(0)}%</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[#0b213e]">
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#5eead4,#67e8f9)]"
-                        style={{ width: `${remote.boardProgressPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-sky-300/25 bg-[#091b37]/75 px-2 py-1.5">
-                      <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-sky-200">
-                        Score {remote.score}
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#0b213e]">
-                        <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#7dd3fc)]"
-                          style={{ width: `${remote.scoreRatio * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="rounded-lg border border-emerald-300/25 bg-[#081f31]/75 px-2 py-1.5">
-                      <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-emerald-200">
-                        $ {remote.money}
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#06322b]">
-                        <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,#34d399,#6ee7b7)]"
-                          style={{ width: `${remote.moneyRatio * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-zinc-300/95">
-                    <span>Roll {remote.lastRoll ?? "-"}</span>
-                    <span>Effects {remote.activeEffectsCount}</span>
-                  </div>
-
-                  <div className="mt-2 rounded-lg border border-cyan-300/20 bg-[#081a35]/78 px-2 py-1.5">
-                    <div className="mb-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.1em] text-cyan-100/90">
-                      Items {remote.inventoryCount}
-                    </div>
-                    {remote.inventoryStacks.length === 0 ? (
-                      <div className="text-zinc-400">None</div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {remote.inventoryStacks.slice(0, 6).map((stack) => {
-                          const rarityMeta = PERK_RARITY_META[stack.rarity];
-                          return (
-                            <div
-                              key={`${remote.id}-${stack.perkId}`}
-                              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${rarityMeta.tailwind.chip}`}
-                            >
-                              <PerkIcon iconKey={stack.iconKey} className="h-3 w-3" />
-                              <span className="max-w-[108px] truncate">{stack.name}</span>
-                              <span
-                                className={`rounded border px-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
-                              >
-                                {rarityMeta.label}
-                              </span>
-                              {stack.count > 1 && (
-                                <span className="text-zinc-100/90">x{stack.count}</span>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {remote.inventoryStacks.length > 6 && (
-                          <div className="inline-flex items-center rounded border border-zinc-600/70 bg-zinc-900/70 px-1.5 py-0.5 text-zinc-300">
-                            +{remote.inventoryStacks.length - 6}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
-        )}
-
-        <InventoryDockButton
-          count={inventoryCount}
-          isOpen={isOverlayOpen}
-          onClick={() => setIsOverlayOpen((prev) => !prev)}
-          position={inVideoView ? "video-view" : "default"}
-          pulse={inventoryBadgePulse}
-          controlsVisible={controlsVisible}
-        />
-
-        {isHost && (
-          <button
-            type="button"
-            aria-label={isLobbyControlOpen ? "Close lobby control" : "Open lobby control"}
-            title={isLobbyControlOpen ? "Close Lobby Control" : "Open Lobby Control"}
-            className={`fixed z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${inVideoView ? "bottom-24 right-20" : "bottom-4 left-20"
-              } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"} ${isLobbyControlOpen
-                ? "border-amber-300/80 bg-amber-500/20 text-amber-100"
-                : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
-              }`}
-            onClick={() => setIsLobbyControlOpen((prev) => !prev)}
-          >
-            Host
-          </button>
-        )}
-
-        {isOverlayOpen && (
-          <aside
-            className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-              } ${isNarrowViewport
-                ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[58vh]`
-                : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)]`
-              }`}
-          >
-            <PerkInventoryPanel
-              title="Lobby Inventory"
-              subtitle="Use perks on yourself, fire anti-perks at opponents, or discard stored items."
-              inventory={localPlayer?.inventory ?? []}
-              activeEffects={localPlayer?.activePerkEffects ?? []}
-              selectedItemId={selectedInventoryItemId}
-              onSelectItem={setSelectedInventoryItemId}
-              onUseSelectedItem={() => {
-                void handleUseInventoryItem();
-              }}
-              onDiscardSelectedItem={handleDiscardInventoryItem}
-              useActionLabel={
-                selectedInventoryItem?.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"
-              }
-              useDisabled={
-                pending || (selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId)
-              }
-              useDisabledReason={
-                selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId
-                  ? "Pick a target player before sending this anti-perk."
-                  : null
-              }
-              targets={targetPlayerOptions}
-              selectedTargetId={selectedTargetId}
-              onSelectTarget={setSelectedTargetId}
-              headerBadge={`Lobby ${search.lobbyId.slice(0, 8)} • ${applyPerkDirectly ? "Direct" : "Store"}`}
-              applyDirectly={applyPerkDirectly}
-              onApplyDirectlyChange={(value) => {
-                setApplyPerkDirectly(value);
-                void trpc.store.set
-                  .mutate({ key: MULTIPLAYER_APPLY_DIRECTLY_KEY, value })
-                  .catch(() => { });
-              }}
-            />
-
-            <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
-                Player Standings
-              </div>
+          {activeInventoryFx && (
+            <div className="pointer-events-none fixed inset-0 z-[121]">
               <div
-                className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-40" : "max-h-56"}`}
+                className={`inventory-fly-item rounded-lg border bg-zinc-950/92 px-3 py-2 text-xs shadow-[0_0_24px_rgba(0,0,0,0.35)] ${activeInventoryRarityMeta.tailwind.inventorySelected}`}
               >
-                {players.map((player) => {
+                <div className="flex items-center gap-2">
+                  <PerkIcon
+                    iconKey={activeInventoryPerk?.iconKey ?? "unknown"}
+                    className="h-4 w-4"
+                  />
+                  <span>Stored: {activeInventoryFx.item.name}</span>
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${activeInventoryRarityMeta.tailwind.badge}`}
+                  >
+                    {activeInventoryRarityMeta.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <GameScene
+            key={`${search.lobbyId}:${ownPlayerId}`}
+            initialState={initialState}
+            sessionStartedAtMs={sessionStartedAtMsRef.current}
+            installedRounds={installedRounds}
+            multiplayerRemotePlayers={remotePlayers}
+            showMultiplayerPlayerNames
+            optionsActions={
+              isHost
+                ? [
+                    {
+                      id: "toggle-lobby-lock",
+                      label: snapshot?.lobby.isOpen ? "Lock Lobby" : "Unlock Lobby",
+                      onClick: () => {
+                        void handleToggleLobbyOpen();
+                      },
+                      disabled: pending,
+                    },
+                  ]
+                : []
+            }
+            externalAntiPerkEvent={incomingAntiPerkEvent}
+            externalInventoryAction={pendingInventoryAction}
+            onExternalAntiPerkEventHandled={handleExternalAntiPerkEventHandled}
+            onExternalInventoryActionHandled={handleExternalInventoryActionHandled}
+            onStateChange={handleGameStateChange}
+            onGiveUp={() => {
+              void (async () => {
+                try {
+                  const player = localState.players[localState.currentPlayerIndex];
+                  const finalScore = Math.max(0, Math.floor(player?.score ?? 0));
+                  const finalPayload = {
+                    completionReason: "gave_up",
+                    finalScore,
+                    completedAtIso: new Date().toISOString(),
+                  };
+
+                  await finishPlayer(search.lobbyId, ownPlayerId, finalScore, {
+                    finalState: "forfeited",
+                    finalPayload,
+                  });
+                  await finalizeMatchIfComplete(search.lobbyId);
+                } catch (giveUpError) {
+                  setError(
+                    giveUpError instanceof Error ? giveUpError.message : "Failed to give up."
+                  );
+                  return;
+                }
+                await navigate({
+                  to: "/multiplayer-result",
+                  search: {
+                    lobbyId: search.lobbyId,
+                    playerId: ownPlayerId,
+                  },
+                  replace: true,
+                });
+              })();
+            }}
+            applyPerkDirectly={applyPerkDirectly}
+            onApplyPerkDirectlyChange={handleApplyPerkDirectlyChange}
+            onRoundOverlayUiVisibilityChange={setVideoUiVisible}
+            intermediaryLoadingPrompt={intermediaryLoadingPrompt}
+            intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
+            intermediaryReturnPauseSec={intermediaryReturnPauseSec}
+            initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
+            hideInventoryButton
+          />
+
+          {showVideoHotzoneHint && (
+            <div
+              className="pointer-events-none fixed top-1/2 z-[113] -translate-y-1/2"
+              style={{ left: "2px" }}
+              aria-hidden="true"
+            >
+              <div className="video-left-hotzone-hint">
+                {[0, 1, 2].map((index) => (
+                  <span
+                    key={`left-hotzone-arrow-${index}`}
+                    className="video-left-hotzone-hint-arrow"
+                    style={{ animationDelay: `${index * 150}ms` }}
+                  >
+                    ◀
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {remoteHudPlayers.length > 0 && (
+            <aside
+              className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${
+                inVideoView
+                  ? "border-cyan-200/25 bg-[linear-gradient(150deg,rgba(5,20,44,0.5),rgba(4,10,26,0.34))] shadow-[0_14px_34px_rgba(2,8,22,0.35),0_0_18px_rgba(34,211,238,0.09)]"
+                  : "border-cyan-300/35 bg-[linear-gradient(150deg,rgba(5,20,44,0.92),rgba(4,10,26,0.88))] shadow-[0_18px_48px_rgba(2,8,22,0.6),0_0_26px_rgba(34,211,238,0.15)]"
+              } ${
+                otherPlayersVisible
+                  ? "translate-x-0 opacity-100"
+                  : "pointer-events-none -translate-x-2 opacity-0"
+              } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
+            >
+              <div
+                className={`flex items-center justify-between border-b px-4 py-2.5 ${
+                  inVideoView
+                    ? "border-cyan-200/15 bg-[linear-gradient(180deg,rgba(10,30,56,0.46),rgba(7,18,38,0.42))]"
+                    : "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(10,30,56,0.78),rgba(7,18,38,0.75))]"
+                }`}
+              >
+                <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-cyan-100">
+                  Other Players
+                </div>
+                <div className="rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+                  {remoteHudPlayers.length}
+                </div>
+              </div>
+              <div className="space-y-2.5 overflow-y-auto p-2.5">
+                {remoteHudPlayers.map((remote) => (
+                  <div
+                    key={remote.id}
+                    className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${
+                      inVideoView
+                        ? "border-blue-200/20 bg-[linear-gradient(145deg,rgba(8,26,53,0.56),rgba(6,16,34,0.52))]"
+                        : "border-blue-300/30 bg-[linear-gradient(145deg,rgba(8,26,53,0.9),rgba(6,16,34,0.9))]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-[27px] leading-none font-semibold text-zinc-100 [font-size:clamp(1rem,1.5vw,1.65rem)]">
+                        {remote.name}
+                      </div>
+                      <div className="shrink-0 rounded-md border border-zinc-500/60 bg-zinc-800/65 px-2 py-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-zinc-200">
+                        {remote.state}
+                      </div>
+                    </div>
+                    <div className="mt-0.5 truncate font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.1em] text-zinc-400/95">
+                      Field {remote.positionIndex + 1}: {remote.boardFieldName}
+                    </div>
+
+                    <div className="mt-2 rounded-lg border border-cyan-300/20 bg-[#081b37]/78 px-2 py-1.5">
+                      <div className="mb-1 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.09em] text-cyan-100/90">
+                        <span>Board Progress</span>
+                        <span>{remote.boardProgressPct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-[#0b213e]">
+                        <div
+                          className="h-full rounded-full bg-[linear-gradient(90deg,#5eead4,#67e8f9)]"
+                          style={{ width: `${remote.boardProgressPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-sky-300/25 bg-[#091b37]/75 px-2 py-1.5">
+                        <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-sky-200">
+                          Score {remote.score}
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#0b213e]">
+                          <div
+                            className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#7dd3fc)]"
+                            style={{ width: `${remote.scoreRatio * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-emerald-300/25 bg-[#081f31]/75 px-2 py-1.5">
+                        <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-emerald-200">
+                          $ {remote.money}
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#06322b]">
+                          <div
+                            className="h-full rounded-full bg-[linear-gradient(90deg,#34d399,#6ee7b7)]"
+                            style={{ width: `${remote.moneyRatio * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-zinc-300/95">
+                      <span>Roll {remote.lastRoll ?? "-"}</span>
+                      <span>Effects {remote.activeEffectsCount}</span>
+                    </div>
+
+                    <div className="mt-2 rounded-lg border border-cyan-300/20 bg-[#081a35]/78 px-2 py-1.5">
+                      <div className="mb-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.1em] text-cyan-100/90">
+                        Items {remote.inventoryCount}
+                      </div>
+                      {remote.inventoryStacks.length === 0 ? (
+                        <div className="text-zinc-400">None</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {remote.inventoryStacks.slice(0, 6).map((stack) => {
+                            const rarityMeta = PERK_RARITY_META[stack.rarity];
+                            return (
+                              <div
+                                key={`${remote.id}-${stack.perkId}`}
+                                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${rarityMeta.tailwind.chip}`}
+                              >
+                                <PerkIcon iconKey={stack.iconKey} className="h-3 w-3" />
+                                <span className="max-w-[108px] truncate">{stack.name}</span>
+                                <span
+                                  className={`rounded border px-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
+                                >
+                                  {rarityMeta.label}
+                                </span>
+                                {stack.count > 1 && (
+                                  <span className="text-zinc-100/90">x{stack.count}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {remote.inventoryStacks.length > 6 && (
+                            <div className="inline-flex items-center rounded border border-zinc-600/70 bg-zinc-900/70 px-1.5 py-0.5 text-zinc-300">
+                              +{remote.inventoryStacks.length - 6}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          )}
+
+          <InventoryDockButton
+            count={inventoryCount}
+            isOpen={isOverlayOpen}
+            onClick={() => setIsOverlayOpen((prev) => !prev)}
+            position={inVideoView ? "video-view" : "default"}
+            pulse={inventoryBadgePulse}
+            controlsVisible={controlsVisible}
+          />
+
+          {isHost && (
+            <button
+              type="button"
+              aria-label={isLobbyControlOpen ? "Close lobby control" : "Open lobby control"}
+              title={isLobbyControlOpen ? "Close Lobby Control" : "Open Lobby Control"}
+              className={`fixed z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${
+                inVideoView ? "bottom-24 right-20" : "bottom-4 left-20"
+              } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"} ${
+                isLobbyControlOpen
+                  ? "border-amber-300/80 bg-amber-500/20 text-amber-100"
+                  : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
+              }`}
+              onClick={() => setIsLobbyControlOpen((prev) => !prev)}
+            >
+              Host
+            </button>
+          )}
+
+          {isOverlayOpen && (
+            <aside
+              className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${
+                controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+              } ${
+                isNarrowViewport
+                  ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[58vh]`
+                  : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)]`
+              }`}
+            >
+              <PerkInventoryPanel
+                title="Lobby Inventory"
+                subtitle="Use perks on yourself, fire anti-perks at opponents, or discard stored items."
+                inventory={localPlayer?.inventory ?? []}
+                activeEffects={localPlayer?.activePerkEffects ?? []}
+                selectedItemId={selectedInventoryItemId}
+                onSelectItem={setSelectedInventoryItemId}
+                onUseSelectedItem={() => {
+                  void handleUseInventoryItem();
+                }}
+                onDiscardSelectedItem={handleDiscardInventoryItem}
+                useActionLabel={
+                  selectedInventoryItem?.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"
+                }
+                useDisabled={
+                  pending || (selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId)
+                }
+                useDisabledReason={
+                  selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId
+                    ? "Pick a target player before sending this anti-perk."
+                    : null
+                }
+                targets={targetPlayerOptions}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+                headerBadge={`Lobby ${search.lobbyId.slice(0, 8)} • ${applyPerkDirectly ? "Direct" : "Store"}`}
+                applyDirectly={applyPerkDirectly}
+                onApplyDirectlyChange={(value) => {
+                  setApplyPerkDirectly(value);
+                  void trpc.store.set
+                    .mutate({ key: MULTIPLAYER_APPLY_DIRECTLY_KEY, value })
+                    .catch(() => {});
+                }}
+              />
+
+              <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
+                <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
+                  Player Standings
+                </div>
+                <div
+                  className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-40" : "max-h-56"}`}
+                >
+                  {players.map((player) => {
+                    const progress = snapshot?.progressByPlayerId[player.id];
+                    return (
+                      <div
+                        key={player.id}
+                        className="rounded border border-zinc-800 bg-zinc-900/65 p-2"
+                      >
+                        <div className="font-semibold text-zinc-100">{player.displayName}</div>
+                        <div className="mt-1 text-zinc-300">
+                          {player.state} | Pos {progress?.positionIndex ?? 0} | ${" "}
+                          {progress?.money ?? 0} | Score {progress?.score ?? player.finalScore ?? 0}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
+                <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
+                  Anti-Perk Feed
+                </div>
+                <div
+                  className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-28" : "max-h-44"}`}
+                >
+                  {antiPerkFeed.map((event) => {
+                    const perk = getPerkById(event.perkId);
+                    const rarityMeta = PERK_RARITY_META[perk ? resolvePerkRarity(perk) : "common"];
+                    return (
+                      <div
+                        key={event.id}
+                        className={`rounded border p-2 ${rarityMeta.tailwind.feed}`}
+                      >
+                        <div className="flex items-center gap-2 font-semibold text-zinc-100">
+                          <PerkIcon iconKey={perk?.iconKey ?? "unknown"} className="h-4 w-4" />
+                          <span>{perk?.name ?? event.perkId}</span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
+                          >
+                            {rarityMeta.label}
+                          </span>
+                        </div>
+                        <div className="text-zinc-300">
+                          {event.senderPlayerId.slice(0, 6)} {"->"}{" "}
+                          {event.targetPlayerId.slice(0, 6)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </aside>
+          )}
+
+          {isHost && isLobbyControlOpen && (
+            <aside
+              className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${
+                controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+              } ${
+                isNarrowViewport
+                  ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[40vh]`
+                  : `${inVideoView ? "bottom-40" : "bottom-20"} left-[412px] w-[380px] max-h-[calc(100vh-7rem)]`
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-amber-200">
+                <span>Lobby Control</span>
+                <span>{hostControllablePlayers.length}</span>
+              </div>
+              <div className="space-y-2 text-xs">
+                {hostControllablePlayers.length === 0 && (
+                  <div className="rounded border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-zinc-400">
+                    No players available for moderation.
+                  </div>
+                )}
+                {hostControllablePlayers.map((player) => {
                   const progress = snapshot?.progressByPlayerId[player.id];
                   return (
                     <div
-                      key={player.id}
-                      className="rounded border border-zinc-800 bg-zinc-900/65 p-2"
+                      key={`lobby-control-${player.id}`}
+                      className="rounded border border-zinc-700 bg-zinc-900/75 px-3 py-2"
                     >
-                      <div className="font-semibold text-zinc-100">{player.displayName}</div>
-                      <div className="mt-1 text-zinc-300">
-                        {player.state} | Pos {progress?.positionIndex ?? 0} | $ {progress?.money ?? 0}{" "}
-                        | Score {progress?.score ?? player.finalScore ?? 0}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
-                Anti-Perk Feed
-              </div>
-              <div
-                className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-28" : "max-h-44"}`}
-              >
-                {antiPerkFeed.map((event) => {
-                  const perk = getPerkById(event.perkId);
-                  const rarityMeta = PERK_RARITY_META[perk ? resolvePerkRarity(perk) : "common"];
-                  return (
-                    <div key={event.id} className={`rounded border p-2 ${rarityMeta.tailwind.feed}`}>
-                      <div className="flex items-center gap-2 font-semibold text-zinc-100">
-                        <PerkIcon iconKey={perk?.iconKey ?? "unknown"} className="h-4 w-4" />
-                        <span>{perk?.name ?? event.perkId}</span>
-                        <span
-                          className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
-                        >
-                          {rarityMeta.label}
-                        </span>
-                      </div>
-                      <div className="text-zinc-300">
-                        {event.senderPlayerId.slice(0, 6)} {"->"} {event.targetPlayerId.slice(0, 6)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {isHost && isLobbyControlOpen && (
-          <aside
-            className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-              } ${isNarrowViewport
-                ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[40vh]`
-                : `${inVideoView ? "bottom-40" : "bottom-20"} left-[412px] w-[380px] max-h-[calc(100vh-7rem)]`
-              }`}
-          >
-            <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-amber-200">
-              <span>Lobby Control</span>
-              <span>{hostControllablePlayers.length}</span>
-            </div>
-            <div className="space-y-2 text-xs">
-              {hostControllablePlayers.length === 0 && (
-                <div className="rounded border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-zinc-400">
-                  No players available for moderation.
-                </div>
-              )}
-              {hostControllablePlayers.map((player) => {
-                const progress = snapshot?.progressByPlayerId[player.id];
-                return (
-                  <div
-                    key={`lobby-control-${player.id}`}
-                    className="rounded border border-zinc-700 bg-zinc-900/75 px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="font-semibold text-zinc-100">{player.displayName}</div>
-                        <div className="text-zinc-400">
-                          {player.state} | Pos {progress?.positionIndex ?? 0} | Score{" "}
-                          {progress?.score ?? player.finalScore ?? 0}
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-zinc-100">{player.displayName}</div>
+                          <div className="text-zinc-400">
+                            {player.state} | Pos {progress?.positionIndex ?? 0} | Score{" "}
+                            {progress?.score ?? player.finalScore ?? 0}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-zinc-100 hover:border-zinc-400 disabled:opacity-60"
+                            onClick={() => {
+                              void handleKickPlayer(player.id);
+                            }}
+                          >
+                            Kick
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="rounded border border-rose-500/70 bg-rose-500/15 px-2 py-1 text-rose-100 hover:bg-rose-500/25 disabled:opacity-60"
+                            onClick={() => {
+                              void handleBanPlayer(player.id);
+                            }}
+                          >
+                            Ban
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={pending}
-                          className="rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-zinc-100 hover:border-zinc-400 disabled:opacity-60"
-                          onClick={() => {
-                            void handleKickPlayer(player.id);
-                          }}
-                        >
-                          Kick
-                        </button>
-                        <button
-                          type="button"
-                          disabled={pending}
-                          className="rounded border border-rose-500/70 bg-rose-500/15 px-2 py-1 text-rose-100 hover:bg-rose-500/25 disabled:opacity-60"
-                          onClick={() => {
-                            void handleBanPlayer(player.id);
-                          }}
-                        >
-                          Ban
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-        )}
-      </div>
-    </MultiplayerUpdateGuard>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
+        </div>
+      </MultiplayerUpdateGuard>
+    </BlockCommandPalette>
   );
 }

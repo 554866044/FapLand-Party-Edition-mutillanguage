@@ -15,10 +15,7 @@ vi.mock("../services/trpc", () => ({
   },
 }));
 
-function ControllerHarness(props: {
-  onPrimary?: () => void;
-  onBack?: () => void;
-}) {
+function ControllerHarness(props: { onPrimary?: () => void; onBack?: () => void }) {
   const scopeRef = useRef<HTMLDivElement | null>(null);
 
   useControllerSurface({
@@ -33,8 +30,12 @@ function ControllerHarness(props: {
 
   return (
     <div ref={scopeRef}>
-      <button type="button" data-controller-focus-id="first" data-controller-initial="true">First</button>
-      <button type="button" data-controller-focus-id="second" onClick={props.onPrimary}>Second</button>
+      <button type="button" data-controller-focus-id="first" data-controller-initial="true">
+        First
+      </button>
+      <button type="button" data-controller-focus-id="second" onClick={props.onPrimary}>
+        Second
+      </button>
       <input aria-label="entry" data-controller-focus-id="entry" />
     </div>
   );
@@ -45,21 +46,29 @@ describe("ControllerProvider", () => {
     let frameId = 0;
     const callbacks = new Map<number, FrameRequestCallback>();
 
-    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-      const nextId = ++frameId;
-      callbacks.set(nextId, callback);
-      return nextId;
-    }));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn((id: number) => {
-      callbacks.delete(id);
-    }));
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const nextId = ++frameId;
+        callbacks.set(nextId, callback);
+        return nextId;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        callbacks.delete(id);
+      })
+    );
 
     Object.defineProperty(window.navigator, "getGamepads", {
       configurable: true,
       value: vi.fn(() => []),
     });
 
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement
+    ) {
       const focusId = this.dataset.controllerFocusId;
       const topById: Record<string, number> = {
         first: 10,
@@ -80,7 +89,9 @@ describe("ControllerProvider", () => {
       } as DOMRect;
     });
 
-    (window as typeof window & { __runAnimationFrame?: (timestamp: number) => void }).__runAnimationFrame = (timestamp: number) => {
+    (
+      window as typeof window & { __runAnimationFrame?: (timestamp: number) => void }
+    ).__runAnimationFrame = (timestamp: number) => {
       const [next] = callbacks.entries();
       if (!next) {
         throw new Error("No animation frame callback scheduled");
@@ -102,7 +113,7 @@ describe("ControllerProvider", () => {
     render(
       <ControllerProvider>
         <ControllerHarness onPrimary={onPrimary} />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
 
     const first = screen.getByRole("button", { name: "First" });
@@ -122,7 +133,7 @@ describe("ControllerProvider", () => {
     render(
       <ControllerProvider>
         <ControllerHarness onPrimary={onPrimary} />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
 
     const second = screen.getByRole("button", { name: "Second" });
@@ -138,7 +149,7 @@ describe("ControllerProvider", () => {
     render(
       <ControllerProvider>
         <ControllerHarness onBack={onBack} />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
 
     const entry = screen.getByLabelText("entry");
@@ -155,28 +166,32 @@ describe("ControllerProvider", () => {
 
   it("ignores gamepad input until experimental controller support is enabled", async () => {
     const onPrimary = vi.fn();
-    const runAnimationFrame = (window as typeof window & { __runAnimationFrame: (timestamp: number) => void }).__runAnimationFrame;
-    const getGamepads = vi.fn(() => [{
-      buttons: [
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: false },
-        { pressed: true },
-        { pressed: false },
-        { pressed: false },
-      ],
-      axes: [0, 0, 0, 0],
-    }]);
+    const runAnimationFrame = (
+      window as typeof window & { __runAnimationFrame: (timestamp: number) => void }
+    ).__runAnimationFrame;
+    const getGamepads = vi.fn(() => [
+      {
+        buttons: [
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: false },
+          { pressed: true },
+          { pressed: false },
+          { pressed: false },
+        ],
+        axes: [0, 0, 0, 0],
+      },
+    ]);
 
     Object.defineProperty(window.navigator, "getGamepads", {
       configurable: true,
@@ -186,13 +201,15 @@ describe("ControllerProvider", () => {
     render(
       <ControllerProvider>
         <ControllerHarness onPrimary={onPrimary} />
-      </ControllerProvider>,
+      </ControllerProvider>
     );
 
     runAnimationFrame(0);
     expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "First" }));
 
-    window.dispatchEvent(new CustomEvent<boolean>(CONTROLLER_SUPPORT_ENABLED_EVENT, { detail: true }));
+    window.dispatchEvent(
+      new CustomEvent<boolean>(CONTROLLER_SUPPORT_ENABLED_EVENT, { detail: true })
+    );
 
     runAnimationFrame(16);
 

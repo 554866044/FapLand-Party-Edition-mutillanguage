@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -108,7 +107,8 @@ function buildCacheFilePath(url: string): { cacheKey: string; cacheDir: string; 
   return { cacheKey, cacheDir, filePath: path.join(cacheDir, "audio.mp3") };
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;

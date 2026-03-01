@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { usePlayableVideoFallback } from "../hooks/usePlayableVideoFallback";
 import { useSfwMode } from "../hooks/useSfwMode";
 import { trpc } from "../services/trpc";
@@ -63,7 +63,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
     const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(
       DEFAULT_BACKGROUND_VIDEO_ENABLED
     );
-    const particles = useRef(generateParticles(18)).current;
+    const particles = useMemo(() => generateParticles(18), []);
     const sfwMode = useSfwMode();
     const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
 
@@ -312,6 +312,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
           />
         </div>
       ),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- renderVideo is a pure function of values already in deps
       [
         backgroundVideoEnabled,
         videoUris,

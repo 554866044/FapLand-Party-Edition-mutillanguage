@@ -34,6 +34,7 @@ import {
   classifyTrustedUrl,
   collectUnknownRemoteSitesFromResources,
   getSecurityMode,
+  listTrustedSites,
   normalizeTrustedBaseDomain,
   setSecurityMode,
 } from "./security";
@@ -89,10 +90,34 @@ describe("security service", () => {
       decision: "blocked",
       source: null,
     });
+    expect(classifyTrustedUrl("https://mega.nz/file/demo#key")).toMatchObject({
+      decision: "blocked",
+      source: null,
+    });
+  });
+
+  it("trusts supplemental hosters by default outside paranoid mode", () => {
+    const trusted = listTrustedSites();
+
+    expect(trusted.builtInYtDlpDomains).toEqual(
+      expect.arrayContaining(["api.gofile.io", "gofile.io", "mega.nz", "pixeldrain.com"])
+    );
+    expect(classifyTrustedUrl("https://mega.nz/file/demo#key")).toMatchObject({
+      decision: "trusted",
+      source: "built_in_ytdlp",
+    });
+    expect(classifyTrustedUrl("https://pixeldrain.com/u/demo")).toMatchObject({
+      decision: "trusted",
+      source: "built_in_ytdlp",
+    });
+    expect(classifyTrustedUrl("https://gofile.io/d/demo")).toMatchObject({
+      decision: "trusted",
+      source: "built_in_ytdlp",
+    });
   });
 
   it("collects unknown remote sites from import resources", () => {
-    const analysis = collectUnknownRemoteSitesFromResources("/tmp/example.hero", [
+    const analysis = collectUnknownRemoteSitesFromResources("/tmp/example.hero", "Demo", [
       {
         videoUri: "https://blocked.example.org/video.mp4",
         funscriptUri: "https://scripts.blocked.example.org/demo.funscript",
@@ -109,5 +134,20 @@ describe("security service", () => {
       videoUrlCount: 1,
       funscriptUrlCount: 1,
     });
+  });
+
+  it("does not flag supplemental hosters as unknown remote sites", () => {
+    const analysis = collectUnknownRemoteSitesFromResources("/tmp/example.hero", "Demo", [
+      {
+        videoUri: "https://mega.nz/file/demo#key",
+        funscriptUri: "https://pixeldrain.com/u/funscript-demo",
+      },
+      {
+        videoUri: "https://gofile.io/d/demo",
+        funscriptUri: null,
+      },
+    ]);
+
+    expect(analysis.unknownEntries).toEqual([]);
   });
 });

@@ -35,6 +35,9 @@ export type ResultSyncQueueRow = Awaited<
 export type SinglePlayerRunHistoryRow = Awaited<
   ReturnType<typeof trpc.db.listSinglePlayerRuns.query>
 >[number];
+export type SinglePlayerRunSaveRow = NonNullable<
+  Awaited<ReturnType<typeof trpc.db.getSinglePlayerRunSave.query>>
+>;
 export type PhashScanStatus = Awaited<ReturnType<typeof trpc.db.getPhashScanStatus.query>>;
 export type WebsiteVideoScanStatus = Awaited<
   ReturnType<typeof trpc.db.getWebsiteVideoScanStatus.query>
@@ -144,8 +147,20 @@ export const db = {
   },
   gameProfile: {
     getLocalHighscore: () => trpc.db.getLocalHighscore.query(),
-    setLocalHighscore: (highscore: number, cheatMode?: boolean) =>
-      trpc.db.setLocalHighscore.mutate({ highscore, cheatMode }),
+    setLocalHighscore: (
+      highscore: number,
+      options?: {
+        cheatMode?: boolean;
+        assisted?: boolean;
+        assistedSaveMode?: "checkpoint" | "everywhere" | null;
+      }
+    ) =>
+      trpc.db.setLocalHighscore.mutate({
+        highscore,
+        cheatMode: options?.cheatMode,
+        assisted: options?.assisted,
+        assistedSaveMode: options?.assistedSaveMode,
+      }),
   },
   singlePlayerHistory: {
     recordRun: (input: {
@@ -162,10 +177,25 @@ export const db = {
       endingPosition: number;
       turn: number;
       cheatModeActive?: boolean;
+      assistedActive?: boolean;
+      assistedSaveMode?: "checkpoint" | "everywhere" | null;
     }) => trpc.db.recordSinglePlayerRun.mutate(input),
     listRuns: (limit = 50) => trpc.db.listSinglePlayerRuns.query({ limit }),
     getCumLoadCount: () => trpc.db.getSinglePlayerCumLoadCount.query(),
     deleteRun: (id: string) => trpc.db.deleteSinglePlayerRun.mutate({ id }),
+  },
+  singlePlayerSaves: {
+    upsert: (input: {
+      playlistId: string;
+      playlistName: string;
+      playlistFormatVersion?: number | null;
+      saveMode: "checkpoint" | "everywhere";
+      snapshot: unknown;
+    }) => trpc.db.upsertSinglePlayerRunSave.mutate(input),
+    getByPlaylist: (playlistId: string) => trpc.db.getSinglePlayerRunSave.query({ playlistId }),
+    list: () => trpc.db.listSinglePlayerRunSaves.query(),
+    deleteByPlaylist: (playlistId: string) =>
+      trpc.db.deleteSinglePlayerRunSaveByPlaylist.mutate({ playlistId }),
   },
   multiplayer: {
     upsertMatchCache: (input: {

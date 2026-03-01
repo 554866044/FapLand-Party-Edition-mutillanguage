@@ -4,9 +4,12 @@ import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { InlineMetrics } from "../components/ui";
 import { useControllerSurface } from "../controller";
+import { getAssistedTooltip, getSaveModeEmoji } from "../game/saveMode";
+import { useSfwMode } from "../hooks/useSfwMode";
 import { db, type SinglePlayerRunHistoryRow } from "../services/db";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { formatDurationLabel } from "../utils/duration";
+import { abbreviateNsfwText } from "../utils/sfwText";
 import {
   getMatchHistoryByLobby,
   listMatchHistory,
@@ -109,33 +112,53 @@ function toMatchView(input: {
 
 async function buildCachedViews(limit = 100): Promise<HighscoreMatchView[]> {
   const cached = await db.multiplayer.listMatchCache(limit);
-  return cached.flatMap((entry) => {
-    const finishedAtIso = toIsoString(entry.finishedAt) ?? toIsoString(entry.updatedAt) ?? new Date().toISOString();
-    const view = toMatchView({
-      lobbyId: entry.lobbyId,
-      finishedAtIso,
-      isFinal: entry.isFinal,
-      resultsJson: entry.resultsJson,
-    });
-    return view ? [view] : [];
-  }).sort((a, b) => Date.parse(b.finishedAtIso) - Date.parse(a.finishedAtIso));
+  return cached
+    .flatMap((entry) => {
+      const finishedAtIso =
+        toIsoString(entry.finishedAt) ?? toIsoString(entry.updatedAt) ?? new Date().toISOString();
+      const view = toMatchView({
+        lobbyId: entry.lobbyId,
+        finishedAtIso,
+        isFinal: entry.isFinal,
+        resultsJson: entry.resultsJson,
+      });
+      return view ? [view] : [];
+    })
+    .sort((a, b) => Date.parse(b.finishedAtIso) - Date.parse(a.finishedAtIso));
 }
 
 export const Route = createFileRoute("/highscores")({
   loader: async () => {
     const [localHighscoreResult, singleRuns, cachedViews, queued] = await Promise.all([
-      db.gameProfile.getLocalHighscore().catch(() => ({ highscore: 0, highscoreCheatMode: false })),
+      db.gameProfile.getLocalHighscore().catch(() => ({
+        highscore: 0,
+        highscoreCheatMode: false,
+        highscoreAssisted: false,
+        highscoreAssistedSaveMode: null,
+      })),
       db.singlePlayerHistory.listRuns(100).catch(() => []),
       buildCachedViews().catch(() => []),
       db.multiplayer.listResultSyncLobbies().catch(() => []),
     ]);
 
-    const localHighscore = typeof localHighscoreResult === "number" ? localHighscoreResult : localHighscoreResult.highscore;
-    const localHighscoreCheatMode = typeof localHighscoreResult === "number" ? false : localHighscoreResult.highscoreCheatMode;
+    const localHighscore =
+      typeof localHighscoreResult === "number"
+        ? localHighscoreResult
+        : localHighscoreResult.highscore;
+    const localHighscoreCheatMode =
+      typeof localHighscoreResult === "number" ? false : localHighscoreResult.highscoreCheatMode;
+    const localHighscoreAssisted =
+      typeof localHighscoreResult === "number" ? false : (localHighscoreResult.highscoreAssisted ?? false);
+    const localHighscoreAssistedSaveMode =
+      typeof localHighscoreResult === "number"
+        ? null
+        : (localHighscoreResult.highscoreAssistedSaveMode ?? null);
 
     return {
       localHighscore,
       localHighscoreCheatMode,
+      localHighscoreAssisted,
+      localHighscoreAssistedSaveMode,
       singleRuns,
       cachedViews,
       initialSyncQueueCount: queued.length,
@@ -145,10 +168,13 @@ export const Route = createFileRoute("/highscores")({
 });
 
 export function HighscoresRoute() {
+  const sfwMode = useSfwMode();
   const navigate = useNavigate();
   const {
     localHighscore: initialHighscore,
     localHighscoreCheatMode: initialHighscoreCheatMode,
+    localHighscoreAssisted: initialHighscoreAssisted,
+    localHighscoreAssistedSaveMode: initialHighscoreAssistedSaveMode,
     singleRuns: initialSingleRuns,
     cachedViews,
     initialSyncQueueCount,
@@ -156,6 +182,10 @@ export function HighscoresRoute() {
 
   const [localHighscore, setLocalHighscore] = useState(initialHighscore);
   const [localHighscoreCheatMode, setLocalHighscoreCheatMode] = useState(initialHighscoreCheatMode);
+  const [localHighscoreAssisted, setLocalHighscoreAssisted] = useState(initialHighscoreAssisted);
+  const [localHighscoreAssistedSaveMode, setLocalHighscoreAssistedSaveMode] = useState<
+    "checkpoint" | "everywhere" | null
+  >(initialHighscoreAssistedSaveMode);
   const [singleRuns, setSingleRuns] = useState<SinglePlayerRunHistoryRow[]>(initialSingleRuns);
   const [matches, setMatches] = useState<HighscoreMatchView[]>(cachedViews);
   const [syncQueueCount, setSyncQueueCount] = useState(initialSyncQueueCount);
@@ -193,9 +223,13 @@ export function HighscoresRoute() {
         if (typeof freshHighscoreResult === "number") {
           setLocalHighscore(Math.max(0, Math.floor(freshHighscoreResult)));
           setLocalHighscoreCheatMode(false);
+          setLocalHighscoreAssisted(false);
+          setLocalHighscoreAssistedSaveMode(null);
         } else {
           setLocalHighscore(Math.max(0, Math.floor(freshHighscoreResult.highscore)));
           setLocalHighscoreCheatMode(freshHighscoreResult.highscoreCheatMode ?? false);
+          setLocalHighscoreAssisted(freshHighscoreResult.highscoreAssisted ?? false);
+          setLocalHighscoreAssistedSaveMode(freshHighscoreResult.highscoreAssistedSaveMode ?? null);
         }
       }
       setSingleRuns(freshSingleRuns);
@@ -240,7 +274,11 @@ export function HighscoresRoute() {
       setMatches(nextCachedViews);
       setSyncQueueCount(nextQueue.length);
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : "Could not sync remote results. Showing cached data.");
+      setError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Could not sync remote results. Showing cached data."
+      );
       const [nextCachedViews, nextQueue] = await Promise.all([
         buildCachedViews().catch(() => []),
         db.multiplayer.listResultSyncLobbies().catch(() => []),
@@ -271,9 +309,13 @@ export function HighscoresRoute() {
       setSingleRuns((current) => current.filter((run) => run.id !== runId));
       setLocalHighscore(Math.max(0, Math.floor(result.highscore ?? 0)));
       setLocalHighscoreCheatMode(result.highscoreCheatMode ?? false);
+      setLocalHighscoreAssisted(result.highscoreAssisted ?? false);
+      setLocalHighscoreAssistedSaveMode(result.highscoreAssistedSaveMode ?? null);
       setPendingDeleteRunId((current) => (current === runId ? null : current));
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Could not delete single-player run.");
+      setError(
+        deleteError instanceof Error ? deleteError.message : "Could not delete single-player run."
+      );
     } finally {
       setDeletingRunId(null);
     }
@@ -281,23 +323,24 @@ export function HighscoresRoute() {
 
   const pendingDeleteRun = useMemo(
     () => singleRuns.find((run) => run.id === pendingDeleteRunId) ?? null,
-    [pendingDeleteRunId, singleRuns],
+    [pendingDeleteRunId, singleRuns]
   );
 
-  const finalMatchCount = useMemo(
-    () => matches.filter((match) => match.isFinal).length,
-    [matches],
-  );
+  const finalMatchCount = useMemo(() => matches.filter((match) => match.isFinal).length, [matches]);
   const singleRunCount = singleRuns.length;
   const singleRunNewBestCount = useMemo(
     () => singleRuns.filter((run) => run.wasNewHighscore).length,
-    [singleRuns],
+    [singleRuns]
   );
-  const activeSection = HIGHSCORE_SECTIONS.find((section) => section.id === activeSectionId) ?? HIGHSCORE_SECTIONS[0];
+  const activeSection =
+    HIGHSCORE_SECTIONS.find((section) => section.id === activeSectionId) ?? HIGHSCORE_SECTIONS[0];
   const latestSingleRun = singleRuns[0] ?? null;
   const topMultiplayerScore = useMemo(
-    () => matches.flatMap((match) => match.rows).reduce((best, row) => Math.max(best, row.finalScore), 0),
-    [matches],
+    () =>
+      matches
+        .flatMap((match) => match.rows)
+        .reduce((best, row) => Math.max(best, row.finalScore), 0),
+    [matches]
   );
 
   useControllerSurface({
@@ -312,7 +355,10 @@ export function HighscoresRoute() {
   });
 
   return (
-    <div ref={scopeRef} className="relative min-h-screen overflow-hidden text-zinc-100 selection:bg-cyan-500/30">
+    <div
+      ref={scopeRef}
+      className="relative min-h-screen overflow-hidden text-zinc-100 selection:bg-cyan-500/30"
+    >
       <AnimatedBackground />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(34,211,238,0.18),transparent_40%),radial-gradient(circle_at_82%_16%,rgba(236,72,153,0.18),transparent_35%),radial-gradient(circle_at_55%_95%,rgba(244,114,182,0.12),transparent_45%)]" />
 
@@ -344,7 +390,9 @@ export function HighscoresRoute() {
                 }}
                 className={`settings-sidebar-item whitespace-nowrap ${active ? "is-active" : ""}`}
               >
-                <span aria-hidden="true" className="settings-sidebar-icon">{section.icon}</span>
+                <span aria-hidden="true" className="settings-sidebar-icon">
+                  {section.icon}
+                </span>
                 <span>{section.title}</span>
               </button>
             );
@@ -375,11 +423,17 @@ export function HighscoresRoute() {
                   <h2 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-4xl">
                     {activeSection.title}
                   </h2>
-                  <p className="mt-2 max-w-3xl text-sm text-zinc-400">{activeSection.description}</p>
+                  <p className="mt-2 max-w-3xl text-sm text-zinc-400">
+                    {activeSection.description}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-xl border border-violet-200/30 bg-violet-400/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-violet-100">
-                    Local Best {localHighscore}{localHighscoreCheatMode ? " 🎭" : ""}
+                    Local Best {localHighscore}
+                    {localHighscoreCheatMode ? " 🎭" : ""}
+                    {localHighscoreAssisted && localHighscoreAssistedSaveMode
+                      ? ` ${getSaveModeEmoji(localHighscoreAssistedSaveMode)}`
+                      : ""}
                   </div>
                   <div className="rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-cyan-100">
                     Queue {syncQueueCount}
@@ -406,12 +460,20 @@ export function HighscoresRoute() {
               )}
             </header>
 
-            <div className="settings-panel-enter flex flex-col gap-5" key={`content-${activeSection.id}`}>
+            <div
+              className="settings-panel-enter flex flex-col gap-5"
+              key={`content-${activeSection.id}`}
+            >
               {activeSection.id === "overview" && (
                 <>
-                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                  <section
+                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                    style={{ animationDelay: "0.05s" }}
+                  >
                     <div className="mb-5">
-                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Score Snapshot</h3>
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                        Score Snapshot
+                      </h3>
                       <p className="mt-1 text-sm text-zinc-300">
                         The fastest read on current local progress and multiplayer cache health.
                       </p>
@@ -428,11 +490,17 @@ export function HighscoresRoute() {
                   </section>
 
                   <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-                    <div className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                    <div
+                      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                      style={{ animationDelay: "0.08s" }}
+                    >
                       <div className="mb-4">
-                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Sync & Cache</h3>
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                          Sync & Cache
+                        </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Pull remote match history into the local cache, then browse it instantly from the multiplayer section.
+                          Pull remote match history into the local cache, then browse it instantly
+                          from the multiplayer section.
                         </p>
                       </div>
                       <div className="space-y-3">
@@ -447,9 +515,13 @@ export function HighscoresRoute() {
                           }}
                         />
                         <div className="rounded-2xl border border-zinc-700/70 bg-black/25 p-4">
-                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-400">Current Status</p>
+                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-400">
+                            Current Status
+                          </p>
                           <p className="mt-2 text-sm text-zinc-100">
-                            {syncing ? "Refreshing local and remote result history." : "Idle. Cached history is ready to browse."}
+                            {syncing
+                              ? "Refreshing local and remote result history."
+                              : "Idle. Cached history is ready to browse."}
                           </p>
                           <p className="mt-2 text-sm text-zinc-400">
                             {syncQueueCount > 0
@@ -460,11 +532,17 @@ export function HighscoresRoute() {
                       </div>
                     </div>
 
-                    <div className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.11s" }}>
+                    <div
+                      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                      style={{ animationDelay: "0.11s" }}
+                    >
                       <div className="mb-4">
-                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Quick Jumps</h3>
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                          Quick Jumps
+                        </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Move straight to the detailed score views when you know what you want to inspect.
+                          Move straight to the detailed score views when you know what you want to
+                          inspect.
                         </p>
                       </div>
                       <div className="space-y-3">
@@ -477,9 +555,12 @@ export function HighscoresRoute() {
                           }}
                           className="w-full rounded-2xl border border-violet-300/25 bg-black/30 px-4 py-4 text-left transition-all duration-200 hover:border-violet-200/60 hover:bg-violet-500/10"
                         >
-                          <div className="font-semibold text-zinc-100">Open single-player history</div>
+                          <div className="font-semibold text-zinc-100">
+                            Open single-player history
+                          </div>
                           <div className="mt-1 text-sm text-zinc-400">
-                            Review {singleRunCount} stored runs, including survival time and playlist provenance.
+                            Review {singleRunCount} stored runs, including survival time and
+                            playlist provenance.
                           </div>
                         </button>
                         <button
@@ -491,9 +572,13 @@ export function HighscoresRoute() {
                           }}
                           className="w-full rounded-2xl border border-cyan-300/25 bg-black/30 px-4 py-4 text-left transition-all duration-200 hover:border-cyan-200/60 hover:bg-cyan-500/10"
                         >
-                          <div className="font-semibold text-zinc-100">Open multiplayer standings</div>
+                          <div className="font-semibold text-zinc-100">
+                            Open multiplayer standings
+                          </div>
                           <div className="mt-1 text-sm text-zinc-400">
-                            Browse {matches.length} cached match {matches.length === 1 ? "result" : "results"} and expand individual player standings.
+                            Browse {matches.length} cached match{" "}
+                            {matches.length === 1 ? "result" : "results"} and expand individual
+                            player standings.
                           </div>
                         </button>
                       </div>
@@ -504,11 +589,17 @@ export function HighscoresRoute() {
 
               {activeSection.id === "single" && (
                 <>
-                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                  <section
+                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                    style={{ animationDelay: "0.05s" }}
+                  >
                     <div className="mb-5">
-                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Single-Player Summary</h3>
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                        Single-Player Summary
+                      </h3>
                       <p className="mt-1 text-sm text-zinc-300">
-                        Local run history is stored directly in the app database, including legacy rows and newer survival-time data.
+                        Local run history is stored directly in the app database, including legacy
+                        rows and newer survival-time data.
                       </p>
                     </div>
                     <InlineMetrics
@@ -517,16 +608,26 @@ export function HighscoresRoute() {
                         { label: "Best Score", value: localHighscore, tone: "violet" },
                         { label: "Run Count", value: singleRunCount, tone: "cyan" },
                         { label: "New Bests", value: singleRunNewBestCount, tone: "emerald" },
-                        { label: "Latest Survival", value: latestSingleRun ? formatRunSurvival(latestSingleRun) : "N/A", tone: "amber" },
+                        {
+                          label: "Latest Survival",
+                          value: latestSingleRun ? formatRunSurvival(latestSingleRun) : "N/A",
+                          tone: "amber",
+                        },
                       ]}
                     />
                   </section>
 
-                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                  <section
+                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                    style={{ animationDelay: "0.08s" }}
+                  >
                     <div className="mb-4">
-                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Singleplayer Run History</h3>
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                        Singleplayer Run History
+                      </h3>
                       <p className="mt-1 text-sm text-zinc-300">
-                        Each row preserves score progression, completion reason, playlist reference, and survival duration when available.
+                        Each row preserves score progression, completion reason, playlist reference,
+                        and survival duration when available.
                       </p>
                     </div>
                     {singleRuns.length === 0 && (
@@ -540,15 +641,34 @@ export function HighscoresRoute() {
                           <div
                             key={run.id}
                             className="py-3 transition-colors hover:bg-violet-500/5 -mx-2 px-2"
-                            title={run.cheatModeActive ? "This run was completed with cheat mode active" : undefined}
+                            title={
+                              run.cheatModeActive
+                                ? "This run was completed with cheat mode active"
+                                : (run.assistedActive ? getAssistedTooltip(run.assistedSaveMode ?? null) : undefined)
+                            }
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-3">
-                                <span className="font-bold text-zinc-100">{run.score}{run.cheatModeActive ? " 🎭" : ""}</span>
-                                <span className="text-xs text-zinc-400">{singlePlayerReasonLabel[run.completionReason] ?? run.completionReason}</span>
+                                <span className="font-bold text-zinc-100">
+                                  {run.score}
+                                  {run.cheatModeActive ? " 🎭" : ""}
+                                  {run.assistedActive && run.assistedSaveMode
+                                    ? ` ${getSaveModeEmoji(run.assistedSaveMode)}`
+                                    : ""}
+                                </span>
+                                <span className="text-xs text-zinc-400">
+                                  {abbreviateNsfwText(
+                                    singlePlayerReasonLabel[run.completionReason] ??
+                                      run.completionReason ??
+                                      "Unknown",
+                                    sfwMode
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-zinc-500">{new Date(run.finishedAt).toLocaleDateString()}</span>
+                                <span className="text-xs text-zinc-500">
+                                  {new Date(run.finishedAt).toLocaleDateString()}
+                                </span>
                                 <button
                                   type="button"
                                   onMouseEnter={playHover}
@@ -566,10 +686,21 @@ export function HighscoresRoute() {
                               </div>
                             </div>
                             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
-                              <span>Survived: <span className="text-zinc-200">{formatRunSurvival(run)}</span></span>
-                              <span>Playlist: <span className="text-zinc-200">{formatPlaylistLabel(run)}</span></span>
-                              <span>Before: <span className="text-zinc-200">{run.highscoreBefore}</span> → After: <span className="text-zinc-200">{run.highscoreAfter}</span></span>
-                              <span className={run.wasNewHighscore ? "text-emerald-300" : ""}>{run.wasNewHighscore ? "New Best!" : ""}</span>
+                              <span>
+                                Survived:{" "}
+                                <span className="text-zinc-200">{formatRunSurvival(run)}</span>
+                              </span>
+                              <span>
+                                Playlist:{" "}
+                                <span className="text-zinc-200">{formatPlaylistLabel(run)}</span>
+                              </span>
+                              <span>
+                                Before: <span className="text-zinc-200">{run.highscoreBefore}</span>{" "}
+                                → After: <span className="text-zinc-200">{run.highscoreAfter}</span>
+                              </span>
+                              <span className={run.wasNewHighscore ? "text-emerald-300" : ""}>
+                                {run.wasNewHighscore ? "New Best!" : ""}
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -581,11 +712,17 @@ export function HighscoresRoute() {
 
               {activeSection.id === "multiplayer" && (
                 <>
-                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                  <section
+                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                    style={{ animationDelay: "0.05s" }}
+                  >
                     <div className="mb-5">
-                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Multiplayer Summary</h3>
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                        Multiplayer Summary
+                      </h3>
                       <p className="mt-1 text-sm text-zinc-300">
-                        Cached standings let you revisit prior lobbies even when the remote service is unavailable.
+                        Cached standings let you revisit prior lobbies even when the remote service
+                        is unavailable.
                       </p>
                     </div>
                     <InlineMetrics
@@ -599,12 +736,18 @@ export function HighscoresRoute() {
                     />
                   </section>
 
-                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                  <section
+                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                    style={{ animationDelay: "0.08s" }}
+                  >
                     <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Multiplayer Result History</h3>
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                          Multiplayer Result History
+                        </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Expand a cached match to review every player row from the stored standings snapshot.
+                          Expand a cached match to review every player row from the stored standings
+                          snapshot.
                         </p>
                       </div>
                       <HighscoreActionButton
@@ -640,20 +783,36 @@ export function HighscoresRoute() {
                                 data-controller-focus-id={`highscores-match-${match.lobbyId}`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <span className={`text-xs text-cyan-200 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>▾</span>
-                                  <span className="font-semibold text-zinc-100">Lobby {match.lobbyId.slice(0, 12)}</span>
-                                  <span className="text-xs text-zinc-400">{match.isFinal ? "Final" : "Draft"}</span>
+                                  <span
+                                    className={`text-xs text-cyan-200 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+                                  >
+                                    ▾
+                                  </span>
+                                  <span className="font-semibold text-zinc-100">
+                                    Lobby {match.lobbyId.slice(0, 12)}
+                                  </span>
+                                  <span className="text-xs text-zinc-400">
+                                    {match.isFinal ? "Final" : "Draft"}
+                                  </span>
                                 </div>
-                                <span className="text-xs text-zinc-500">{new Date(match.finishedAtIso).toLocaleDateString()}</span>
+                                <span className="text-xs text-zinc-500">
+                                  {new Date(match.finishedAtIso).toLocaleDateString()}
+                                </span>
                               </button>
                               {expanded && (
                                 <div className="ml-6 mt-2 space-y-1 border-l-2 border-cyan-500/30 pl-3">
                                   {match.rows.map((row) => (
-                                    <div key={row.playerId} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                                    <div
+                                      key={row.playerId}
+                                      className="flex items-center justify-between gap-3 py-1.5 text-sm"
+                                    >
                                       <span className="text-zinc-100">
-                                        <span className="text-cyan-300">#{row.place}</span> {row.displayName}
+                                        <span className="text-cyan-300">#{row.place}</span>{" "}
+                                        {row.displayName}
                                       </span>
-                                      <span className="font-bold text-cyan-200">{row.finalScore}</span>
+                                      <span className="font-bold text-cyan-200">
+                                        {row.finalScore}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -700,18 +859,22 @@ export function HighscoresRoute() {
   );
 }
 
-function HighscoreStatCard({
+export function HighscoreStatCard({
   label,
   value,
   description,
   tone = "violet",
   cheatMode,
+  assisted,
+  assistedSaveMode,
 }: {
   label: string;
   value: string | number;
   description: string;
   tone?: "violet" | "cyan" | "emerald" | "amber";
   cheatMode?: boolean;
+  assisted?: boolean;
+  assistedSaveMode?: "checkpoint" | "everywhere" | null;
 }) {
   const toneClass =
     tone === "cyan"
@@ -725,12 +888,23 @@ function HighscoreStatCard({
   return (
     <div
       className={`rounded-2xl border p-4 ${toneClass}`}
-      title={cheatMode ? "This highscore was achieved with cheat mode active" : undefined}
+      title={
+        cheatMode
+          ? "This highscore was achieved with cheat mode active"
+          : (assisted ? getAssistedTooltip(assistedSaveMode) : undefined)
+      }
     >
-      <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">{label}</p>
+      <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+        {label}
+      </p>
       <p className="mt-2 text-2xl font-black tracking-tight text-zinc-50">
         {value}
         {cheatMode && <span className="ml-1.5 text-lg cursor-help">🎭</span>}
+        {assisted && assistedSaveMode && (
+          <span className="ml-1.5 text-lg cursor-help" title={getAssistedTooltip(assistedSaveMode)}>
+            {getSaveModeEmoji(assistedSaveMode)}
+          </span>
+        )}
       </p>
       <p className="mt-2 text-sm text-zinc-400">{description}</p>
     </div>
@@ -764,7 +938,9 @@ function HighscoreActionButton({
       className={`rounded-2xl border px-4 py-3 text-left font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${toneClass}`}
     >
       <div>{label}</div>
-      {description && <div className="mt-2 text-[11px] normal-case tracking-normal opacity-80">{description}</div>}
+      {description && (
+        <div className="mt-2 text-[11px] normal-case tracking-normal opacity-80">{description}</div>
+      )}
     </button>
   );
 }
@@ -788,15 +964,22 @@ function DeleteRunConfirmDialog({
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-rose-200/80">
           Confirm Deletion
         </p>
-        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">Delete Highscore Entry?</h2>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">
+          Delete Highscore Entry?
+        </h2>
         <p className="mt-2 text-sm text-zinc-400">
-          This removes the stored single-player run from local history and may lower your local best score.
+          This removes the stored single-player run from local history and may lower your local best
+          score.
         </p>
 
         <div className="mt-5 rounded-2xl border border-rose-300/25 bg-rose-500/10 p-4">
-          <p className="text-sm text-zinc-100">Score: <span className="font-semibold">{run.score}</span></p>
+          <p className="text-sm text-zinc-100">
+            Score: <span className="font-semibold">{run.score}</span>
+          </p>
           <p className="mt-1 text-sm text-zinc-300">Playlist: {formatPlaylistLabel(run)}</p>
-          <p className="mt-1 text-sm text-zinc-300">Finished: {new Date(run.finishedAt).toLocaleString()}</p>
+          <p className="mt-1 text-sm text-zinc-300">
+            Finished: {new Date(run.finishedAt).toLocaleString()}
+          </p>
         </div>
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
