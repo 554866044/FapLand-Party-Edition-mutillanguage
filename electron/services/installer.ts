@@ -78,6 +78,27 @@ type PreparedRoundResources = {
   previewImage: string | null;
 };
 
+type PrepareMediaOptions = {
+  deferPhash?: boolean;
+  deferPreview?: boolean;
+  deferDuration?: boolean;
+  lowPriorityMedia?: boolean;
+};
+
+const DEFAULT_PREPARE_MEDIA_OPTIONS: Required<PrepareMediaOptions> = {
+  deferPhash: false,
+  deferPreview: false,
+  deferDuration: false,
+  lowPriorityMedia: false,
+};
+
+const LEGACY_PREPARE_MEDIA_OPTIONS: Required<PrepareMediaOptions> = {
+  deferPhash: true,
+  deferPreview: true,
+  deferDuration: true,
+  lowPriorityMedia: true,
+};
+
 type HeroMetadataInput = {
   name: string;
   author?: string | null;
@@ -189,41 +210,73 @@ type InstallSessionContext = {
   securityWarnings: ImportSecurityWarning[];
 };
 
+function resolvePrepareMediaOptions(options?: PrepareMediaOptions): Required<PrepareMediaOptions> {
+  return { ...DEFAULT_PREPARE_MEDIA_OPTIONS, ...(options ?? {}) };
+}
+
+function createAsyncLimiter(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
+  const queue: Array<() => void> = [];
+  let activeCount = 0;
+
+  const runNext = () => {
+    if (activeCount >= limit) return;
+    const next = queue.shift();
+    if (!next) return;
+    activeCount += 1;
+    next();
+  };
+
+  return async <T>(task: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      queue.push(() => {
+        task()
+          .then(resolve, reject)
+          .finally(() => {
+            activeCount -= 1;
+            runNext();
+          });
+      });
+      runNext();
+    });
+}
+
+const runImportMediaWork = createAsyncLimiter(1);
+
 type PreparedLegacyEntry =
   | {
-    kind: "checkpoint";
-    label: string;
-  }
+      kind: "checkpoint";
+      label: string;
+    }
   | {
-    kind: "round";
-    sourcePath: string;
-    write: PreparedRoundWrite;
-  };
+      kind: "round";
+      sourcePath: string;
+      write: PreparedRoundWrite;
+    };
 
 type IndexedLegacyEntry =
   | {
-    kind: "checkpoint";
-    label: string;
-    index: number;
-  }
+      kind: "checkpoint";
+      label: string;
+      index: number;
+    }
   | {
-    kind: "round";
-    write: PreparedRoundWrite;
-    index: number;
-  };
+      kind: "round";
+      write: PreparedRoundWrite;
+      index: number;
+    };
 
 type PersistedLegacyEntry =
   | {
-    kind: "checkpoint";
-    label: string;
-    index: number;
-  }
+      kind: "checkpoint";
+      label: string;
+      index: number;
+    }
   | {
-    kind: "round";
-    write: PreparedRoundWrite;
-    index: number;
-    persisted: { installed: number; updated: number; roundIds: string[] };
-  };
+      kind: "round";
+      write: PreparedRoundWrite;
+      index: number;
+      persisted: { installed: number; updated: number; roundIds: string[] };
+    };
 
 export type InstallScanState = "idle" | "running" | "done" | "aborted" | "error";
 export type InstallScanTrigger = "startup" | "manual";
@@ -299,33 +352,33 @@ export type ReviewedLegacyImportSlot = {
 
 export type InstallFolderInspectionResult =
   | {
-    kind: "sidecar";
-    folderPath: string;
-    playlistNameHint: string;
-    sidecarCount: number;
-  }
+      kind: "sidecar";
+      folderPath: string;
+      playlistNameHint: string;
+      sidecarCount: number;
+    }
   | {
-    kind: "legacy";
-    folderPath: string;
-    playlistNameHint: string;
-    legacySlots: LegacyImportSlotPreview[];
-  }
+      kind: "legacy";
+      folderPath: string;
+      playlistNameHint: string;
+      legacySlots: LegacyImportSlotPreview[];
+    }
   | {
-    kind: "empty";
-    folderPath: string;
-    playlistNameHint: string;
-  };
+      kind: "empty";
+      folderPath: string;
+      playlistNameHint: string;
+    };
 
 export type LegacyImportSlot =
   | {
-    kind: "round";
-    ref: PortableRoundRef;
-  }
+      kind: "round";
+      ref: PortableRoundRef;
+    }
   | {
-    kind: "checkpoint";
-    label: string;
-    restDurationMs?: number | null;
-  };
+      kind: "checkpoint";
+      label: string;
+      restDurationMs?: number | null;
+    };
 
 export type InstallFolderScanResult = {
   status: InstallScanStatus;
@@ -777,13 +830,15 @@ async function collectSidecarFiles(folderPath: string): Promise<ImportedSidecarD
         try {
           const { manifest } = await ensureFpackExtracted(fullPath);
           output.push(
-            ...manifest.sidecarEntries.map((sidecar): ImportedSidecarDescriptor => ({
-              sidecarPath: sidecar.extractedPath,
-              source: {
-                sourceKind: "fpack",
-                archiveEntryPath: sidecar.archiveEntryPath,
-              },
-            }))
+            ...manifest.sidecarEntries.map(
+              (sidecar): ImportedSidecarDescriptor => ({
+                sidecarPath: sidecar.extractedPath,
+                source: {
+                  sourceKind: "fpack",
+                  archiveEntryPath: sidecar.archiveEntryPath,
+                },
+              })
+            )
           );
         } catch {
           // Skip invalid .fpack files silently.
@@ -886,10 +941,8 @@ async function resolveVideoRange(
     let cacheKey = rawKey;
 
     try {
-      normalizedRange = await getNormalizedVideoHashRange(
-        normalizedPath,
-        normalizedStartTimeMs,
-        normalizedEndTimeMs
+      normalizedRange = await runImportMediaWork(() =>
+        getNormalizedVideoHashRange(normalizedPath, normalizedStartTimeMs, normalizedEndTimeMs)
       );
       cacheKey = toVideoHashRangeCacheKey(normalizedPath, normalizedRange);
     } catch {
@@ -910,21 +963,31 @@ async function computeVideoHash(
   context: InstallSessionContext,
   localVideoPath: string,
   startTimeMs?: number | null,
-  endTimeMs?: number | null
+  endTimeMs?: number | null,
+  options?: PrepareMediaOptions
 ): Promise<string> {
+  const mediaOptions = resolvePrepareMediaOptions(options);
   const range = await resolveVideoRange(context, localVideoPath, startTimeMs, endTimeMs);
   return rememberPromise(context.hashCache, range.cacheKey, async () => {
     let resolvedHash: string | null = null;
 
     try {
       throwIfAbortRequested();
-      const phash = range.normalizedRange
-        ? await generateVideoPhashForNormalizedRange(range.normalizedPath, range.normalizedRange)
-        : await generateVideoPhash(
-          range.normalizedPath,
-          range.normalizedStartTimeMs,
-          range.normalizedEndTimeMs
-        );
+      const normalizedRange = range.normalizedRange;
+      const phash = normalizedRange
+        ? await runImportMediaWork(() =>
+            generateVideoPhashForNormalizedRange(range.normalizedPath, normalizedRange, {
+              lowPriority: mediaOptions.lowPriorityMedia,
+            })
+          )
+        : await runImportMediaWork(() =>
+            generateVideoPhash(
+              range.normalizedPath,
+              range.normalizedStartTimeMs,
+              range.normalizedEndTimeMs,
+              { lowPriority: mediaOptions.lowPriorityMedia }
+            )
+          );
       const trimmed = typeof phash === "string" ? phash.trim() : "";
       if (trimmed.length > 0) {
         resolvedHash = trimmed;
@@ -964,11 +1027,13 @@ async function computePreviewImage(
 
   return rememberPromise(context.previewCache, cacheKey, async () => {
     throwIfAbortRequested();
-    return await generateRoundPreviewImageDataUri({
-      videoUri,
-      startTimeMs,
-      endTimeMs,
-    });
+    return await runImportMediaWork(() =>
+      generateRoundPreviewImageDataUri({
+        videoUri,
+        startTimeMs,
+        endTimeMs,
+      })
+    );
   });
 }
 
@@ -978,7 +1043,7 @@ async function resolveLocalVideoDurationMs(
 ): Promise<number | null> {
   if (!localVideoPath) return null;
   return rememberPromise(context.durationCache, localVideoPath, async () => {
-    return resolveVideoDurationMsForLocalPath(localVideoPath);
+    return runImportMediaWork(() => resolveVideoDurationMsForLocalPath(localVideoPath));
   });
 }
 
@@ -1046,9 +1111,10 @@ async function prepareRoundResources(
   sidecarPath: string,
   round: SidecarRoundData,
   allowLocalFallback: boolean,
-  deferPhash?: boolean
+  options?: PrepareMediaOptions
 ): Promise<PreparedRoundResources> {
   throwIfAbortRequested();
+  const mediaOptions = resolvePrepareMediaOptions(options);
   const explicitRoundPhash = normalizeText(round.phash);
   const resources: Array<{
     videoUri: string;
@@ -1070,10 +1136,10 @@ async function prepareRoundResources(
       const normalizedFunscriptUri = normalizeText(resource.funscriptUri);
       const funscriptUri = normalizedFunscriptUri
         ? filterTrustedRemoteUri(
-          context,
-          resolveSidecarResourceUri(normalizedFunscriptUri, sidecarPath),
-          "funscript"
-        )
+            context,
+            resolveSidecarResourceUri(normalizedFunscriptUri, sidecarPath),
+            "funscript"
+          )
         : null;
       resources.push({
         videoUri,
@@ -1118,12 +1184,13 @@ async function prepareRoundResources(
         throwIfAbortRequested();
         let resolvedPhash: string | null = explicitRoundPhash;
 
-        if (!resolvedPhash && resource.localVideoPath && !deferPhash) {
+        if (!resolvedPhash && resource.localVideoPath && !mediaOptions.deferPhash) {
           resolvedPhash = await computeVideoHash(
             context,
             resource.localVideoPath,
             round.startTime,
-            round.endTime
+            round.endTime,
+            mediaOptions
           );
         }
 
@@ -1131,11 +1198,13 @@ async function prepareRoundResources(
           videoUri: resource.videoUri,
           funscriptUri: resource.funscriptUri,
           phash: resolvedPhash,
-          durationMs: await resolveLocalVideoDurationMs(context, resource.localVideoPath),
+          durationMs: mediaOptions.deferDuration
+            ? null
+            : await resolveLocalVideoDurationMs(context, resource.localVideoPath),
         } satisfies PreparedResource;
       })
     ),
-    previewSourceResource
+    previewSourceResource && !mediaOptions.deferPreview
       ? computePreviewImage(context, previewSourceResource.videoUri, round.startTime, round.endTime)
       : Promise.resolve(null),
   ]);
@@ -1408,7 +1477,7 @@ async function prepareRoundWrite(
   sidecarPath: string,
   roundInput: InstallRound,
   allowLocalFallback: boolean,
-  deferPhash?: boolean
+  options?: PrepareMediaOptions
 ): Promise<PreparedRoundWrite> {
   const normalizedRound = normalizeRoundData(roundInput);
   const existingRound = context.roundByInstallSourceKey.get(installSourceKey) ?? null;
@@ -1421,7 +1490,7 @@ async function prepareRoundWrite(
     sidecarPath,
     roundForPreparation,
     allowLocalFallback,
-    deferPhash
+    options
   );
   const calculatedDifficulty =
     normalizedRound.difficulty ??
@@ -1445,10 +1514,10 @@ async function prepareRoundWrite(
       normalizedRound.phash || !prepared.computedRoundPhash
         ? { ...normalizedRound, difficulty: calculatedDifficulty }
         : {
-          ...normalizedRound,
-          difficulty: calculatedDifficulty,
-          phash: prepared.computedRoundPhash,
-        },
+            ...normalizedRound,
+            difficulty: calculatedDifficulty,
+            phash: prepared.computedRoundPhash,
+          },
     resources: prepared.resources,
     previewImage: prepared.previewImage,
     unresolved: prepared.resources.length === 0,
@@ -1469,17 +1538,17 @@ async function calculateMissingDifficultyFromResources(
 
 type ParsedSidecarInspectionEntry =
   | {
-    kind: "playlist";
-    filePath: string;
-    name: string;
-    resources: [];
-  }
+      kind: "playlist";
+      filePath: string;
+      name: string;
+      resources: [];
+    }
   | {
-    kind: "hero_round";
-    filePath: string;
-    name: string;
-    resources: Array<{ videoUri: string; funscriptUri: string | null }>;
-  };
+      kind: "hero_round";
+      filePath: string;
+      name: string;
+      resources: Array<{ videoUri: string; funscriptUri: string | null }>;
+    };
 
 function normalizeFpackInstallEntryPath(entryPath: string): string {
   const normalized = path.posix.normalize(entryPath.replaceAll("\\", "/")).replace(/^\/+/u, "");
@@ -1547,14 +1616,12 @@ async function parseSidecarForInspection(
     };
   }
 
-
   return {
     kind: "hero_round",
     filePath: sidecarPath,
     name: path.basename(sidecarPath),
     resources: [],
   };
-
 }
 
 async function prepareRoundSidecar(
@@ -2152,7 +2219,7 @@ export async function repairTemplateHero(
 async function prepareLegacyRoundEntry(
   context: InstallSessionContext,
   sourcePath: string,
-  deferPhash?: boolean
+  options?: PrepareMediaOptions
 ): Promise<PreparedLegacyEntry> {
   const absoluteVideoPath = path.resolve(sourcePath);
   const parsed = path.parse(absoluteVideoPath);
@@ -2184,7 +2251,7 @@ async function prepareLegacyRoundEntry(
         ],
       },
       false,
-      deferPhash
+      { ...LEGACY_PREPARE_MEDIA_OPTIONS, ...(options ?? {}) }
     ),
   };
 }
@@ -2268,7 +2335,7 @@ function toPlaylistNameHint(folderPath: string): string {
 
 async function importLegacyFolderAsRounds(
   folderPath: string,
-  options?: { omitCheckpointRounds?: boolean }
+  options?: { omitCheckpointRounds?: boolean } & PrepareMediaOptions
 ): Promise<{
   installed: number;
   updated: number;
@@ -2307,7 +2374,7 @@ async function importLegacyFolderAsRounds(
         return null;
       }
 
-      const preparedEntry = await prepareLegacyRoundEntry(context, absoluteVideoPath);
+      const preparedEntry = await prepareLegacyRoundEntry(context, absoluteVideoPath, options);
       if (preparedEntry.kind !== "round") {
         throw new Error("Unexpected checkpoint result from prepareLegacyRoundEntry");
       }
@@ -2399,7 +2466,7 @@ function updateEta(startedAt: number, completed: number, total: number): void {
 async function importLegacyFolderFromReviewedSlots(
   folderPath: string,
   reviewedSlots: ReviewedLegacyImportSlot[],
-  options?: { deferPhash?: boolean }
+  options?: PrepareMediaOptions
 ): Promise<LegacyInstallImport & { installed: number; updated: number }> {
   throwIfAbortRequested();
   const normalizedFolder = path.resolve(folderPath);
@@ -2464,11 +2531,7 @@ async function importLegacyFolderFromReviewedSlots(
         };
       }
 
-      const preparedEntry = await prepareLegacyRoundEntry(
-        context,
-        reviewed.sourcePath,
-        options?.deferPhash
-      );
+      const preparedEntry = await prepareLegacyRoundEntry(context, reviewed.sourcePath, options);
       if (preparedEntry.kind !== "round") {
         throw new Error("Unexpected checkpoint result from prepareLegacyRoundEntry");
       }
@@ -2605,7 +2668,9 @@ export function requestInstallScanAbort(): InstallScanStatus {
 export async function inspectInstallSidecarFile(
   filePath: string
 ): Promise<InstallSidecarSecurityAnalysis> {
-  const normalizedFile = assertApprovedDialogPath("installSidecarFile", filePath, { consume: false });
+  const normalizedFile = assertApprovedDialogPath("installSidecarFile", filePath, {
+    consume: false,
+  });
   if (!(await isFile(normalizedFile))) {
     throw new Error("Selected file does not exist or is not a file.");
   }
@@ -2630,7 +2695,6 @@ export async function inspectInstallSidecarFile(
   const parsed = await parseSidecarForInspection(normalizedFile);
   return collectUnknownRemoteSitesFromResources(normalizedFile, parsed.name, parsed.resources);
 }
-
 
 export async function importInstallSidecarFile(
   filePath: string,
@@ -3097,7 +3161,7 @@ async function importPreparedSidecars(
 
 async function scanInstallFolderOnceWithLegacySupportResolved(
   normalizedFolder: string,
-  options?: { omitCheckpointRounds?: boolean }
+  options?: { omitCheckpointRounds?: boolean } & PrepareMediaOptions
 ): Promise<InstallFolderScanResult> {
   activeManualFolderImport = true;
 
@@ -3167,7 +3231,7 @@ async function scanInstallFolderOnceWithLegacySupportResolved(
 
 export async function scanInstallFolderOnceWithLegacySupport(
   folderPath: string,
-  options?: { omitCheckpointRounds?: boolean }
+  options?: { omitCheckpointRounds?: boolean } & PrepareMediaOptions
 ): Promise<InstallFolderScanResult> {
   const normalizedFolder = await resolveApprovedInstallFolder(folderPath);
   return scanInstallFolderOnceWithLegacySupportResolved(normalizedFolder, options);
@@ -3176,7 +3240,7 @@ export async function scanInstallFolderOnceWithLegacySupport(
 export async function importLegacyFolderWithPlan(
   folderPath: string,
   reviewedSlots: ReviewedLegacyImportSlot[],
-  options?: { deferPhash?: boolean }
+  options?: PrepareMediaOptions
 ): Promise<InstallFolderScanResult> {
   activeManualFolderImport = true;
 

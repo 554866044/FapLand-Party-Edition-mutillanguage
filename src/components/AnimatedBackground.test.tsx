@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -46,16 +46,25 @@ describe("AnimatedBackground", () => {
     cleanup();
   });
 
-  it("renders at most one video in light mode and omits grid and scanlines", () => {
+  it("renders at most one video in light mode when background videos are enabled", async () => {
     const { container } = render(
       <AnimatedBackground
         videoUris={["/video-1.mp4", "/video-2.mp4", "/video-3.mp4", "/video-4.mp4"]}
       />
     );
 
-    expect(container.querySelectorAll("video")).toHaveLength(1);
+    await waitFor(() => expect(container.querySelectorAll("video")).toHaveLength(1));
     expect(screen.queryByTestId("animated-background-grid")).toBeNull();
     expect(screen.queryByTestId("animated-background-scanlines")).toBeNull();
+  });
+
+  it("renders videos by default when the setting is unset", async () => {
+    mocks.backgroundVideoEnabledQuery.mockResolvedValue(undefined);
+
+    const { container } = render(<AnimatedBackground videoUris={["/video-1.mp4"]} />);
+
+    await waitFor(() => expect(mocks.backgroundVideoEnabledQuery).toHaveBeenCalled());
+    expect(container.querySelectorAll("video")).toHaveLength(1);
   });
 
   it("handles empty video lists without rendering a video element", () => {

@@ -4,7 +4,9 @@ import { round, resource } from "./db/schema";
 import { getStore } from "./store";
 import {
   BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
   normalizeBackgroundPhashScanningEnabled,
+  normalizeBackgroundPhashRoundsPerPass,
 } from "../../src/constants/phashSettings";
 import { generateVideoPhash } from "./phash";
 import { getInstallScanStatus } from "./installer";
@@ -34,6 +36,7 @@ const MAX_TRACKED_ERRORS = 20;
 const INSTALL_SCAN_POLL_INTERVAL_MS = 500;
 const MAX_INSTALL_SCAN_WAIT_MS = 300000;
 const CONTINUOUS_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+const INITIAL_CONTINUOUS_SCAN_DELAY_MS = 60_000;
 
 let scanStatus: PhashScanStatus = {
   state: "idle",
@@ -50,7 +53,15 @@ let scanStatus: PhashScanStatus = {
 let activeScanPromise: Promise<void> | null = null;
 let abortRequested = false;
 let continuousScanTimer: ReturnType<typeof setInterval> | null = null;
+let initialContinuousScanTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunRequested = false;
+
+type PhashScanMode = "background" | "manual";
+
+type RunPhashScanOptions = {
+  mode: PhashScanMode;
+  maxRounds?: number;
+};
 
 function cloneStatus(status: PhashScanStatus): PhashScanStatus {
   return { ...status, errors: [...status.errors] };
@@ -139,8 +150,12 @@ async function resolvePhashVideoPath(videoUri: string): Promise<DirectPlayableRe
   return resolveDirectPlayableResolution(videoUri);
 }
 
-async function runPhashScan(): Promise<void> {
-  const roundsToProcess = await findRoundsWithoutPhash();
+async function runPhashScan(options: RunPhashScanOptions): Promise<void> {
+  const allRoundsWithoutPhash = await findRoundsWithoutPhash();
+  const roundsToProcess =
+    options.mode === "background" && typeof options.maxRounds === "number"
+      ? allRoundsWithoutPhash.slice(0, Math.max(0, options.maxRounds))
+      : allRoundsWithoutPhash;
 
   scanStatus.totalCount = roundsToProcess.length;
 
@@ -151,7 +166,7 @@ async function runPhashScan(): Promise<void> {
     return;
   }
 
-  console.log(`[PhashScan] Started scanning ${roundsToProcess.length} rounds...`);
+  console.log(`[PhashScan] Started ${options.mode} scanning ${roundsToProcess.length} rounds...`);
 
   const db = getDb();
 
@@ -251,8 +266,8 @@ async function runPhashScan(): Promise<void> {
   scanStatus.currentRoundName = null;
 }
 
-function launchPhashScanRun(): void {
-  activeScanPromise = runPhashScan()
+function launchPhashScanRun(options: RunPhashScanOptions): void {
+  activeScanPromise = runPhashScan(options)
     .catch((error) => {
       scanStatus.state = "error";
       scanStatus.finishedAt = new Date().toISOString();
@@ -285,7 +300,7 @@ function launchPhashScanRun(): void {
           currentRoundName: null,
           errors: [],
         };
-        launchPhashScanRun();
+        launchPhashScanRun(options);
         return;
       }
 
@@ -315,6 +330,9 @@ export async function startPhashScan(): Promise<PhashScanStatus> {
   const store = getStore();
   const isEnabled = normalizeBackgroundPhashScanningEnabled(
     store.get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
+  );
+  const roundsPerPass = normalizeBackgroundPhashRoundsPerPass(
+    store.get(BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY)
   );
 
   if (!isEnabled) {
@@ -348,7 +366,7 @@ export async function startPhashScan(): Promise<PhashScanStatus> {
   };
 
   rerunRequested = false;
-  launchPhashScanRun();
+  launchPhashScanRun({ mode: "background", maxRounds: roundsPerPass });
 
   await activeScanPromise;
   return cloneStatus(scanStatus);
@@ -382,7 +400,7 @@ export async function startPhashScanManual(): Promise<PhashScanStatus> {
   };
 
   rerunRequested = false;
-  launchPhashScanRun();
+  launchPhashScanRun({ mode: "manual" });
 
   await activeScanPromise;
   return cloneStatus(scanStatus);
@@ -401,6 +419,20 @@ export function startContinuousPhashScan(): void {
 
   if (continuousScanTimer) {
     return;
+  }
+
+  if (!initialContinuousScanTimer) {
+    initialContinuousScanTimer = setTimeout(() => {
+      initialContinuousScanTimer = null;
+      const currentSetting = normalizeBackgroundPhashScanningEnabled(
+        getStore().get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
+      );
+      if (!currentSetting || activeScanPromise) return;
+
+      void startPhashScan().catch((error) => {
+        console.error("Initial continuous phash scan error:", error);
+      });
+    }, INITIAL_CONTINUOUS_SCAN_DELAY_MS);
   }
 
   continuousScanTimer = setInterval(async () => {
@@ -423,13 +455,13 @@ export function startContinuousPhashScan(): void {
       console.error("Continuous phash scan error:", error);
     }
   }, CONTINUOUS_SCAN_INTERVAL_MS);
-
-  void startPhashScan().catch((error) => {
-    console.error("Initial continuous phash scan error:", error);
-  });
 }
 
 export function stopContinuousPhashScan(): void {
+  if (initialContinuousScanTimer) {
+    clearTimeout(initialContinuousScanTimer);
+    initialContinuousScanTimer = null;
+  }
   if (continuousScanTimer) {
     clearInterval(continuousScanTimer);
     continuousScanTimer = null;

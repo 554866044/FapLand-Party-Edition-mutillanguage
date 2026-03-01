@@ -2,15 +2,24 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
+import { BACKGROUND_VIDEO_ENABLED_KEY } from "../constants/backgroundSettings";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 import { EROSCRIPTS_CACHE_ROOT_PATH_KEY } from "../constants/eroscriptsSettings";
 import type { EroScriptsLoginStatus } from "../services/eroscripts";
 import { FPACK_EXTRACTION_PATH_KEY } from "../constants/fpackSettings";
 import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
 import {
+  BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
   BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS,
   DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
+  DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED,
+  MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+  MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS,
   normalizeBackgroundPhashScanningEnabled,
+  normalizeBackgroundPhashRoundsPerPass,
+  normalizePreviewFfmpegSingleThreadEnabled,
+  PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
 } from "../constants/phashSettings";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
 import { useHandy } from "../contexts/HandyContext";
@@ -220,7 +229,7 @@ function getStepTitle(id: string): string {
     case "phash":
       return i18n._({
         id: "first-start.step.phash.title",
-        message: "Do you have an old slow computer? Consider turning off background hashing",
+        message: "Tune background media work for your hardware",
       });
     case "handy":
       return i18n._({
@@ -291,7 +300,7 @@ function getStepDescription(id: string): string {
       return i18n._({
         id: "first-start.step.phash.description",
         message:
-          "The app can compute visual fingerprints in the background to improve round matching. On slower machines, that extra work can be worth disabling.",
+          "The app can compute visual fingerprints in the background to improve round matching. On weaker hardware, lower the pass size or disable it.",
       });
     case "handy":
       return i18n._({
@@ -514,7 +523,7 @@ function getStepDetails(id: string): string[] {
         i18n._({
           id: "first-start.step.phash.detail.2",
           message:
-            "If your computer is older or already struggles during startup, disabling background hashing can reduce background load.",
+            "If your computer is older or already struggles during startup, reduce rounds per pass, enable single-thread previews, or turn off background hashing.",
         }),
         i18n._({
           id: "first-start.step.phash.detail.3",
@@ -610,12 +619,20 @@ function FirstStartPage() {
   const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
     DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
   );
+  const [backgroundPhashRoundsPerPass, setBackgroundPhashRoundsPerPass] = useState(
+    DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS
+  );
+  const [previewFfmpegSingleThreadEnabled, setPreviewFfmpegSingleThreadEnabled] = useState(
+    DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED
+  );
   const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
   const [musicCacheRootPath, setMusicCacheRootPath] = useState<string | null>(null);
   const [fpackExtractionPath, setFpackExtractionPath] = useState<string | null>(null);
   const [eroscriptsCacheRootPath, setEroscriptsCacheRootPath] = useState<string | null>(null);
   const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
     useState(true);
+  const [isLoadingPhashPerformanceSettings, setIsLoadingPhashPerformanceSettings] = useState(true);
+  const [isApplyingWeakHardwareSettings, setIsApplyingWeakHardwareSettings] = useState(false);
   const [isLoadingStorageSettings, setIsLoadingStorageSettings] = useState(true);
   const [updatingStorageTarget, setUpdatingStorageTarget] = useState<
     "music-cache" | "website-video-cache" | "fpack-extraction" | "eroscripts-cache" | null
@@ -644,7 +661,8 @@ function FirstStartPage() {
   const isContinueDisabled =
     isBusy ||
     (currentStep.id === "booru" && isLoadingPrompt) ||
-    (currentStep.id === "phash" && isLoadingBackgroundPhashScanningEnabled) ||
+    (currentStep.id === "phash" &&
+      (isLoadingBackgroundPhashScanningEnabled || isLoadingPhashPerformanceSettings)) ||
     (currentStep.id === "storage" && isLoadingStorageSettings) ||
     (currentStep.id === "eroscripts" && isEroScriptsAuthLoading);
   const progressPercent = ((stepIndex + 1) / STEPS.length) * 100;
@@ -731,18 +749,28 @@ function FirstStartPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void trpc.store.get
-      .query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY })
-      .then((value) => {
+    void Promise.all([
+      trpc.store.get.query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY }),
+      trpc.store.get.query({ key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY }),
+      trpc.store.get.query({ key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY }),
+    ])
+      .then(([rawBackgroundPhashScanning, rawRoundsPerPass, rawPreviewSingleThread]) => {
         if (cancelled) return;
-        setBackgroundPhashScanningEnabled(normalizeBackgroundPhashScanningEnabled(value));
+        setBackgroundPhashScanningEnabled(
+          normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanning)
+        );
+        setBackgroundPhashRoundsPerPass(normalizeBackgroundPhashRoundsPerPass(rawRoundsPerPass));
+        setPreviewFfmpegSingleThreadEnabled(
+          normalizePreviewFfmpegSingleThreadEnabled(rawPreviewSingleThread)
+        );
       })
       .catch((error) => {
-        console.error("Failed to load onboarding background phash scanning setting", error);
+        console.error("Failed to load onboarding performance settings", error);
       })
       .finally(() => {
         if (!cancelled) {
           setIsLoadingBackgroundPhashScanningEnabled(false);
+          setIsLoadingPhashPerformanceSettings(false);
         }
       });
 
@@ -824,6 +852,46 @@ function FirstStartPage() {
     }
 
     setStepIndex((current) => Math.min(STEPS.length - 1, current + 1));
+  };
+
+  const applyWeakHardwarePerformanceSettings = async () => {
+    if (isApplyingWeakHardwareSettings) return;
+    playSelectSound();
+    setIsApplyingWeakHardwareSettings(true);
+
+    const nextBackgroundPhashScanningEnabled = false;
+    const nextRoundsPerPass = MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS;
+    const nextPreviewFfmpegSingleThreadEnabled = true;
+    const nextBackgroundVideoEnabled = false;
+
+    setBackgroundPhashScanningEnabled(nextBackgroundPhashScanningEnabled);
+    setBackgroundPhashRoundsPerPass(nextRoundsPerPass);
+    setPreviewFfmpegSingleThreadEnabled(nextPreviewFfmpegSingleThreadEnabled);
+
+    try {
+      await Promise.all([
+        trpc.store.set.mutate({
+          key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+          value: nextBackgroundPhashScanningEnabled,
+        }),
+        trpc.store.set.mutate({
+          key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+          value: nextRoundsPerPass,
+        }),
+        trpc.store.set.mutate({
+          key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+          value: nextPreviewFfmpegSingleThreadEnabled,
+        }),
+        trpc.store.set.mutate({
+          key: BACKGROUND_VIDEO_ENABLED_KEY,
+          value: nextBackgroundVideoEnabled,
+        }),
+      ]);
+    } catch (error) {
+      console.error("Failed to apply weak hardware onboarding settings", error);
+    } finally {
+      setIsApplyingWeakHardwareSettings(false);
+    }
   };
 
   const addMusicTracks = async () => {
@@ -1173,8 +1241,8 @@ function FirstStartPage() {
                 style={{ animationDelay: "0.3s" }}
               >
                 <Trans>
-                  Let's get you set up. This quick walkthrough covers the essentials and lets you
-                  import content right away.
+                  Let&apos;s get you set up. This quick walkthrough covers the essentials and lets
+                  you import content right away.
                 </Trans>
               </p>
             </div>
@@ -2125,9 +2193,27 @@ function FirstStartPage() {
                     </div>
                     <p className="text-sm text-zinc-400">
                       <Trans>
-                        Do you have an old slow computer? Consider turning off background hashing.
+                        Weak hardware: reduce rounds per pass, enable single-thread previews, or
+                        turn off background hashing if startup or library work feels heavy.
                       </Trans>
                     </p>
+                    <button
+                      type="button"
+                      disabled={
+                        isLoadingBackgroundPhashScanningEnabled ||
+                        isLoadingPhashPerformanceSettings ||
+                        isApplyingWeakHardwareSettings
+                      }
+                      onMouseEnter={playHoverSound}
+                      onClick={() => void applyWeakHardwarePerformanceSettings()}
+                      className="mt-4 w-full rounded-xl border border-amber-300/45 bg-amber-500/20 px-4 py-3 text-left text-sm font-semibold text-amber-50 transition-all hover:border-amber-200/80 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900/60 disabled:text-zinc-500"
+                    >
+                      {isApplyingWeakHardwareSettings ? (
+                        <Trans>Applying recommended weak hardware settings...</Trans>
+                      ) : (
+                        <Trans>Apply recommended settings for weak hardware</Trans>
+                      )}
+                    </button>
                     <label
                       htmlFor="first-start-background-phash-scanning"
                       className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
@@ -2136,6 +2222,7 @@ function FirstStartPage() {
                         id="first-start-background-phash-scanning"
                         type="checkbox"
                         role="switch"
+                        aria-label={t`Enable background pHash scanning`}
                         checked={backgroundPhashScanningEnabled}
                         disabled={isLoadingBackgroundPhashScanningEnabled}
                         onChange={(event) => {
@@ -2156,6 +2243,70 @@ function FirstStartPage() {
                           <Trans>
                             Recommended on faster machines. Disable this if startup work or
                             background CPU load feels too heavy.
+                          </Trans>
+                        </p>
+                      </div>
+                    </label>
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                      <label
+                        htmlFor="first-start-background-phash-rounds-per-pass"
+                        className="text-sm font-semibold text-white"
+                      >
+                        <Trans>Rounds per background pHash pass</Trans>
+                      </label>
+                      <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                        <Trans>
+                          Lower values reduce each automatic scan burst on weaker laptops. Higher
+                          values finish background matching faster on stronger systems.
+                        </Trans>
+                      </p>
+                      <input
+                        id="first-start-background-phash-rounds-per-pass"
+                        type="number"
+                        min={MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS}
+                        max={MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS}
+                        value={backgroundPhashRoundsPerPass}
+                        disabled={isLoadingPhashPerformanceSettings}
+                        onChange={(event) => {
+                          const next = normalizeBackgroundPhashRoundsPerPass(event.target.value);
+                          setBackgroundPhashRoundsPerPass(next);
+                          void trpc.store.set.mutate({
+                            key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                            value: next,
+                          });
+                        }}
+                        className="mt-3 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-2 text-sm text-white outline-none transition-all focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 disabled:opacity-60"
+                      />
+                    </div>
+                    <label
+                      htmlFor="first-start-preview-ffmpeg-single-thread"
+                      className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <input
+                        id="first-start-preview-ffmpeg-single-thread"
+                        type="checkbox"
+                        role="switch"
+                        aria-label={t`Limit preview ffmpeg to one thread`}
+                        checked={previewFfmpegSingleThreadEnabled}
+                        disabled={isLoadingPhashPerformanceSettings}
+                        onChange={(event) => {
+                          const next = event.target.checked;
+                          setPreviewFfmpegSingleThreadEnabled(next);
+                          void trpc.store.set.mutate({
+                            key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                            value: next,
+                          });
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
+                      />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-white">
+                          <Trans>Limit preview ffmpeg to one thread</Trans>
+                        </p>
+                        <p className="text-xs leading-relaxed text-zinc-400">
+                          <Trans>
+                            Recommended on weak hardware if preview generation causes stutters.
+                            Leave it off for faster imports on stronger machines.
                           </Trans>
                         </p>
                       </div>

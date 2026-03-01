@@ -2,6 +2,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
+import {
+  PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+  normalizePreviewFfmpegSingleThreadEnabled,
+} from "../../src/constants/phashSettings";
+import { getStore } from "./store";
 import { getCachedWebsiteVideoLocalPath, getWebsiteVideoTargetUrl } from "./webVideo";
 
 const PREVIEW_IMAGE_WIDTH = 480;
@@ -65,7 +70,9 @@ async function toFfmpegInput(videoUri: string): Promise<string | null> {
   return getWebsiteVideoTargetUrl(videoUri);
 }
 
-export async function generateRoundPreviewImageDataUri(input: GenerateRoundPreviewImageInput): Promise<string | null> {
+export async function generateRoundPreviewImageDataUri(
+  input: GenerateRoundPreviewImageInput
+): Promise<string | null> {
   const ffmpegInput = await toFfmpegInput(input.videoUri);
   if (!ffmpegInput) return null;
 
@@ -74,11 +81,15 @@ export async function generateRoundPreviewImageDataUri(input: GenerateRoundPrevi
 
   try {
     const binaries = await resolvePhashBinaries();
-    const { stdout } = await runCommand(binaries.ffmpegPath, [
+    const limitThreads = normalizePreviewFfmpegSingleThreadEnabled(
+      getStore().get(PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY)
+    );
+    const args = [
       "-hide_banner",
       "-loglevel",
       "error",
       "-nostdin",
+      ...(limitThreads ? ["-threads", "1"] : []),
       "-ss",
       timestampSeconds,
       "-i",
@@ -94,7 +105,8 @@ export async function generateRoundPreviewImageDataUri(input: GenerateRoundPrevi
       "-vcodec",
       "mjpeg",
       "-",
-    ]);
+    ];
+    const { stdout } = await runCommand(binaries.ffmpegPath, args);
 
     if (stdout.length === 0) return null;
     return `data:image/jpeg;base64,${stdout.toString("base64")}`;

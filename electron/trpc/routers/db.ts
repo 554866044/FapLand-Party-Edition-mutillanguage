@@ -151,15 +151,17 @@ async function hydrateResourceDurationMs(
   db: ReturnType<typeof getDb>,
   resources: Array<{ id: string; videoUri: string; durationMs: number | null }>
 ): Promise<void> {
-  await Promise.all(
-    resources.map(async (entry) => {
-      if (typeof entry.durationMs === "number" && entry.durationMs > 0) return;
+  for (const entry of resources) {
+    if (typeof entry.durationMs === "number" && entry.durationMs > 0) continue;
+    try {
       const durationMs = await resolveVideoDurationMsForUri(entry.videoUri);
-      if (durationMs === null) return;
+      if (durationMs === null) continue;
       entry.durationMs = durationMs;
       await db.update(resource).set({ durationMs }).where(eq(resource.id, entry.id));
-    })
-  );
+    } catch (error) {
+      console.warn("Failed to hydrate resource duration", entry.videoUri, error);
+    }
+  }
 }
 
 type InstalledRoundQueryEntry = {
@@ -1512,12 +1514,18 @@ export const dbRouter = router({
       z.object({
         folderPath: z.string().min(1),
         omitCheckpointRounds: z.boolean().optional(),
+        deferPhash: z.boolean().optional(),
+        deferPreview: z.boolean().optional(),
+        deferDuration: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
       try {
         const result = await scanInstallFolderOnceWithLegacySupport(input.folderPath, {
           omitCheckpointRounds: input.omitCheckpointRounds ?? true,
+          deferPhash: input.deferPhash,
+          deferPreview: input.deferPreview,
+          deferDuration: input.deferDuration,
         });
         queueWebsiteVideoCaching();
         return result;
@@ -1653,12 +1661,16 @@ export const dbRouter = router({
           })
         ),
         deferPhash: z.boolean().optional(),
+        deferPreview: z.boolean().optional(),
+        deferDuration: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
       try {
         const result = await importLegacyFolderWithPlan(input.folderPath, input.reviewedSlots, {
           deferPhash: input.deferPhash,
+          deferPreview: input.deferPreview,
+          deferDuration: input.deferDuration,
         });
         queueWebsiteVideoCaching();
         return result;

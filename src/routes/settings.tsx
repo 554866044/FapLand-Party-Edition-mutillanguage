@@ -104,9 +104,17 @@ import {
   clampSfxVolume,
 } from "../constants/audioSettings";
 import {
+  BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
   BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS,
   DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
+  DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED,
+  MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+  MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS,
   normalizeBackgroundPhashScanningEnabled,
+  normalizeBackgroundPhashRoundsPerPass,
+  normalizePreviewFfmpegSingleThreadEnabled,
+  PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
 } from "../constants/phashSettings";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
 import { EROSCRIPTS_CACHE_ROOT_PATH_KEY } from "../constants/eroscriptsSettings";
@@ -311,6 +319,18 @@ type NumberSetting = {
   onChange: (next: number) => Promise<void>;
 };
 
+type ActionSetting = {
+  id: string;
+  type: "actions";
+  label: string;
+  description: string;
+  actions: Array<{
+    id: string;
+    label: string;
+    onClick: () => Promise<void>;
+  }>;
+};
+
 type SelectSetting = {
   id: string;
   type: "select";
@@ -321,7 +341,12 @@ type SelectSetting = {
   onChange: (next: string) => Promise<void>;
 };
 
-type SettingDefinition = ToggleSetting | TextSetting | NumberSetting | SelectSetting;
+type SettingDefinition =
+  | ToggleSetting
+  | TextSetting
+  | NumberSetting
+  | ActionSetting
+  | SelectSetting;
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -420,6 +445,12 @@ export function SettingsPage() {
   const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
     DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
   );
+  const [backgroundPhashRoundsPerPass, setBackgroundPhashRoundsPerPass] = useState(
+    DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS
+  );
+  const [previewFfmpegSingleThreadEnabled, setPreviewFfmpegSingleThreadEnabled] = useState(
+    DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED
+  );
   const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
   const [eroscriptsCacheRootPath, setEroScriptsCacheRootPath] = useState<string | null>(null);
   const [eroscriptsLoginStatus, setEroScriptsLoginStatus] = useState<EroScriptsLoginStatus | null>(
@@ -441,6 +472,10 @@ export function SettingsPage() {
   const [isLoadingStartupSafeModeShortcutEnabled, setIsLoadingStartupSafeModeShortcutEnabled] =
     useState(true);
   const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
+    useState(true);
+  const [isLoadingBackgroundPhashRoundsPerPass, setIsLoadingBackgroundPhashRoundsPerPass] =
+    useState(true);
+  const [isLoadingPreviewFfmpegSingleThreadEnabled, setIsLoadingPreviewFfmpegSingleThreadEnabled] =
     useState(true);
   const [isLoadingWebsiteVideoCacheRootPath, setIsLoadingWebsiteVideoCacheRootPath] =
     useState(true);
@@ -496,6 +531,8 @@ export function SettingsPage() {
         CHEAT_MODE_ENABLED_KEY,
         SFW_MODE_ENABLED_KEY,
         BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+        BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+        PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
         APPLY_PERK_DIRECTLY_KEY,
         MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
         INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
@@ -532,6 +569,9 @@ export function SettingsPage() {
         const rawSfwModeEnabled = storeValues[SFW_MODE_ENABLED_KEY];
         const rawBackgroundPhashScanningEnabled =
           storeValues[BACKGROUND_PHASH_SCANNING_ENABLED_KEY];
+        const rawBackgroundPhashRoundsPerPass = storeValues[BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY];
+        const rawPreviewFfmpegSingleThreadEnabled =
+          storeValues[PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY];
         const rawApplyPerkDirectly = storeValues[APPLY_PERK_DIRECTLY_KEY];
         const rawMultiplayerSkipRoundsCheck = storeValues[MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY];
         const rawInstallWebFunscriptUrlEnabled = storeValues[INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY];
@@ -594,6 +634,12 @@ export function SettingsPage() {
         setBackgroundPhashScanningEnabled(
           normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
         );
+        setBackgroundPhashRoundsPerPass(
+          normalizeBackgroundPhashRoundsPerPass(rawBackgroundPhashRoundsPerPass)
+        );
+        setPreviewFfmpegSingleThreadEnabled(
+          normalizePreviewFfmpegSingleThreadEnabled(rawPreviewFfmpegSingleThreadEnabled)
+        );
         setStartupSafeModeShortcutEnabled(
           normalizeStartupSafeModeShortcutEnabled(rawStartupSafeModeShortcutEnabled)
         );
@@ -645,6 +691,8 @@ export function SettingsPage() {
           setIsLoadingControllerSupportEnabled(false);
           setIsLoadingCheatModeEnabled(false);
           setIsLoadingBackgroundPhashScanningEnabled(false);
+          setIsLoadingBackgroundPhashRoundsPerPass(false);
+          setIsLoadingPreviewFfmpegSingleThreadEnabled(false);
           setIsLoadingWebsiteVideoCacheRootPath(false);
           setIsLoadingEroScriptsCacheRootPath(false);
           setIsLoadingEroScriptsAuth(false);
@@ -926,6 +974,111 @@ export function SettingsPage() {
         description: t`Application data maintenance and destructive actions.`,
         settings: [
           {
+            id: "hardware-performance-presets",
+            type: "actions",
+            label: t`Hardware performance presets`,
+            description: t`Apply a quick profile for background hashing and preview generation. You can still fine tune each setting below.`,
+            actions: [
+              {
+                id: "weak-hardware",
+                label: t`Apply recommended settings for weak hardware`,
+                onClick: async () => {
+                  await Promise.all([
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_VIDEO_ENABLED_KEY,
+                      value: false,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                      value: false,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                      value: MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+                    }),
+                    trpc.store.set.mutate({
+                      key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                      value: true,
+                    }),
+                  ]);
+                  setBackgroundVideoEnabled(false);
+                  setBackgroundPhashScanningEnabled(false);
+                  setBackgroundPhashRoundsPerPass(MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS);
+                  setPreviewFfmpegSingleThreadEnabled(true);
+                  window.dispatchEvent(
+                    new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, { detail: false })
+                  );
+                },
+              },
+              {
+                id: "strong-hardware",
+                label: t`Apply for strong hardware`,
+                onClick: async () => {
+                  await Promise.all([
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_VIDEO_ENABLED_KEY,
+                      value: true,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                      value: true,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                      value: MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+                    }),
+                    trpc.store.set.mutate({
+                      key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                      value: false,
+                    }),
+                  ]);
+                  setBackgroundVideoEnabled(true);
+                  setBackgroundPhashScanningEnabled(true);
+                  setBackgroundPhashRoundsPerPass(MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS);
+                  setPreviewFfmpegSingleThreadEnabled(false);
+                  window.dispatchEvent(
+                    new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, { detail: true })
+                  );
+                },
+              },
+              {
+                id: "defaults",
+                label: t`Apply defaults`,
+                onClick: async () => {
+                  await Promise.all([
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_VIDEO_ENABLED_KEY,
+                      value: DEFAULT_BACKGROUND_VIDEO_ENABLED,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                      value: DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
+                    }),
+                    trpc.store.set.mutate({
+                      key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                      value: DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+                    }),
+                    trpc.store.set.mutate({
+                      key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                      value: DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED,
+                    }),
+                  ]);
+                  setBackgroundVideoEnabled(DEFAULT_BACKGROUND_VIDEO_ENABLED);
+                  setBackgroundPhashScanningEnabled(DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED);
+                  setBackgroundPhashRoundsPerPass(DEFAULT_BACKGROUND_PHASH_ROUNDS_PER_PASS);
+                  setPreviewFfmpegSingleThreadEnabled(
+                    DEFAULT_PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED
+                  );
+                  window.dispatchEvent(
+                    new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, {
+                      detail: DEFAULT_BACKGROUND_VIDEO_ENABLED,
+                    })
+                  );
+                },
+              },
+            ],
+          },
+          {
             id: "background-phash-scanning-enabled",
             type: "toggle",
             label: t`Background Phash Scanning`,
@@ -937,6 +1090,37 @@ export function SettingsPage() {
                 value: next,
               });
               setBackgroundPhashScanningEnabled(next);
+            },
+          },
+          {
+            id: "background-phash-rounds-per-pass",
+            type: "number",
+            label: t`Rounds per background pHash pass`,
+            description: t`Limits how many missing video fingerprints are calculated during each automatic background pass. Manual scans still process the full backlog.`,
+            value: backgroundPhashRoundsPerPass,
+            min: MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+            max: MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS,
+            onChange: async (next: number) => {
+              const normalized = normalizeBackgroundPhashRoundsPerPass(next);
+              await trpc.store.set.mutate({
+                key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                value: normalized,
+              });
+              setBackgroundPhashRoundsPerPass(normalized);
+            },
+          },
+          {
+            id: "preview-ffmpeg-single-thread-enabled",
+            type: "toggle",
+            label: t`Limit preview ffmpeg to one thread`,
+            description: t`Reduces preview generation load on weak hardware. Leave off for faster imports on stronger systems.`,
+            value: previewFfmpegSingleThreadEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({
+                key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                value: next,
+              });
+              setPreviewFfmpegSingleThreadEnabled(next);
             },
           },
         ],
@@ -1082,6 +1266,8 @@ export function SettingsPage() {
       videoHashFfmpegSourcePreference,
       ytDlpBinaryPreference,
       backgroundPhashScanningEnabled,
+      backgroundPhashRoundsPerPass,
+      previewFfmpegSingleThreadEnabled,
       startupSafeModeShortcutEnabled,
       locale,
       locales,
@@ -1633,7 +1819,9 @@ export function SettingsPage() {
                     isLoadingControllerSupportEnabled ||
                     isLoadingCheatModeEnabled ||
                     isLoadingStartupSafeModeShortcutEnabled ||
-                    isLoadingBackgroundPhashScanningEnabled
+                    isLoadingBackgroundPhashScanningEnabled ||
+                    isLoadingBackgroundPhashRoundsPerPass ||
+                    isLoadingPreviewFfmpegSingleThreadEnabled
                   }
                 />
               ) : null}
@@ -5346,11 +5534,71 @@ function SettingRow({ setting, disabled }: { setting: SettingDefinition; disable
   if (setting.type === "number") {
     return <NumberRow setting={setting} disabled={disabled} />;
   }
+  if (setting.type === "actions") {
+    return <ActionRow setting={setting} disabled={disabled} />;
+  }
   if (setting.type === "select") {
     return <SelectRow setting={setting} disabled={disabled} />;
   }
 
   return null;
+}
+
+function ActionRow({ setting, disabled }: { setting: ActionSetting; disabled: boolean }) {
+  const { t } = useLingui();
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runAction = async (action: ActionSetting["actions"][number]) => {
+    if (disabled || pendingActionId) return;
+    playSelectSound();
+    setPendingActionId(action.id);
+    setError(null);
+    try {
+      await action.onClick();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t`Failed to apply setting.`);
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+      onMouseEnter={playHoverSound}
+    >
+      <div className="mb-3">
+        <p className="font-semibold text-zinc-100">{setting.label}</p>
+        <p className="text-sm text-zinc-400">{setting.description}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {setting.actions.map((action) => {
+          const isPending = pendingActionId === action.id;
+          return (
+            <button
+              key={action.id}
+              type="button"
+              disabled={disabled || pendingActionId !== null}
+              onClick={() => void runAction(action)}
+              className={`rounded-xl border px-4 py-2 text-left text-sm font-semibold transition-all duration-200 ${
+                disabled || pendingActionId !== null
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              }`}
+            >
+              {isPending ? t`Applying...` : action.label}
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="mt-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 font-mono text-xs text-rose-400 animate-entrance">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: boolean }) {

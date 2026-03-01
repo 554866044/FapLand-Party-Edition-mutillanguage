@@ -7,11 +7,13 @@ const {
   getInstallScanStatusMock,
   generateVideoPhashMock,
   resolveDirectPlayableResolutionMock,
+  storeGetMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   getInstallScanStatusMock: vi.fn(),
   generateVideoPhashMock: vi.fn(),
   resolveDirectPlayableResolutionMock: vi.fn(),
+  storeGetMock: vi.fn(),
 }));
 
 vi.mock("./db", () => ({
@@ -26,9 +28,21 @@ vi.mock("./phash", () => ({
   generateVideoPhash: generateVideoPhashMock,
 }));
 
+vi.mock("./store", () => ({
+  getStore: () => ({
+    get: storeGetMock,
+  }),
+}));
+
 vi.mock("../../../src/constants/phashSettings", () => ({
   BACKGROUND_PHASH_SCANNING_ENABLED_KEY: "game.backgroundPhashScanning.enabled",
+  BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY: "game.backgroundPhashScanning.roundsPerPass",
   normalizeBackgroundPhashScanningEnabled: () => true,
+  normalizeBackgroundPhashRoundsPerPass: (value: unknown) => {
+    const parsed = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(parsed)) return 3;
+    return Math.max(1, Math.min(20, Math.floor(parsed)));
+  },
 }));
 
 vi.mock("./integrations", () => ({
@@ -83,6 +97,7 @@ describe("phashScanService", () => {
     getInstallScanStatusMock.mockReturnValue({ state: "idle" });
     generateVideoPhashMock.mockResolvedValue("phash-1");
     resolveDirectPlayableResolutionMock.mockResolvedValue(null);
+    storeGetMock.mockReturnValue(undefined);
   });
 
   it("skips rounds when no playable resolution is found", async () => {
@@ -305,5 +320,57 @@ describe("phashScanService", () => {
     await firstRun;
     expect(service.getPhashScanStatus().state).toBe("done");
     expect(generateVideoPhashMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("limits background scans to the configured rounds per pass", async () => {
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      roundId: `round-${index + 1}`,
+      roundName: `Round ${index + 1}`,
+      resourceId: `res-${index + 1}`,
+      videoUri: `https://page.example/watch/${index + 1}`,
+      startTime: null,
+      endTime: null,
+    }));
+    const dbMock = buildDbMock(rows);
+    getDbMock.mockReturnValue(dbMock);
+    storeGetMock.mockImplementation((key: string) =>
+      key === "game.backgroundPhashScanning.roundsPerPass" ? 2 : true
+    );
+    resolveDirectPlayableResolutionMock.mockImplementation(async (uri: string) => ({
+      streamUrl: `/tmp/${uri.split("/").pop()}.mp4`,
+    }));
+
+    const service = await import("./phashScanService");
+    const result = await service.startPhashScan();
+
+    expect(result.totalCount).toBe(2);
+    expect(result.completedCount).toBe(2);
+    expect(generateVideoPhashMock).toHaveBeenCalledTimes(2);
+    expect(dbMock.roundUpdates).toHaveLength(2);
+  });
+
+  it("uses the default background batch size when the stored value is invalid", async () => {
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      roundId: `round-${index + 1}`,
+      roundName: `Round ${index + 1}`,
+      resourceId: `res-${index + 1}`,
+      videoUri: `https://page.example/watch/${index + 1}`,
+      startTime: null,
+      endTime: null,
+    }));
+    getDbMock.mockReturnValue(buildDbMock(rows));
+    storeGetMock.mockImplementation((key: string) =>
+      key === "game.backgroundPhashScanning.roundsPerPass" ? "bad" : true
+    );
+    resolveDirectPlayableResolutionMock.mockImplementation(async (uri: string) => ({
+      streamUrl: `/tmp/${uri.split("/").pop()}.mp4`,
+    }));
+
+    const service = await import("./phashScanService");
+    const result = await service.startPhashScan();
+
+    expect(result.totalCount).toBe(3);
+    expect(result.completedCount).toBe(3);
+    expect(generateVideoPhashMock).toHaveBeenCalledTimes(3);
   });
 });
