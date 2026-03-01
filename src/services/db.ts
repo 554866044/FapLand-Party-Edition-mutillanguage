@@ -25,6 +25,12 @@ export type InstallDatabaseExportResult = Awaited<
 export type LibraryPackageExportResult = Awaited<
   ReturnType<typeof trpc.db.exportLibraryPackage.mutate>
 >;
+export type LibraryExportPackageStatus = Awaited<
+  ReturnType<typeof trpc.db.getLibraryExportPackageStatus.query>
+>;
+export type LibraryExportPackageAnalysis = Awaited<
+  ReturnType<typeof trpc.db.analyzeLibraryExportPackage.query>
+>;
 export type DisabledRoundIds = Awaited<ReturnType<typeof trpc.db.getDisabledRoundIds.query>>;
 export type MultiplayerMatchCacheRow = Awaited<
   ReturnType<typeof trpc.db.listMultiplayerMatchCache.query>
@@ -144,6 +150,15 @@ export const db = {
       compressionMode?: "copy" | "av1";
       compressionStrength?: number;
     }) => trpc.db.exportLibraryPackage.mutate(input),
+    analyzeExportPackage: (input: {
+      roundIds?: string[];
+      heroIds?: string[];
+      includeMedia?: boolean;
+      compressionMode?: "copy" | "av1";
+      compressionStrength?: number;
+    }) => trpc.db.analyzeLibraryExportPackage.query(input),
+    getExportPackageStatus: () => trpc.db.getLibraryExportPackageStatus.query(),
+    abortExportPackage: () => trpc.db.abortLibraryExportPackage.mutate(),
     openExportFolder: () => trpc.db.openInstallExportFolder.mutate(),
     clearAllData: () => trpc.db.clearAllData.mutate(),
   },

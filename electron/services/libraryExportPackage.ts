@@ -17,12 +17,16 @@ import { listExternalSources, normalizeBaseUrl } from "./integrations/store";
 import { fromLocalMediaUri, toPortableRelativePath } from "./localMedia";
 import {
   detectAv1Encoder,
+  estimateCompressionForProbes,
+  getParallelJobsForEncoder,
   isAv1Codec,
   normalizeCompressionStrength,
   probeLocalVideo,
   transcodeVideoToAv1,
+  type Av1TranscodeProgress,
   type Av1EncoderDetails,
   type PlaylistExportCompressionEncoderKind,
+  type PlaylistExportEstimate,
   type PlaylistExportCompressionMode,
   type PlaylistExportCompressionPhase,
   type PlaylistExportVideoProbe,
@@ -40,6 +44,14 @@ export type LibraryExportPackageInput = {
   compressionStrength?: number;
 };
 
+type AnalyzeLibraryExportPackageInput = {
+  roundIds?: string[];
+  heroIds?: string[];
+  includeMedia?: boolean;
+  compressionMode?: PlaylistExportCompressionMode;
+  compressionStrength?: number;
+};
+
 export type LibraryExportPackageState = "idle" | "running" | "done" | "aborted" | "error";
 
 export type LibraryExportPackageCompressionStatus = {
@@ -51,6 +63,15 @@ export type LibraryExportPackageCompressionStatus = {
   reencodedTotal: number;
   alreadyAv1Copied: number;
   activeJobs: number;
+  expectedVideoBytes: number;
+  estimatedCompressionSeconds: number;
+  approximate: boolean;
+  liveProgress: {
+    completedDurationMs: number;
+    totalDurationMs: number;
+    percent: number;
+    etaSecondsRemaining: number | null;
+  };
 };
 
 export type LibraryExportPackageStatus = {
@@ -90,6 +111,33 @@ export type LibraryExportPackageResult = {
     alreadyAv1Copied: number;
     actualVideoBytes: number;
   };
+};
+
+export type LibraryExportPackageAnalysis = {
+  videoTotals: {
+    uniqueVideos: number;
+    localVideos: number;
+    remoteVideos: number;
+    alreadyAv1Videos: number;
+    estimatedReencodeVideos: number;
+  };
+  compression: {
+    supported: boolean;
+    defaultMode: PlaylistExportCompressionMode;
+    encoderName: string | null;
+    encoderKind: PlaylistExportCompressionEncoderKind | null;
+    warning: string | null;
+    strength: number;
+    estimate: PlaylistExportEstimate;
+  };
+  settings: {
+    outputContainer: "mp4";
+    audioCodec: "aac";
+    audioBitrateKbps: 128;
+    lowPriority: true;
+    parallelJobs: number;
+  };
+  estimate: PlaylistExportEstimate;
 };
 
 type ExportableResource = {
@@ -163,6 +211,39 @@ type RoundResourceEntry = {
   };
 };
 
+type PreparedLibraryExport = {
+  rounds: ExportableRound[];
+  resourceReferences: ResourceReference[];
+  videoTasks: VideoTask[];
+  funscriptTasks: FunscriptTask[];
+  encoder: Av1EncoderDetails | null;
+  effectiveCompressionMode: PlaylistExportCompressionMode;
+  compressionStrength: number;
+  parallelJobs: number;
+  includeMedia: boolean;
+  analysis: LibraryExportPackageAnalysis;
+};
+
+type CompressionLiveTracker = {
+  startedAtMs: number | null;
+  totalDurationMs: number;
+  completedDurationMs: number;
+  expectedDurationMsByTaskKey: Map<string, number>;
+  activeByTaskKey: Map<string, { durationMs: number; encodedDurationMs: number }>;
+};
+
+class ExportAbortError extends Error {
+  constructor() {
+    super("Library export aborted.");
+  }
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof ExportAbortError) return true;
+  if (!(error instanceof Error)) return false;
+  return error.name === "AbortError" || error.message === "Aborted";
+}
+
 const WINDOWS_RESERVED_BASENAMES = new Set([
   "CON",
   "PRN",
@@ -199,7 +280,171 @@ let exportStatus: LibraryExportPackageStatus = {
   compression: null,
 };
 
+let activeExportPromise: Promise<LibraryExportPackageResult> | null = null;
+let abortRequested = false;
+const activeTransferAbortControllers = new Set<AbortController>();
 const activeEncodeChildren = new Set<ChildProcess>();
+
+function cloneStatus(status: LibraryExportPackageStatus): LibraryExportPackageStatus {
+  return JSON.parse(JSON.stringify(status)) as LibraryExportPackageStatus;
+}
+
+function throwIfAbortRequested(): void {
+  if (abortRequested) {
+    throw new ExportAbortError();
+  }
+}
+
+function createCompressionLiveProgress(
+  totalDurationMs = 0
+): LibraryExportPackageCompressionStatus["liveProgress"] {
+  return {
+    completedDurationMs: 0,
+    totalDurationMs,
+    percent: 0,
+    etaSecondsRemaining: null,
+  };
+}
+
+function createCompressionLiveTracker(tasks: VideoTask[]): CompressionLiveTracker {
+  const expectedDurationMsByTaskKey = new Map<string, number>();
+  let totalDurationMs = 0;
+  for (const task of tasks) {
+    if (isAv1Codec(task.probe.codecName)) continue;
+    const durationMs = Math.max(0, task.probe.durationMs ?? 0);
+    expectedDurationMsByTaskKey.set(task.canonicalKey, durationMs);
+    totalDurationMs += durationMs;
+  }
+
+  return {
+    startedAtMs: null,
+    totalDurationMs,
+    completedDurationMs: 0,
+    expectedDurationMsByTaskKey,
+    activeByTaskKey: new Map(),
+  };
+}
+
+function syncCompressionLiveProgress(tracker: CompressionLiveTracker): void {
+  if (exportStatus.state !== "running" || !exportStatus.compression) return;
+
+  let activeDurationMs = 0;
+  for (const entry of tracker.activeByTaskKey.values()) {
+    activeDurationMs += Math.min(Math.max(0, entry.encodedDurationMs), entry.durationMs);
+  }
+
+  const completedDurationMs = Math.min(
+    tracker.totalDurationMs,
+    Math.max(0, tracker.completedDurationMs + activeDurationMs)
+  );
+  const totalDurationMs = Math.max(0, tracker.totalDurationMs);
+  const percent =
+    totalDurationMs > 0 ? Math.max(0, Math.min(1, completedDurationMs / totalDurationMs)) : 0;
+
+  let etaSecondsRemaining: number | null = null;
+  if (totalDurationMs > 0) {
+    const remainingDurationMs = Math.max(0, totalDurationMs - completedDurationMs);
+    if (remainingDurationMs === 0) {
+      etaSecondsRemaining = 0;
+    } else {
+      const baselineEtaSeconds = Math.ceil(
+        (exportStatus.compression.estimatedCompressionSeconds || 0) * (1 - percent)
+      );
+      etaSecondsRemaining = baselineEtaSeconds > 0 ? baselineEtaSeconds : null;
+
+      if (tracker.startedAtMs !== null && completedDurationMs > 0) {
+        const elapsedSeconds = Math.max(0, (Date.now() - tracker.startedAtMs) / 1000);
+        if (elapsedSeconds >= 5) {
+          const processedDurationPerSecond = completedDurationMs / 1000 / elapsedSeconds;
+          if (processedDurationPerSecond > 0) {
+            etaSecondsRemaining = Math.max(
+              1,
+              Math.ceil(remainingDurationMs / 1000 / processedDurationPerSecond)
+            );
+          }
+        }
+      }
+    }
+  }
+
+  setCompressionStatus({
+    liveProgress: {
+      completedDurationMs,
+      totalDurationMs,
+      percent,
+      etaSecondsRemaining,
+    },
+  });
+}
+
+function ensureExpectedTaskDuration(
+  tracker: CompressionLiveTracker,
+  taskKey: string,
+  durationMs: number | null | undefined
+): number {
+  const normalizedDurationMs = Math.max(0, durationMs ?? 0);
+  const previousDurationMs = tracker.expectedDurationMsByTaskKey.get(taskKey) ?? 0;
+  if (previousDurationMs !== normalizedDurationMs) {
+    tracker.expectedDurationMsByTaskKey.set(taskKey, normalizedDurationMs);
+    tracker.totalDurationMs = Math.max(
+      0,
+      tracker.totalDurationMs - previousDurationMs + normalizedDurationMs
+    );
+  }
+  syncCompressionLiveProgress(tracker);
+  return normalizedDurationMs;
+}
+
+function startCompressionJob(
+  tracker: CompressionLiveTracker,
+  taskKey: string,
+  durationMs: number | null | undefined
+): number {
+  const normalizedDurationMs = ensureExpectedTaskDuration(tracker, taskKey, durationMs);
+  if (tracker.startedAtMs === null) {
+    tracker.startedAtMs = Date.now();
+  }
+  tracker.activeByTaskKey.set(taskKey, {
+    durationMs: normalizedDurationMs,
+    encodedDurationMs: 0,
+  });
+  syncCompressionLiveProgress(tracker);
+  return normalizedDurationMs;
+}
+
+function updateCompressionJobProgress(
+  tracker: CompressionLiveTracker,
+  taskKey: string,
+  progress: Av1TranscodeProgress
+): void {
+  const activeEntry = tracker.activeByTaskKey.get(taskKey);
+  if (!activeEntry) return;
+  const nextDurationMs =
+    activeEntry.durationMs > 0
+      ? Math.min(activeEntry.durationMs, Math.max(0, progress.encodedDurationMs))
+      : Math.max(0, progress.encodedDurationMs);
+  tracker.activeByTaskKey.set(taskKey, {
+    ...activeEntry,
+    encodedDurationMs: nextDurationMs,
+  });
+  syncCompressionLiveProgress(tracker);
+}
+
+function finishCompressionJob(tracker: CompressionLiveTracker, taskKey: string): void {
+  const activeEntry = tracker.activeByTaskKey.get(taskKey);
+  if (!activeEntry) return;
+  tracker.completedDurationMs += activeEntry.durationMs;
+  tracker.activeByTaskKey.delete(taskKey);
+  syncCompressionLiveProgress(tracker);
+}
+
+function skipCompressionJob(tracker: CompressionLiveTracker, taskKey: string): void {
+  const previousDurationMs = tracker.expectedDurationMsByTaskKey.get(taskKey) ?? 0;
+  tracker.totalDurationMs = Math.max(0, tracker.totalDurationMs - previousDurationMs);
+  tracker.expectedDurationMsByTaskKey.delete(taskKey);
+  tracker.activeByTaskKey.delete(taskKey);
+  syncCompressionLiveProgress(tracker);
+}
 
 function toSafeIsoTimestamp(date: Date): string {
   return date.toISOString().replace(/:/g, "-");
@@ -276,6 +521,7 @@ function toUniqueCaseInsensitiveFileName(
 }
 
 async function writeJsonFile(filePath: string, payload: unknown): Promise<void> {
+  throwIfAbortRequested();
   await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
@@ -303,16 +549,47 @@ async function resolveRemoteResponse(
   });
 }
 
-async function copyLocalFile(sourcePath: string, destinationPath: string): Promise<void> {
-  let completed = false;
+function registerTransferController(controller: AbortController): void {
+  activeTransferAbortControllers.add(controller);
+}
+
+function unregisterTransferController(controller: AbortController): void {
+  activeTransferAbortControllers.delete(controller);
+}
+
+async function withTransferAbort<T>(
+  runner: (controller: AbortController) => Promise<T>
+): Promise<T> {
+  throwIfAbortRequested();
+  const controller = new AbortController();
+  registerTransferController(controller);
   try {
-    await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath));
-    completed = true;
-  } finally {
-    if (!completed) {
-      await fs.rm(destinationPath, { force: true }).catch(() => {});
+    return await runner(controller);
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new ExportAbortError();
     }
+    throw error;
+  } finally {
+    unregisterTransferController(controller);
   }
+}
+
+async function copyLocalFile(sourcePath: string, destinationPath: string): Promise<void> {
+  await withTransferAbort(async (controller) => {
+    let completed = false;
+    try {
+      await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), {
+        signal: controller.signal,
+      });
+      throwIfAbortRequested();
+      completed = true;
+    } finally {
+      if (!completed) {
+        await fs.rm(destinationPath, { force: true }).catch(() => {});
+      }
+    }
+  });
 }
 
 async function ensureLocalSourceExists(sourcePath: string, resourceLabel: string): Promise<void> {
@@ -335,31 +612,108 @@ async function downloadRemoteResource(
   installSourceKey: string | null,
   destinationPath: string
 ): Promise<void> {
-  let completed = false;
-  try {
-    const response = await resolveRemoteResponse(
-      uri,
-      installSourceKey,
-      new Request(uri, { method: "GET" })
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download resource: ${response.status} ${response.statusText}`.trim()
+  await withTransferAbort(async (controller) => {
+    let completed = false;
+    try {
+      const response = await resolveRemoteResponse(
+        uri,
+        installSourceKey,
+        new Request(uri, { method: "GET", signal: controller.signal })
       );
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download resource: ${response.status} ${response.statusText}`.trim()
+        );
+      }
+      if (!response.body) {
+        throw new Error("Failed to download resource: empty response body.");
+      }
+      await pipeline(
+        Readable.fromWeb(response.body as unknown as import("node:stream/web").ReadableStream),
+        createWriteStream(destinationPath),
+        { signal: controller.signal }
+      );
+      throwIfAbortRequested();
+      completed = true;
+    } finally {
+      if (!completed) {
+        await fs.rm(destinationPath, { force: true }).catch(() => {});
+      }
     }
-    if (!response.body) {
-      throw new Error("Failed to download resource: empty response body.");
-    }
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as import("node:stream/web").ReadableStream),
-      createWriteStream(destinationPath)
-    );
-    completed = true;
-  } finally {
-    if (!completed) {
-      await fs.rm(destinationPath, { force: true }).catch(() => {});
+  });
+}
+
+function parseContentLength(headers: Headers): number | null {
+  const raw = headers.get("content-length");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseContentRange(headers: Headers): number | null {
+  const raw = headers.get("content-range");
+  if (!raw) return null;
+  const match = raw.match(/\/(\d+)\s*$/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function fetchRemoteVideoMetadata(task: VideoTask): Promise<PlaylistExportVideoProbe> {
+  let fileSizeBytes: number | null = null;
+
+  try {
+    await withTransferAbort(async (controller) => {
+      try {
+        const headResponse = await resolveRemoteResponse(
+          task.uri,
+          task.installSourceKey,
+          new Request(task.uri, { method: "HEAD", signal: controller.signal })
+        );
+        if (headResponse.ok) {
+          fileSizeBytes = parseContentLength(headResponse.headers);
+        }
+      } catch {
+        // Best effort only.
+      }
+    });
+  } catch (error) {
+    if (error instanceof ExportAbortError) throw error;
+  }
+
+  if (fileSizeBytes === null) {
+    try {
+      await withTransferAbort(async (controller) => {
+        try {
+          const rangeResponse = await resolveRemoteResponse(
+            task.uri,
+            task.installSourceKey,
+            new Request(task.uri, {
+              method: "GET",
+              headers: new Headers({ Range: "bytes=0-0" }),
+              signal: controller.signal,
+            })
+          );
+          if (rangeResponse.ok || rangeResponse.status === 206) {
+            fileSizeBytes =
+              parseContentRange(rangeResponse.headers) ?? parseContentLength(rangeResponse.headers);
+          }
+        } catch {
+          // Best effort only.
+        }
+      });
+    } catch (error) {
+      if (error instanceof ExportAbortError) throw error;
     }
   }
+
+  return {
+    codecName: null,
+    width: null,
+    height: null,
+    durationMs: task.probe.durationMs,
+    fileSizeBytes,
+  };
 }
 
 function updateStatus(updates: Partial<LibraryExportPackageStatus>): void {
@@ -554,6 +908,199 @@ function buildResourceInventory(rounds: ExportableRound[]): {
   };
 }
 
+async function loadRoundsForExport(
+  input: Pick<AnalyzeLibraryExportPackageInput, "roundIds" | "heroIds">
+): Promise<ExportableRound[]> {
+  throwIfAbortRequested();
+
+  if (input.roundIds?.length || input.heroIds?.length) {
+    const roundIds = input.roundIds ?? [];
+    const heroIds = input.heroIds ?? [];
+    const queries: Promise<ExportableRound[]>[] = [];
+
+    if (roundIds.length > 0) {
+      queries.push(
+        getDb().query.round.findMany({
+          where: inArray(roundTable.id, roundIds),
+          with: { hero: true, resources: true },
+        }) as Promise<ExportableRound[]>
+      );
+    }
+
+    if (heroIds.length > 0) {
+      queries.push(
+        getDb().query.round.findMany({
+          where: inArray(roundTable.heroId, heroIds),
+          with: { hero: true, resources: true },
+        }) as Promise<ExportableRound[]>
+      );
+    }
+
+    const results = await Promise.all(queries);
+    const seenIds = new Set<string>();
+    const rounds: ExportableRound[] = [];
+    for (const batch of results) {
+      for (const round of batch) {
+        if (!seenIds.has(round.id)) {
+          seenIds.add(round.id);
+          rounds.push(round);
+        }
+      }
+    }
+    return rounds;
+  }
+
+  return (await getDb().query.round.findMany({
+    with: { hero: true, resources: true },
+  })) as ExportableRound[];
+}
+
+async function prepareLibraryExport(
+  input: AnalyzeLibraryExportPackageInput = {}
+): Promise<PreparedLibraryExport> {
+  const includeMedia = input.includeMedia ?? true;
+  const rounds = await loadRoundsForExport(input);
+
+  if (rounds.length === 0) {
+    throw new Error("No rounds found to export.");
+  }
+
+  const binaries = await resolvePhashBinaries();
+  const encoder = await detectAv1Encoder(binaries.ffmpegPath);
+  const compressionStrength = normalizeCompressionStrength(input.compressionStrength);
+  const defaultMode: PlaylistExportCompressionMode = encoder ? "av1" : "copy";
+  const requestedMode = input.compressionMode ?? defaultMode;
+  const effectiveCompressionMode =
+    includeMedia && requestedMode === "av1" && encoder ? "av1" : "copy";
+  const parallelJobs = getParallelJobsForEncoder(encoder?.kind ?? null);
+  const { resourceReferences, videoTasks, funscriptTasks } = buildResourceInventory(rounds);
+
+  if (includeMedia) {
+    for (const task of videoTasks) {
+      const localPath = await resolveLocalSourcePath(task.uri);
+      if (localPath) {
+        task.probe = await probeLocalVideo(binaries.ffprobePath, localPath);
+        if (task.probe.durationMs === null && resourceReferences.length > 0) {
+          const matching = resourceReferences.find(
+            (entry) => canonicalizeResourceKey(entry.resource.videoUri) === task.canonicalKey
+          );
+          task.probe.durationMs = matching?.resource.durationMs ?? null;
+        }
+        continue;
+      }
+      task.probe = await fetchRemoteVideoMetadata(task);
+    }
+  }
+
+  const localVideos = includeMedia
+    ? videoTasks.filter((task) => task.probe.codecName !== null).length
+    : 0;
+  const remoteVideos = includeMedia ? videoTasks.length - localVideos : 0;
+  const alreadyAv1Videos = includeMedia
+    ? videoTasks.filter((task) => isAv1Codec(task.probe.codecName)).length
+    : 0;
+  const estimatedReencodeVideos =
+    includeMedia && effectiveCompressionMode === "av1"
+      ? videoTasks.filter((task) => !isAv1Codec(task.probe.codecName)).length
+      : 0;
+
+  const estimate =
+    includeMedia && effectiveCompressionMode === "av1" && encoder
+      ? estimateCompressionForProbes({
+          probes: videoTasks.map((task) => task.probe),
+          strength: compressionStrength,
+          encoderKind: encoder.kind,
+          parallelJobs,
+        })
+      : ({
+          sourceVideoBytes: includeMedia
+            ? videoTasks.reduce((sum, task) => sum + (task.probe.fileSizeBytes ?? 0), 0)
+            : 0,
+          expectedVideoBytes: includeMedia
+            ? videoTasks.reduce((sum, task) => sum + (task.probe.fileSizeBytes ?? 0), 0)
+            : 0,
+          savingsBytes: 0,
+          estimatedCompressionSeconds: 0,
+          approximate: includeMedia
+            ? videoTasks.some((task) => task.probe.fileSizeBytes === null)
+            : false,
+        } satisfies PlaylistExportEstimate);
+
+  let warning: string | null = null;
+  if (includeMedia) {
+    if (!encoder) {
+      warning =
+        "No AV1 encoder is available in the configured ffmpeg build. Compression is disabled.";
+    } else if (encoder.kind === "software") {
+      warning =
+        "No AV1 hardware encoder was detected. Reencoding on this system may take multiple hours.";
+    }
+  }
+
+  return {
+    rounds,
+    resourceReferences,
+    videoTasks,
+    funscriptTasks,
+    encoder,
+    effectiveCompressionMode,
+    compressionStrength,
+    parallelJobs,
+    includeMedia,
+    analysis: {
+      videoTotals: {
+        uniqueVideos: includeMedia ? videoTasks.length : 0,
+        localVideos,
+        remoteVideos,
+        alreadyAv1Videos,
+        estimatedReencodeVideos,
+      },
+      compression: {
+        supported: Boolean(encoder),
+        defaultMode,
+        encoderName: encoder?.name ?? null,
+        encoderKind: encoder?.kind ?? null,
+        warning,
+        strength: compressionStrength,
+        estimate,
+      },
+      settings: {
+        outputContainer: "mp4",
+        audioCodec: "aac",
+        audioBitrateKbps: 128,
+        lowPriority: true,
+        parallelJobs,
+      },
+      estimate,
+    },
+  };
+}
+
+function estimateExportWork(input: PreparedLibraryExport) {
+  let standaloneRoundFiles = 0;
+  const heroIds = new Set<string>();
+
+  for (const entry of input.resourceReferences) {
+    if (entry.round.heroId && entry.round.hero) {
+      heroIds.add(entry.round.heroId);
+    } else {
+      standaloneRoundFiles += 1;
+    }
+  }
+
+  return {
+    videoFiles: input.includeMedia ? input.videoTasks.length : 0,
+    funscriptFiles: input.funscriptTasks.length,
+    roundFiles: standaloneRoundFiles,
+    heroFiles: heroIds.size,
+    total:
+      (input.includeMedia ? input.videoTasks.length : 0) +
+      input.funscriptTasks.length +
+      standaloneRoundFiles +
+      heroIds.size,
+  };
+}
+
 function allocateMediaOutputs(input: {
   tasks: VideoTask[] | FunscriptTask[];
   usedNames: Set<string>;
@@ -585,7 +1132,9 @@ async function materializeVideoTask(input: {
   encoder: Av1EncoderDetails | null;
   compressionMode: PlaylistExportCompressionMode;
   compressionStrength: number;
+  compressionLiveTracker: CompressionLiveTracker | null;
 }): Promise<{ reencoded: boolean; alreadyAv1Copied: boolean; outputBytes: number }> {
+  throwIfAbortRequested();
   const output = input.task.output;
   if (!output) {
     throw new Error("Video output path was not allocated.");
@@ -628,6 +1177,9 @@ async function materializeVideoTask(input: {
     setCompressionStatus({
       alreadyAv1Copied: (exportStatus.compression?.alreadyAv1Copied ?? 0) + 1,
     });
+    if (input.compressionLiveTracker) {
+      skipCompressionJob(input.compressionLiveTracker, input.task.canonicalKey);
+    }
     return {
       reencoded: false,
       alreadyAv1Copied: true,
@@ -681,6 +1233,9 @@ async function materializeVideoTask(input: {
         alreadyAv1Copied: (exportStatus.compression?.alreadyAv1Copied ?? 0) + 1,
         reencodedTotal: Math.max(0, (exportStatus.compression?.reencodedTotal ?? 0) - 1),
       });
+      if (input.compressionLiveTracker) {
+        skipCompressionJob(input.compressionLiveTracker, input.task.canonicalKey);
+      }
       return {
         reencoded: false,
         alreadyAv1Copied: true,
@@ -693,6 +1248,13 @@ async function materializeVideoTask(input: {
     }
 
     updatePhase("compressing", `Compressing video ${outputFileName} to AV1...`);
+    if (input.compressionLiveTracker) {
+      startCompressionJob(
+        input.compressionLiveTracker,
+        input.task.canonicalKey,
+        probedSource.durationMs
+      );
+    }
     setCompressionStatus({
       activeJobs: (exportStatus.compression?.activeJobs ?? 0) + 1,
     });
@@ -705,6 +1267,14 @@ async function materializeVideoTask(input: {
         encoder: input.encoder,
         strength: input.compressionStrength,
         onSpawn: registerEncodeChild,
+        onProgress: input.compressionLiveTracker
+          ? (progress) =>
+              updateCompressionJobProgress(
+                input.compressionLiveTracker!,
+                input.task.canonicalKey,
+                progress
+              )
+          : undefined,
       });
       encodedSuccessfully = true;
     } finally {
@@ -720,6 +1290,11 @@ async function materializeVideoTask(input: {
         setCompressionStatus({
           reencodedCompleted: (exportStatus.compression?.reencodedCompleted ?? 0) + 1,
         });
+        if (input.compressionLiveTracker) {
+          finishCompressionJob(input.compressionLiveTracker, input.task.canonicalKey);
+        }
+      } else if (input.compressionLiveTracker) {
+        syncCompressionLiveProgress(input.compressionLiveTracker);
       }
     }
 
@@ -739,6 +1314,7 @@ async function materializeVideoTask(input: {
 }
 
 async function materializeFunscriptTask(task: FunscriptTask): Promise<void> {
+  throwIfAbortRequested();
   if (!task.output) {
     throw new Error("Funscript output path was not allocated.");
   }
@@ -759,7 +1335,50 @@ async function materializeFunscriptTask(task: FunscriptTask): Promise<void> {
 }
 
 export function getLibraryExportPackageStatus(): LibraryExportPackageStatus {
-  return { ...exportStatus };
+  return cloneStatus(exportStatus);
+}
+
+export async function analyzeLibraryExportPackage(
+  input: AnalyzeLibraryExportPackageInput = {}
+): Promise<LibraryExportPackageAnalysis> {
+  const prepared = await prepareLibraryExport(input);
+  return prepared.analysis;
+}
+
+function terminateActiveEncodeChildren(): void {
+  for (const child of activeEncodeChildren) {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Best effort only.
+    }
+    setTimeout(() => {
+      if (child.exitCode === null && !child.killed) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // Best effort only.
+        }
+      }
+    }, 1500);
+  }
+}
+
+export function requestLibraryExportPackageAbort(): LibraryExportPackageStatus {
+  if (!activeExportPromise || exportStatus.state !== "running") {
+    return cloneStatus(exportStatus);
+  }
+
+  abortRequested = true;
+  for (const controller of activeTransferAbortControllers) {
+    controller.abort();
+  }
+  terminateActiveEncodeChildren();
+  exportStatus = {
+    ...exportStatus,
+    lastMessage: "Abort requested. Waiting for the current export step to finish...",
+  };
+  return cloneStatus(exportStatus);
 }
 
 async function packResultAsFpack(
@@ -778,6 +1397,13 @@ async function packResultAsFpack(
 export async function exportLibraryPackage(
   input: LibraryExportPackageInput = {}
 ): Promise<LibraryExportPackageResult> {
+  if (activeExportPromise) {
+    throw new Error("A library export is already running.");
+  }
+
+  abortRequested = false;
+  activeTransferAbortControllers.clear();
+  activeEncodeChildren.clear();
   const includeMedia = input.includeMedia ?? true;
   const now = new Date();
   const compressionStrength = normalizeCompressionStrength(input.compressionStrength);
@@ -795,162 +1421,123 @@ export async function exportLibraryPackage(
     lastMessage: "Preparing export...",
     progress: { completed: 0, total: 0 },
     stats: { heroFiles: 0, roundFiles: 0, videoFiles: 0, funscriptFiles: 0 },
-    compression: null,
+    compression:
+      includeMedia && input.compressionMode === "av1"
+        ? {
+            enabled: true,
+            encoderName: null,
+            encoderKind: null,
+            strength: compressionStrength,
+            reencodedCompleted: 0,
+            reencodedTotal: 0,
+            alreadyAv1Copied: 0,
+            activeJobs: 0,
+            expectedVideoBytes: 0,
+            estimatedCompressionSeconds: 0,
+            approximate: true,
+            liveProgress: createCompressionLiveProgress(),
+          }
+        : null,
   };
 
-  try {
+  activeExportPromise = (async () => {
     updateStatus({ lastMessage: "Loading rounds from database..." });
+    const prepared = await prepareLibraryExport({
+      roundIds: input.roundIds,
+      heroIds: input.heroIds,
+      includeMedia,
+      compressionMode: input.compressionMode,
+      compressionStrength,
+    });
+    const binaries = await resolvePhashBinaries();
+    const compressionLiveTracker =
+      prepared.effectiveCompressionMode === "av1"
+        ? createCompressionLiveTracker(prepared.videoTasks)
+        : null;
+    const workEstimate = estimateExportWork(prepared);
 
-    let rounds: ExportableRound[];
-
-    if (input.roundIds?.length || input.heroIds?.length) {
-      const roundIds = input.roundIds ?? [];
-      const heroIds = input.heroIds ?? [];
-
-      const queries: Promise<ExportableRound[]>[] = [];
-
-      if (roundIds.length > 0) {
-        queries.push(
-          getDb().query.round.findMany({
-            where: inArray(roundTable.id, roundIds),
-            with: { hero: true, resources: true },
-          }) as Promise<ExportableRound[]>
-        );
-      }
-
-      if (heroIds.length > 0) {
-        queries.push(
-          getDb().query.round.findMany({
-            where: inArray(roundTable.heroId, heroIds),
-            with: { hero: true, resources: true },
-          }) as Promise<ExportableRound[]>
-        );
-      }
-
-      const results = await Promise.all(queries);
-      const seenIds = new Set<string>();
-      rounds = [];
-      for (const batch of results) {
-        for (const round of batch) {
-          if (!seenIds.has(round.id)) {
-            seenIds.add(round.id);
-            rounds.push(round);
-          }
-        }
-      }
+    setProgress({ completed: 0, total: workEstimate.total });
+    if (prepared.effectiveCompressionMode === "av1") {
+      exportStatus = {
+        ...exportStatus,
+        compression: {
+          enabled: true,
+          encoderName: prepared.encoder?.name ?? null,
+          encoderKind: prepared.encoder?.kind ?? null,
+          strength: prepared.compressionStrength,
+          reencodedCompleted: 0,
+          reencodedTotal: prepared.analysis.videoTotals.estimatedReencodeVideos,
+          alreadyAv1Copied: 0,
+          activeJobs: 0,
+          expectedVideoBytes: prepared.analysis.estimate.expectedVideoBytes,
+          estimatedCompressionSeconds: prepared.analysis.estimate.estimatedCompressionSeconds,
+          approximate: prepared.analysis.estimate.approximate,
+          liveProgress: createCompressionLiveProgress(
+            prepared.videoTasks
+              .filter((task) => !isAv1Codec(task.probe.codecName))
+              .reduce((sum, task) => sum + Math.max(0, task.probe.durationMs ?? 0), 0)
+          ),
+        },
+      };
     } else {
-      rounds = (await getDb().query.round.findMany({
-        with: { hero: true, resources: true },
-      })) as ExportableRound[];
-    }
-
-    if (rounds.length === 0) {
-      throw new Error("No rounds found to export.");
+      exportStatus = {
+        ...exportStatus,
+        compression: null,
+      };
     }
 
     updateStatus({ lastMessage: "Preparing export directory..." });
     await fs.mkdir(exportDir, { recursive: true });
     await fs.mkdir(workDir, { recursive: true });
 
-    const { resourceReferences, videoTasks, funscriptTasks } = buildResourceInventory(rounds);
-
-    const binaries = await resolvePhashBinaries();
-    const encoder = await detectAv1Encoder(binaries.ffmpegPath);
-    const defaultMode: PlaylistExportCompressionMode = encoder ? "av1" : "copy";
-    const requestedMode = input.compressionMode ?? defaultMode;
-    const effectiveCompressionMode = requestedMode === "av1" && encoder ? "av1" : "copy";
-
-    if (includeMedia) {
-      for (const task of videoTasks) {
-        const localPath = await resolveLocalSourcePath(task.uri);
-        if (localPath) {
-          task.probe = await probeLocalVideo(binaries.ffprobePath, localPath);
-          if (task.probe.durationMs === null && resourceReferences.length > 0) {
-            const matching = resourceReferences.find(
-              (entry) => canonicalizeResourceKey(entry.resource.videoUri) === task.canonicalKey
-            );
-            task.probe.durationMs = matching?.resource.durationMs ?? null;
-          }
-          continue;
-        }
-      }
-    }
-
-    if (includeMedia && effectiveCompressionMode === "av1") {
-      const estimatedReencodeVideos = videoTasks.filter(
-        (task) => !isAv1Codec(task.probe.codecName)
-      ).length;
-      exportStatus = {
-        ...exportStatus,
-        compression: {
-          enabled: true,
-          encoderName: encoder?.name ?? null,
-          encoderKind: encoder?.kind ?? null,
-          strength: compressionStrength,
-          reencodedCompleted: 0,
-          reencodedTotal: estimatedReencodeVideos,
-          alreadyAv1Copied: 0,
-          activeJobs: 0,
-        },
-      };
-    }
-
     const usedMediaNames = new Set<string>();
     const usedSidecarNames = new Set<string>();
 
-    let videoFiles = 0;
-    let funscriptFiles = 0;
-
     if (includeMedia) {
       allocateMediaOutputs({
-        tasks: videoTasks,
+        tasks: prepared.videoTasks,
         usedNames: usedMediaNames,
         packageDir: exportDir,
-        compressionMode: effectiveCompressionMode,
+        compressionMode: prepared.effectiveCompressionMode,
       });
     }
 
     allocateMediaOutputs({
-      tasks: funscriptTasks,
+      tasks: prepared.funscriptTasks,
       usedNames: usedMediaNames,
       packageDir: exportDir,
-      compressionMode: effectiveCompressionMode,
+      compressionMode: prepared.effectiveCompressionMode,
     });
-
-    const totalWork =
-      (includeMedia ? videoTasks.length : 0) + funscriptTasks.length + rounds.length;
-    setProgress({ completed: 0, total: totalWork });
 
     let actualVideoBytes = 0;
     let reencodedVideos = 0;
     let alreadyAv1Copied = 0;
 
     if (includeMedia) {
-      for (const task of videoTasks) {
+      for (const task of prepared.videoTasks) {
         const result = await materializeVideoTask({
           task,
           workDir,
           ffmpegPath: binaries.ffmpegPath,
           ffprobePath: binaries.ffprobePath,
-          encoder,
-          compressionMode: effectiveCompressionMode,
-          compressionStrength,
+          encoder: prepared.encoder,
+          compressionMode: prepared.effectiveCompressionMode,
+          compressionStrength: prepared.compressionStrength,
+          compressionLiveTracker,
         });
         actualVideoBytes += result.outputBytes;
         if (result.reencoded) reencodedVideos += 1;
         if (result.alreadyAv1Copied) alreadyAv1Copied += 1;
       }
-      videoFiles = videoTasks.length;
     }
 
-    for (const task of funscriptTasks) {
+    for (const task of prepared.funscriptTasks) {
       await materializeFunscriptTask(task);
     }
-    funscriptFiles = funscriptTasks.length;
 
     const videoOutputByKey = new Map<string, ExportedMediaFile>(
       includeMedia
-        ? videoTasks
+        ? prepared.videoTasks
             .filter((task): task is VideoTask & { output: ExportedMediaFile } =>
               Boolean(task.output)
             )
@@ -958,14 +1545,14 @@ export async function exportLibraryPackage(
         : []
     );
     const funscriptOutputByKey = new Map<string, ExportedMediaFile>(
-      funscriptTasks
+      prepared.funscriptTasks
         .filter((task): task is FunscriptTask & { output: ExportedMediaFile } =>
           Boolean(task.output)
         )
         .map((task) => [`funscript:${task.canonicalKey}`, task.output])
     );
 
-    const materializedEntries: RoundResourceEntry[] = resourceReferences.map((entry) => {
+    const materializedEntries: RoundResourceEntry[] = prepared.resourceReferences.map((entry) => {
       const funscriptKey = entry.resource.funscriptUri
         ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}`
         : null;
@@ -1008,11 +1595,8 @@ export async function exportLibraryPackage(
 
       const sidecarBaseName = sanitizeFileSystemName(entry.round.name, `round__${entry.round.id}`);
       const fileName = toUniqueCaseInsensitiveFileName(usedSidecarNames, sidecarBaseName, ".round");
-      updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
-      await writeJsonFile(
-        path.join(exportDir, fileName),
-        toRoundSidecarPayload(entry, includeMedia)
-      );
+      updatePhase("writing", `Writing sidecar ${fileName}...`);
+      await writeJsonFile(path.join(exportDir, fileName), toRoundSidecarPayload(entry, includeMedia));
       incrementStat("roundFiles");
       incrementProgress();
       roundFiles += 1;
@@ -1030,11 +1614,8 @@ export async function exportLibraryPackage(
     for (const group of sortedHeroGroups) {
       const sidecarBaseName = sanitizeFileSystemName(group.hero.name, `hero__${group.hero.id}`);
       const fileName = toUniqueCaseInsensitiveFileName(usedSidecarNames, sidecarBaseName, ".hero");
-      updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
-      await writeJsonFile(
-        path.join(exportDir, fileName),
-        toHeroSidecarPayload(group.hero, group.entries, includeMedia)
-      );
+      updatePhase("writing", `Writing sidecar ${fileName}...`);
+      await writeJsonFile(path.join(exportDir, fileName), toHeroSidecarPayload(group.hero, group.entries, includeMedia));
       incrementStat("heroFiles");
       incrementProgress();
       heroFiles += 1;
@@ -1042,48 +1623,80 @@ export async function exportLibraryPackage(
 
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
 
-    const result: LibraryExportPackageResult = {
+    const rawResult: LibraryExportPackageResult = {
       exportDir,
       heroFiles,
       roundFiles,
-      videoFiles,
-      funscriptFiles,
-      exportedRounds: rounds.length,
+      videoFiles: includeMedia ? prepared.videoTasks.length : 0,
+      funscriptFiles: prepared.funscriptTasks.length,
+      exportedRounds: prepared.rounds.length,
       includeMedia,
       compression: {
-        enabled: effectiveCompressionMode === "av1" && Boolean(encoder),
-        encoderName: encoder?.name ?? null,
-        encoderKind: encoder?.kind ?? null,
-        strength: compressionStrength,
+        enabled: prepared.effectiveCompressionMode === "av1" && Boolean(prepared.encoder),
+        encoderName: prepared.encoder?.name ?? null,
+        encoderKind: prepared.encoder?.kind ?? null,
+        strength: prepared.compressionStrength,
         reencodedVideos,
         alreadyAv1Copied,
         actualVideoBytes,
       },
     };
 
+    const result = await packResultAsFpack(rawResult, input.asFpack ?? false);
     exportStatus = {
+      ...exportStatus,
       state: "done",
       phase: "done",
-      startedAt: exportStatus.startedAt,
       finishedAt: new Date().toISOString(),
-      lastMessage: "Export complete.",
+      lastMessage: result.compression.enabled
+        ? `Export finished. ${result.compression.reencodedVideos} videos reencoded, ${result.heroFiles} heroes, ${result.roundFiles} standalone rounds.`
+        : `Export finished. ${result.heroFiles} heroes, ${result.roundFiles} standalone rounds, ${result.funscriptFiles} funscripts.`,
       progress: { completed: exportStatus.progress.total, total: exportStatus.progress.total },
-      stats: { ...exportStatus.stats, heroFiles, roundFiles, videoFiles, funscriptFiles },
-      compression: exportStatus.compression,
+      stats: {
+        ...exportStatus.stats,
+        heroFiles: result.heroFiles,
+        roundFiles: result.roundFiles,
+        videoFiles: result.videoFiles,
+        funscriptFiles: result.funscriptFiles,
+      },
     };
+    return result;
+  })();
 
-    return await packResultAsFpack(result, input.asFpack ?? false);
-  } catch (error) {
+  try {
+    return await activeExportPromise;
+  } catch (caughtError) {
+    let error: unknown = caughtError;
+    if (abortRequested && isAbortLikeError(error)) {
+      error = new ExportAbortError();
+    }
+
+    if (error instanceof ExportAbortError) {
+      exportStatus = {
+        ...exportStatus,
+        state: "aborted",
+        phase: "aborted",
+        finishedAt: new Date().toISOString(),
+        lastMessage: "Export aborted by user.",
+      };
+      throw new Error("Export aborted by user.");
+    }
+
+    const message = error instanceof Error ? error.message : "Export failed.";
     exportStatus = {
+      ...exportStatus,
       state: "error",
       phase: "error",
-      startedAt: exportStatus.startedAt,
       finishedAt: new Date().toISOString(),
-      lastMessage: error instanceof Error ? error.message : "Export failed.",
-      progress: exportStatus.progress,
-      stats: exportStatus.stats,
-      compression: exportStatus.compression,
+      lastMessage: message,
     };
     throw error;
+  } finally {
+    activeTransferAbortControllers.clear();
+    for (const child of activeEncodeChildren) {
+      unregisterEncodeChild(child);
+    }
+    abortRequested = false;
+    activeExportPromise = null;
   }
 }

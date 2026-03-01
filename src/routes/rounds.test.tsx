@@ -47,7 +47,10 @@ const mocks = vi.hoisted(() => ({
       importLegacyWithPlan: vi.fn(),
       scanFolderOnce: vi.fn(),
       exportDatabase: vi.fn(),
+      analyzeExportPackage: vi.fn(),
       exportPackage: vi.fn(),
+      getExportPackageStatus: vi.fn(),
+      abortExportPackage: vi.fn(),
       openExportFolder: vi.fn(),
     },
     webVideoCache: {
@@ -84,7 +87,27 @@ vi.mock("../services/trpc", () => ({
   trpc: {
     store: {
       get: {
-        query: vi.fn(),
+        query: vi.fn(async ({ key }: { key: string }) => {
+          if (key === "experimental.controllerSupportEnabled") {
+            return mocks.loaderData.controllerSupportEnabled;
+          }
+          if (key === "game.intermediary.loadingPrompt") {
+            return mocks.loaderData.intermediaryLoadingPrompt;
+          }
+          if (key === "game.intermediary.loadingDurationSec") {
+            return mocks.loaderData.intermediaryLoadingDurationSec;
+          }
+          if (key === "game.intermediary.returnPauseSec") {
+            return mocks.loaderData.intermediaryReturnPauseSec;
+          }
+          if (key === "game.video.roundProgressBarAlwaysVisible") {
+            return mocks.loaderData.roundProgressBarAlwaysVisible;
+          }
+          if (key === "experimental.installWebFunscriptUrlEnabled") {
+            return mocks.loaderData.installWebFunscriptUrlEnabled;
+          }
+          return null;
+        }),
       },
     },
   },
@@ -123,6 +146,17 @@ vi.mock("../components/ui/ToastHost", () => ({
 
 import { InstalledRoundsPage } from "./rounds";
 import { buildRoundRenderRows, buildRoundRenderRowsWithOptions } from "./roundRows";
+
+async function renderInstalledRoundsPage() {
+  const view = render(<InstalledRoundsPage />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await waitFor(() => {
+    expect(mocks.db.round.findInstalled).toHaveBeenCalled();
+  });
+  return view;
+}
 
 function makeRound({
   id,
@@ -468,6 +502,44 @@ beforeEach(() => {
     },
   });
   mocks.playlists.setActive.mockResolvedValue({ id: "playlist-1" });
+  mocks.db.install.analyzeExportPackage.mockResolvedValue({
+    videoTotals: {
+      uniqueVideos: 3,
+      localVideos: 3,
+      remoteVideos: 0,
+      alreadyAv1Videos: 1,
+      estimatedReencodeVideos: 2,
+    },
+    compression: {
+      supported: true,
+      defaultMode: "av1",
+      encoderName: "av1_nvenc",
+      encoderKind: "hardware",
+      warning: null,
+      strength: 80,
+      estimate: {
+        sourceVideoBytes: 120 * 1024 * 1024,
+        expectedVideoBytes: 70 * 1024 * 1024,
+        savingsBytes: 50 * 1024 * 1024,
+        estimatedCompressionSeconds: 180,
+        approximate: false,
+      },
+    },
+    settings: {
+      outputContainer: "mp4",
+      audioCodec: "aac",
+      audioBitrateKbps: 128,
+      lowPriority: true,
+      parallelJobs: 1,
+    },
+    estimate: {
+      sourceVideoBytes: 120 * 1024 * 1024,
+      expectedVideoBytes: 70 * 1024 * 1024,
+      savingsBytes: 50 * 1024 * 1024,
+      estimatedCompressionSeconds: 180,
+      approximate: false,
+    },
+  });
   mocks.db.install.exportPackage.mockResolvedValue({
     exportDir: "/tmp/export-root/2026-03-20T12-00-00.000Z",
     heroFiles: 1,
@@ -476,6 +548,35 @@ beforeEach(() => {
     funscriptFiles: 2,
     exportedRounds: 3,
     includeMedia: true,
+    compression: {
+      enabled: true,
+      encoderName: "av1_nvenc",
+      encoderKind: "hardware",
+      strength: 80,
+      reencodedVideos: 2,
+      alreadyAv1Copied: 1,
+      actualVideoBytes: 70 * 1024 * 1024,
+    },
+  });
+  mocks.db.install.getExportPackageStatus.mockResolvedValue({
+    state: "idle",
+    phase: "idle",
+    startedAt: null,
+    finishedAt: null,
+    lastMessage: null,
+    progress: { completed: 0, total: 0 },
+    stats: { heroFiles: 0, roundFiles: 0, videoFiles: 0, funscriptFiles: 0 },
+    compression: null,
+  });
+  mocks.db.install.abortExportPackage.mockResolvedValue({
+    state: "running",
+    phase: "copying",
+    startedAt: "2026-03-20T12:00:00.000Z",
+    finishedAt: null,
+    lastMessage: "Abort requested. Waiting for the current export step to finish...",
+    progress: { completed: 1, total: 4 },
+    stats: { heroFiles: 0, roundFiles: 0, videoFiles: 1, funscriptFiles: 0 },
+    compression: null,
   });
   mocks.db.install.openExportFolder.mockResolvedValue({ path: "/tmp/app-export" });
   mocks.roundVideoOverlay.mockClear();
@@ -489,7 +590,7 @@ afterEach(() => {
 });
 
 describe("buildRoundRenderRows", () => {
-  it("groups hero rounds and preserves first-seen order", () => {
+  it("groups hero rounds and preserves first-seen order", async () => {
     const rows = buildRoundRenderRows([
       makeRound({
         id: "a",
@@ -514,7 +615,7 @@ describe("buildRoundRenderRows", () => {
     }
   });
 
-  it("groups hero rounds under their hero name", () => {
+  it("groups hero rounds under their hero name", async () => {
     const rows = buildRoundRenderRows([
       makeRound({
         id: "a",
@@ -545,7 +646,7 @@ describe("buildRoundRenderRows", () => {
     ]);
   });
 
-  it("groups rounds under playlists and allows the same round in multiple playlist groups", () => {
+  it("groups rounds under playlists and allows the same round in multiple playlist groups", async () => {
     const alpha = makeRound({ id: "alpha", name: "Alpha", createdAt: "2026-03-01T10:00:00.000Z" });
     const beta = makeRound({ id: "beta", name: "Beta", createdAt: "2026-03-01T11:00:00.000Z" });
     const rows = buildRoundRenderRowsWithOptions([alpha, beta], {
@@ -582,8 +683,8 @@ describe("buildRoundRenderRows", () => {
 });
 
 describe("InstalledRoundsPage hero grouping", () => {
-  it("shows a go back button in the header and falls back to home navigation", () => {
-    render(<InstalledRoundsPage />);
+  it("shows a go back button in the header and falls back to home navigation", async () => {
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
@@ -607,7 +708,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getByRole("heading", { name: "Solo Round" })).toBeDefined();
     expect(screen.queryByRole("heading", { name: "Hero Round 1" })).toBeNull();
@@ -623,7 +724,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(screen.queryByRole("heading", { name: "Hero Round 1" })).toBeNull();
   });
 
-  it("keeps first-seen order across hero groups and standalone rounds", () => {
+  it("keeps first-seen order across hero groups and standalone rounds", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "beta",
@@ -640,7 +741,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     const betaHeader = screen.getByRole("button", { name: "Hero Beta (1 rounds)" });
     const soloHeading = screen.getByRole("heading", { name: "Solo Round" });
@@ -654,7 +755,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     ).toBe(true);
   });
 
-  it("updates grouped rows via filtering and preserves empty state", () => {
+  it("updates grouped rows via filtering and preserves empty state", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "hero",
@@ -665,7 +766,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.change(screen.getByPlaceholderText("Search title, hero, author"), {
       target: { value: "solo" },
@@ -691,7 +792,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       makePlaylist("playlist-2", "Playlist Two", ["r1", "r2"]),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
 
@@ -706,12 +807,12 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(await screen.findByRole("heading", { name: "Round Two" })).toBeDefined();
   });
 
-  it("shows convert button for rounds without hero and navigates to converter with prefill", () => {
+  it("shows convert button for rounds without hero and navigates to converter with prefill", async () => {
     mocks.loaderData.rounds = [
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     const convertButton = screen.getByRole("button", { name: "Convert to Hero" });
     fireEvent.click(convertButton);
@@ -725,7 +826,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
   });
 
-  it("labels website-backed rounds as web in the installed rounds view", () => {
+  it("labels website-backed rounds as web in the installed rounds view", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "web-round",
@@ -735,7 +836,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getAllByText("Web").length).toBeGreaterThan(0);
     expect(screen.getByText((_content, node) => node?.textContent === "Source: Web")).toBeDefined();
@@ -763,7 +864,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(await screen.findByText("Preview Is Being Generated")).toBeDefined();
   });
@@ -791,7 +892,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(await screen.findByText("Preview Is Being Generated")).toBeDefined();
     expect(screen.queryByRole("heading", { name: "Hero Website Round" })).toBeNull();
@@ -821,7 +922,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       index === 0 ? round : ({ ...round, type: "Interjection" } as InstalledRound)
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(await screen.findByLabelText("Play Main Round"));
 
@@ -847,7 +948,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(await screen.findByLabelText("Play Preview Round"));
 
@@ -877,7 +978,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(await screen.findByLabelText("Play Preview Round"));
 
@@ -914,7 +1015,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    const { container } = render(<InstalledRoundsPage />);
+    const { container } = await renderInstalledRoundsPage();
 
     const heading = await screen.findByRole("heading", { name: "Main Round" });
     const card = heading.closest("article");
@@ -943,7 +1044,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       .spyOn(HTMLMediaElement.prototype, "load")
       .mockImplementation(() => undefined);
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     const heading = await screen.findByRole("heading", { name: "Main Round" });
     const card = heading.closest("article");
@@ -954,7 +1055,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     await waitFor(() => expect(loadSpy).toHaveBeenCalled());
   });
 
-  it("shows caching ongoing for website rounds that are still waiting for the cache", () => {
+  it("shows caching ongoing for website rounds that are still waiting for the cache", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "web-round",
@@ -965,13 +1066,13 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getAllByText("Caching Ongoing").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Play Website Round" })).toBeNull();
   });
 
-  it("shows caching state on collapsed hero groups when grouped website rounds are pending", () => {
+  it("shows caching state on collapsed hero groups when grouped website rounds are pending", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "hero-web-round",
@@ -983,7 +1084,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getAllByText("Caching Ongoing").length).toBeGreaterThan(0);
     expect(screen.queryByRole("heading", { name: "Hero Website Round" })).toBeNull();
@@ -1005,7 +1106,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Convert to Round" }));
@@ -1063,7 +1164,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       };
     });
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getByRole("button", { name: "Hero One (2 rounds)" })).toBeDefined();
 
@@ -1103,7 +1204,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Convert to Round" }));
@@ -1127,7 +1228,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       makeRound({ id: "solo", name: "Solo Round", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
     fireEvent.change(screen.getByDisplayValue("Solo Round"), {
@@ -1154,7 +1255,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       "/tmp/solo.funscript"
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
     fireEvent.click(screen.getByRole("button", { name: "Attach Funscript" }));
@@ -1183,7 +1284,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
     fireEvent.click(screen.getByRole("button", { name: "Detach Funscript" }));
@@ -1209,7 +1310,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit Hero" }));
@@ -1234,7 +1335,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       makeRound({ id: "solo", name: "Solo Round", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
     fireEvent.change(screen.getByDisplayValue("Solo Round"), {
@@ -1259,7 +1360,7 @@ describe("InstalledRoundsPage hero grouping", () => {
         hero: { id: "h1", name: "Hero One" },
       }),
     ];
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit Hero" }));
@@ -1282,7 +1383,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete Hero" }));
@@ -1302,10 +1403,13 @@ describe("InstalledRoundsPage hero grouping", () => {
       "/tmp/export-root"
     );
 
-    render(<InstalledRoundsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    await renderInstalledRoundsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
     expect(screen.getByRole("dialog", { name: "Package your library." })).toBeTruthy();
 
+    await waitFor(() => {
+      expect(mocks.db.install.analyzeExportPackage).toHaveBeenCalled();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Start Export" }));
 
     await waitFor(() => {
@@ -1318,7 +1422,10 @@ describe("InstalledRoundsPage hero grouping", () => {
         roundIds: undefined,
         heroIds: undefined,
         includeMedia: true,
+        asFpack: false,
         directoryPath: "/tmp/export-root",
+        compressionMode: "av1",
+        compressionStrength: 80,
       });
     });
     expect(screen.getByText("/tmp/export-root/2026-03-20T12-00-00.000Z")).toBeTruthy();
@@ -1327,8 +1434,11 @@ describe("InstalledRoundsPage hero grouping", () => {
 
   it("does not start the package export when directory selection is cancelled", async () => {
     vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue(null);
-    render(<InstalledRoundsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    await renderInstalledRoundsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Start Export" })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Start Export" }));
 
     await waitFor(() => {
@@ -1339,10 +1449,65 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(mocks.db.install.exportPackage).not.toHaveBeenCalled();
   });
 
+  it("shows AV1 analysis controls for library export and hides them when media is disabled", async () => {
+    await renderInstalledRoundsPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+
+    await waitFor(() => {
+      expect(mocks.db.install.analyzeExportPackage).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("button", { name: "Convert to AV1" })).toBeTruthy();
+    expect(screen.getByText("Compression Strength")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include Media Files" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Convert to AV1" })).toBeNull();
+    });
+  });
+
+  it("shows export progress overlay and aborts the library export", async () => {
+    mocks.db.install.exportPackage.mockImplementation(
+      () =>
+        new Promise(() => {})
+    );
+    mocks.db.install.getExportPackageStatus.mockResolvedValue({
+      state: "running",
+      phase: "copying",
+      startedAt: "2026-03-20T12:00:00.000Z",
+      finishedAt: null,
+      lastMessage: "Exporting video demo.mp4...",
+      progress: { completed: 1, total: 4 },
+      stats: { heroFiles: 0, roundFiles: 0, videoFiles: 1, funscriptFiles: 0 },
+      compression: null,
+    });
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue(
+      "/tmp/export-root"
+    );
+
+    await renderInstalledRoundsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Start Export" })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Export" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Library Export Running")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Abort Export" }));
+
+    await waitFor(() => {
+      expect(mocks.db.install.abortExportPackage).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("removes the dedicated open export folder action", async () => {
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     expect(screen.queryByRole("button", { name: "Open Export Folder" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
     expect(screen.queryByRole("button", { name: "Browse Export Library" })).toBeNull();
   });
 
@@ -1356,7 +1521,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     );
     vi.mocked(window.electronAPI.dialog.selectFolders).mockResolvedValue(["/tmp/legacy-pack"]);
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install Rounds" }));
 
     expect(await screen.findByText("Installing rounds can take a very long time.")).toBeDefined();
@@ -1424,7 +1589,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       ],
     });
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install Rounds" }));
 
     expect(await screen.findByRole("heading", { name: "Review Legacy Import" })).toBeDefined();
@@ -1512,7 +1677,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       ],
     });
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install Rounds" }));
 
     expect(await screen.findByRole("heading", { name: "Review Legacy Import" })).toBeDefined();
@@ -1551,7 +1716,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       "/tmp/imported.round"
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Import File" }));
 
     await waitFor(() => {
@@ -1565,7 +1730,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       "/tmp/imported.fplay"
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Import File" }));
 
     await waitFor(() => {
@@ -1577,8 +1742,8 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
   });
 
-  it("hides the web funscript URL input by default in install from web", () => {
-    render(<InstalledRoundsPage />);
+  it("hides the web funscript URL input by default in install from web", async () => {
+    await renderInstalledRoundsPage();
 
     expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
@@ -1591,7 +1756,7 @@ describe("InstalledRoundsPage hero grouping", () => {
   it("opens install from web when requested by rounds search params", async () => {
     mocks.search = { open: "install-web" };
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(await screen.findByRole("dialog", { name: "Install from web" })).toBeTruthy();
     expect(mocks.navigate).toHaveBeenCalledWith({
@@ -1601,8 +1766,8 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
   });
 
-  it("closes install from web on escape", () => {
-    render(<InstalledRoundsPage />);
+  it("closes install from web on escape", async () => {
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
 
     expect(screen.getByRole("dialog", { name: "Install from web" })).toBeTruthy();
@@ -1616,7 +1781,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     mocks.search = { open: "install-rounds" };
     vi.mocked(window.electronAPI.dialog.selectFolders).mockResolvedValue(["/tmp/round-pack"]);
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     await waitFor(() => {
       expect(window.electronAPI.dialog.selectFolders).toHaveBeenCalledTimes(1);
@@ -1629,8 +1794,62 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
   });
 
-  it("autofills the round name from the extracted website title while the field is untouched", async () => {
+  it("renders immediately, loads rounds after mount, and does not fetch playlists on first paint", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "r1", name: "Round One", createdAt: "2026-03-03T12:00:00.000Z" }),
+    ];
+
     render(<InstalledRoundsPage />);
+
+    expect(screen.queryByRole("heading", { name: "Round One" })).toBeNull();
+    expect(mocks.playlists.list).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Round One" })).toBeDefined();
+    });
+    expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a section-scoped retry state when the first rounds fetch fails", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "r1", name: "Round One", createdAt: "2026-03-03T12:00:00.000Z" }),
+    ];
+    mocks.db.round.findInstalled
+      .mockRejectedValueOnce(new Error("Library load failed."))
+      .mockImplementation(async () => mocks.loaderData.rounds);
+
+    render(<InstalledRoundsPage />);
+
+    expect(await screen.findByText("Failed to load installed rounds")).toBeDefined();
+    expect(screen.getByText("Library load failed.")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Round One" })).toBeDefined();
+    });
+  });
+
+  it("loads playlists only after switching the grouping mode to playlists", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "r1", name: "Round One", createdAt: "2026-03-03T12:00:00.000Z" }),
+    ];
+    mocks.loaderData.availablePlaylists = [makePlaylist("playlist-1", "Playlist One", ["r1"])];
+
+    await renderInstalledRoundsPage();
+
+    expect(mocks.playlists.list).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
+
+    await waitFor(() => {
+      expect(mocks.playlists.list).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByRole("button", { name: "Playlist One (1 rounds)" })).toBeDefined();
+  });
+
+  it("autofills the round name from the extracted website title while the field is untouched", async () => {
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
 
     fireEvent.change(screen.getByLabelText("Video URL"), {
@@ -1642,7 +1861,7 @@ describe("InstalledRoundsPage hero grouping", () => {
   });
 
   it("does not overwrite a manually entered round name with the extracted website title", async () => {
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
 
     fireEvent.change(screen.getByLabelText("Round Name"), {
@@ -1678,7 +1897,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       };
     });
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
 
     expect(screen.getByRole("dialog", { name: "Install from web" })).toBeTruthy();
@@ -1707,12 +1926,22 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(await screen.findByText('Installed "Website Demo".')).toBeDefined();
   });
 
+  it("loads the remote funscript setting when the web install dialog opens", async () => {
+    mocks.loaderData.installWebFunscriptUrlEnabled = true;
+
+    await renderInstalledRoundsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    expect(screen.queryByLabelText("Funscript URL")).toBeNull();
+    expect(await screen.findByLabelText("Funscript URL")).toBeDefined();
+  });
+
   it("shows unsupported website video feedback live and blocks install", async () => {
     mocks.db.round.checkWebsiteVideoSupport.mockRejectedValue(
       new Error("This website video URL is not supported.")
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
     fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
 
     fireEvent.change(screen.getByLabelText("Video URL"), {
@@ -1726,7 +1955,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(mocks.db.round.createWebsiteRound).not.toHaveBeenCalled();
   });
 
-  it("renders a large library through the virtualized wrapper without load-more pagination", () => {
+  it("renders a large library through the virtualized wrapper without load-more pagination", async () => {
     mocks.loaderData.rounds = Array.from({ length: 75 }, (_, index) =>
       makeRound({
         id: `round-${index}`,
@@ -1735,7 +1964,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       })
     );
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getByText("75 / 75 Visible")).toBeDefined();
     expect(screen.getByRole("heading", { name: "Round 0" })).toBeDefined();
@@ -1750,7 +1979,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       makeRound({ id: "oldest", name: "Oldest Round", createdAt: "2026-03-01T12:00:00.000Z" }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: /Newest/i }));
     fireEvent.click(screen.getByRole("button", { name: "Oldest" }));
@@ -1792,7 +2021,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: /Newest/i }));
     fireEvent.click(screen.getByRole("button", { name: "Length" }));
@@ -1827,7 +2056,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    render(<InstalledRoundsPage />);
+    await renderInstalledRoundsPage();
 
     expect(screen.getAllByText("Template").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Repair Template" }));

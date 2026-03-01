@@ -6,7 +6,12 @@ import { app, shell } from "electron";
 import * as z from "zod";
 import { getDb } from "../../services/db";
 import { exportInstalledDatabase } from "../../services/installExport";
-import { exportLibraryPackage } from "../../services/libraryExportPackage";
+import {
+  analyzeLibraryExportPackage,
+  exportLibraryPackage,
+  getLibraryExportPackageStatus,
+  requestLibraryExportPackageAbort,
+} from "../../services/libraryExportPackage";
 import { getDisabledRoundIdSet, resolveResourceUris } from "../../services/integrations";
 import { getStore } from "../../services/store";
 import { resolveVideoDurationMsForUri } from "../../services/videoDuration";
@@ -1304,6 +1309,41 @@ export const dbRouter = router({
         });
       }
     }),
+
+  analyzeLibraryExportPackage: publicProcedure
+    .input(
+      z.object({
+        roundIds: z.array(z.string()).optional(),
+        heroIds: z.array(z.string()).optional(),
+        includeMedia: z.boolean().optional(),
+        compressionMode: z.enum(["copy", "av1"]).optional(),
+        compressionStrength: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        return await analyzeLibraryExportPackage({
+          roundIds: input.roundIds,
+          heroIds: input.heroIds,
+          includeMedia: input.includeMedia ?? true,
+          compressionMode: input.compressionMode,
+          compressionStrength: input.compressionStrength,
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Failed to analyze library package.",
+        });
+      }
+    }),
+
+  getLibraryExportPackageStatus: publicProcedure.query(() => {
+    return getLibraryExportPackageStatus();
+  }),
+
+  abortLibraryExportPackage: publicProcedure.mutation(() => {
+    return requestLibraryExportPackageAbort();
+  }),
 
   openInstallExportFolder: publicProcedure.mutation(async () => {
     const exportBaseDir = getInstallExportBaseDir();

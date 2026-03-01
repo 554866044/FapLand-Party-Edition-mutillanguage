@@ -10,6 +10,18 @@ const { exportInstalledDatabaseMock } = vi.hoisted(() => ({
   exportInstalledDatabaseMock: vi.fn(),
 }));
 
+const {
+  exportLibraryPackageMock,
+  analyzeLibraryExportPackageMock,
+  getLibraryExportPackageStatusMock,
+  requestLibraryExportPackageAbortMock,
+} = vi.hoisted(() => ({
+  exportLibraryPackageMock: vi.fn(),
+  analyzeLibraryExportPackageMock: vi.fn(),
+  getLibraryExportPackageStatusMock: vi.fn(),
+  requestLibraryExportPackageAbortMock: vi.fn(),
+}));
+
 const { getStoreMock } = vi.hoisted(() => ({
   getStoreMock: vi.fn(),
 }));
@@ -29,6 +41,13 @@ vi.mock("../../services/db", () => ({
 
 vi.mock("../../services/installExport", () => ({
   exportInstalledDatabase: exportInstalledDatabaseMock,
+}));
+
+vi.mock("../../services/libraryExportPackage", () => ({
+  exportLibraryPackage: exportLibraryPackageMock,
+  analyzeLibraryExportPackage: analyzeLibraryExportPackageMock,
+  getLibraryExportPackageStatus: getLibraryExportPackageStatusMock,
+  requestLibraryExportPackageAbort: requestLibraryExportPackageAbortMock,
 }));
 
 vi.mock("../../services/store", () => ({
@@ -159,6 +178,82 @@ describe("dbRouter local highscore and multiplayer cache", () => {
       roundFiles: 1,
       exportedRounds: 2,
       includeResourceUris: false,
+    });
+    exportLibraryPackageMock.mockResolvedValue({
+      exportDir: "/tmp/f-land/export/library",
+      heroFiles: 1,
+      roundFiles: 1,
+      videoFiles: 1,
+      funscriptFiles: 1,
+      exportedRounds: 2,
+      includeMedia: true,
+      compression: {
+        enabled: true,
+        encoderName: "av1_nvenc",
+        encoderKind: "hardware",
+        strength: 80,
+        reencodedVideos: 1,
+        alreadyAv1Copied: 0,
+        actualVideoBytes: 1024,
+      },
+    });
+    analyzeLibraryExportPackageMock.mockResolvedValue({
+      videoTotals: {
+        uniqueVideos: 1,
+        localVideos: 1,
+        remoteVideos: 0,
+        alreadyAv1Videos: 0,
+        estimatedReencodeVideos: 1,
+      },
+      compression: {
+        supported: true,
+        defaultMode: "av1",
+        encoderName: "av1_nvenc",
+        encoderKind: "hardware",
+        warning: null,
+        strength: 80,
+        estimate: {
+          sourceVideoBytes: 1024,
+          expectedVideoBytes: 768,
+          savingsBytes: 256,
+          estimatedCompressionSeconds: 60,
+          approximate: false,
+        },
+      },
+      settings: {
+        outputContainer: "mp4",
+        audioCodec: "aac",
+        audioBitrateKbps: 128,
+        lowPriority: true,
+        parallelJobs: 1,
+      },
+      estimate: {
+        sourceVideoBytes: 1024,
+        expectedVideoBytes: 768,
+        savingsBytes: 256,
+        estimatedCompressionSeconds: 60,
+        approximate: false,
+      },
+    });
+    getLibraryExportPackageStatusMock.mockReturnValue({
+      state: "idle",
+      phase: "idle",
+      startedAt: null,
+      finishedAt: null,
+      lastMessage: null,
+      progress: { completed: 0, total: 0 },
+      stats: { heroFiles: 0, roundFiles: 0, videoFiles: 0, funscriptFiles: 0 },
+      compression: null,
+    });
+    requestLibraryExportPackageAbortMock.mockReturnValue({
+      state: "running",
+      phase: "copying",
+      startedAt: "2026-03-05T20:00:00.000Z",
+      finishedAt: null,
+      lastMessage: "Abort requested. Waiting for the current export step to finish...",
+      progress: { completed: 1, total: 2 },
+      stats: { heroFiles: 0, roundFiles: 0, videoFiles: 1, funscriptFiles: 0 },
+      compression: null,
     });
 
     const cacheByLobby = new Map<string, CacheRow>();
@@ -1034,6 +1129,62 @@ describe("dbRouter local highscore and multiplayer cache", () => {
 
     await caller.exportInstalledDatabase({ includeResourceUris: true });
     expect(exportInstalledDatabaseMock).toHaveBeenLastCalledWith({ includeResourceUris: true });
+  });
+
+  it("analyzes, exports, polls, and aborts library package export", async () => {
+    const caller = createRendererCaller();
+
+    await expect(
+      caller.analyzeLibraryExportPackage({
+        roundIds: ["round-1"],
+        includeMedia: true,
+        compressionMode: "av1",
+        compressionStrength: 55,
+      })
+    ).resolves.toMatchObject({
+      videoTotals: { uniqueVideos: 1 },
+      compression: { defaultMode: "av1", strength: 80 },
+    });
+    expect(analyzeLibraryExportPackageMock).toHaveBeenCalledWith({
+      roundIds: ["round-1"],
+      heroIds: undefined,
+      includeMedia: true,
+      compressionMode: "av1",
+      compressionStrength: 55,
+    });
+
+    await expect(
+      caller.exportLibraryPackage({
+        roundIds: ["round-1"],
+        includeMedia: true,
+        compressionMode: "av1",
+        compressionStrength: 70,
+        asFpack: true,
+      })
+    ).resolves.toMatchObject({
+      exportDir: "/tmp/f-land/export/library",
+      compression: { enabled: true },
+    });
+    expect(exportLibraryPackageMock).toHaveBeenCalledWith({
+      roundIds: ["round-1"],
+      heroIds: undefined,
+      includeMedia: true,
+      directoryPath: undefined,
+      asFpack: true,
+      compressionMode: "av1",
+      compressionStrength: 70,
+    });
+
+    await expect(caller.getLibraryExportPackageStatus()).resolves.toMatchObject({
+      state: "idle",
+    });
+    expect(getLibraryExportPackageStatusMock).toHaveBeenCalledTimes(1);
+
+    await expect(caller.abortLibraryExportPackage()).resolves.toMatchObject({
+      state: "running",
+      phase: "copying",
+    });
+    expect(requestLibraryExportPackageAbortMock).toHaveBeenCalledTimes(1);
   });
 
   it("clears persisted database rows and store state", async () => {

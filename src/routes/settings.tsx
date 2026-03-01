@@ -3738,6 +3738,7 @@ function getSelectableAuthModeValue(
 }
 
 function SourceIntegrationsCard() {
+  const sfwMode = useSfwMode();
   const [sources, setSources] = useState<ExternalSource[]>([]);
   const [drafts, setDrafts] = useState<Record<string, SourceDraft>>({});
   const [syncStatus, setSyncStatus] = useState<IntegrationSyncStatus | null>(null);
