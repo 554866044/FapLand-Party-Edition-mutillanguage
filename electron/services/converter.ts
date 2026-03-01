@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateVideoPhash } from "./phash";
@@ -191,15 +191,25 @@ export function fromUriToLocalPath(uri: string): string | null {
 }
 
 async function computeFileSha256(filePath: string): Promise<string> {
-  const bytes = await fs.readFile(filePath);
-  return crypto.createHash("sha256").update(bytes).digest("hex");
+  const hash = crypto.createHash("sha256");
+  const stream = createReadStream(filePath);
+
+  return await new Promise<string>((resolve, reject) => {
+    stream.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
 }
 
 async function computeRoundPhash(
   localVideoPath: string,
   startTimeMs: number,
   endTimeMs: number,
-  fullFileHashCache: Map<string, string>,
+  fullFileHashCache: Map<string, Promise<string>>,
 ): Promise<string> {
   try {
     const result = await generateVideoPhash(localVideoPath, startTimeMs, endTimeMs);
@@ -212,11 +222,12 @@ async function computeRoundPhash(
   }
 
   const normalizedPath = path.normalize(localVideoPath);
-  let fileHash = fullFileHashCache.get(normalizedPath);
-  if (!fileHash) {
-    fileHash = await computeFileSha256(normalizedPath);
-    fullFileHashCache.set(normalizedPath, fileHash);
+  let fileHashPromise = fullFileHashCache.get(normalizedPath);
+  if (!fileHashPromise) {
+    fileHashPromise = computeFileSha256(normalizedPath);
+    fullFileHashCache.set(normalizedPath, fileHashPromise);
   }
+  const fileHash = await fileHashPromise;
 
   return `sha256:${fileHash}@${startTimeMs}-${endTimeMs}`;
 }
@@ -264,7 +275,7 @@ export async function saveConvertedRounds(input: SaveConvertedRoundsInput): Prom
   const localVideoPath = fromUriToLocalPath(videoUri);
   let phashes: Array<string | null>;
   if (localVideoPath) {
-    const fileHashCache = new Map<string, string>();
+    const fileHashCache = new Map<string, Promise<string>>();
     phashes = await Promise.all(
       normalizedSegments.map((segment) =>
         computeRoundPhash(localVideoPath, segment.startTimeMs, segment.endTimeMs, fileHashCache),
