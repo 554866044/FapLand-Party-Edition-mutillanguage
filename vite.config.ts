@@ -123,6 +123,7 @@ export default defineConfig(({ command, mode }) => {
         include: /\.[jt]sx?$/,
         babel: {
           plugins: [
+            "@lingui/babel-plugin-lingui-macro",
             [
               "babel-plugin-react-compiler",
               {

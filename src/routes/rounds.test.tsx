@@ -799,8 +799,8 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
 
-    const playlistOneHeader = screen.getByRole("button", { name: "Playlist One (1 rounds)" });
-    const playlistTwoHeader = screen.getByRole("button", { name: "Playlist Two (2 rounds)" });
+    const playlistOneHeader = await screen.findByRole("button", { name: "Playlist One (1 rounds)" });
+    const playlistTwoHeader = await screen.findByRole("button", { name: "Playlist Two (2 rounds)" });
 
     fireEvent.click(playlistOneHeader);
     fireEvent.click(playlistTwoHeader);

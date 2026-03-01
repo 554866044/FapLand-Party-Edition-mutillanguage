@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import React, { type RefObject, useId } from "react";
 import {
   playConverterMarkInSound,
@@ -51,6 +52,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
     onMoveSelectedEndToPlayhead,
     onRandomJump,
   }) => {
+    const { t } = useLingui();
     const foregroundVideoId = useId();
     const foregroundVideo = useForegroundVideoRegistration(
       `converter-preview:${foregroundVideoId}`
@@ -88,7 +90,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-3 text-zinc-500">
               <span className="text-4xl opacity-30">🎬</span>
-              <span className="text-sm">Select a source video to start editing.</span>
+              <span className="text-sm">{t`Select a source video to start editing.`}</span>
             </div>
           )}
         </div>

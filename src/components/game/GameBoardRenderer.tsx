@@ -8,8 +8,10 @@ import {
   TextStyle,
   type FederatedPointerEvent,
 } from "pixi.js";
+import { Trans } from "@lingui/react/macro";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { BoardField, GameState } from "../../game/types";
+import { i18n } from "../../i18n";
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -154,12 +156,20 @@ function drawToken(g: Graphics, x: number, y: number, playerIndex: number, phase
 
 // ─── Kind label mapping ───────────────────────────────────────────────────────
 
-const KIND_LABELS: Record<string, string> = {
-  start: "START",
-  path: "PATH",
-  event: "EVENT★",
-  perk: "✦ PERK",
-};
+function getKindLabel(kind: string): string {
+  switch (kind) {
+    case "start":
+      return i18n._({ id: "gameboard.kind.start", message: "START" });
+    case "path":
+      return i18n._({ id: "gameboard.kind.path", message: "PATH" });
+    case "event":
+      return i18n._({ id: "gameboard.kind.event", message: "EVENT★" });
+    case "perk":
+      return i18n._({ id: "gameboard.kind.perk", message: "✦ PERK" });
+    default:
+      return kind;
+  }
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -293,7 +303,7 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
           nameText.interactiveChildren = false;
 
           const kindText = new Text({
-            text: KIND_LABELS[field.kind] ?? field.kind,
+            text: getKindLabel(field.kind),
             style: new TextStyle({
               fontFamily: "JetBrains Mono, monospace",
               fontSize: 7,
@@ -387,6 +397,7 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
             if (!pair) return;
             pair.name.x = x + TILE_W / 2;
             pair.name.y = y + TILE_H / 2 - 7;
+            pair.kind.text = getKindLabel(f.kind);
             pair.kind.x = x + TILE_W / 2;
             pair.kind.y = y + TILE_H / 2 + 8;
             pair.index.x = x + 4;
@@ -431,11 +442,11 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
         >
           <p className="text-xs font-bold text-white">{tooltip.field.name}</p>
           <p className="mt-0.5 text-[10px] uppercase tracking-widest text-violet-300">
-            {tooltip.field.kind}
+            {getKindLabel(tooltip.field.kind)}
           </p>
           {tooltip.field.round && (
             <p className="mt-0.5 text-[10px] text-amber-300">
-              Round Slot {tooltip.field.round.slot + 1}
+              <Trans>Round Slot {tooltip.field.round.slot + 1}</Trans>
             </p>
           )}
         </div>

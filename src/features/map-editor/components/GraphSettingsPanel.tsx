@@ -1,4 +1,5 @@
 import React from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { playHoverSound } from "../../../utils/audio";
 import { useSfwMode } from "../../../hooks/useSfwMode";
 import type { InstalledRound, InstalledRoundCatalogEntry } from "../../../services/db";
@@ -47,7 +48,8 @@ function renderPerkToggleList(
   enabledIds: ReadonlyArray<string>,
   accent: "emerald" | "rose",
   emptyLabel: string,
-  onToggle: (perkId: string) => void
+  onToggle: (perkId: string) => void,
+  labels: { device: string; active: string; inactive: string }
 ) {
   const enabledSet = new Set(enabledIds);
   if (options.length === 0) {
@@ -81,7 +83,7 @@ function renderPerkToggleList(
                 <span className="truncate">{perk.name}</span>
                 {perk.requiresHandy && (
                   <span className="flex-shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1 py-0.5 text-[8px] font-medium uppercase tracking-[0.04em] text-amber-200/90">
-                    Device
+                    {labels.device}
                   </span>
                 )}
               </span>
@@ -93,7 +95,7 @@ function renderPerkToggleList(
                     : "border-zinc-700/50 bg-zinc-900/70 text-zinc-400"
                   }`}
               >
-                {selected ? "Active" : "Inactive"}
+                {selected ? labels.active : labels.inactive}
               </span>
             </div>
           </button>
@@ -131,6 +133,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
     onMoveCumRound,
     onRemoveCumRoundByIndex,
   }) => {
+    const { t } = useLingui();
     const sfwMode = useSfwMode();
 
     return (
@@ -138,19 +141,19 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       <div className="space-y-3 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Dice Roll Limits
+            <Trans>Dice Roll Limits</Trans>
           </p>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Controls the range of the dice used for movement.
+            <Trans>Controls the range of the dice used for movement.</Trans>
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Minimum Roll
+              <Trans>Minimum Roll</Trans>
             </span>
             <input
-              aria-label="Minimum Roll"
+              aria-label={t`Minimum Roll`}
               type="number"
               min={1}
               max={20}
@@ -164,10 +167,10 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Maximum Roll
+              <Trans>Maximum Roll</Trans>
             </span>
             <input
-              aria-label="Maximum Roll"
+              aria-label={t`Maximum Roll`}
               type="number"
               min={1}
               max={20}
@@ -185,17 +188,17 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       <div className="space-y-3 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Save Mode
+            <Trans>Save Mode</Trans>
           </p>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Save-enabled runs are marked as assisted in local highscores and run history.
+            <Trans>Save-enabled runs are marked as assisted in local highscores and run history.</Trans>
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: "none" as const, label: "No Saves" },
-            { value: "checkpoint" as const, label: "Only Checkpoint" },
-            { value: "everywhere" as const, label: "Everywhere", fullWidth: true },
+            { value: "none" as const, label: t`No Saves` },
+            { value: "checkpoint" as const, label: t`Only Checkpoint` },
+            { value: "everywhere" as const, label: t`Everywhere`, fullWidth: true },
           ].map((option) => (
             <button
               key={option.value}
@@ -216,8 +219,8 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
         </div>
         {saveMode !== "none" && (
           <p className="rounded-lg border border-amber-300/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-            {saveMode === "checkpoint" ? "🚩" : "💾"} Warning: runs from this playlist are marked
-            as assisted on the highscore and in run history.
+            {saveMode === "checkpoint" ? "🚩" : "💾"}
+            {t` Warning: runs from this playlist are marked as assisted on the highscore and in run history.`}
           </p>
         )}
       </div>
@@ -225,18 +228,18 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       <div className="space-y-2 rounded-xl border border-zinc-700/40 bg-zinc-950/40 p-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Perk Rates
+            <Trans>Perk Rates</Trans>
           </p>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Match the singleplayer trigger and per-round chance growth.
+            <Trans>Match the singleplayer trigger and per-round chance growth.</Trans>
           </p>
         </div>
         <label className="block space-y-1">
           <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Random perk selection chance
+            <Trans>Random perk selection chance</Trans>
           </span>
           <input
-            aria-label="Random perk selection chance"
+            aria-label={t`Random perk selection chance`}
             type="number"
             min={0}
             max={100}
@@ -245,15 +248,17 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
             onChange={(event) => onSetPerkTriggerChance(toRatio(event.target.value))}
             className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
           />
-          <p className="text-[10px] text-zinc-600">Percent chance after each completed round.</p>
+          <p className="text-[10px] text-zinc-600">
+            <Trans>Percent chance after each completed round.</Trans>
+          </p>
         </label>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Intermediary initial
+              <Trans>Intermediary initial</Trans>
             </span>
             <input
-              aria-label="Intermediary initial"
+              aria-label={t`Intermediary initial`}
               type="number"
               min={0}
               max={100}
@@ -267,14 +272,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Starting percent chance.</p>
+            <p className="text-[10px] text-zinc-600"><Trans>Starting percent chance.</Trans></p>
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Intermediary increase
+              <Trans>Intermediary increase</Trans>
             </span>
             <input
-              aria-label="Intermediary increase"
+              aria-label={t`Intermediary increase`}
               type="number"
               min={0}
               max={100}
@@ -285,14 +290,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Percent added per round.</p>
+            <p className="text-[10px] text-zinc-600"><Trans>Percent added per round.</Trans></p>
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Intermediary max
+              <Trans>Intermediary max</Trans>
             </span>
             <input
-              aria-label="Intermediary max"
+              aria-label={t`Intermediary max`}
               type="number"
               min={0}
               max={100}
@@ -303,14 +308,16 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Highest intermediary chance allowed.</p>
+            <p className="text-[10px] text-zinc-600">
+              <Trans>Highest intermediary chance allowed.</Trans>
+            </p>
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Anti-perk initial
+              <Trans>Anti-perk initial</Trans>
             </span>
             <input
-              aria-label="Anti-perk initial"
+              aria-label={t`Anti-perk initial`}
               type="number"
               min={0}
               max={100}
@@ -321,14 +328,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Starting percent chance.</p>
+            <p className="text-[10px] text-zinc-600"><Trans>Starting percent chance.</Trans></p>
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Anti-perk increase
+              <Trans>Anti-perk increase</Trans>
             </span>
             <input
-              aria-label="Anti-perk increase"
+              aria-label={t`Anti-perk increase`}
               type="number"
               min={0}
               max={100}
@@ -339,14 +346,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Percent added per round.</p>
+            <p className="text-[10px] text-zinc-600"><Trans>Percent added per round.</Trans></p>
           </label>
           <label className="block space-y-1">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Anti-perk max
+              <Trans>Anti-perk max</Trans>
             </span>
             <input
-              aria-label="Anti-perk max"
+              aria-label={t`Anti-perk max`}
               type="number"
               min={0}
               max={100}
@@ -357,14 +364,16 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               }
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
-            <p className="text-[10px] text-zinc-600">Highest anti-perk chance allowed.</p>
+            <p className="text-[10px] text-zinc-600">
+              <Trans>Highest anti-perk chance allowed.</Trans>
+            </p>
           </label>
           <label className="block space-y-1 sm:col-span-2">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Starting Money
+              <Trans>Starting Money</Trans>
             </span>
             <input
-              aria-label="Starting Money"
+              aria-label={t`Starting Money`}
               type="number"
               min={0}
               max={100000}
@@ -376,15 +385,15 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
             <p className="text-[10px] text-zinc-600">
-              Money available at the start of a new run from this playlist.
+              <Trans>Money available at the start of a new run from this playlist.</Trans>
             </p>
           </label>
           <label className="block space-y-1 sm:col-span-2">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              {abbreviateNsfwText("Cum round bonus score", sfwMode)}
+              {abbreviateNsfwText(t`Cum round bonus score`, sfwMode)}
             </span>
             <input
-              aria-label={abbreviateNsfwText("Cum round bonus score", sfwMode)}
+              aria-label={abbreviateNsfwText(t`Cum round bonus score`, sfwMode)}
               type="number"
               min={0}
               max={100000}
@@ -396,7 +405,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               className="w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-2.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-cyan-400/50"
             />
             <p className="text-[10px] text-zinc-600">
-              {abbreviateNsfwText("Score awarded when a cum round succeeds.", sfwMode)}
+              {abbreviateNsfwText(t`Score awarded when a cum round succeeds.`, sfwMode)}
             </p>
           </label>
         </div>
@@ -406,10 +415,10 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Perks
+              <Trans>Perks</Trans>
             </p>
             <p className="mt-1 text-[11px] text-zinc-600">
-              {perkPool.enabledPerkIds.length}/{perkOptions.length} active
+              {t`${perkPool.enabledPerkIds.length}/${perkOptions.length} active`}
             </p>
           </div>
           <div className="flex gap-1.5">
@@ -418,14 +427,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               className="rounded border border-emerald-500/30 px-2 py-1 text-[10px] uppercase tracking-wide text-emerald-200 transition-colors hover:bg-emerald-500/10"
               onClick={() => onSetAllPerksEnabled(true)}
             >
-              Activate all
+              <Trans>Activate all</Trans>
             </button>
             <button
               type="button"
               className="rounded border border-zinc-700/40 px-2 py-1 text-[10px] uppercase tracking-wide text-zinc-300 transition-colors hover:bg-zinc-800/70"
               onClick={() => onSetAllPerksEnabled(false)}
             >
-              Deactivate all
+              <Trans>Deactivate all</Trans>
             </button>
           </div>
         </div>
@@ -433,8 +442,9 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
           perkOptions,
           perkPool.enabledPerkIds,
           "emerald",
-          "No perks available.",
-          onTogglePerk
+          t`No perks available.`,
+          onTogglePerk,
+          { device: t`Device`, active: t`Active`, inactive: t`Inactive` }
         )}
       </div>
 
@@ -442,10 +452,10 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Anti-Perks
+              <Trans>Anti-Perks</Trans>
             </p>
             <p className="mt-1 text-[11px] text-zinc-600">
-              {perkPool.enabledAntiPerkIds.length}/{antiPerkOptions.length} active
+              {t`${perkPool.enabledAntiPerkIds.length}/${antiPerkOptions.length} active`}
             </p>
           </div>
           <div className="flex gap-1.5">
@@ -454,14 +464,14 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
               className="rounded border border-rose-500/30 px-2 py-1 text-[10px] uppercase tracking-wide text-rose-200 transition-colors hover:bg-rose-500/10"
               onClick={() => onSetAllAntiPerksEnabled(true)}
             >
-              Activate all
+              <Trans>Activate all</Trans>
             </button>
             <button
               type="button"
               className="rounded border border-zinc-700/40 px-2 py-1 text-[10px] uppercase tracking-wide text-zinc-300 transition-colors hover:bg-zinc-800/70"
               onClick={() => onSetAllAntiPerksEnabled(false)}
             >
-              Deactivate all
+              <Trans>Deactivate all</Trans>
             </button>
           </div>
         </div>
@@ -469,17 +479,18 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
           antiPerkOptions,
           perkPool.enabledAntiPerkIds,
           "rose",
-          "No anti-perks available.",
-          onToggleAntiPerk
+          t`No anti-perks available.`,
+          onToggleAntiPerk,
+          { device: t`Device`, active: t`Active`, inactive: t`Inactive` }
         )}
       </div>
 
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-          {abbreviateNsfwText("Cum Rounds", sfwMode)}
+          {abbreviateNsfwText(t`Cum Rounds`, sfwMode)}
         </p>
         <p className="mt-1 text-[11px] text-zinc-600">
-          Landing on any end node queues these rounds in order.
+          <Trans>Landing on any end node queues these rounds in order.</Trans>
         </p>
       </div>
 
@@ -487,7 +498,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       <div className="space-y-1.5">
         {cumRoundRefs.length === 0 && (
           <p className="rounded-lg border border-dashed border-zinc-700/50 px-3 py-3 text-center text-[11px] text-zinc-600">
-            {abbreviateNsfwText("No cum rounds selected.", sfwMode)}
+            {abbreviateNsfwText(t`No cum rounds selected.`, sfwMode)}
           </p>
         )}
         {cumRoundRefs.map((ref, index) => {
@@ -500,7 +511,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs text-zinc-200">{resolved?.name ?? ref.name}</p>
-                {!resolved && <p className="text-[10px] text-amber-400/70">Unresolved</p>}
+                {!resolved && <p className="text-[10px] text-amber-400/70"><Trans>Unresolved</Trans></p>}
               </div>
               <div className="flex flex-shrink-0 items-center gap-1">
                 <button
@@ -542,7 +553,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
       {/* ── Available cum rounds ─────────────────── */}
       <div className="space-y-1.5">
         <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-          Available
+          <Trans>Available</Trans>
         </p>
         {cumRounds.map((round) => {
           const selected = selectedCumRoundIdSet.has(round.id);
@@ -568,7 +579,7 @@ export const GraphSettingsPanel: React.FC<GraphSettingsPanelProps> = React.memo(
         })}
         {cumRounds.length === 0 && (
           <p className="rounded-lg border border-dashed border-zinc-700/50 px-3 py-3 text-center text-[11px] text-zinc-600">
-            {abbreviateNsfwText("No installed cum rounds found.", sfwMode)}
+            {abbreviateNsfwText(t`No installed cum rounds found.`, sfwMode)}
           </p>
         )}
       </div>

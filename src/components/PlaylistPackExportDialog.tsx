@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useControllerSurface } from "../controller";
 import { playlists, type PlaylistExportPackageAnalysis } from "../services/playlists";
 
@@ -28,12 +29,6 @@ function formatDurationEstimate(seconds: number): string {
   return `${Math.max(1, minutes)} min`;
 }
 
-function getStrengthLabel(value: number): string {
-  if (value <= 20) return "Low compression";
-  if (value <= 60) return "Balanced";
-  return "High compression";
-}
-
 export function PlaylistPackExportDialog({
   playlistId,
   playlistName,
@@ -50,6 +45,7 @@ export function PlaylistPackExportDialog({
     asFpack: boolean;
   }) => Promise<boolean>;
 }) {
+  const { t } = useLingui();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [compressionMode, setCompressionMode] = useState<CompressionMode | null>(null);
   const [compressionStrength, setCompressionStrength] = useState(80);
@@ -60,6 +56,12 @@ export function PlaylistPackExportDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const userTouchedModeRef = useRef(false);
+
+  function getStrengthLabel(value: number): string {
+    if (value <= 20) return t`Low compression`;
+    if (value <= 60) return t`Balanced`;
+    return t`High compression`;
+  }
 
   useControllerSurface({
     id: "playlist-pack-export-dialog",
@@ -95,7 +97,7 @@ export function PlaylistPackExportDialog({
             setError(
               analysisError instanceof Error
                 ? analysisError.message
-                : "Failed to analyze export package."
+                : t`Failed to analyze export package.`
             );
           })
           .finally(() => {
@@ -145,7 +147,7 @@ export function PlaylistPackExportDialog({
         onClose();
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to start export.");
+      setError(submitError instanceof Error ? submitError.message : t`Failed to start export.`);
     } finally {
       setSubmitting(false);
     }
@@ -162,15 +164,17 @@ export function PlaylistPackExportDialog({
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.34em] text-cyan-200/85">
-                Playlist Pack Export
+                <Trans>Playlist Pack Export</Trans>
               </p>
               <div>
                 <h2 className="text-3xl font-black tracking-tight text-white">
-                  Prepare {playlistName}
+                  <Trans>Prepare {playlistName}</Trans>
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                  Review the estimated pack size and compression time before choosing the
-                  destination folder.
+                  <Trans>
+                    Review the estimated pack size and compression time before choosing the
+                    destination folder.
+                  </Trans>
                 </p>
               </div>
             </div>
@@ -184,7 +188,7 @@ export function PlaylistPackExportDialog({
                   : "border-slate-600/80 bg-black/30 text-slate-300 transition-all duration-200 hover:border-cyan-200/60 hover:text-white"
               }`}
             >
-              Close
+              <Trans>Close</Trans>
             </button>
           </div>
 
@@ -192,7 +196,7 @@ export function PlaylistPackExportDialog({
             <div className="space-y-4">
               <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                  Package Options
+                  <Trans>Package Options</Trans>
                 </p>
                 <div className="mt-4 flex flex-col gap-4">
                   {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- label wraps input and has text content */}
@@ -213,9 +217,13 @@ export function PlaylistPackExportDialog({
                       }}
                     />
                     <div>
-                      <span className="text-sm font-semibold text-white">Include Media Files</span>
+                      <span className="text-sm font-semibold text-white">
+                        <Trans>Include Media Files</Trans>
+                      </span>
                       <p className="text-xs text-slate-400">
-                        If unchecked, only text files and configurations are exported.
+                        <Trans>
+                          If unchecked, only text files and configurations are exported.
+                        </Trans>
                       </p>
                     </div>
                   </label>
@@ -233,10 +241,10 @@ export function PlaylistPackExportDialog({
                     />
                     <div>
                       <span className="text-sm font-semibold text-white">
-                        Pack into .fpack File
+                        <Trans>Pack into .fpack File</Trans>
                       </span>
                       <p className="text-xs text-slate-400">
-                        Packs all exported files into a single ZIP archive (.fpack).
+                        <Trans>Packs all exported files into a single ZIP archive (.fpack).</Trans>
                       </p>
                     </div>
                   </label>
@@ -246,7 +254,7 @@ export function PlaylistPackExportDialog({
               {includeMedia && (
                 <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                    Compression
+                    <Trans>Compression</Trans>
                   </p>
                   <div className="mt-4 grid gap-3">
                     <button
@@ -264,20 +272,22 @@ export function PlaylistPackExportDialog({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-100/80">
-                            Fastest
+                            <Trans>Fastest</Trans>
                           </p>
                           <h3 className="mt-2 text-lg font-bold text-white">
-                            Copy original videos
+                            <Trans>Copy original videos</Trans>
                           </h3>
                           <p className="mt-2 text-sm leading-6 text-slate-300">
-                            Export the pack without reencoding. File size stays close to the
-                            original sources.
+                            <Trans>
+                              Export the pack without reencoding. File size stays close to the
+                              original sources.
+                            </Trans>
                           </p>
                         </div>
                         <div
                           className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "copy" ? "border-emerald-200/70 bg-emerald-400/20 text-emerald-50" : "border-slate-600 text-slate-300"}`}
                         >
-                          {effectiveMode === "copy" ? "Selected" : "Select"}
+                          {effectiveMode === "copy" ? t`Selected` : t`Select`}
                         </div>
                       </div>
                     </button>
@@ -302,7 +312,7 @@ export function PlaylistPackExportDialog({
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-cyan-100/85">
-                              Smallest Packs
+                              <Trans>Smallest Packs</Trans>
                             </p>
                             {analysis?.compression.encoderName && (
                               <span
@@ -313,18 +323,20 @@ export function PlaylistPackExportDialog({
                                 }`}
                               >
                                 {analysis.compression.encoderKind === "hardware"
-                                  ? "Hardware"
-                                  : "Software"}{" "}
+                                  ? t`Hardware`
+                                  : t`Software`}{" "}
                                 {analysis.compression.encoderName}
                               </span>
                             )}
                           </div>
                           <h3 className="mt-2 text-lg font-bold text-white">
-                            Compress non-AV1 videos to AV1
+                            <Trans>Compress non-AV1 videos to AV1</Trans>
                           </h3>
                           <p className="mt-2 text-sm leading-6 text-slate-300">
-                            Skip videos that are already AV1 and recompress the rest to reduce
-                            sharing size.
+                            <Trans>
+                              Skip videos that are already AV1 and recompress the rest to reduce
+                              sharing size.
+                            </Trans>
                           </p>
                         </div>
                         <div
@@ -335,10 +347,10 @@ export function PlaylistPackExportDialog({
                           }`}
                         >
                           {effectiveMode === "av1"
-                            ? "Selected"
+                            ? t`Selected`
                             : canEnableCompression
-                              ? "Select"
-                              : "Unavailable"}
+                              ? t`Select`
+                              : t`Unavailable`}
                         </div>
                       </div>
                     </button>
@@ -351,7 +363,7 @@ export function PlaylistPackExportDialog({
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-slate-400">
-                        Compression Strength
+                        <Trans>Compression Strength</Trans>
                       </p>
                       <p className="mt-2 text-sm text-slate-300">
                         {compressionStrength}% · {getStrengthLabel(compressionStrength)}
@@ -373,9 +385,15 @@ export function PlaylistPackExportDialog({
                     aria-label="Compression strength"
                   />
                   <div className="mt-3 flex justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                    <span>Low compression</span>
-                    <span>Balanced</span>
-                    <span>High compression</span>
+                    <span>
+                      <Trans>Low compression</Trans>
+                    </span>
+                    <span>
+                      <Trans>Balanced</Trans>
+                    </span>
+                    <span>
+                      <Trans>High compression</Trans>
+                    </span>
                   </div>
                 </div>
               )}
@@ -398,32 +416,32 @@ export function PlaylistPackExportDialog({
             <div className="space-y-4">
               <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                  Estimates
+                  <Trans>Estimates</Trans>
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-100">
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                      Source Video Size
+                      <Trans>Source Video Size</Trans>
                     </p>
                     <p className="mt-2 text-xl font-bold text-white">{sourceSizeLabel}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                      Expected Final Size
+                      <Trans>Expected Final Size</Trans>
                     </p>
                     <p className="mt-2 text-xl font-bold text-white">{finalSizeLabel}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                      Expected Savings
+                      <Trans>Expected Savings</Trans>
                     </p>
                     <p className="mt-2 text-xl font-bold text-white">
-                      {!includeMedia ? "N/A" : savingsLabel}
+                      {!includeMedia ? t`N/A` : savingsLabel}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                      Compression Time
+                      <Trans>Compression Time</Trans>
                     </p>
                     <p className="mt-2 text-xl font-bold text-white">
                       {!includeMedia ? "0 min" : timeEstimateLabel}
@@ -432,7 +450,9 @@ export function PlaylistPackExportDialog({
                 </div>
                 {analysis?.estimate.approximate && (
                   <p className="mt-4 text-sm leading-6 text-slate-300">
-                    Some media metadata is incomplete, so these numbers are approximate.
+                    <Trans>
+                      Some media metadata is incomplete, so these numbers are approximate.
+                    </Trans>
                   </p>
                 )}
               </div>
@@ -440,7 +460,7 @@ export function PlaylistPackExportDialog({
               <div className="grid gap-3 rounded-[1.5rem] border border-slate-700/80 bg-black/25 p-5 text-sm text-slate-200 sm:grid-cols-2">
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    Unique Videos
+                    <Trans>Unique Videos</Trans>
                   </p>
                   <p className="mt-1 text-lg font-semibold text-white">
                     {analysis?.videoTotals.uniqueVideos ?? "..."}
@@ -448,7 +468,7 @@ export function PlaylistPackExportDialog({
                 </div>
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    Already AV1
+                    <Trans>Already AV1</Trans>
                   </p>
                   <p className="mt-1 text-lg font-semibold text-white">
                     {analysis?.videoTotals.alreadyAv1Videos ?? "..."}
@@ -456,7 +476,7 @@ export function PlaylistPackExportDialog({
                 </div>
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    Local Videos
+                    <Trans>Local Videos</Trans>
                   </p>
                   <p className="mt-1 text-lg font-semibold text-white">
                     {analysis?.videoTotals.localVideos ?? "..."}
@@ -464,7 +484,7 @@ export function PlaylistPackExportDialog({
                 </div>
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    Remote Videos
+                    <Trans>Remote Videos</Trans>
                   </p>
                   <p className="mt-1 text-lg font-semibold text-white">
                     {analysis?.videoTotals.remoteVideos ?? "..."}
@@ -472,7 +492,7 @@ export function PlaylistPackExportDialog({
                 </div>
                 <div className="sm:col-span-2">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    Parallel Jobs
+                    <Trans>Parallel Jobs</Trans>
                   </p>
                   <p className="mt-1 text-lg font-semibold text-white">
                     {analysis?.settings.parallelJobs ?? "..."}
@@ -485,14 +505,14 @@ export function PlaylistPackExportDialog({
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-2">
             <p className="text-sm text-slate-400">
               {analyzing
-                ? "Refreshing export analysis..."
+                ? t`Refreshing export analysis...`
                 : !includeMedia && asFpack
-                  ? "The export will skip media files and package into a single .fpack file."
+                  ? t`The export will skip media files and package into a single .fpack file.`
                   : !includeMedia
-                    ? "The export will skip media files and save to a folder."
+                    ? t`The export will skip media files and save to a folder.`
                     : effectiveMode === "av1"
-                      ? "The folder picker opens next. Export starts after you choose the destination."
-                      : "The export will copy the current source videos as-is."}
+                      ? t`The folder picker opens next. Export starts after you choose the destination.`
+                      : t`The export will copy the current source videos as-is.`}
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -501,7 +521,7 @@ export function PlaylistPackExportDialog({
                 disabled={submitting}
                 className="rounded-xl border border-slate-700 bg-black/30 px-4 py-2 text-sm text-slate-300"
               >
-                Cancel
+                <Trans>Cancel</Trans>
               </button>
               <button
                 type="button"
@@ -525,7 +545,7 @@ export function PlaylistPackExportDialog({
                 data-controller-focus-id="playlist-pack-export-submit"
                 data-controller-initial="true"
               >
-                {submitting ? "Starting..." : "Choose Folder and Export"}
+                {submitting ? t`Starting...` : t`Choose Folder and Export`}
               </button>
             </div>
           </div>

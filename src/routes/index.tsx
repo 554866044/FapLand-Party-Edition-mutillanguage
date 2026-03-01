@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
@@ -138,6 +139,7 @@ const loadHomeData = async (): Promise<HomeData> => {
 const Home = () => {
   const [homeData, setHomeData] = useState<HomeData>(DEFAULT_HOME_DATA);
   const navigate = useNavigate();
+  const { t } = useLingui();
   const { connected, isConnecting, error, connectionKey } = useHandy();
   const appUpdate = useAppUpdate();
   const sfwModeEnabled = useSfwMode();
@@ -168,29 +170,29 @@ const Home = () => {
     const nextOptions: MenuOption[] = [
       {
         id: "play",
-        label: "Play",
+        label: t`Play`,
         primary: true,
         submenu: [
           {
             id: "singleplayer",
-            label: "Single Player",
+            label: t`Single Player`,
             primary: true,
             action: () => navigate({ to: "/single-player-setup" }),
           },
           {
             id: "multiplayer",
-            label: "Multiplayer",
+            label: t`Multiplayer`,
             experimental: true,
             disabled:
               sfwModeEnabled ||
               appUpdate.state.status === "update_available" ||
               (!skipRoundsCheck && installedRoundCount < MULTIPLAYER_MINIMUM_ROUNDS),
             subLabel: sfwModeEnabled
-              ? "Blocked By SFW Mode"
+              ? t`Blocked By SFW Mode`
               : appUpdate.state.status === "update_available"
-                ? "Update Required"
+                ? t`Update Required`
                 : !skipRoundsCheck && installedRoundCount < MULTIPLAYER_MINIMUM_ROUNDS
-                  ? `${MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required`
+                  ? t`${MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required`
                   : undefined,
             action: () => navigate({ to: "/multiplayer" }),
           },
@@ -198,26 +200,26 @@ const Home = () => {
       },
       {
         id: "creation",
-        label: "Creation & Workshop",
+        label: t`Creation & Workshop`,
         submenu: [
           {
             id: "installedrounds",
-            label: "Installed Rounds",
+            label: t`Installed Rounds`,
             action: () => navigate({ to: "/rounds" }),
           },
           {
             id: "converter",
-            label: "Round Converter",
+            label: t`Round Converter`,
             action: () => navigate({ to: "/converter" }),
           },
           {
             id: "playlist-workshop",
-            label: "Playlist Workshop",
+            label: t`Playlist Workshop`,
             action: () => navigate({ to: "/playlist-workshop" }),
           },
           {
             id: "map-editor",
-            label: "Map Editor",
+            label: t`Map Editor`,
             experimental: true,
             action: () => navigate({ to: "/map-editor" }),
           },
@@ -225,12 +227,12 @@ const Home = () => {
       },
       {
         id: "highscores",
-        label: "Highscores",
+        label: t`Highscores`,
         action: () => navigate({ to: "/highscores" }),
       },
       {
         id: "settings",
-        label: "Settings",
+        label: t`Settings`,
         action: () => navigate({ to: "/settings" }),
       },
     ];
@@ -242,8 +244,8 @@ const Home = () => {
         primary: true,
         badge: appUpdate.menuBadge,
         subLabel: appUpdate.state.latestVersion
-          ? `Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
-          : `Installed v${appUpdate.state.currentVersion}`,
+          ? t`Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
+          : t`Installed v${appUpdate.state.currentVersion}`,
         statusTone: appUpdate.menuTone,
         action: () => {
           void appUpdate.triggerPrimaryAction();
@@ -253,7 +255,7 @@ const Home = () => {
 
     nextOptions.push({
       id: "close",
-      label: "Close",
+      label: t`Close`,
       action: () => {
         void window.electronAPI.window.close();
       },
@@ -274,26 +276,26 @@ const Home = () => {
   };
 
   const handyLabel = !connectionKey.trim()
-    ? "No Connection Key"
+    ? t`No Connection Key`
     : isConnecting
-      ? "Connecting"
+      ? t`Connecting`
       : connected
-        ? "Connected"
+        ? t`Connected`
         : error
-          ? "Connection Error"
-          : "Disconnected";
+          ? t`Connection Error`
+          : t`Disconnected`;
   const handyWarning = !connected && error ? error : null;
 
   const updateStateLabel =
     appUpdate.state.status === "checking"
-      ? "Checking"
+      ? t`Checking`
       : appUpdate.state.status === "update_available"
-        ? "Out of Date"
+        ? t`Out of Date`
         : appUpdate.state.status === "up_to_date"
-          ? "Current"
+          ? t`Current`
           : appUpdate.state.status === "error"
-            ? "Retry Needed"
-            : "Idle";
+            ? t`Retry Needed`
+            : t`Idle`;
 
   useEffect(() => {
     let cancelled = false;
@@ -318,7 +320,7 @@ const Home = () => {
     if (depth > 0) {
       list.push({
         id: "back",
-        label: "Back",
+        label: t`Back`,
         action: goBack,
       });
     }
@@ -374,8 +376,8 @@ const Home = () => {
               style={{ animationDelay: "0.1s" }}
             >
               {sfwModeEnabled
-                ? "✦ \u00a0 Safe Experience \u00a0 ✦"
-                : "✦ \u00a0 Party Edition \u00a0 ✦"}
+                ? t`✦ \u00a0 Safe Experience \u00a0 ✦`
+                : t`✦ \u00a0 Party Edition \u00a0 ✦`}
             </p>
 
             {/* Main title with animated shimmer gradient */}
@@ -451,7 +453,7 @@ const Home = () => {
           <div className="mb-2 flex items-center gap-2">
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-violet-200/80 font-semibold">
-              System
+              <Trans>System</Trans>
             </p>
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
           </div>
@@ -461,7 +463,7 @@ const Home = () => {
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-indigo-300/80 text-[8px]">◆</span>
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] text-indigo-200/70 font-medium">
-                  Program Version
+                  <Trans>Program Version</Trans>
                 </p>
               </div>
               <div className="pl-3.5 space-y-0">
@@ -469,7 +471,7 @@ const Home = () => {
                   v{import.meta.env.VITE_APP_VERSION}
                 </div>
                 <div className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide text-indigo-200/60">
-                  Early Access
+                  <Trans>Early Access</Trans>
                 </div>
               </div>
             </div>
@@ -504,7 +506,7 @@ const Home = () => {
                         : "text-amber-200/70"
                   }`}
                 >
-                  TheHandy
+                  <Trans>TheHandy</Trans>
                 </p>
               </div>
               <div className="pl-3.5">
@@ -577,7 +579,7 @@ const Home = () => {
                           : "text-zinc-200/70"
                   }`}
                 >
-                  Update Status
+                  <Trans>Update Status</Trans>
                 </p>
               </div>
               <div className="pl-3.5 space-y-0">
@@ -605,7 +607,7 @@ const Home = () => {
                           : "text-zinc-200/60"
                   }`}
                 >
-                  Installed v{appUpdate.state.currentVersion}
+                  <Trans>Installed v{appUpdate.state.currentVersion}</Trans>
                 </div>
                 {appUpdate.state.latestVersion && (
                   <div
@@ -619,7 +621,7 @@ const Home = () => {
                             : "text-zinc-200/60"
                     }`}
                   >
-                    Latest v{appUpdate.state.latestVersion}
+                    <Trans>Latest v{appUpdate.state.latestVersion}</Trans>
                   </div>
                 )}
                 {appUpdate.systemMessage && (
@@ -711,6 +713,7 @@ function HighscoreDisplay({
   cumLoadCount: number;
   hideCumLoadCount?: boolean;
 }) {
+  const { t } = useLingui();
   const [displayScore, setDisplayScore] = useState(0);
 
   useEffect(() => {
@@ -746,14 +749,14 @@ function HighscoreDisplay({
         className="flex flex-col items-start gap-0.5"
         title={
           cheatMode
-            ? "This highscore was achieved with cheat mode active"
+            ? t`This highscore was achieved with cheat mode active`
             : assisted
               ? getAssistedTooltip(assistedSaveMode)
               : undefined
         }
       >
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-zinc-500">
-          Best
+          <Trans>Best</Trans>
         </p>
         <div className="flex items-baseline gap-1">
           <span className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-semibold tabular-nums text-zinc-300">
@@ -762,7 +765,7 @@ function HighscoreDisplay({
           {cheatMode && (
             <span
               className="text-xs cursor-help"
-              title="This highscore was achieved with cheat mode active"
+              title={t`This highscore was achieved with cheat mode active`}
             >
               🎭
             </span>
@@ -776,7 +779,7 @@ function HighscoreDisplay({
         {!hideCumLoadCount && (
           <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide text-zinc-600">
             {abbreviateNsfwText(
-              `${cumLoadCount.toLocaleString()} total`,
+              t`${cumLoadCount.toLocaleString()} total`,
               Boolean(hideCumLoadCount)
             )}
           </p>

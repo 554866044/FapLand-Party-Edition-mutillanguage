@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { PlaylistPackExportDialog } from "../components/PlaylistPackExportDialog";
@@ -100,13 +101,6 @@ type ImportedPlaylistReview = {
   playlistId: string;
   analysis: PlaylistResolutionAnalysis;
 };
-
-const INSPECTOR_TABS: ReadonlyArray<{ id: InspectorTab; label: string }> = [
-  { id: "node", label: "Node" },
-  { id: "edge", label: "Edge" },
-  { id: "settings", label: "Settings" },
-  { id: "validation", label: "Checks" },
-];
 
 function toManualMappingRecord(
   overrides: Record<string, string | null | undefined>
@@ -274,6 +268,7 @@ const selectionsEqual = (left: EditorSelectionState, right: EditorSelectionState
 type GraphUpdateFn = (previous: EditorGraphConfig) => EditorGraphConfig;
 
 function MapEditorPage() {
+  const { t } = useLingui();
   const navigate = useNavigate();
   const { installedRounds, availablePlaylists, activePlaylist } = Route.useLoaderData() as {
     installedRounds: MapEditorInstalledRound[];
@@ -1720,8 +1715,18 @@ function MapEditorPage() {
   }, [selection.primaryNodeId, selection.selectedEdgeId]);
 
   const categoryTabs = useMemo<Array<{ id: TileCatalogCategory["id"] | "all"; label: string }>>(
-    () => [{ id: "all", label: "All" }, ...tileCatalog.categories],
-    [tileCatalog.categories]
+    () => [{ id: "all", label: t`All` }, ...tileCatalog.categories],
+    [t, tileCatalog.categories]
+  );
+
+  const inspectorTabs = useMemo<ReadonlyArray<{ id: InspectorTab; label: string }>>(
+    () => [
+      { id: "node", label: t`Node` },
+      { id: "edge", label: t`Edge` },
+      { id: "settings", label: t`Settings` },
+      { id: "validation", label: t`Checks` },
+    ],
+    [t]
   );
 
   const handleToggleGrid = useCallback(() => {
@@ -1779,13 +1784,13 @@ function MapEditorPage() {
         />
         <ConfirmDialog
           isOpen={playlistDeleteTarget !== null}
-          title="Delete Playlist?"
+          title={t`Delete Playlist?`}
           message={
             playlistDeleteTarget
-              ? `Delete "${playlistDeleteTarget.name}"? This cannot be undone.`
+              ? t`Delete "${playlistDeleteTarget.name}"? This cannot be undone.`
               : ""
           }
-          confirmLabel="Delete"
+          confirmLabel={t`Delete`}
           variant="danger"
           isPending={playlistPendingAction === "delete"}
           onConfirm={() => {
@@ -1806,10 +1811,12 @@ function MapEditorPage() {
         <header className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-white/6 bg-black/40 px-4 py-2.5 backdrop-blur-md">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white">Map Editor</h1>
+              <h1 className="text-lg font-bold tracking-tight text-white">
+                <Trans>Map Editor</Trans>
+              </h1>
               <p className="text-xs text-zinc-500">
                 <label className="sr-only" htmlFor="map-editor-name">
-                  Map name
+                  <Trans>Map name</Trans>
                 </label>
                 <input
                   id="map-editor-name"
@@ -1820,10 +1827,10 @@ function MapEditorPage() {
                     setSaveNotice(null);
                   }}
                   className="min-w-[14rem] rounded-md border border-cyan-500/20 bg-cyan-500/8 px-2.5 py-1 text-sm font-semibold text-cyan-200 outline-none transition focus:border-cyan-400/50 focus:bg-cyan-500/12 focus:text-cyan-100"
-                  placeholder="Map name"
-                  aria-label="Map name"
+                  placeholder={t`Map name`}
+                  aria-label={t`Map name`}
                 />
-                {isEditorDirty && <span className="ml-1.5 text-amber-400">• unsaved</span>}
+                {isEditorDirty && <span className="ml-1.5 text-amber-400">{t`• unsaved`}</span>}
               </p>
             </div>
           </div>
@@ -1839,7 +1846,7 @@ function MapEditorPage() {
               data-controller-focus-id="map-editor-export-fplay"
               data-controller-initial="true"
             >
-              {savePending ? "Working..." : "Export Fplay"}
+              {savePending ? t`Working...` : t`Export Fplay`}
             </button>
             <button
               type="button"
@@ -1851,7 +1858,7 @@ function MapEditorPage() {
               disabled={importPending || savePending || testMapPending}
               data-controller-focus-id="map-editor-export-pack"
             >
-              {savePending ? "Working..." : "Export Pack"}
+              {savePending ? t`Working...` : t`Export Pack`}
             </button>
             {selectedResolutionActionLabel && selectedResolutionReview && (
               <button
@@ -1861,7 +1868,7 @@ function MapEditorPage() {
                 onClick={() => {
                   setResolutionModalState({
                     context: "playlist",
-                    title: `Resolve ${selectedPlaylist.name}`,
+                    title: t`Resolve ${selectedPlaylist.name}`,
                     analysis: selectedResolutionReview,
                   });
                 }}
@@ -1877,7 +1884,7 @@ function MapEditorPage() {
               onClick={handleOpenPlaylistPicker}
               data-controller-focus-id="map-editor-switch"
             >
-              Switch
+              {t`Switch`}
             </button>
             <button
               type="button"
@@ -1887,7 +1894,7 @@ function MapEditorPage() {
               data-controller-focus-id="map-editor-exit"
               data-controller-back="true"
             >
-              Exit
+              {t`Exit`}
             </button>
           </div>
         </header>
@@ -2024,7 +2031,7 @@ function MapEditorPage() {
               <>
                 {/* ── Tab bar ─────────────────── */}
                 <div className="flex flex-shrink-0 border-b border-white/6">
-                  {INSPECTOR_TABS.map((tab) => {
+                  {inspectorTabs.map((tab) => {
                     const isActive = inspectorTab === tab.id;
                     const hasIssue =
                       tab.id === "validation" &&
@@ -2117,11 +2124,11 @@ function MapEditorPage() {
           analysis={resolutionModalState.analysis}
           primaryActionLabel={
             resolutionModalState.context === "import"
-              ? "Import with Selected Resolutions"
-              : "Apply Resolutions"
+              ? t`Import with Selected Resolutions`
+              : t`Apply Resolutions`
           }
           secondaryActionLabel={
-            resolutionModalState.context === "import" ? "Continue Unresolved" : undefined
+            resolutionModalState.context === "import" ? t`Continue Unresolved` : undefined
           }
           onClose={() => setResolutionModalState(null)}
           onPrimaryAction={(overrides) => {
@@ -2142,7 +2149,7 @@ function MapEditorPage() {
                       }
                     : null
                 );
-                setSaveNotice(`Imported "${imported.playlist.name}".`);
+                setSaveNotice(t`Imported "${imported.playlist.name}".`);
                 setResolutionModalState(null);
                 return;
               }
@@ -2169,7 +2176,7 @@ function MapEditorPage() {
               if (importedPlaylistReview?.playlistId === selectedPlaylist.id) {
                 setImportedPlaylistReview(null);
               }
-              setSaveNotice(`Applied playlist resolutions to "${updated.name}".`);
+              setSaveNotice(t`Applied playlist resolutions to "${updated.name}".`);
               setResolutionModalState(null);
             })();
           }}
@@ -2187,7 +2194,7 @@ function MapEditorPage() {
                 playlistId: imported.playlist.id,
                 analysis: resolutionModalState.analysis,
               });
-              setSaveNotice(`Imported "${imported.playlist.name}" with unresolved refs preserved.`);
+              setSaveNotice(t`Imported "${imported.playlist.name}" with unresolved refs preserved.`);
               setResolutionModalState(null);
             })();
           }}
@@ -2214,27 +2221,27 @@ function MapEditorPage() {
       )}
       <ConfirmDialog
         isOpen={resetDialogOpen}
-        title="Reset Graph?"
-        message="Are you sure you want to reset the graph? This will delete all progress made."
-        confirmLabel="Reset Graph"
+        title={t`Reset Graph?`}
+        message={t`Are you sure you want to reset the graph? This will delete all progress made.`}
+        confirmLabel={t`Reset Graph`}
         variant="danger"
         onConfirm={confirmResetGraph}
         onCancel={() => setResetDialogOpen(false)}
       />
       <ConfirmDialog
         isOpen={discardPlaylistDialogOpen}
-        title="Discard Changes?"
-        message="Discard unsaved map changes and choose another playlist?"
-        confirmLabel="Discard Changes"
+        title={t`Discard Changes?`}
+        message={t`Discard unsaved map changes and choose another playlist?`}
+        confirmLabel={t`Discard Changes`}
         variant="warning"
         onConfirm={confirmDiscardAndOpenPicker}
         onCancel={() => setDiscardPlaylistDialogOpen(false)}
       />
       <ConfirmDialog
         isOpen={discardImportDialogOpen}
-        title="Discard Changes?"
-        message="Discard unsaved map changes and import another playlist?"
-        confirmLabel="Discard Changes"
+        title={t`Discard Changes?`}
+        message={t`Discard unsaved map changes and import another playlist?`}
+        confirmLabel={t`Discard Changes`}
         variant="warning"
         onConfirm={doImportPlaylist}
         onCancel={() => setDiscardImportDialogOpen(false)}

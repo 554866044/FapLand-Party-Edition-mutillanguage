@@ -263,6 +263,28 @@ describe("playlistResolution", () => {
     );
   });
 
+  it("resolves install source hints before metadata and id fallbacks", () => {
+    const installedRounds = [
+      makeRound({
+        id: "source-match",
+        name: "Renamed Round",
+        author: "Dex",
+        installSourceKey: "website:https://example.com/video-1",
+      }),
+      makeRound({ id: "metadata-match", name: "Reference Name", author: "Dex", type: "Normal" }),
+    ];
+    const resolver = createPortableRoundRefResolver(installedRounds);
+
+    expect(
+      resolver.resolve({
+        name: "Reference Name",
+        author: "Dex",
+        type: "Normal",
+        installSourceKeyHint: "website:https://example.com/video-1",
+      })?.id
+    ).toBe("source-match");
+  });
+
   it("keeps exact resolution behavior aligned with playlist runtime", () => {
     const round = makeRound({
       id: "round-1",

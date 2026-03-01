@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { playHoverSound } from "../../utils/audio";
 
 export type ConfirmDialogVariant = "danger" | "warning" | "default";
@@ -17,7 +18,6 @@ export type ConfirmDialogProps = {
 const variantStyles: Record<
   ConfirmDialogVariant,
   {
-    label: string;
     border: string;
     shadow: string;
     labelColor: string;
@@ -30,7 +30,6 @@ const variantStyles: Record<
   }
 > = {
   danger: {
-    label: "Confirm Action",
     border: "border-rose-300/35",
     shadow: "shadow-[0_0_60px_rgba(244,63,94,0.28)]",
     labelColor: "text-rose-200/80",
@@ -42,7 +41,6 @@ const variantStyles: Record<
     confirmHoverBg: "hover:bg-rose-500/40",
   },
   warning: {
-    label: "Confirm Action",
     border: "border-amber-300/35",
     shadow: "shadow-[0_0_60px_rgba(251,191,36,0.28)]",
     labelColor: "text-amber-200/80",
@@ -54,7 +52,6 @@ const variantStyles: Record<
     confirmHoverBg: "hover:bg-amber-500/40",
   },
   default: {
-    label: "Confirm Action",
     border: "border-zinc-300/35",
     shadow: "shadow-[0_0_60px_rgba(161,161,170,0.18)]",
     labelColor: "text-zinc-300/80",
@@ -71,16 +68,20 @@ export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   variant = "danger",
   isPending = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useLingui();
   if (!isOpen) return null;
 
   const s = variantStyles[variant];
+  const resolvedConfirmLabel = confirmLabel ?? t`Confirm`;
+  const resolvedCancelLabel = cancelLabel ?? t`Cancel`;
+  const variantLabel = t`Confirm Action`;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
@@ -90,7 +91,7 @@ export function ConfirmDialog({
         <p
           className={`font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] ${s.labelColor}`}
         >
-          {s.label}
+          {variantLabel}
         </p>
         <h2 className={`mt-3 text-2xl font-black tracking-tight ${s.titleColor}`}>{title}</h2>
         <p className="mt-2 text-sm text-zinc-400 whitespace-pre-line">{message}</p>
@@ -107,7 +108,7 @@ export function ConfirmDialog({
                 : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
             }`}
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             type="button"
@@ -120,7 +121,7 @@ export function ConfirmDialog({
                 : `${s.confirmBorder} ${s.confirmBg} ${s.confirmText} ${s.confirmHoverBorder} ${s.confirmHoverBg}`
             }`}
           >
-            {isPending ? "Processing..." : confirmLabel}
+            {isPending ? t`Processing...` : resolvedConfirmLabel}
           </button>
         </div>
       </div>

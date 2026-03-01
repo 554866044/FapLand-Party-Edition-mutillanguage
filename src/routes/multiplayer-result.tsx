@@ -20,6 +20,7 @@ import {
   type MultiplayerStandingRow,
 } from "../services/multiplayer";
 import { MultiplayerUpdateGuard } from "../components/multiplayer/MultiplayerUpdateGuard";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const MultiplayerResultSearchSchema = z.object({
   lobbyId: z.string().min(1),
@@ -67,15 +68,11 @@ export const Route = createFileRoute("/multiplayer-result")({
     const finalRows = finalHistory ? parseHistoryStandings(finalHistory) : [];
     const snapshotRows = snapshot ? buildTemporaryStandings(snapshot) : [];
     const cachedRows = cached ? parseStandingsJson(cached.resultsJson) : [];
-    const initialRows = finalRows.length > 0
-      ? finalRows
-      : snapshotRows.length > 0
-        ? snapshotRows
-        : cachedRows;
-    const initialIsFinal = finalRows.length > 0 || Boolean(cached?.isFinal && cachedRows.length > 0);
-    const finishedAtIso = finalHistory?.finishedAt
-      ?? toIsoString(cached?.finishedAt)
-      ?? null;
+    const initialRows =
+      finalRows.length > 0 ? finalRows : snapshotRows.length > 0 ? snapshotRows : cachedRows;
+    const initialIsFinal =
+      finalRows.length > 0 || Boolean(cached?.isFinal && cachedRows.length > 0);
+    const finishedAtIso = finalHistory?.finishedAt ?? toIsoString(cached?.finishedAt) ?? null;
 
     return {
       search,
@@ -91,8 +88,10 @@ export const Route = createFileRoute("/multiplayer-result")({
 
 function MultiplayerResultRoute() {
   const navigate = useNavigate();
+  const { t } = useLingui();
   const sfwModeEnabled = useMultiplayerSfwRedirect();
-  const { search, initialRows, initialIsFinal, initialSnapshot, ownPlayerId, finishedAtIso } = Route.useLoaderData();
+  const { search, initialRows, initialIsFinal, initialSnapshot, ownPlayerId, finishedAtIso } =
+    Route.useLoaderData();
   const scopeRef = useRef<HTMLDivElement | null>(null);
 
   if (sfwModeEnabled) {
@@ -106,15 +105,18 @@ function MultiplayerResultRoute() {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const persistRows = useCallback(async (nextRows: MultiplayerStandingRow[], finalFlag: boolean, finishedAt: string | null) => {
-    if (nextRows.length === 0) return;
-    await db.multiplayer.upsertMatchCache({
-      lobbyId: search.lobbyId,
-      finishedAtIso: finishedAt ?? new Date().toISOString(),
-      isFinal: finalFlag,
-      resultsJson: toResultJson(nextRows),
-    });
-  }, [search.lobbyId]);
+  const persistRows = useCallback(
+    async (nextRows: MultiplayerStandingRow[], finalFlag: boolean, finishedAt: string | null) => {
+      if (nextRows.length === 0) return;
+      await db.multiplayer.upsertMatchCache({
+        lobbyId: search.lobbyId,
+        finishedAtIso: finishedAt ?? new Date().toISOString(),
+        isFinal: finalFlag,
+        resultsJson: toResultJson(nextRows),
+      });
+    },
+    [search.lobbyId]
+  );
 
   const resolveHistory = useCallback(async () => {
     const history = await getMatchHistoryByLobby(search.lobbyId);
@@ -153,7 +155,7 @@ function MultiplayerResultRoute() {
         }
       }
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh result.");
+      setError(refreshError instanceof Error ? refreshError.message : t`Failed to refresh result.`);
     } finally {
       setIsRefreshing(false);
     }
@@ -181,10 +183,16 @@ function MultiplayerResultRoute() {
     };
   }, [isFinal, refresh]);
 
-  const ownRow = useMemo(() => rows.find((row) => row.playerId === ownPlayerId) ?? null, [ownPlayerId, rows]);
+  const ownRow = useMemo(
+    () => rows.find((row) => row.playerId === ownPlayerId) ?? null,
+    [ownPlayerId, rows]
+  );
   const activePlayers = useMemo(
-    () => snapshot?.players.filter((player) => !["finished", "forfeited", "kicked", "came"].includes(player.state)).length ?? 0,
-    [snapshot?.players],
+    () =>
+      snapshot?.players.filter(
+        (player) => !["finished", "forfeited", "kicked", "came"].includes(player.state)
+      ).length ?? 0,
+    [snapshot?.players]
   );
 
   useControllerSurface({
@@ -200,22 +208,25 @@ function MultiplayerResultRoute() {
 
   return (
     <MultiplayerUpdateGuard>
-      <div ref={scopeRef} className="relative min-h-screen overflow-hidden bg-[#030713] text-zinc-100">
+      <div
+        ref={scopeRef}
+        className="relative min-h-screen overflow-hidden bg-[#030713] text-zinc-100"
+      >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_12%,rgba(34,211,238,0.27),transparent_40%),radial-gradient(circle_at_86%_18%,rgba(236,72,153,0.26),transparent_36%),radial-gradient(circle_at_52%_90%,rgba(56,189,248,0.18),transparent_35%),linear-gradient(140deg,#020612_0%,#06122b_55%,#18051f_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[length:100%_4px] opacity-20" />
 
         <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-8 sm:py-8">
           <header className="rounded-2xl border border-cyan-300/30 bg-[#050f23]/80 p-5 shadow-[0_0_38px_rgba(34,211,238,0.14)] backdrop-blur-xl">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-cyan-100/90">
-              Multiplayer Result
+              <Trans>Multiplayer Result</Trans>
             </p>
             <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.07em] sm:text-4xl">
-              {isFinal ? "Final Standings" : "Temporary Standings"}
+              {isFinal ? <Trans>Final Standings</Trans> : <Trans>Temporary Standings</Trans>}
             </h1>
             <p className="mt-2 text-sm text-zinc-300">
               {isFinal
-                ? `Final result synced${finalizedAtIso ? ` at ${new Date(finalizedAtIso).toLocaleString()}` : "."}`
-                : `This result is temporary. ${activePlayers} player(s) still active. Final standings will auto-sync.`}
+                ? t`Final result synced${finalizedAtIso ? ` at ${new Date(finalizedAtIso).toLocaleString()}` : "."}`
+                : t`This result is temporary. ${activePlayers} player(s) still active. Final standings will auto-sync.`}
             </p>
             {error && (
               <p className="mt-2 rounded-lg border border-rose-400/60 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
@@ -232,7 +243,7 @@ function MultiplayerResultRoute() {
                 data-controller-focus-id="multiplayer-result-refresh"
                 data-controller-initial="true"
               >
-                {isRefreshing ? "Refreshing..." : "Refresh"}
+                {isRefreshing ? <Trans>Refreshing...</Trans> : <Trans>Refresh</Trans>}
               </button>
               <button
                 type="button"
@@ -242,7 +253,7 @@ function MultiplayerResultRoute() {
                 className="rounded-xl border border-fuchsia-300/50 bg-fuchsia-500/15 px-4 py-2 text-sm font-semibold text-fuchsia-100 transition hover:border-fuchsia-200"
                 data-controller-focus-id="multiplayer-result-highscores"
               >
-                Highscore Hub
+                <Trans>Highscore Hub</Trans>
               </button>
               <button
                 type="button"
@@ -253,18 +264,22 @@ function MultiplayerResultRoute() {
                 data-controller-focus-id="multiplayer-result-main-menu"
                 data-controller-back="true"
               >
-                Main Menu
+                <Trans>Main Menu</Trans>
               </button>
             </div>
           </header>
 
           {ownRow && (
             <section className="rounded-2xl border border-fuchsia-300/35 bg-fuchsia-500/10 p-4 shadow-[0_0_30px_rgba(217,70,239,0.16)]">
-              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.2em] text-fuchsia-100/90">Your Placement</p>
+              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.2em] text-fuchsia-100/90">
+                <Trans>Your Placement</Trans>
+              </p>
               <div className="mt-1 flex flex-wrap items-end gap-3">
                 <p className="text-5xl font-black text-fuchsia-100">#{ownRow.place}</p>
                 <p className="pb-1 text-lg font-semibold text-zinc-100">{ownRow.displayName}</p>
-                <p className="pb-1 text-sm text-zinc-300">Score {ownRow.finalScore}</p>
+                <p className="pb-1 text-sm text-zinc-300">
+                  <Trans>Score</Trans> {ownRow.finalScore}
+                </p>
               </div>
             </section>
           )}
@@ -273,16 +288,20 @@ function MultiplayerResultRoute() {
             <div className="grid gap-2">
               {rows.length === 0 && (
                 <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
-                  No standings available yet. Keep this page open or check back from the Highscore Hub later.
+                  <Trans>
+                    No standings available yet. Keep this page open or check back from the Highscore
+                    Hub later.
+                  </Trans>
                 </div>
               )}
               {rows.map((row) => (
                 <article
                   key={row.playerId}
-                  className={`rounded-xl border px-4 py-3 ${row.playerId === ownPlayerId
+                  className={`rounded-xl border px-4 py-3 ${
+                    row.playerId === ownPlayerId
                       ? "border-fuchsia-300/60 bg-fuchsia-500/15 shadow-[0_0_20px_rgba(217,70,239,0.18)]"
                       : "border-cyan-300/25 bg-cyan-500/5"
-                    }`}
+                  }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -293,13 +312,13 @@ function MultiplayerResultRoute() {
                         <h2 className="text-lg font-bold text-zinc-100">{row.displayName}</h2>
                       </div>
                       <p className="mt-1 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                        state {row.state}
+                        <Trans>state</Trans> {row.state}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-black text-cyan-100">{row.finalScore}</p>
                       <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                        score
+                        <Trans>score</Trans>
                       </p>
                     </div>
                   </div>

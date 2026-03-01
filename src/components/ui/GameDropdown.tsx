@@ -129,7 +129,7 @@ export function GameDropdown<T extends string>({
     <div
       ref={rootRef}
       data-controller-skip={open ? "true" : undefined}
-      className={`relative ${className ?? ""}`}
+      className={`relative ${open ? "z-[1000]" : ""} ${className ?? ""}`}
     >
       {label && (
         <span className="mb-2 block font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-zinc-300">
@@ -302,7 +302,11 @@ export function GameDropdown<T extends string>({
                 }`}
               >
                 <span>{option.label}</span>
-                {active && !option.disabled && <span className="text-xs text-violet-200">●</span>}
+                {active && !option.disabled && (
+                  <span aria-hidden="true" className="text-xs text-violet-200">
+                    ●
+                  </span>
+                )}
               </button>
             );
           })}

@@ -1,4 +1,5 @@
 import React from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { resolvePortableRoundRef } from "../../../game/playlistRuntime";
 import { useInstalledRoundMedia } from "../../../hooks/useInstalledRoundMedia";
 import { usePlayableVideoFallback } from "../../../hooks/usePlayableVideoFallback";
@@ -36,11 +37,12 @@ interface NodeInspectorPanelProps {
 }
 
 function formatInstalledRoundMeta(
-  round: Pick<InstalledRound | InstalledRoundCatalogEntry, "author" | "difficulty" | "type">
+  round: Pick<InstalledRound | InstalledRoundCatalogEntry, "author" | "difficulty" | "type">,
+  labels: { unknownAuthor: string; normal: string; difficulty: (value: number) => string }
 ): string {
-  const parts = [round.author ?? "Unknown Author", round.type ?? "Normal"];
+  const parts = [round.author ?? labels.unknownAuthor, round.type ?? labels.normal];
   if (typeof round.difficulty === "number") {
-    parts.push(`Difficulty ${round.difficulty}`);
+    parts.push(labels.difficulty(round.difficulty));
   }
   return parts.join(" • ");
 }
@@ -56,10 +58,11 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
     onSetTool,
     onSetConnectFrom,
   }) => {
+    const { t } = useLingui();
     if (!selectedNode) {
       return (
         <div className="flex items-center justify-center py-8 text-xs text-zinc-600">
-          Select a node to inspect
+          <Trans>Select a node to inspect</Trans>
         </div>
       );
     }
@@ -74,7 +77,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
         {/* ── Name ─────────────────── */}
         <label className="block">
           <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Name
+            <Trans>Name</Trans>
           </span>
           <input
             type="text"
@@ -89,16 +92,32 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
         {/* ── Kind ─────────────────── */}
         <div className="block">
           <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Kind
+            <Trans>Kind</Trans>
           </span>
           <GameDropdown
             value={selectedNode.kind}
-            options={NODE_KIND_OPTIONS.map((kind) => ({ value: kind, label: kind }))}
+            options={NODE_KIND_OPTIONS.map((kind) => ({
+              value: kind,
+              label:
+                kind === "start"
+                  ? t`Start`
+                  : kind === "end"
+                    ? t`End`
+                    : kind === "path"
+                      ? t`Path`
+                      : kind === "safePoint"
+                        ? t`Safe Point`
+                        : kind === "round"
+                          ? t`Round`
+                          : kind === "randomRound"
+                            ? t`Random Round`
+                            : t`Perk`,
+            }))}
             onChange={(kind) => {
               onPatchNode(selectedNode.id, {
                 kind: kind as EditorNode["kind"],
                 roundRef:
-                  kind === "round" ? (selectedNode.roundRef ?? { name: "Round" }) : undefined,
+                  kind === "round" ? (selectedNode.roundRef ?? { name: t`Round` }) : undefined,
                 forceStop: kind === "round" || kind === "perk" ? selectedNode.forceStop : undefined,
                 skippable: kind === "round" ? selectedNode.skippable : undefined,
                 visualId:
@@ -112,16 +131,16 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
 
         <div className="rounded-lg border border-white/6 bg-black/20 p-2.5">
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Appearance
+            <Trans>Appearance</Trans>
           </p>
           <div className="mt-2 space-y-3">
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Color
+                <Trans>Color</Trans>
               </span>
               <div className="mt-1 flex items-center gap-2">
                 <input
-                  aria-label="Node color"
+                  aria-label={t`Node color`}
                   type="color"
                   value={colorValue}
                   onChange={(event) =>
@@ -135,21 +154,21 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                 />
                 <button
                   type="button"
-                  aria-label="Reset node color"
+                  aria-label={t`Reset node color`}
                   className="rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-500/60 hover:text-white"
                   onClick={() => onPatchNode(selectedNode.id, { styleHint: { color: undefined } })}
                 >
-                  Reset
+                  <Trans>Reset</Trans>
                 </button>
               </div>
             </label>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Size
+                <Trans>Size</Trans>
               </span>
               <div className="mt-1 flex items-center gap-2">
                 <input
-                  aria-label="Node size"
+                  aria-label={t`Node size`}
                   type="number"
                   min="0.5"
                   max="3"
@@ -172,15 +191,15 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                     });
                   }}
                   className="w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none transition-colors focus:border-cyan-500/50"
-                  placeholder="1.0"
+                  placeholder={t`1.0`}
                 />
                 <button
                   type="button"
-                  aria-label="Reset node size"
+                  aria-label={t`Reset node size`}
                   className="rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-500/60 hover:text-white"
                   onClick={() => onPatchNode(selectedNode.id, { styleHint: { size: undefined } })}
                 >
-                  Reset
+                  <Trans>Reset</Trans>
                 </button>
               </div>
             </label>
@@ -192,7 +211,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
           <>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Round name
+                <Trans>Round name</Trans>
               </span>
               <input
                 type="text"
@@ -201,7 +220,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   onPatchNode(selectedNode.id, {
                     roundRef: {
                       ...(selectedNode.roundRef ?? {}),
-                      name: event.target.value.trim().length > 0 ? event.target.value : "Round",
+                      name: event.target.value.trim().length > 0 ? event.target.value : t`Round`,
                     },
                   })
                 }
@@ -210,7 +229,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
             </label>
             <div className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Installed round
+                <Trans>Installed round</Trans>
               </span>
               <InstalledRoundPicker
                 key={selectedNode.id}
@@ -219,7 +238,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                 onClearSelection={() => {
                   onPatchNode(selectedNode.id, {
                     roundRef: {
-                      name: selectedNode.roundRef?.name?.trim() || "Round",
+                      name: selectedNode.roundRef?.name?.trim() || t`Round`,
                     },
                   });
                 }}
@@ -239,7 +258,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
             </div>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Force stop
+                <Trans>Force stop</Trans>
               </span>
               <label className="mt-1 flex items-start gap-2 rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-2 text-xs text-zinc-200">
                 <input
@@ -251,14 +270,16 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   className="mt-0.5"
                 />
                 <span>
-                  Stop movement as soon as a player reaches this round tile and start the round
-                  immediately.
+                  <Trans>
+                    Stop movement as soon as a player reaches this round tile and start the round
+                    immediately.
+                  </Trans>
                 </span>
               </label>
             </label>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Skippable
+                <Trans>Skippable</Trans>
               </span>
               <label className="mt-1 flex items-start gap-2 rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-2 text-xs text-zinc-200">
                 <input
@@ -270,8 +291,10 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   className="mt-0.5"
                 />
                 <span>
-                  Let the player choose to play this round or skip it and roll from this tile
-                  instead.
+                  <Trans>
+                    Let the player choose to play this round or skip it and roll from this tile
+                    instead.
+                  </Trans>
                 </span>
               </label>
             </label>
@@ -288,7 +311,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
         {selectedNode.kind === "safePoint" && (
           <label className="block">
             <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-              Checkpoint Rest (sec)
+              <Trans>Checkpoint Rest (sec)</Trans>
             </span>
             <input
               type="number"
@@ -313,14 +336,14 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                 });
               }}
               className="mt-1 w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-100 outline-none transition-colors focus:border-cyan-500/50"
-              placeholder="Uses normal rest when empty"
+              placeholder={t`Uses normal rest when empty`}
             />
           </label>
         )}
 
         {selectedNode.kind === "randomRound" && (
           <div className="rounded-lg border border-amber-400/20 bg-amber-500/8 p-2.5 text-xs text-amber-100">
-            This node plays a random installed round. It does not need a random pool.
+            <Trans>This node plays a random installed round. It does not need a random pool.</Trans>
           </div>
         )}
 
@@ -329,7 +352,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
           <>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Force stop
+                <Trans>Force stop</Trans>
               </span>
               <label className="mt-1 flex items-start gap-2 rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-2 text-xs text-zinc-200">
                 <input
@@ -341,19 +364,21 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   className="mt-0.5"
                 />
                 <span>
-                  Stop movement as soon as a player reaches this perk tile and resolve the perk
-                  immediately.
+                  <Trans>
+                    Stop movement as soon as a player reaches this perk tile and resolve the perk
+                    immediately.
+                  </Trans>
                 </span>
               </label>
             </label>
             <div className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Guaranteed perk
+                <Trans>Guaranteed perk</Trans>
               </span>
               <GameDropdown
                 value={selectedNode.visualId ?? ""}
                 options={[
-                  { value: "" as string, label: "None" },
+                  { value: "" as string, label: t`None` },
                   ...perkOptions.map((perk) => ({
                     value: perk.id,
                     label: perk.name,
@@ -364,7 +389,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
             </div>
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-                Gift guaranteed perk
+                <Trans>Gift guaranteed perk</Trans>
               </span>
               <label className="mt-1 flex items-start gap-2 rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-2 text-xs text-zinc-200">
                 <input
@@ -376,8 +401,10 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
                   className="mt-0.5"
                 />
                 <span>
-                  Add the guaranteed perk to the player's inventory instead of applying it
-                  immediately.
+                  <Trans>
+                    Add the guaranteed perk to the player's inventory instead of applying it
+                    immediately.
+                  </Trans>
                 </span>
               </label>
             </label>
@@ -387,13 +414,15 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
         {/* ── Paths / outgoing edges ─────────────────── */}
         <div className="rounded-lg border border-white/6 bg-black/20 p-2.5">
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-            Outgoing Paths
+            <Trans>Outgoing Paths</Trans>
           </p>
           <p className="mt-1 text-xs text-zinc-400">
-            {outgoingEdges.length} edge{outgoingEdges.length !== 1 ? "s" : ""}
+            {t`${outgoingEdges.length} edge${outgoingEdges.length !== 1 ? "s" : ""}`}
           </p>
           {selectedNode.kind === "end" && (
-            <p className="mt-1 text-[11px] text-amber-400/80">End nodes are terminal.</p>
+            <p className="mt-1 text-[11px] text-amber-400/80">
+              <Trans>End nodes are terminal.</Trans>
+            </p>
           )}
           <button
             type="button"
@@ -406,7 +435,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
             }}
             disabled={selectedNode.kind === "end"}
           >
-            Connect From Here
+            <Trans>Connect From Here</Trans>
           </button>
           {outgoingEdges.map((edge) => (
             <button
@@ -423,7 +452,7 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
             >
               {edge.fromNodeId} → {edge.toNodeId}
               <span className="ml-2 text-zinc-600">
-                gate ${edge.gateCost ?? 0} · w{edge.weight ?? 1}
+                {t`gate $${edge.gateCost ?? 0} · w${edge.weight ?? 1}`}
               </span>
             </button>
           ))}
@@ -441,6 +470,7 @@ const InstalledRoundPicker: React.FC<{
   onSelectRound: (round: InstalledRound | InstalledRoundCatalogEntry) => void;
   onClearSelection: () => void;
 }> = React.memo(({ selectedRoundId, installedRounds, onSelectRound, onClearSelection }) => {
+  const { t } = useLingui();
   const [query, setQuery] = React.useState("");
 
   const filteredRounds = React.useMemo(() => {
@@ -448,7 +478,7 @@ const InstalledRoundPicker: React.FC<{
     const matches = installedRounds.filter((round) => {
       if (!normalizedQuery) return true;
       const haystack =
-        `${round.name} ${round.author ?? ""} ${round.type ?? "Normal"} ${round.difficulty ?? ""}`.toLowerCase();
+        `${round.name} ${round.author ?? ""} ${round.type ?? t`Normal`} ${round.difficulty ?? ""}`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
 
@@ -473,7 +503,7 @@ const InstalledRoundPicker: React.FC<{
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         className="w-full rounded-md border border-zinc-700/50 bg-zinc-950/70 px-2.5 py-2 text-xs text-zinc-100 outline-none transition-colors focus:border-cyan-500/50"
-        placeholder="Search by round, author, or type"
+        placeholder={t`Search by round, author, or type`}
       />
       <button
         type="button"
@@ -485,9 +515,9 @@ const InstalledRoundPicker: React.FC<{
         onMouseEnter={playHoverSound}
         onClick={onClearSelection}
       >
-        <div className="font-medium">Custom / none</div>
+        <div className="font-medium">{t`Custom / none`}</div>
         <div className="mt-1 text-[11px] text-zinc-500">
-          Keep the manual round name without linking to an installed round.
+          <Trans>Keep the manual round name without linking to an installed round.</Trans>
         </div>
       </button>
       <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
@@ -510,15 +540,21 @@ const InstalledRoundPicker: React.FC<{
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">{round.name}</span>
-                {selected && <span className="text-[10px] uppercase tracking-[0.1em]">Selected</span>}
+                {selected && <span className="text-[10px] uppercase tracking-[0.1em]">{t`Selected`}</span>}
               </div>
-              <div className="mt-1 text-[11px] text-zinc-500">{formatInstalledRoundMeta(round)}</div>
+              <div className="mt-1 text-[11px] text-zinc-500">
+                {formatInstalledRoundMeta(round, {
+                  unknownAuthor: t`Unknown Author`,
+                  normal: t`Normal`,
+                  difficulty: (value) => t`Difficulty ${value}`,
+                })}
+              </div>
             </button>
           );
         })}
         {filteredRounds.length === 0 && (
           <div className="rounded-md border border-zinc-800 bg-black/25 px-2.5 py-3 text-xs text-zinc-400">
-            No installed rounds match the current filter.
+            <Trans>No installed rounds match the current filter.</Trans>
           </div>
         )}
       </div>
@@ -533,6 +569,7 @@ function SelectedRoundPreview({
 }: {
   round: InstalledRound | InstalledRoundCatalogEntry | null;
 }) {
+  const { t } = useLingui();
   const { mediaResources, isLoading, loadMediaResources } = useInstalledRoundMedia(round?.id ?? null);
   const previewUri = mediaResources?.resources[0]?.videoUri ?? null;
   const previewImage = round?.previewImage ?? null;
@@ -602,7 +639,7 @@ function SelectedRoundPreview({
   return (
     <div className="rounded-lg border border-white/6 bg-black/20 p-2.5">
       <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
-        Round preview
+        <Trans>Round preview</Trans>
       </p>
       {round ? (
         <>
@@ -618,13 +655,13 @@ function SelectedRoundPreview({
             onBlur={stopPreview}
             tabIndex={previewUri ? 0 : undefined}
             role={previewUri ? "button" : undefined}
-            aria-label={previewUri ? `Preview ${round.name}` : undefined}
+            aria-label={previewUri ? t`Preview ${round.name}` : undefined}
           >
             {previewImage && (
               <SfwGuard>
                 <img
                   src={previewImage}
-                  alt={`${round.name} preview`}
+                  alt={t`${round.name} preview`}
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover/video:scale-[1.03] group-focus-within/video:scale-[1.03]"
                   loading="lazy"
                   decoding="async"
@@ -688,7 +725,7 @@ function SelectedRoundPreview({
               </SfwGuard>
             ) : !previewImage ? (
               <div className="flex h-full items-center justify-center text-[10px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.25em] text-zinc-500">
-                {isLoading ? "Loading..." : "No Preview"}
+                {isLoading ? t`Loading...` : t`No Preview`}
               </div>
             ) : null}
 
@@ -705,7 +742,7 @@ function SelectedRoundPreview({
             <p className="text-xs font-semibold text-zinc-100">{round.name}</p>
             <div className="flex flex-wrap gap-1.5">
               <span className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-cyan-100">
-                {round.type ?? "Normal"}
+                {round.type ?? t`Normal`}
               </span>
               {round.author && (
                 <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
@@ -717,7 +754,7 @@ function SelectedRoundPreview({
         </>
       ) : (
         <p className="mt-1 text-xs text-zinc-500">
-          Select an installed round to see its preview here.
+          <Trans>Select an installed round to see its preview here.</Trans>
         </p>
       )}
     </div>

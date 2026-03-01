@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useControllerSubscription, useControllerSurface } from "../controller";
@@ -64,6 +65,7 @@ function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
 }
 
 export function GlobalMusicOverlay() {
+  const { t } = useLingui();
   const {
     enabled,
     queue,
@@ -367,10 +369,10 @@ export function GlobalMusicOverlay() {
                       )}
                     </div>
                     <h2 className="mt-1 truncate text-lg font-bold text-white sm:text-xl">
-                      {currentTrack?.name ?? "No track selected"}
+                      {currentTrack?.name ?? t`No track selected`}
                     </h2>
                     <p className="mt-0.5 truncate text-xs text-zinc-500">
-                      {currentTrack?.filePath ?? "Add local audio files to start"}
+                      {currentTrack?.filePath ?? t`Add local audio files to start`}
                     </p>
                   </div>
                 </div>
@@ -378,7 +380,9 @@ export function GlobalMusicOverlay() {
                 {isSuppressedByVideo && (
                   <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100">
                     <span>⚠</span>
-                    <span>Playback paused while a foreground video is active</span>
+                    <span>
+                      <Trans>Playback paused while a foreground video is active</Trans>
+                    </span>
                   </div>
                 )}
 
@@ -599,7 +603,9 @@ export function GlobalMusicOverlay() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-white">Volume</p>
+                      <p className="text-xs font-semibold text-white">
+                        <Trans>Volume</Trans>
+                      </p>
                       <span className="text-xs font-bold text-cyan-300">{volumeDraft}%</span>
                     </div>
                     <input
@@ -620,7 +626,9 @@ export function GlobalMusicOverlay() {
 
                   <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-white">Shuffle</p>
+                      <p className="text-xs font-semibold text-white">
+                        <Trans>Shuffle</Trans>
+                      </p>
                       <button
                         type="button"
                         aria-pressed={shuffle}
@@ -635,20 +643,24 @@ export function GlobalMusicOverlay() {
                             : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
                         }`}
                       >
-                        {shuffle ? "On" : "Off"}
+                        {shuffle ? t`On` : t`Off`}
                       </button>
                     </div>
-                    <p className="mt-2 text-[10px] text-zinc-500">Randomize track order</p>
+                    <p className="mt-2 text-[10px] text-zinc-500">
+                      <Trans>Randomize track order</Trans>
+                    </p>
                   </div>
 
                   <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
-                    <p className="text-xs font-semibold text-white">Loop</p>
+                    <p className="text-xs font-semibold text-white">
+                      <Trans>Loop</Trans>
+                    </p>
                     <div className="mt-2 flex gap-1.5">
                       {(
                         [
-                          ["queue", "Queue"],
-                          ["track", "Track"],
-                          ["off", "Off"],
+                          ["queue", t`Queue`],
+                          ["track", t`Track`],
+                          ["off", t`Off`],
                         ] as const satisfies ReadonlyArray<readonly [MusicLoopMode, string]>
                       ).map(([value, label]) => (
                         <button
@@ -685,8 +697,10 @@ export function GlobalMusicOverlay() {
                       data-controller-focus-id="music-toggle-queue"
                     >
                       <div>
-                        <p className="text-xs font-semibold text-white">Queue</p>
-                        <p className="text-[10px] text-zinc-500">{queue.length} tracks</p>
+                        <p className="text-xs font-semibold text-white">
+                          <Trans>Queue</Trans>
+                        </p>
+                        <p className="text-[10px] text-zinc-500">{t`${queue.length} tracks`}</p>
                       </div>
                       <span className="text-xs text-zinc-400">{showQueue ? "▲" : "▼"}</span>
                     </button>
@@ -751,10 +765,10 @@ export function GlobalMusicOverlay() {
           </motion.section>
           <ConfirmDialog
             isOpen={isClearConfirmOpen}
-            title="Clear music playlist?"
-            message="This will remove every track from the current music playlist."
-            confirmLabel="Clear Playlist"
-            cancelLabel="Keep Playlist"
+            title={t`Clear music playlist?`}
+            message={t`This will remove every track from the current music playlist.`}
+            confirmLabel={t`Clear Playlist`}
+            cancelLabel={t`Keep Playlist`}
             variant="warning"
             onConfirm={handleConfirmClearQueue}
             onCancel={handleCancelClearQueue}

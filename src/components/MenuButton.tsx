@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import React, { useRef, useState } from "react";
 
 interface MenuButtonProps {
@@ -143,7 +144,9 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
         <div
           className={[
             "absolute inset-0 -z-10 rounded-xl blur-xl opacity-60 transition-opacity duration-300",
-            primary ? "bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600" : "bg-zinc-700",
+            primary
+              ? "bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600"
+              : "bg-zinc-700",
           ].join(" ")}
           style={{ transform: "scaleY(1.4) scaleX(1.1)" }}
         />
@@ -165,7 +168,13 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
         <span
           className={[
             "flex items-center gap-3 transition-colors duration-200",
-            primary ? (isActive ? "text-white" : "text-violet-100") : isActive ? "text-white" : "text-zinc-400",
+            primary
+              ? isActive
+                ? "text-white"
+                : "text-violet-100"
+              : isActive
+                ? "text-white"
+                : "text-zinc-400",
           ].join(" ")}
         >
           <span className="flex flex-col items-start gap-1">
@@ -188,7 +197,9 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
           {experimental && (
             <span className="relative flex items-center justify-center rounded border border-amber-500/50 bg-amber-500/20 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.15em] text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
               <span className="absolute inset-0 overflow-hidden rounded bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(245,158,11,0.1)_4px,rgba(245,158,11,0.1)_8px)]" />
-              <span className="relative z-10 animate-pulse">Experimental</span>
+              <span className="relative z-10 animate-pulse">
+                <Trans>Experimental</Trans>
+              </span>
             </span>
           )}
         </span>

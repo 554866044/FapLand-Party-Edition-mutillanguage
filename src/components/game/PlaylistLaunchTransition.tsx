@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { CinematicTransitionFrame } from "./CinematicTransitionFrame";
 
 export type PlaylistLaunchTransitionProps = {
@@ -17,17 +18,18 @@ export function PlaylistLaunchTransition({
   estimatedDurationLabel,
   progress,
 }: PlaylistLaunchTransitionProps) {
+  const { t } = useLingui();
   if (!visible) return null;
 
   return (
     <div className="absolute inset-0 z-[120]" data-testid="playlist-launch-transition">
       <CinematicTransitionFrame
         title={playlistName}
-        overline="RUN INITIALIZATION"
-        accentLabel="Playlist locked"
+        overline={t`RUN INITIALIZATION`}
+        accentLabel={t`Playlist locked`}
         metadata={[
-          `${boardModeLabel} board`,
-          `${Math.max(0, roundCount)} rounds`,
+          `${boardModeLabel} ${t`board`}`,
+          `${Math.max(0, roundCount)} ${t`rounds`}`,
           estimatedDurationLabel,
         ]}
         progress={progress}

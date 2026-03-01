@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as z from "zod";
@@ -90,16 +91,17 @@ function arePublicLobbySummariesEqual(
 function getLobbyJoinBlockedReason(
   lobby: LobbyJoinRequirement,
   installedRoundsCount: number,
-  skipRoundsCheck: boolean
+  skipRoundsCheck: boolean,
+  t: ReturnType<typeof useLingui>["t"]
 ): string | null {
   if (!lobby.isOpen) {
-    return "Lobby is locked.";
+    return t`Lobby is locked.`;
   }
   if (lobby.status === "running" && !lobby.allowLateJoin) {
-    return "Late join is disabled for this lobby.";
+    return t`Late join is disabled for this lobby.`;
   }
   if (!skipRoundsCheck && installedRoundsCount < lobby.requiredRoundCount) {
-    return `This lobby requires at least ${lobby.requiredRoundCount} installed rounds. You have ${installedRoundsCount}.`;
+    return t`This lobby requires at least ${lobby.requiredRoundCount} installed rounds. You have ${installedRoundsCount}.`;
   }
   return null;
 }
@@ -137,6 +139,7 @@ export const Route = createFileRoute("/multiplayer")({
 });
 
 function MultiplayerRoute() {
+  const { t } = useLingui();
   const navigate = useNavigate();
   const sfwModeEnabled = useMultiplayerSfwRedirect();
 
@@ -178,9 +181,9 @@ function MultiplayerRoute() {
     activeProfile?.id ?? profiles[0]?.id ?? ""
   );
   const [displayName, setDisplayName] = useState<string>(
-    () => localStorage.getItem("fland-multiplayer-username") || "Player"
+    () => localStorage.getItem("fland-multiplayer-username") || t`Player`
   );
-  const [lobbyName, setLobbyName] = useState("My Lobby");
+  const [lobbyName, setLobbyName] = useState(t`My Lobby`);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(
     activePlaylist?.id ?? availablePlaylists[0]?.id ?? ""
   );
@@ -204,7 +207,7 @@ function MultiplayerRoute() {
   const [authStatus, setAuthStatus] = useState<MultiplayerAuthStatus | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>("provisioning");
   const [onboardingMessage, setOnboardingMessage] = useState(
-    "Preparing multiplayer authentication on the selected server."
+    t`Preparing multiplayer authentication on the selected server.`
   );
   const [authBootstrapPending, setAuthBootstrapPending] = useState(false);
   const [email, setEmail] = useState("");
@@ -248,9 +251,9 @@ function MultiplayerRoute() {
     onboardingStatus === "ready" && serverConfigured && !authBootstrapPending && !roundsBlocked;
   const selectedServerEndpointLabel = selectedServer
     ? selectedServer.isBuiltIn
-      ? "Hidden for built-in server"
-      : selectedServer.url || "No URL configured"
-    : "No URL configured";
+      ? t`Hidden for built-in server`
+      : selectedServer.url || t`No URL configured`
+    : t`No URL configured`;
 
   const actionButtonClass =
     "rounded-xl border px-3 py-2 text-sm font-semibold tracking-wide transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100";
@@ -273,7 +276,7 @@ function MultiplayerRoute() {
         setPublicLobbiesError(null);
       } catch (loadError) {
         setPublicLobbiesError(
-          loadError instanceof Error ? loadError.message : "Failed to load public lobbies."
+          loadError instanceof Error ? loadError.message : t`Failed to load public lobbies.`
         );
       } finally {
         if (!silent) setPublicLobbiesLoading(false);
@@ -311,7 +314,7 @@ function MultiplayerRoute() {
 
   const loadServerIntoEditor = (profile: MultiplayerServerProfile) => {
     if (profile.isBuiltIn) {
-      setError("Built-in servers cannot be loaded into the editor.");
+      setError(t`Built-in servers cannot be loaded into the editor.`);
       return;
     }
     setEditingServerId(profile.id);
@@ -334,7 +337,7 @@ function MultiplayerRoute() {
       setAuthStatus(null);
       setOnboardingStatus("unavailable");
       setOnboardingMessage(
-        "Online multiplayer is unavailable right now. Retry or use Advanced setup."
+        t`Online multiplayer is unavailable right now. Retry or use Advanced setup.`
       );
       setAdvancedOpen(true);
       return;
@@ -342,7 +345,7 @@ function MultiplayerRoute() {
 
     setAuthBootstrapPending(true);
     setOnboardingStatus("provisioning");
-    setOnboardingMessage("Creating or resuming your multiplayer account on the selected server.");
+    setOnboardingMessage(t`Creating or resuming your multiplayer account on the selected server.`);
 
     try {
       if (syncActive) {
@@ -364,7 +367,7 @@ function MultiplayerRoute() {
       setOnboardingMessage(
         bootstrapError instanceof Error
           ? bootstrapError.message
-          : "Failed to prepare multiplayer authentication. Retry or use Advanced setup."
+          : t`Failed to prepare multiplayer authentication. Retry or use Advanced setup.`
       );
       setAdvancedOpen(true);
     } finally {
@@ -434,7 +437,9 @@ function MultiplayerRoute() {
       await setActiveMultiplayerServerProfile(selectedServer.id);
       await startDiscordMultiplayerLink(selectedServer);
     } catch (linkError) {
-      setError(linkError instanceof Error ? linkError.message : "Failed to start Discord linking.");
+      setError(
+        linkError instanceof Error ? linkError.message : t`Failed to start Discord linking.`
+      );
     } finally {
       setLinkPending(false);
     }
@@ -442,7 +447,7 @@ function MultiplayerRoute() {
 
   const handleAuthEmail = async () => {
     if (!email.trim() || !password.trim()) {
-      setError("Email and password are required.");
+      setError(t`Email and password are required.`);
       return;
     }
 
@@ -457,7 +462,7 @@ function MultiplayerRoute() {
       setEmail("");
       setPassword("");
     } catch (authErr) {
-      setError(authErr instanceof Error ? authErr.message : "Authentication failed.");
+      setError(authErr instanceof Error ? authErr.message : t`Authentication failed.`);
     } finally {
       setAuthPending(false);
     }
@@ -465,21 +470,21 @@ function MultiplayerRoute() {
 
   const handleCreateLobby = async () => {
     if (!displayName.trim()) {
-      setError("Display name is required.");
+      setError(t`Display name is required.`);
       return;
     }
 
     if (!selectedServer || !serverConfigured || onboardingStatus !== "ready") {
-      setError("Multiplayer is not ready on this server yet.");
+      setError(t`Multiplayer is not ready on this server yet.`);
       return;
     }
     if (!selectedPlaylist) {
-      setError("Select a playlist before hosting a lobby.");
+      setError(t`Select a playlist before hosting a lobby.`);
       return;
     }
     if (!skipRoundsCheck && installedRoundCount < selectedPlaylistRequiredRounds) {
       setError(
-        `This playlist requires at least ${selectedPlaylistRequiredRounds} installed rounds. You have ${installedRoundCount}.`
+        t`This playlist requires at least ${selectedPlaylistRequiredRounds} installed rounds. You have ${installedRoundCount}.`
       );
       return;
     }
@@ -494,7 +499,7 @@ function MultiplayerRoute() {
       });
       const created = await createLobby(
         {
-          name: lobbyName.trim() || "My Lobby",
+          name: lobbyName.trim() || t`My Lobby`,
           playlistSnapshotJson: snapshot,
           displayName: displayName.trim(),
           allowLateJoin,
@@ -513,7 +518,7 @@ function MultiplayerRoute() {
         },
       });
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Failed to create lobby.");
+      setError(createError instanceof Error ? createError.message : t`Failed to create lobby.`);
     } finally {
       setCreatePending(false);
     }
@@ -522,17 +527,17 @@ function MultiplayerRoute() {
   const handleJoinLobby = useCallback(
     async (previewInput?: MultiplayerPublicLobbySummary | MultiplayerLobbyJoinPreview) => {
       if (!displayName.trim()) {
-        setError("Display name is required.");
+        setError(t`Display name is required.`);
         return;
       }
 
       if (!previewInput && !inviteCode.trim()) {
-        setError("Invite code is required.");
+        setError(t`Invite code is required.`);
         return;
       }
 
       if (!selectedServer || !serverConfigured || onboardingStatus !== "ready") {
-        setError("Multiplayer is not ready on this server yet.");
+        setError(t`Multiplayer is not ready on this server yet.`);
         return;
       }
 
@@ -544,12 +549,13 @@ function MultiplayerRoute() {
           previewInput ??
           (await getLobbyJoinPreview(inviteCode.trim().toUpperCase(), selectedServer));
         if (!preview) {
-          throw new Error("Lobby not found.");
+          throw new Error(t`Lobby not found.`);
         }
         const blockedReason = getLobbyJoinBlockedReason(
           preview,
           installedRoundCount,
-          skipRoundsCheck
+          skipRoundsCheck,
+          t
         );
         if (blockedReason) {
           throw new Error(blockedReason);
@@ -571,7 +577,7 @@ function MultiplayerRoute() {
           },
         });
       } catch (joinError) {
-        setError(joinError instanceof Error ? joinError.message : "Failed to join lobby.");
+        setError(joinError instanceof Error ? joinError.message : t`Failed to join lobby.`);
       } finally {
         setJoinPending(false);
       }
@@ -601,78 +607,76 @@ function MultiplayerRoute() {
 
   const badgeLabel =
     onboardingStatus === "ready"
-      ? "Ready"
+      ? t`Ready`
       : onboardingStatus === "provisioning"
-        ? "Preparing"
+        ? t`Preparing`
         : onboardingStatus === "needs_discord"
-          ? "Link Discord"
+          ? t`Link Discord`
           : onboardingStatus === "needs_email"
-            ? "Email Required"
+            ? t`Email Required`
             : onboardingStatus === "needs_login"
-              ? "Login Required"
+              ? t`Login Required`
               : onboardingStatus === "oauth_unavailable"
-                ? "OAuth Unavailable"
+                ? t`OAuth Unavailable`
                 : onboardingStatus === "error"
-                  ? "Connection Failed"
-                  : "Unavailable";
+                  ? t`Connection Failed`
+                  : t`Unavailable`;
 
   const authModeLabel = authStatus
     ? authStatus.hasDiscordIdentity
-      ? "Discord linked"
+      ? t`Discord linked`
       : authStatus.isAnonymous
-        ? "Anonymous account"
-        : "Supabase account"
-    : "Unknown";
+        ? t`Anonymous account`
+        : t`Supabase account`
+    : t`Unknown`;
   const readinessHeadline = canPlay
-    ? "Ready to join or host"
+    ? t`Ready to join or host`
     : onboardingStatus === "provisioning"
-      ? "Preparing your multiplayer account"
+      ? t`Preparing your multiplayer account`
       : onboardingStatus === "needs_discord"
-        ? "Discord linking required"
+        ? t`Discord linking required`
         : onboardingStatus === "needs_email"
-          ? "Discord account needs an email"
+          ? t`Discord account needs an email`
           : onboardingStatus === "needs_login"
-            ? "Login required"
-            : "Multiplayer setup needs attention";
+            ? t`Login required`
+            : t`Multiplayer setup needs attention`;
   const readinessDetail = canPlay
-    ? "Enter a code to join immediately or host a lobby with the current playlist."
+    ? t`Enter a code to join immediately or host a lobby with the current playlist.`
     : onboardingMessage;
   const createDisabledReason = !canPlay
     ? roundsBlocked
-      ? `You need at least ${MULTIPLAYER_MINIMUM_ROUNDS} installed rounds to host. You have ${installedRoundCount}.`
+      ? t`You need at least ${MULTIPLAYER_MINIMUM_ROUNDS} installed rounds to host. You have ${installedRoundCount}.`
       : authBootstrapPending
-        ? "Finish account setup to host."
-        : "Resolve multiplayer readiness first."
+        ? t`Finish account setup to host.`
+        : t`Resolve multiplayer readiness first.`
     : !hasPlayablePlaylist
-      ? "Create or select a playlist before hosting."
+      ? t`Create or select a playlist before hosting.`
       : selectedPlaylistBlocked
-        ? `This playlist requires at least ${selectedPlaylistRequiredRounds} installed rounds. You have ${installedRoundCount}.`
+        ? t`This playlist requires at least ${selectedPlaylistRequiredRounds} installed rounds. You have ${installedRoundCount}.`
         : null;
   const createWarning =
-    hasPlayablePlaylist &&
-    skipRoundsCheck &&
-    installedRoundCount < selectedPlaylistRequiredRounds
-      ? `Experimental override active: ${selectedPlaylist?.name ?? "This playlist"} is tuned for at least ${selectedPlaylistRequiredRounds} installed rounds, and disabling the checks may result in a bad user experience.`
+    hasPlayablePlaylist && skipRoundsCheck && installedRoundCount < selectedPlaylistRequiredRounds
+      ? t`Experimental override active: ${selectedPlaylist?.name ?? "This playlist"} is tuned for at least ${selectedPlaylistRequiredRounds} installed rounds, and disabling the checks may result in a bad user experience.`
       : null;
   const joinDisabledReason = !canPlay
     ? roundsBlocked
-      ? `You need at least ${MULTIPLAYER_MINIMUM_ROUNDS} installed rounds to join. You have ${installedRoundCount}.`
+      ? t`You need at least ${MULTIPLAYER_MINIMUM_ROUNDS} installed rounds to join. You have ${installedRoundCount}.`
       : authBootstrapPending
-        ? "Finish account setup to join."
-        : "Resolve multiplayer readiness first."
+        ? t`Finish account setup to join.`
+        : t`Resolve multiplayer readiness first.`
     : inviteCode.trim().length === 0
-      ? "Paste an invite code to join."
+      ? t`Paste an invite code to join.`
       : null;
 
   const publicLobbyCards = useMemo(
     () =>
       publicLobbies.map((lobby) => {
         const joinBlockedReason = !canPlay
-          ? (joinDisabledReason ?? "Resolve multiplayer readiness first.")
-          : getLobbyJoinBlockedReason(lobby, installedRoundCount, skipRoundsCheck);
+          ? (joinDisabledReason ?? t`Resolve multiplayer readiness first.`)
+          : getLobbyJoinBlockedReason(lobby, installedRoundCount, skipRoundsCheck, t);
         const joinWarning =
           skipRoundsCheck && installedRoundCount < lobby.requiredRoundCount
-            ? `Experimental override active. This lobby expects ${lobby.requiredRoundCount} installed rounds, and joining below that may result in a bad user experience.`
+            ? t`Experimental override active. This lobby expects ${lobby.requiredRoundCount} installed rounds, and joining below that may result in a bad user experience.`
             : null;
 
         return (
@@ -690,11 +694,13 @@ function MultiplayerRoute() {
               <p className="mt-0.5 truncate text-xs text-zinc-400">
                 {lobby.playlistName}
                 {" · "}
-                {lobby.playerCount} player{lobby.playerCount !== 1 ? "s" : ""}
+                <Trans>
+                  {lobby.playerCount} player{lobby.playerCount !== 1 ? "s" : ""}
+                </Trans>
                 {" · "}
-                {lobby.requiredRoundCount} rounds required
+                <Trans>{lobby.requiredRoundCount} rounds required</Trans>
                 {lobby.status !== "waiting" &&
-                  (lobby.allowLateJoin ? " · Late join" : " · No late join")}
+                  (lobby.allowLateJoin ? t` · Late join` : t` · No late join`)}
               </p>
               {joinBlockedReason && (
                 <p className="mt-1 text-xs text-zinc-500">{joinBlockedReason}</p>
@@ -709,7 +715,7 @@ function MultiplayerRoute() {
                 void handleJoinLobby(lobby);
               }}
             >
-              {joinPending ? "..." : "Join Public Lobby"}
+              {joinPending ? "..." : <Trans>Join Public Lobby</Trans>}
             </button>
           </div>
         );
@@ -744,14 +750,14 @@ function MultiplayerRoute() {
                 }}
                 className="rounded-xl border border-violet-300/55 bg-violet-500/20 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/35"
               >
-                Go Back
+                <Trans>Go Back</Trans>
               </button>
               <div>
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.62rem] uppercase tracking-[0.45em] text-purple-200/70">
-                  Matchmaking
+                  <Trans>Matchmaking</Trans>
                 </p>
                 <h1 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)] sm:text-3xl">
-                  Multiplayer
+                  <Trans>Multiplayer</Trans>
                 </h1>
               </div>
             </div>
@@ -763,7 +769,7 @@ function MultiplayerRoute() {
               }}
               className={`${actionButtonClass} border-orange-300/45 bg-orange-400/15 text-orange-100 hover:border-orange-300/70`}
             >
-              Host Ban List
+              <Trans>Host Ban List</Trans>
             </button>
           </div>
 
@@ -776,20 +782,22 @@ function MultiplayerRoute() {
           {roundsBlocked && (
             <div className="rounded-2xl border border-rose-300/40 bg-rose-500/15 px-5 py-4 backdrop-blur-xl">
               <h2 className="text-lg font-bold text-rose-50">
-                {MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required
+                <Trans>{MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required</Trans>
               </h2>
               <p className="mt-1 text-sm text-rose-200/80">
-                Multiplayer requires at least {MULTIPLAYER_MINIMUM_ROUNDS} installed rounds. You
-                have <span className="font-bold text-rose-100">{installedRoundCount}</span>.
-                Install more via the{" "}
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: "/rounds" })}
-                  className="font-semibold text-rose-100 underline underline-offset-2 transition hover:text-rose-50"
-                >
-                  Installed Rounds
-                </button>{" "}
-                page.
+                <Trans>
+                  Multiplayer requires at least {MULTIPLAYER_MINIMUM_ROUNDS} installed rounds. You
+                  have <span className="font-bold text-rose-100">{installedRoundCount}</span>.
+                  Install more via the{" "}
+                  <button
+                    type="button"
+                    onClick={() => void navigate({ to: "/rounds" })}
+                    className="font-semibold text-rose-100 underline underline-offset-2 transition hover:text-rose-50"
+                  >
+                    Installed Rounds
+                  </button>{" "}
+                  page.
+                </Trans>
               </p>
             </div>
           )}
@@ -803,19 +811,19 @@ function MultiplayerRoute() {
                 htmlFor="multiplayer-display-name"
                 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400"
               >
-                Display Name
+                <Trans>Display Name</Trans>
               </label>
               <input
                 id="multiplayer-display-name"
                 className="w-48 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Player"
+                placeholder={t`Player`}
               />
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                Status
+                <Trans>Status</Trans>
               </span>
               <span
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${badgeClass}`}
@@ -825,24 +833,24 @@ function MultiplayerRoute() {
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                Auth
+                <Trans>Auth</Trans>
               </span>
               <span className="text-sm text-zinc-200">{authModeLabel}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                Server
+                <Trans>Server</Trans>
               </span>
-              <span className="text-sm text-zinc-200">{selectedServer?.name ?? "None"}</span>
+              <span className="text-sm text-zinc-200">{selectedServer?.name ?? t`None`}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                Rounds
+                <Trans>Rounds</Trans>
               </span>
               <span
                 className={`text-sm ${hasEnoughRounds ? "text-emerald-200" : "text-amber-200"}`}
               >
-                {installedRoundCount} installed
+                <Trans>{installedRoundCount} installed</Trans>
               </span>
             </div>
             <div className="flex items-end gap-2 self-end">
@@ -855,7 +863,7 @@ function MultiplayerRoute() {
                   disabled={linkPending || authBootstrapPending}
                   className={`${actionButtonClass} border-fuchsia-300/45 bg-fuchsia-500/15 text-fuchsia-100 hover:border-fuchsia-300/70`}
                 >
-                  {linkPending ? "Opening Discord..." : "Link Discord"}
+                  {linkPending ? t`Opening Discord...` : t`Link Discord`}
                 </button>
               )}
               {(onboardingStatus === "error" ||
@@ -866,7 +874,7 @@ function MultiplayerRoute() {
                   onClick={handleRetryBootstrap}
                   className={`${actionButtonClass} border-cyan-300/40 bg-cyan-400/12 text-cyan-100 hover:border-cyan-300/70`}
                 >
-                  Retry
+                  <Trans>Retry</Trans>
                 </button>
               )}
               {(onboardingStatus === "needs_email" || onboardingStatus === "needs_discord") && (
@@ -876,34 +884,34 @@ function MultiplayerRoute() {
                   disabled={authBootstrapPending}
                   className={`${actionButtonClass} border-cyan-300/40 bg-cyan-400/12 text-cyan-100 hover:border-cyan-300/70`}
                 >
-                  Recheck Account
+                  <Trans>Recheck Account</Trans>
                 </button>
               )}
               {onboardingStatus === "needs_login" && (
                 <div className="flex flex-col gap-3 rounded-2xl border border-violet-400/30 bg-black/40 p-5 mt-4 w-full max-w-md">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-violet-100">
-                      {authMode === "signin" ? "Sign In" : "Create Account"}
+                      {authMode === "signin" ? t`Sign In` : t`Create Account`}
                     </p>
                     <button
                       type="button"
                       onClick={() => setAuthMode((m) => (m === "signin" ? "signup" : "signin"))}
                       className="text-xs text-violet-300 underline"
                     >
-                      {authMode === "signin" ? "Switch to Sign Up" : "Switch to Sign In"}
+                      {authMode === "signin" ? t`Switch to Sign Up` : t`Switch to Sign In`}
                     </button>
                   </div>
                   <div className="flex flex-col gap-2">
                     <input
                       type="email"
-                      placeholder="Email Address"
+                      placeholder={t`Email Address`}
                       className="rounded-xl border border-white/10 bg-black/50 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-400"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
                     <input
                       type="password"
-                      placeholder="Password"
+                      placeholder={t`Password`}
                       className="rounded-xl border border-white/10 bg-black/50 px-4 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-400"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -916,10 +924,10 @@ function MultiplayerRoute() {
                     className="w-full rounded-xl border border-violet-400/50 bg-violet-600/30 py-2 text-sm font-bold uppercase tracking-widest text-violet-50 transition hover:bg-violet-600/50 disabled:opacity-50"
                   >
                     {authPending
-                      ? "Authenticating..."
+                      ? t`Authenticating...`
                       : authMode === "signin"
-                        ? "Sign In"
-                        : "Sign Up"}
+                        ? t`Sign In`
+                        : t`Sign Up`}
                   </button>
                 </div>
               )}
@@ -934,9 +942,11 @@ function MultiplayerRoute() {
           )}
 
           <section className="animate-entrance rounded-3xl border border-violet-400/25 bg-zinc-950/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Join Lobby</h2>
+            <h2 className="text-xl font-extrabold tracking-tight text-violet-100">
+              <Trans>Join Lobby</Trans>
+            </h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Paste the invite code from your host and enter the round.
+              <Trans>Paste the invite code from your host and enter the round.</Trans>
             </p>
 
             <div className="mt-5">
@@ -944,21 +954,23 @@ function MultiplayerRoute() {
                 htmlFor="multiplayer-invite-code"
                 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-300"
               >
-                Invite Code
+                <Trans>Invite Code</Trans>
               </label>
               <input
                 id="multiplayer-invite-code"
                 className="mt-2 w-full rounded-3xl border-2 border-violet-500/50 bg-black/50 px-5 py-4 font-[family-name:var(--font-jetbrains-mono)] text-3xl font-black tracking-[0.2em] text-violet-50 uppercase outline-none transition-all placeholder:text-violet-900/50 focus:border-violet-400 focus:bg-violet-950/40 focus:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
                 value={inviteCode}
                 onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
-                placeholder="CODE"
+                placeholder={t`CODE`}
               />
               <p className="mt-2 text-xs text-zinc-500">
-                Playing on{" "}
-                <span className="text-zinc-300">
-                  {selectedServer?.name ?? "No Server Selected"}
-                </span>
-                {" · "}Codes are case-insensitive.
+                <Trans>
+                  Playing on{" "}
+                  <span className="text-zinc-300">
+                    {selectedServer?.name ?? t`No Server Selected`}
+                  </span>
+                  {" · "}Codes are case-insensitive.
+                </Trans>
               </p>
             </div>
 
@@ -971,10 +983,10 @@ function MultiplayerRoute() {
               }}
             >
               {joinPending
-                ? "Joining..."
+                ? t`Joining...`
                 : authBootstrapPending
-                  ? "Preparing Account..."
-                  : "Join Lobby"}
+                  ? t`Preparing Account...`
+                  : t`Join Lobby`}
             </button>
             {joinDisabledReason && (
               <p className="mt-3 text-xs text-zinc-400">{joinDisabledReason}</p>
@@ -985,10 +997,10 @@ function MultiplayerRoute() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-extrabold tracking-tight text-emerald-100">
-                  Public Lobbies
+                  <Trans>Public Lobbies</Trans>
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Browse advertised lobbies and join with one click.
+                  <Trans>Browse advertised lobbies and join with one click.</Trans>
                 </p>
               </div>
               <button
@@ -997,7 +1009,7 @@ function MultiplayerRoute() {
                 disabled={publicLobbiesLoading || !selectedServer || !serverConfigured}
                 className={`${actionButtonClass} border-emerald-300/45 bg-emerald-500/15 text-emerald-100 hover:border-emerald-300/70`}
               >
-                {publicLobbiesLoading ? "Refreshing..." : "Refresh"}
+                {publicLobbiesLoading ? t`Refreshing...` : t`Refresh`}
               </button>
             </div>
 
@@ -1013,22 +1025,26 @@ function MultiplayerRoute() {
 
             {!publicLobbiesLoading && publicLobbies.length === 0 && !publicLobbiesError && (
               <p className="mt-4 text-sm text-zinc-500">
-                No public lobbies available on the selected server right now.
+                <Trans>No public lobbies available on the selected server right now.</Trans>
               </p>
             )}
           </section>
 
           <section className="animate-entrance rounded-3xl border border-cyan-400/20 bg-zinc-950/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-extrabold tracking-tight text-cyan-100">Host a Lobby</h2>
+            <h2 className="text-xl font-extrabold tracking-tight text-cyan-100">
+              <Trans>Host a Lobby</Trans>
+            </h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Start a lobby with the current playlist, then share the invite code or advertise
-              publicly.
+              <Trans>
+                Start a lobby with the current playlist, then share the invite code or advertise
+                publicly.
+              </Trans>
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  Lobby Name
+                  <Trans>Lobby Name</Trans>
                 </label>
                 <input
                   className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm font-semibold text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
@@ -1038,19 +1054,19 @@ function MultiplayerRoute() {
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  Playlist
+                  <Trans>Playlist</Trans>
                 </label>
                 <GameDropdown
                   value={selectedPlaylistId}
                   disabled={!hasPlayablePlaylist}
                   options={[
                     ...(!hasPlayablePlaylist
-                      ? [{ value: "" as string, label: "No playlists available" }]
+                      ? [{ value: "" as string, label: t`No playlists available` }]
                       : []),
                     ...availablePlaylists.map((playlist: { id: string; name: string }) => ({
                       value: playlist.id,
                       label:
-                        playlist.name + (playlist.id === activePlaylist?.id ? " (Active)" : ""),
+                        playlist.name + (playlist.id === activePlaylist?.id ? t` (Active)` : ""),
                     })),
                   ]}
                   onChange={(value) => setSelectedPlaylistId(value)}
@@ -1060,7 +1076,10 @@ function MultiplayerRoute() {
 
             {hasPlayablePlaylist && selectedPlaylist && (
               <p className="mt-3 text-xs text-zinc-400">
-                {selectedPlaylist.name} requires {selectedPlaylistRequiredRounds} installed rounds.
+                <Trans>
+                  {selectedPlaylist.name} requires {selectedPlaylistRequiredRounds} installed
+                  rounds.
+                </Trans>
               </p>
             )}
 
@@ -1072,7 +1091,7 @@ function MultiplayerRoute() {
                   checked={allowLateJoin}
                   onChange={(event) => setAllowLateJoin(event.target.checked)}
                 />
-                Allow late join
+                <Trans>Allow late join</Trans>
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
                 <input
@@ -1081,13 +1100,15 @@ function MultiplayerRoute() {
                   checked={advertisePublicly}
                   onChange={(event) => setAdvertisePublicly(event.target.checked)}
                 />
-                Advertise on Public List
+                <Trans>Advertise on Public List</Trans>
               </label>
             </div>
 
             {!hasPlayablePlaylist && (
               <p className="mt-3 text-xs text-amber-200">
-                Create a playlist in the playlist workshop or map editor before hosting a lobby.
+                <Trans>
+                  Create a playlist in the playlist workshop or map editor before hosting a lobby.
+                </Trans>
               </p>
             )}
 
@@ -1102,10 +1123,10 @@ function MultiplayerRoute() {
               }}
             >
               {createPending
-                ? "Initializing..."
+                ? t`Initializing...`
                 : authBootstrapPending
-                  ? "Preparing Account..."
-                  : "Create Lobby"}
+                  ? t`Preparing Account...`
+                  : t`Create Lobby`}
             </button>
             {createDisabledReason && (
               <p className="mt-3 text-xs text-zinc-400">{createDisabledReason}</p>
@@ -1116,9 +1137,13 @@ function MultiplayerRoute() {
           <section className="animate-entrance rounded-3xl border border-purple-400/15 bg-zinc-950/55 p-6 backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Advanced</h2>
+                <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+                  <Trans>Advanced</Trans>
+                </h2>
                 <p className="mt-0.5 text-xs text-zinc-400">
-                  Server management and self-hosted setup. Keep this closed unless needed.
+                  <Trans>
+                    Server management and self-hosted setup. Keep this closed unless needed.
+                  </Trans>
                 </p>
               </div>
               <button
@@ -1127,7 +1152,7 @@ function MultiplayerRoute() {
                 className={`${actionButtonClass} border-white/20 bg-black/30 hover:border-white/40`}
                 aria-expanded={advancedOpen}
               >
-                {advancedOpen ? "Hide Advanced" : "Show Advanced"}
+                {advancedOpen ? t`Hide Advanced` : t`Show Advanced`}
               </button>
             </div>
 
@@ -1136,18 +1161,18 @@ function MultiplayerRoute() {
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
                   <div>
                     <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                      Active Server
+                      <Trans>Active Server</Trans>
                     </span>
                     <GameDropdown
                       value={selectedServerId}
                       disabled={!hasServerProfiles}
                       options={[
                         ...(!hasServerProfiles
-                          ? [{ value: "" as string, label: "No servers saved" }]
+                          ? [{ value: "" as string, label: t`No servers saved` }]
                           : []),
                         ...serverProfiles.map((profile) => ({
                           value: profile.id,
-                          label: profile.name + (profile.isDefault ? " (Default)" : ""),
+                          label: profile.name + (profile.isDefault ? t` (Default)` : ""),
                         })),
                       ]}
                       onChange={(nextServerId) => {
@@ -1173,7 +1198,7 @@ function MultiplayerRoute() {
                             loadServerIntoEditor(selectedServer);
                           }}
                         >
-                          Load Into Editor
+                          <Trans>Load Into Editor</Trans>
                         </button>
                       )}
                       <button
@@ -1181,7 +1206,7 @@ function MultiplayerRoute() {
                         className={`${actionButtonClass} border-sky-300/45 bg-sky-500/15 text-sky-100 hover:border-sky-300/70`}
                         onClick={resetServerEditor}
                       >
-                        New Endpoint
+                        <Trans>New Endpoint</Trans>
                       </button>
                       {!selectedServer?.isDefault && (
                         <button
@@ -1202,13 +1227,13 @@ function MultiplayerRoute() {
                                 setError(
                                   removeError instanceof Error
                                     ? removeError.message
-                                    : "Failed to remove server profile."
+                                    : t`Failed to remove server profile.`
                                 );
                               }
                             })();
                           }}
                         >
-                          Remove Selected
+                          <Trans>Remove Selected</Trans>
                         </button>
                       )}
                     </div>
@@ -1216,71 +1241,73 @@ function MultiplayerRoute() {
 
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                      Selected Endpoint
+                      <Trans>Selected Endpoint</Trans>
                     </p>
                     <p className="mt-1.5 break-all rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-xs text-zinc-300">
                       {selectedServerEndpointLabel}
                     </p>
                     <p className="mt-2 text-xs text-zinc-400">
-                      Server name:{" "}
-                      <span className="text-zinc-200">
-                        {selectedServer?.name ?? "None selected"}
-                      </span>
+                      <Trans>
+                        Server name:{" "}
+                        <span className="text-zinc-200">
+                          {selectedServer?.name ?? t`None selected`}
+                        </span>
+                      </Trans>
                     </p>
                     {selectedServer?.isBuiltIn && (
                       <p className="mt-1 text-xs text-zinc-500">
-                        Built-in server credentials stay hidden and cannot be edited.
+                        <Trans>Built-in server credentials stay hidden and cannot be edited.</Trans>
                       </p>
                     )}
                   </div>
                 </div>
 
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  Endpoint Editor
+                  <Trans>Endpoint Editor</Trans>
                   {" · "}
                   <span className="font-normal text-zinc-500">
                     {editingServer
-                      ? `Editing ${editingServer.name}`
-                      : "Create a new custom endpoint"}
+                      ? t`Editing ${editingServer.name}`
+                      : t`Create a new custom endpoint`}
                   </span>
                 </p>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                    Server Name
+                    <Trans>Server Name</Trans>
                     <input
                       className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
                       value={newServerName}
                       onChange={(event) => setNewServerName(event.target.value)}
-                      placeholder="My Private Server"
+                      placeholder={t`My Private Server`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                    Supabase URL
+                    <Trans>Supabase URL</Trans>
                     <input
                       className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
                       value={newServerUrl}
                       onChange={(event) => setNewServerUrl(event.target.value)}
-                      placeholder="https://project.supabase.co"
+                      placeholder={t`https://project.supabase.co`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                    Anon Key
+                    <Trans>Anon Key</Trans>
                     <input
                       className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
                       value={newServerAnonKey}
                       onChange={(event) => setNewServerAnonKey(event.target.value)}
-                      placeholder="ey..."
+                      placeholder={t`ey...`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                    Auth Requirement
+                    <Trans>Auth Requirement</Trans>
                     <GameDropdown
                       value={editingAuthRequirement}
                       options={[
-                        { value: "anonymous_only", label: "Anonymous (Default)" },
-                        { value: "discord_required", label: "Discord Required" },
-                        { value: "email_password_required", label: "Email Required" },
+                        { value: "anonymous_only", label: t`Anonymous (Default)` },
+                        { value: "discord_required", label: t`Discord Required` },
+                        { value: "email_password_required", label: t`Email Required` },
                       ]}
                       onChange={(value) =>
                         setEditingAuthRequirement(value as MultiplayerAuthRequirement)
@@ -1298,7 +1325,7 @@ function MultiplayerRoute() {
                         try {
                           const saved = await saveMultiplayerServerProfile({
                             id: editingServer?.id,
-                            name: newServerName.trim() || "Custom Server",
+                            name: newServerName.trim() || t`Custom Server`,
                             url: newServerUrl.trim(),
                             anonKey: newServerAnonKey.trim(),
                             authRequirement: editingAuthRequirement,
@@ -1316,13 +1343,13 @@ function MultiplayerRoute() {
                           setError(
                             saveError instanceof Error
                               ? saveError.message
-                              : "Failed to save server profile."
+                              : t`Failed to save server profile.`
                           );
                         }
                       })();
                     }}
                   >
-                    {editingServer ? "Update Endpoint" : "Save Endpoint"}
+                    {editingServer ? t`Update Endpoint` : t`Save Endpoint`}
                   </button>
                   <button
                     type="button"
@@ -1331,7 +1358,7 @@ function MultiplayerRoute() {
                       void (async () => {
                         try {
                           const saved = await saveMultiplayerServerProfile({
-                            name: newServerName.trim() || "Custom Server",
+                            name: newServerName.trim() || t`Custom Server`,
                             url: newServerUrl.trim(),
                             anonKey: newServerAnonKey.trim(),
                             authRequirement: editingAuthRequirement,
@@ -1347,20 +1374,20 @@ function MultiplayerRoute() {
                           setError(
                             saveError instanceof Error
                               ? saveError.message
-                              : "Failed to save server profile."
+                              : t`Failed to save server profile.`
                           );
                         }
                       })();
                     }}
                   >
-                    Save as New
+                    <Trans>Save as New</Trans>
                   </button>
                   <button
                     type="button"
                     className={`${actionButtonClass} border-white/20 bg-black/30 hover:border-white/40`}
                     onClick={resetServerEditor}
                   >
-                    Clear Editor
+                    <Trans>Clear Editor</Trans>
                   </button>
                 </div>
               </div>

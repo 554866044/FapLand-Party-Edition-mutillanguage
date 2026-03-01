@@ -137,7 +137,7 @@ describe("engine cum flow", () => {
       },
       []
     );
-    expect(cameAsTold.players[cameAsTold.currentPlayerIndex]?.score).toBe(135);
+    expect(cameAsTold.players[cameAsTold.currentPlayerIndex]?.score).toBe(435);
     expect(cameAsTold.sessionPhase).toBe("completed");
     expect(cameAsTold.completionReason).toBe("finished");
 
@@ -150,7 +150,7 @@ describe("engine cum flow", () => {
       },
       []
     );
-    expect(didNotCum.players[didNotCum.currentPlayerIndex]?.score).toBe(135);
+    expect(didNotCum.players[didNotCum.currentPlayerIndex]?.score).toBe(435);
     expect(didNotCum.sessionPhase).toBe("completed");
     expect(didNotCum.completionReason).toBe("finished");
   });

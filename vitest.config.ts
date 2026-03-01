@@ -6,5 +6,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     exclude: ["**/.direnv/**", "**/node_modules/**", "**/dist/**", "**/dist-electron/**"],
+    setupFiles: ["./test/setupTests.ts"],
   },
 });

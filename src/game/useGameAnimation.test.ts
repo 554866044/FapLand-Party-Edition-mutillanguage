@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createInitialGameState } from "./engine";
 import { getSinglePlayerPerkPool } from "./data/perks";
-import type { GameConfig, GameState } from "./types";
+import type { GameConfig, GameState, PendingPerkSelection } from "./types";
 import {
   CUM_ROUND_COUNTDOWN_DURATION,
   NORMAL_ROUND_COUNTDOWN_DURATION,
@@ -118,6 +118,33 @@ function makePerkConfig(): GameConfig {
   };
 }
 
+function withPendingPerkSelection(state: GameState): GameState {
+  const perk = getSinglePlayerPerkPool()[0];
+  const player = state.players[state.currentPlayerIndex];
+  if (!perk || !player) {
+    throw new Error("Missing perk fixture for pending selection test.");
+  }
+
+  const pendingPerkSelection: PendingPerkSelection = {
+    playerId: player.id,
+    fromFieldId: "perk-1",
+    options: [perk],
+  };
+
+  return {
+    ...state,
+    turn: 2,
+    lastRoll: 1,
+    pendingPerkSelection,
+    activeRound: null,
+    queuedRound: null,
+    pendingPathChoice: null,
+    players: state.players.map((entry) =>
+      entry.id === player.id ? { ...entry, money: 999 } : entry
+    ),
+  };
+}
+
 describe("useGameAnimation", () => {
   it("resolves countdown duration by round type", () => {
     expect(resolveRoundCountdownDuration(null)).toBe(NORMAL_ROUND_COUNTDOWN_DURATION);
@@ -163,7 +190,7 @@ describe("useGameAnimation", () => {
     expect(result.current.state.queuedRound).toBeNull();
   });
 
-  it("does not auto-skip or replace a pending perk selection during perk reveal", () => {
+  it("auto-skips a pending perk selection and rolls the dice when the timer runs out", () => {
     const initialState = createInitialGameState(makePerkConfig());
     const { result } = renderHook(() => useGameAnimation(initialState, []));
 
@@ -172,30 +199,84 @@ describe("useGameAnimation", () => {
     });
 
     act(() => {
+      // Processes rollingDice, returns diceResultReveal
       result.current.tickAnim(2);
     });
 
     act(() => {
-      result.current.tickAnim(1);
+      // Processes diceResultReveal, returns movingToken
+      result.current.tickAnim(2);
     });
 
     act(() => {
-      result.current.tickAnim(1);
+      // Processes movingToken, returns perkReveal
+      result.current.tickAnim(2);
     });
 
     expect(result.current.animPhase.kind).toBe("perkReveal");
-    expect(result.current.state.pendingPerkSelection).not.toBeNull();
-    const initialOptions = result.current.state.pendingPerkSelection?.options.map((option) => option.id);
 
     act(() => {
+      // Processes perkReveal timeout, returns rollingDice
       result.current.tickAnim(2);
     });
 
-    expect(result.current.state.pendingPerkSelection).not.toBeNull();
-    expect(result.current.state.pendingPerkSelection?.options.map((option) => option.id)).toEqual(
-      initialOptions
-    );
-    expect(result.current.state.turn).toBe(1);
-    expect(result.current.state.lastRoll).toBe(1);
+    expect(result.current.animPhase.kind).toBe("rollingDice");
+    expect(result.current.state.pendingPerkSelection).toBeNull();
+    expect(result.current.state.log[0]).toContain("Perk selection timed out");
+  });
+
+  it("returns to idle and allows rolling after buying a post-round perk", () => {
+    const initialState = withPendingPerkSelection(createInitialGameState(makePerkConfig()));
+    const perkId = initialState.pendingPerkSelection?.options[0]?.id;
+    if (!perkId) {
+      throw new Error("Expected pending perk selection option.");
+    }
+    const { result } = renderHook(() => useGameAnimation(initialState, []));
+
+    act(() => {
+      result.current.handleSelectPerk(perkId, { applyDirectly: true });
+    });
+
+    expect(result.current.state.pendingPerkSelection).toBeNull();
+    expect(result.current.animPhase.kind).toBe("idle");
+
+    act(() => {
+      result.current.handleRoll();
+    });
+
+    expect(result.current.animPhase.kind).toBe("rollingDice");
+  });
+
+  it("returns to idle and allows rolling after skipping a post-round perk", () => {
+    const initialState = withPendingPerkSelection(createInitialGameState(makePerkConfig()));
+    const { result } = renderHook(() => useGameAnimation(initialState, []));
+
+    act(() => {
+      result.current.handleSkipPerk();
+    });
+
+    expect(result.current.state.pendingPerkSelection).toBeNull();
+    expect(result.current.animPhase.kind).toBe("idle");
+
+    act(() => {
+      result.current.handleRoll();
+    });
+
+    expect(result.current.animPhase.kind).toBe("rollingDice");
+  });
+
+  it("does not remain in perk reveal after selecting a post-round perk", () => {
+    const initialState = withPendingPerkSelection(createInitialGameState(makePerkConfig()));
+    const perkId = initialState.pendingPerkSelection?.options[0]?.id;
+    if (!perkId) {
+      throw new Error("Expected pending perk selection option.");
+    }
+    const { result } = renderHook(() => useGameAnimation(initialState, []));
+
+    act(() => {
+      result.current.handleSelectPerk(perkId, { applyDirectly: true });
+    });
+
+    expect(result.current.animPhase.kind).not.toBe("perkReveal");
   });
 });

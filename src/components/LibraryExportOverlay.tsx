@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef } from "react";
 import { useControllerSurface } from "../controller";
 import type { LibraryExportPackageStatus } from "../services/db";
@@ -47,13 +48,16 @@ export function LibraryExportOverlay({
   onAbort: () => void;
 }) {
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const { t } = useLingui();
   const completed = status?.progress.completed ?? 0;
   const total = status?.progress.total ?? 0;
   const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((completed / total) * 100))) : 0;
   const compression = status?.compression ?? null;
   const transcodePercent = Math.round((compression?.liveProgress.percent ?? 0) * 100);
   const transcodeEtaSeconds = compression?.liveProgress.etaSecondsRemaining ?? null;
-  const transcodeCompletedLabel = formatMediaDuration(compression?.liveProgress.completedDurationMs ?? 0);
+  const transcodeCompletedLabel = formatMediaDuration(
+    compression?.liveProgress.completedDurationMs ?? 0
+  );
   const transcodeTotalLabel = formatMediaDuration(compression?.liveProgress.totalDurationMs ?? 0);
 
   useControllerSurface({
@@ -77,19 +81,24 @@ export function LibraryExportOverlay({
           <div className="flex-1 space-y-4">
             <div>
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.32em] text-cyan-200/85">
-                Library Export Running
+                <Trans>Library Export Running</Trans>
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-50">
-                Building the library package.
+                <Trans>Building the library package.</Trans>
               </h2>
               <p className="mt-3 text-sm leading-6 text-zinc-300">
-                This export is blocking. Videos, sidecars, and attached funscripts are being copied, downloaded, compressed, and written into the package.
+                <Trans>
+                  This export is blocking. Videos, sidecars, and attached funscripts are being
+                  copied, downloaded, compressed, and written into the package.
+                </Trans>
               </p>
             </div>
 
             <div className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
               <div className="flex items-center justify-between gap-3 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100">
-                <span>Progress</span>
+                <span>
+                  <Trans>Progress</Trans>
+                </span>
                 <span>{percent}%</span>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/40">
@@ -99,31 +108,39 @@ export function LibraryExportOverlay({
                 />
               </div>
               <p className="mt-3 text-sm text-zinc-100">
-                {completed} / {total || "?"} steps completed
+                {t`${completed} / ${total || "?"} steps completed`}
               </p>
               <p className="mt-2 text-sm text-zinc-300">
-                {status?.lastMessage ?? "Preparing export package..."}
+                {status?.lastMessage ?? t`Preparing export package...`}
               </p>
               <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">
-                Phase: {status?.phase ?? "idle"}
+                {t`Phase: ${status?.phase ?? "idle"}`}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 rounded-2xl border border-zinc-700/70 bg-black/25 p-4 text-sm text-zinc-200 sm:grid-cols-4">
               <div>
-                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Heroes</p>
+                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <Trans>Heroes</Trans>
+                </p>
                 <p className="mt-1 text-zinc-50">{status?.stats.heroFiles ?? 0}</p>
               </div>
               <div>
-                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Standalone</p>
+                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <Trans>Standalone</Trans>
+                </p>
                 <p className="mt-1 text-zinc-50">{status?.stats.roundFiles ?? 0}</p>
               </div>
               <div>
-                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Videos</p>
+                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <Trans>Videos</Trans>
+                </p>
                 <p className="mt-1 text-zinc-50">{status?.stats.videoFiles ?? 0}</p>
               </div>
               <div>
-                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Scripts</p>
+                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <Trans>Scripts</Trans>
+                </p>
                 <p className="mt-1 text-zinc-50">{status?.stats.funscriptFiles ?? 0}</p>
               </div>
             </div>
@@ -132,16 +149,19 @@ export function LibraryExportOverlay({
               <div className="rounded-2xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-zinc-200">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-amber-100">
-                    AV1 Compression
+                    <Trans>AV1 Compression</Trans>
                   </p>
                   <p className="rounded-full border border-amber-200/35 bg-amber-400/10 px-3 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-amber-100">
-                    {compression.encoderKind ?? "unknown"} {compression.encoderName ?? "encoder"} · {compression.strength}%
+                    {compression.encoderKind ?? "unknown"} {compression.encoderName ?? "encoder"} ·{" "}
+                    {compression.strength}%
                   </p>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <div className="sm:col-span-3 rounded-2xl border border-amber-200/15 bg-black/20 p-3">
                     <div className="flex items-center justify-between gap-3 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100/90">
-                      <span>Transcoding Progress</span>
+                      <span>
+                        <Trans>Transcoding Progress</Trans>
+                      </span>
                       <span>{transcodePercent}%</span>
                     </div>
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/40">
@@ -151,33 +171,57 @@ export function LibraryExportOverlay({
                       />
                     </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-200">
-                      <span>{transcodeCompletedLabel} / {transcodeTotalLabel} encoded</span>
-                      <span>{transcodeEtaSeconds === null ? "ETA calibrating..." : `${formatDurationEstimate(transcodeEtaSeconds)} remaining`}</span>
+                      <span>{t`${transcodeCompletedLabel} / ${transcodeTotalLabel} encoded`}</span>
+                      <span>
+                        {transcodeEtaSeconds === null
+                          ? t`ETA calibrating...`
+                          : t`${formatDurationEstimate(transcodeEtaSeconds)} remaining`}
+                      </span>
                     </div>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Reencoded</p>
-                    <p className="mt-1 text-zinc-50">{compression.reencodedCompleted} / {compression.reencodedTotal}</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Reencoded</Trans>
+                    </p>
+                    <p className="mt-1 text-zinc-50">
+                      {compression.reencodedCompleted} / {compression.reencodedTotal}
+                    </p>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Already AV1</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Already AV1</Trans>
+                    </p>
                     <p className="mt-1 text-zinc-50">{compression.alreadyAv1Copied}</p>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Active Jobs</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Active Jobs</Trans>
+                    </p>
                     <p className="mt-1 text-zinc-50">{compression.activeJobs}</p>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Expected Size</p>
-                    <p className="mt-1 text-zinc-50">{formatByteSize(compression.expectedVideoBytes)}</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Expected Size</Trans>
+                    </p>
+                    <p className="mt-1 text-zinc-50">
+                      {formatByteSize(compression.expectedVideoBytes)}
+                    </p>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Est. Encode Time</p>
-                    <p className="mt-1 text-zinc-50">{formatDurationEstimate(compression.estimatedCompressionSeconds)}</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Est. Encode Time</Trans>
+                    </p>
+                    <p className="mt-1 text-zinc-50">
+                      {formatDurationEstimate(compression.estimatedCompressionSeconds)}
+                    </p>
                   </div>
                   <div>
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">Estimate</p>
-                    <p className="mt-1 text-zinc-50">{compression.approximate ? "Approximate" : "Measured"}</p>
+                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                      <Trans>Estimate</Trans>
+                    </p>
+                    <p className="mt-1 text-zinc-50">
+                      {compression.approximate ? t`Approximate` : t`Measured`}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -196,7 +240,7 @@ export function LibraryExportOverlay({
                 data-controller-focus-id="library-export-abort"
                 data-controller-initial="true"
               >
-                {aborting ? "Aborting..." : "Abort Export"}
+                {aborting ? t`Aborting...` : t`Abort Export`}
               </button>
             </div>
           </div>

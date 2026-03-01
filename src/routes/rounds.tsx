@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   memo,
@@ -49,7 +50,7 @@ import { buildRoundRenderRowsWithOptions, type RoundRenderRow } from "./roundRow
 import {
   buildAggregateDownloadProgress,
   buildDownloadProgressByUri,
-  buildPlaylistsByRoundId,
+  buildPlaylistGroupingData,
   buildSourceHeroOptions,
   filterAndSortRounds,
   toIndexedRound,
@@ -65,7 +66,6 @@ import { formatDurationLabel, getRoundDurationSec } from "../utils/duration";
 import { abbreviateNsfwText } from "../utils/sfwText";
 import { VirtualizedRoundLibraryGrid } from "../features/library/components/VirtualizedRoundLibraryGrid";
 import {
-  buildPlaylistWebsiteCacheSummary,
   getInstalledRoundWebsiteVideoCacheStatus,
 } from "../features/webVideo/cacheStatus";
 import {
@@ -207,6 +207,7 @@ const InstallScanStatusBadge = memo(function InstallScanStatusBadge({
 }: {
   status: InstallScanStatus;
 }) {
+  const { t } = useLingui();
   const tone =
     status.state === "running"
       ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100"
@@ -223,15 +224,15 @@ const InstallScanStatusBadge = memo(function InstallScanStatusBadge({
   const progressText =
     total > 0 && status.state === "running" ? ` (${Math.round((processed / total) * 100)}%)` : "";
 
-  const summary = `${stats.installed} rounds / ${stats.playlistsImported} playlists / ${stats.updated} updated / ${stats.failed} failed${progressText}`;
+  const summary = t`${stats.installed} rounds / ${stats.playlistsImported} playlists / ${stats.updated} updated / ${stats.failed} failed${progressText}`;
   const label =
     status.state === "running"
-      ? `Scan running (${summary})`
+      ? t`Scan running (${summary})`
       : status.state === "aborted"
-        ? `Scan aborted (${summary})`
+        ? t`Scan aborted (${summary})`
         : status.state === "error"
-          ? `Scan error (${summary})`
-          : `Last scan done (${summary})`;
+          ? t`Scan error (${summary})`
+          : t`Last scan done (${summary})`;
 
   return (
     <div
@@ -291,7 +292,7 @@ const RoundsLibraryStatusPoller = memo(
     if (!scanStatus) {
       return (
         <div className="rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-emerald-100">
-          Library Idle
+          <Trans>Library Idle</Trans>
         </div>
       );
     }
@@ -335,6 +336,7 @@ const LibraryLastMessage = memo(() => {
 LibraryLastMessage.displayName = "LibraryLastMessage";
 
 const LibraryTransferStats = memo(() => {
+  const { t } = useLingui();
   const [scanStatus, setScanStatus] = useState<InstallScanStatus | null>(null);
 
   useEffect(() => {
@@ -360,11 +362,14 @@ const LibraryTransferStats = memo(() => {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-            Transfer Guidance
+            <Trans>Transfer Guidance</Trans>
           </h3>
           <p className="mt-1 text-sm text-zinc-300">
-            Keep the flow predictable: install from folders for bulk local content, use safe exports
-            for portability, and only include URIs when the receiving machine expects them.
+            <Trans>
+              Keep the flow predictable: install from folders for bulk local content, use safe
+              exports for portability, and only include URIs when the receiving machine expects
+              them.
+            </Trans>
           </p>
         </div>
         {scanStatus && <InstallScanStatusBadge status={scanStatus} />}
@@ -372,10 +377,10 @@ const LibraryTransferStats = memo(() => {
       <InlineMetrics
         className="mt-4"
         metrics={[
-          { label: "Folders", value: scanStatus?.stats.scannedFolders ?? 0, tone: "violet" },
-          { label: "Installed", value: scanStatus?.stats.installed ?? 0, tone: "emerald" },
-          { label: "Playlists", value: scanStatus?.stats.playlistsImported ?? 0, tone: "cyan" },
-          { label: "Failed", value: scanStatus?.stats.failed ?? 0, tone: "amber" },
+          { label: t`Folders`, value: scanStatus?.stats.scannedFolders ?? 0, tone: "violet" },
+          { label: t`Installed`, value: scanStatus?.stats.installed ?? 0, tone: "emerald" },
+          { label: t`Playlists`, value: scanStatus?.stats.playlistsImported ?? 0, tone: "cyan" },
+          { label: t`Failed`, value: scanStatus?.stats.failed ?? 0, tone: "amber" },
         ]}
       />
     </>
@@ -391,7 +396,9 @@ function createAsyncResource<T>(data: T): AsyncResource<T> {
 }
 
 function LoadingPillSkeleton() {
-  return <span className="inline-flex h-7 w-24 animate-pulse rounded-xl border border-zinc-700/80 bg-zinc-900/70" />;
+  return (
+    <span className="inline-flex h-7 w-24 animate-pulse rounded-xl border border-zinc-700/80 bg-zinc-900/70" />
+  );
 }
 
 function RoundsLibraryMetricsSkeleton() {
@@ -460,7 +467,7 @@ function RoundsLibraryGridSkeleton({ refreshing = false }: { refreshing?: boolea
         </div>
         {refreshing ? (
           <div className="rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-cyan-100">
-            Refreshing library...
+            <Trans>Refreshing library...</Trans>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -501,6 +508,7 @@ function LibraryErrorState({
   onHoverSfx: () => void;
   onSelectSfx: () => void;
 }) {
+  const { t } = useLingui();
   return (
     <section
       className="animate-entrance rounded-3xl border border-rose-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
@@ -508,12 +516,12 @@ function LibraryErrorState({
     >
       <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-8 text-center">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-sm uppercase tracking-[0.28em] text-rose-200">
-          Failed to load installed rounds
+          <Trans>Failed to load installed rounds</Trans>
         </p>
         <p className="mt-3 text-sm text-zinc-300">{message}</p>
         <div className="mt-5 flex justify-center">
           <RoundActionButton
-            label="Retry"
+            label={t`Retry`}
             tone="rose"
             onHover={onHoverSfx}
             onClick={() => {
@@ -692,7 +700,8 @@ const getInstalledRounds = async (
 
 const getAvailablePlaylists = async (): Promise<StoredPlaylist[]> => playlists.list();
 
-const getDisabledRoundIds = async (): Promise<Set<string>> => new Set(await db.round.getDisabledIds());
+const getDisabledRoundIds = async (): Promise<Set<string>> =>
+  new Set(await db.round.getDisabledIds());
 
 const getIntermediaryLoadingPrompt = async (): Promise<string> => {
   try {
@@ -766,36 +775,39 @@ export const Route = createFileRoute("/rounds")({
 });
 
 export function InstalledRoundsPage() {
+  const { t } = useLingui();
   const search = Route.useSearch();
   const sfwMode = useSfwMode();
   const { showToast } = useToast();
   const [deleteRoundDialog, setDeleteRoundDialog] = useState<DeleteRoundDialogState | null>(null);
   const [deleteHeroDialog, setDeleteHeroDialog] = useState<DeleteHeroDialogState | null>(null);
   const [showDisabledRounds, setShowDisabledRounds] = useState(false);
-  const [roundsResource, setRoundsResource] = useState<AsyncResource<InstalledRound[]>>(
-    () => createAsyncResource<InstalledRound[]>([])
+  const [roundsResource, setRoundsResource] = useState<AsyncResource<InstalledRound[]>>(() =>
+    createAsyncResource<InstalledRound[]>([])
   );
-  const [playlistsResource, setPlaylistsResource] = useState<AsyncResource<StoredPlaylist[]>>(
-    () => createAsyncResource<StoredPlaylist[]>([])
+  const [playlistsResource, setPlaylistsResource] = useState<AsyncResource<StoredPlaylist[]>>(() =>
+    createAsyncResource<StoredPlaylist[]>([])
   );
-  const [disabledIdsResource, setDisabledIdsResource] = useState<AsyncResource<Set<string>>>(
-    () => createAsyncResource<Set<string>>(new Set())
+  const [disabledIdsResource, setDisabledIdsResource] = useState<AsyncResource<Set<string>>>(() =>
+    createAsyncResource<Set<string>>(new Set())
   );
-  const [previewSettingsResource, setPreviewSettingsResource] = useState<AsyncResource<PreviewSettings>>(
-    () =>
-      createAsyncResource<PreviewSettings>({
-        intermediaryLoadingPrompt: DEFAULT_INTERMEDIARY_LOADING_PROMPT,
-        intermediaryLoadingDurationSec: DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC,
-        intermediaryReturnPauseSec: DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC,
-        roundProgressBarAlwaysVisible: DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
-      })
+  const [previewSettingsResource, setPreviewSettingsResource] = useState<
+    AsyncResource<PreviewSettings>
+  >(() =>
+    createAsyncResource<PreviewSettings>({
+      intermediaryLoadingPrompt: DEFAULT_INTERMEDIARY_LOADING_PROMPT,
+      intermediaryLoadingDurationSec: DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC,
+      intermediaryReturnPauseSec: DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC,
+      roundProgressBarAlwaysVisible: DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+    })
   );
-  const [webInstallSettingsResource, setWebInstallSettingsResource] =
-    useState<AsyncResource<WebInstallSettings>>(() =>
-      createAsyncResource<WebInstallSettings>({
-        installWebFunscriptUrlEnabled: DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
-      })
-    );
+  const [webInstallSettingsResource, setWebInstallSettingsResource] = useState<
+    AsyncResource<WebInstallSettings>
+  >(() =>
+    createAsyncResource<WebInstallSettings>({
+      installWebFunscriptUrlEnabled: DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
+    })
+  );
   const [controllerSupportEnabled, setControllerSupportEnabled] = useState(
     DEFAULT_CONTROLLER_SUPPORT_ENABLED
   );
@@ -857,7 +869,8 @@ export function InstalledRoundsPage() {
   const availablePlaylists = playlistsResource.data;
   const disabledRoundIds = disabledIdsResource.data;
   const intermediaryLoadingPrompt = previewSettingsResource.data.intermediaryLoadingPrompt;
-  const intermediaryLoadingDurationSec = previewSettingsResource.data.intermediaryLoadingDurationSec;
+  const intermediaryLoadingDurationSec =
+    previewSettingsResource.data.intermediaryLoadingDurationSec;
   const intermediaryReturnPauseSec = previewSettingsResource.data.intermediaryReturnPauseSec;
   const roundProgressBarAlwaysVisible = previewSettingsResource.data.roundProgressBarAlwaysVisible;
   const installWebFunscriptUrlEnabled =
@@ -883,7 +896,7 @@ export function InstalledRoundsPage() {
               ? {
                   ...current,
                   result: null,
-                  error: "Export canceled.",
+                  error: t`Export canceled.`,
                 }
               : current
           );
@@ -892,7 +905,8 @@ export function InstalledRoundsPage() {
             current
               ? {
                   ...current,
-                  error: current.error ?? status.lastMessage ?? "Failed to export library package.",
+                  error:
+                    current.error ?? status.lastMessage ?? t`Failed to export library package.`,
                 }
               : current
           );
@@ -1010,7 +1024,7 @@ export function InstalledRoundsPage() {
         .catch((error) => {
           console.error("Error loading installed rounds", error);
           const message =
-            error instanceof Error ? error.message : "Failed to load installed rounds.";
+            error instanceof Error ? error.message : t`Failed to load installed rounds.`;
           setRoundsResource((current) => ({
             status: "error",
             data: current.hasLoadedOnce ? current.data : [],
@@ -1061,7 +1075,7 @@ export function InstalledRoundsPage() {
         .catch((error) => {
           console.error("Error loading disabled round IDs", error);
           const message =
-            error instanceof Error ? error.message : "Failed to load disabled round IDs.";
+            error instanceof Error ? error.message : t`Failed to load disabled round IDs.`;
           setDisabledIdsResource((current) => ({
             status: "error",
             data: current.hasLoadedOnce ? current.data : new Set<string>(),
@@ -1109,7 +1123,7 @@ export function InstalledRoundsPage() {
         })
         .catch((error) => {
           console.error("Error loading playlists", error);
-          const message = error instanceof Error ? error.message : "Failed to load playlists.";
+          const message = error instanceof Error ? error.message : t`Failed to load playlists.`;
           setPlaylistsResource((current) => ({
             status: "error",
             data: current.hasLoadedOnce ? current.data : [],
@@ -1130,69 +1144,72 @@ export function InstalledRoundsPage() {
     [playlistsResource.data, playlistsResource.hasLoadedOnce]
   );
 
-  const loadPreviewSettings = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
-    if (previewSettingsRequestRef.current && !force) {
-      return previewSettingsRequestRef.current;
-    }
-    if (!force && previewSettingsResource.hasLoadedOnce) {
-      return Promise.resolve(previewSettingsResource.data);
-    }
+  const loadPreviewSettings = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      if (previewSettingsRequestRef.current && !force) {
+        return previewSettingsRequestRef.current;
+      }
+      if (!force && previewSettingsResource.hasLoadedOnce) {
+        return Promise.resolve(previewSettingsResource.data);
+      }
 
-    setPreviewSettingsResource((current) => ({
-      ...current,
-      status: "loading",
-      error: null,
-    }));
+      setPreviewSettingsResource((current) => ({
+        ...current,
+        status: "loading",
+        error: null,
+      }));
 
-    const request = Promise.all([
-      getIntermediaryLoadingPrompt(),
-      getIntermediaryLoadingDurationSec(),
-      getIntermediaryReturnPauseSec(),
-      getRoundProgressBarAlwaysVisible(),
-    ])
-      .then(
-        ([
-          nextIntermediaryLoadingPrompt,
-          nextIntermediaryLoadingDurationSec,
-          nextIntermediaryReturnPauseSec,
-          nextRoundProgressBarAlwaysVisible,
-        ]) => {
-          const nextSettings = {
-            intermediaryLoadingPrompt: nextIntermediaryLoadingPrompt,
-            intermediaryLoadingDurationSec: nextIntermediaryLoadingDurationSec,
-            intermediaryReturnPauseSec: nextIntermediaryReturnPauseSec,
-            roundProgressBarAlwaysVisible: nextRoundProgressBarAlwaysVisible,
-          };
-          setPreviewSettingsResource({
-            status: "ready",
-            data: nextSettings,
-            error: null,
-            hasLoadedOnce: true,
-          });
-          return nextSettings;
-        }
-      )
-      .catch((error) => {
-        console.warn("Failed to load preview settings", error);
-        const message =
-          error instanceof Error ? error.message : "Failed to load preview settings.";
-        setPreviewSettingsResource((current) => ({
-          status: "error",
-          data: current.data,
-          error: message,
-          hasLoadedOnce: current.hasLoadedOnce,
-        }));
-        throw error;
-      })
-      .finally(() => {
-        if (previewSettingsRequestRef.current === request) {
-          previewSettingsRequestRef.current = null;
-        }
-      });
+      const request = Promise.all([
+        getIntermediaryLoadingPrompt(),
+        getIntermediaryLoadingDurationSec(),
+        getIntermediaryReturnPauseSec(),
+        getRoundProgressBarAlwaysVisible(),
+      ])
+        .then(
+          ([
+            nextIntermediaryLoadingPrompt,
+            nextIntermediaryLoadingDurationSec,
+            nextIntermediaryReturnPauseSec,
+            nextRoundProgressBarAlwaysVisible,
+          ]) => {
+            const nextSettings = {
+              intermediaryLoadingPrompt: nextIntermediaryLoadingPrompt,
+              intermediaryLoadingDurationSec: nextIntermediaryLoadingDurationSec,
+              intermediaryReturnPauseSec: nextIntermediaryReturnPauseSec,
+              roundProgressBarAlwaysVisible: nextRoundProgressBarAlwaysVisible,
+            };
+            setPreviewSettingsResource({
+              status: "ready",
+              data: nextSettings,
+              error: null,
+              hasLoadedOnce: true,
+            });
+            return nextSettings;
+          }
+        )
+        .catch((error) => {
+          console.warn("Failed to load preview settings", error);
+          const message =
+            error instanceof Error ? error.message : t`Failed to load preview settings.`;
+          setPreviewSettingsResource((current) => ({
+            status: "error",
+            data: current.data,
+            error: message,
+            hasLoadedOnce: current.hasLoadedOnce,
+          }));
+          throw error;
+        })
+        .finally(() => {
+          if (previewSettingsRequestRef.current === request) {
+            previewSettingsRequestRef.current = null;
+          }
+        });
 
-    previewSettingsRequestRef.current = request;
-    return request;
-  }, [previewSettingsResource.data, previewSettingsResource.hasLoadedOnce]);
+      previewSettingsRequestRef.current = request;
+      return request;
+    },
+    [previewSettingsResource.data, previewSettingsResource.hasLoadedOnce]
+  );
 
   const loadWebInstallSettings = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
@@ -1223,7 +1240,7 @@ export function InstalledRoundsPage() {
         .catch((error) => {
           console.warn("Failed to load web install settings", error);
           const message =
-            error instanceof Error ? error.message : "Failed to load web install settings.";
+            error instanceof Error ? error.message : t`Failed to load web install settings.`;
           setWebInstallSettingsResource((current) => ({
             status: "error",
             data: current.data,
@@ -1281,7 +1298,7 @@ export function InstalledRoundsPage() {
     if (!normalizedVideoUrl) {
       setWebsiteRoundVideoValidation({
         state: "unsupported",
-        message: "Enter a valid public http(s) website video URL.",
+        message: t`Enter a valid public http(s) website video URL.`,
       });
       return;
     }
@@ -1289,7 +1306,7 @@ export function InstalledRoundsPage() {
     const requestId = ++websiteRoundVideoValidationRequestIdRef.current;
     setWebsiteRoundVideoValidation({
       state: "checking",
-      message: "Checking website support...",
+      message: t`Checking website support...`,
     });
 
     const timeoutId = window.setTimeout(() => {
@@ -1304,7 +1321,7 @@ export function InstalledRoundsPage() {
           }
           setWebsiteRoundVideoValidation({
             state: "supported",
-            message: `Supported via ${sourceLabel}${titleSuffix}`,
+            message: t`Supported via ${sourceLabel}${titleSuffix}`,
           });
         })
         .catch((error) => {
@@ -1312,7 +1329,7 @@ export function InstalledRoundsPage() {
           setWebsiteRoundVideoValidation({
             state: "unsupported",
             message:
-              error instanceof Error ? error.message : "This website video URL is not supported.",
+              error instanceof Error ? error.message : t`This website video URL is not supported.`,
           });
         });
     }, 400);
@@ -1326,15 +1343,15 @@ export function InstalledRoundsPage() {
     () =>
       activePreviewRound
         ? {
-          fieldId: "preview-field",
-          nodeId: "preview-node",
-          roundId: activePreviewRound.id,
-          roundName: activePreviewRound.name,
-          selectionKind: "fixed",
-          poolId: null,
-          phaseKind: "normal",
-          campaignIndex: 1,
-        }
+            fieldId: "preview-field",
+            nodeId: "preview-node",
+            roundId: activePreviewRound.id,
+            roundName: activePreviewRound.name,
+            selectionKind: "fixed",
+            poolId: null,
+            phaseKind: "normal",
+            campaignIndex: 1,
+          }
         : null,
     [activePreviewRound]
   );
@@ -1396,14 +1413,27 @@ export function InstalledRoundsPage() {
   }, [loadInstalledRounds, roundsResource.hasLoadedOnce, showDisabledRounds]);
 
   useEffect(() => {
-    if (groupMode !== "playlist" || playlistsResource.hasLoadedOnce || playlistsResource.status === "loading") {
+    if (
+      groupMode !== "playlist" ||
+      playlistsResource.hasLoadedOnce ||
+      playlistsResource.status === "loading"
+    ) {
       return;
     }
     void loadAvailablePlaylists().catch(() => undefined);
-  }, [groupMode, loadAvailablePlaylists, playlistsResource.hasLoadedOnce, playlistsResource.status]);
+  }, [
+    groupMode,
+    loadAvailablePlaylists,
+    playlistsResource.hasLoadedOnce,
+    playlistsResource.status,
+  ]);
 
   useEffect(() => {
-    if (!activePreviewRound || previewSettingsResource.hasLoadedOnce || previewSettingsResource.status === "loading") {
+    if (
+      !activePreviewRound ||
+      previewSettingsResource.hasLoadedOnce ||
+      previewSettingsResource.status === "loading"
+    ) {
       return;
     }
     void loadPreviewSettings().catch(() => undefined);
@@ -1415,7 +1445,11 @@ export function InstalledRoundsPage() {
   ]);
 
   useEffect(() => {
-    if (!websiteRoundDialogOpen || webInstallSettingsResource.hasLoadedOnce || webInstallSettingsResource.status === "loading") {
+    if (
+      !websiteRoundDialogOpen ||
+      webInstallSettingsResource.hasLoadedOnce ||
+      webInstallSettingsResource.status === "loading"
+    ) {
       return;
     }
     void loadWebInstallSettings().catch(() => undefined);
@@ -1513,17 +1547,15 @@ export function InstalledRoundsPage() {
       }),
     [deferredQuery, indexedRounds, scriptFilter, sortMode, typeFilter]
   );
-  const playlistsByRoundId = useMemo(() => {
-    if (groupMode !== "playlist" || availablePlaylists.length === 0) return null;
-    return buildPlaylistsByRoundId(availablePlaylists, rounds);
-  }, [availablePlaylists, groupMode, rounds]);
-  const playlistWebsiteCacheSummaryById = useMemo(
+  const playlistGroupingData = useMemo(
     () =>
       groupMode === "playlist" && availablePlaylists.length > 0
-        ? buildPlaylistWebsiteCacheSummary(availablePlaylists, rounds)
-        : new Map(),
+        ? buildPlaylistGroupingData(availablePlaylists, rounds)
+        : null,
     [availablePlaylists, groupMode, rounds]
   );
+  const playlistsByRoundId = playlistGroupingData?.playlistsByRoundId ?? null;
+  const playlistWebsiteCacheSummaryById = playlistGroupingData?.cacheSummaryByPlaylistId ?? new Map();
   const activeSection =
     ROUND_SECTIONS.find((section) => section.id === activeSectionId) ?? ROUND_SECTIONS[0];
   const standaloneRoundCount = useMemo(
@@ -1559,17 +1591,17 @@ export function InstalledRoundsPage() {
   const scanRunning = isStartingScan || isLibraryScanning;
   const sortModeLabel =
     sortMode === "oldest"
-      ? "Oldest"
+      ? t`Oldest`
       : sortMode === "difficulty"
-        ? "Difficulty"
+        ? t`Difficulty`
         : sortMode === "bpm"
-          ? "BPM"
+          ? t`BPM`
           : sortMode === "length"
-            ? "Length"
+            ? t`Length`
             : sortMode === "name"
-              ? "Name"
-              : "Newest";
-  const groupModeLabel = groupMode === "playlist" ? "Playlist" : "Hero";
+              ? t`Name`
+              : t`Newest`;
+  const groupModeLabel = groupMode === "playlist" ? t`Playlist` : t`Hero`;
   const highestFilteredDifficulty = useMemo(
     () => filteredRounds.reduce((max, round) => Math.max(max, round.difficulty ?? 0), 0),
     [filteredRounds]
@@ -1609,7 +1641,8 @@ export function InstalledRoundsPage() {
     activeSectionId === "library" &&
     roundsResource.status === "error" &&
     !roundsResource.hasLoadedOnce;
-  const playlistGroupingLoading = groupMode === "playlist" && playlistsResource.status === "loading";
+  const playlistGroupingLoading =
+    groupMode === "playlist" && playlistsResource.status === "loading";
   const expandedGroupKeySet = useMemo(
     () => new Set(visibleGroupKeys.filter((groupKey) => Boolean(expandedHeroGroups[groupKey]))),
     [expandedHeroGroups, visibleGroupKeys]
@@ -1696,14 +1729,14 @@ export function InstalledRoundsPage() {
       setLegacyPlaylistReview(null);
       const inspection = await db.install.inspectFolder(folderPath);
       if (inspection.kind === "empty") {
-        showToast("No supported video files found in selected folder.", "error");
+        showToast(t`No supported video files found in selected folder.`, "error");
         return;
       }
 
       if (inspection.kind === "legacy") {
         setLegacyPlaylistReview({
           folderPath: inspection.folderPath,
-          playlistName: inspection.playlistNameHint.trim() || "Legacy Playlist",
+          playlistName: inspection.playlistNameHint.trim() || t`Legacy Playlist`,
           createPlaylist: true,
           deferPhash: true,
           creating: false,
@@ -1755,7 +1788,10 @@ export function InstalledRoundsPage() {
       }
     } catch (error) {
       console.error("Failed to import selected file", error);
-      showToast(error instanceof Error ? error.message : "Failed to import selected file.", "error");
+      showToast(
+        error instanceof Error ? error.message : t`Failed to import selected file.`,
+        "error"
+      );
     } finally {
       setShowInstallOverlay(false);
       setIsAbortingInstall(false);
@@ -1810,14 +1846,14 @@ export function InstalledRoundsPage() {
     setLegacyPlaylistReview((current) =>
       current
         ? {
-          ...current,
-          error: null,
-          slots: current.slots.map((slot) =>
-            slot.id === slotId
-              ? { ...slot, selectedAsCheckpoint: !slot.selectedAsCheckpoint }
-              : slot
-          ),
-        }
+            ...current,
+            error: null,
+            slots: current.slots.map((slot) =>
+              slot.id === slotId
+                ? { ...slot, selectedAsCheckpoint: !slot.selectedAsCheckpoint }
+                : slot
+            ),
+          }
         : null
     );
   };
@@ -1826,12 +1862,12 @@ export function InstalledRoundsPage() {
     setLegacyPlaylistReview((current) =>
       current
         ? {
-          ...current,
-          error: null,
-          slots: current.slots.map((slot) =>
-            slot.id === slotId ? { ...slot, excludedFromImport: !slot.excludedFromImport } : slot
-          ),
-        }
+            ...current,
+            error: null,
+            slots: current.slots.map((slot) =>
+              slot.id === slotId ? { ...slot, excludedFromImport: !slot.excludedFromImport } : slot
+            ),
+          }
         : null
     );
   };
@@ -1839,16 +1875,16 @@ export function InstalledRoundsPage() {
   const createLegacyPlaylist = async () => {
     if (!legacyPlaylistReview || legacyPlaylistReview.creating) return;
 
-    const playlistName = legacyPlaylistReview.playlistName.trim() || "Legacy Playlist";
+    const playlistName = legacyPlaylistReview.playlistName.trim() || t`Legacy Playlist`;
     const shouldCreatePlaylist = legacyPlaylistReview.createPlaylist;
     setLegacyPlaylistReview((current) =>
       current
         ? {
-          ...current,
-          playlistName,
-          creating: true,
-          error: null,
-        }
+            ...current,
+            playlistName,
+            creating: true,
+            error: null,
+          }
         : null
     );
 
@@ -1871,10 +1907,10 @@ export function InstalledRoundsPage() {
         setLegacyPlaylistReview((current) =>
           current
             ? {
-              ...current,
-              creating: false,
-              error: result.status.lastMessage ?? "Legacy import did not finish.",
-            }
+                ...current,
+                creating: false,
+                error: result.status.lastMessage ?? t`Legacy import did not finish.`,
+              }
             : null
         );
         return;
@@ -1893,10 +1929,10 @@ export function InstalledRoundsPage() {
       setLegacyPlaylistReview((current) =>
         current
           ? {
-            ...current,
-            creating: false,
-            error: error instanceof Error ? error.message : "Failed to create legacy playlist.",
-          }
+              ...current,
+              creating: false,
+              error: error instanceof Error ? error.message : t`Failed to create legacy playlist.`,
+            }
           : null
       );
     } finally {
@@ -1922,8 +1958,9 @@ export function InstalledRoundsPage() {
     if (!exportDialog || isExportingDatabase || isStartingScan || isLibraryScanning) return;
 
     try {
-      const directoryPath =
-        await window.electronAPI.dialog.selectPlaylistExportDirectory("Installed Library");
+      const directoryPath = await window.electronAPI.dialog.selectPlaylistExportDirectory(
+        t`Installed Library`
+      );
       if (!directoryPath) return;
 
       setIsExportingDatabase(true);
@@ -1936,7 +1973,7 @@ export function InstalledRoundsPage() {
               phase: "analyzing",
               startedAt: new Date().toISOString(),
               finishedAt: null,
-              lastMessage: "Preparing export...",
+              lastMessage: t`Preparing export...`,
               progress: { completed: 0, total: 0 },
               stats: { heroFiles: 0, roundFiles: 0, videoFiles: 0, funscriptFiles: 0 },
               compression: null,
@@ -1965,10 +2002,10 @@ export function InstalledRoundsPage() {
       setExportDialog((current) =>
         current
           ? {
-            ...current,
-            result,
-            error: null,
-          }
+              ...current,
+              result,
+              error: null,
+            }
           : current
       );
     } catch (error) {
@@ -1976,14 +2013,14 @@ export function InstalledRoundsPage() {
       setExportDialog((current) =>
         current
           ? {
-            ...current,
-            error:
-              error instanceof Error && error.message === "Export aborted by user."
-                ? "Export canceled."
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to export library package.",
-          }
+              ...current,
+              error:
+                error instanceof Error && error.message === "Export aborted by user."
+                  ? t`Export canceled.`
+                  : error instanceof Error
+                    ? error.message
+                    : t`Failed to export library package.`,
+            }
           : current
       );
       setShowLibraryExportOverlay(false);
@@ -2008,7 +2045,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to select website round funscript", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to attach the selected funscript file.",
+        error instanceof Error ? error.message : t`Failed to attach the selected funscript file.`,
         "error"
       );
     }
@@ -2019,20 +2056,20 @@ export function InstalledRoundsPage() {
 
     const trimmedName = websiteRoundName.trim();
     if (!trimmedName) {
-      setWebsiteRoundError("Enter a round name before installing.");
+      setWebsiteRoundError(t`Enter a round name before installing.`);
       setWebsiteRoundSuccess(null);
       return;
     }
 
     const normalizedVideoUrl = normalizeHttpUrl(websiteRoundVideoUrl);
     if (!normalizedVideoUrl) {
-      setWebsiteRoundError("Enter a valid public http(s) website video URL.");
+      setWebsiteRoundError(t`Enter a valid public http(s) website video URL.`);
       setWebsiteRoundSuccess(null);
       return;
     }
 
     if (websiteRoundVideoValidation.state === "checking") {
-      setWebsiteRoundError("Wait until the website video URL support check finishes.");
+      setWebsiteRoundError(t`Wait until the website video URL support check finishes.`);
       setWebsiteRoundSuccess(null);
       return;
     }
@@ -2047,7 +2084,7 @@ export function InstalledRoundsPage() {
     const normalizedFunscriptUrl =
       trimmedFunscriptUrl.length > 0 ? normalizeHttpUrl(trimmedFunscriptUrl) : null;
     if (trimmedFunscriptUrl.length > 0 && !normalizedFunscriptUrl) {
-      setWebsiteRoundError("Funscript URL must also be a valid http(s) URL.");
+      setWebsiteRoundError(t`Funscript URL must also be a valid http(s) URL.`);
       setWebsiteRoundSuccess(null);
       return;
     }
@@ -2069,11 +2106,11 @@ export function InstalledRoundsPage() {
       setWebsiteRoundFunscriptFileUri(null);
       setWebsiteRoundFunscriptFileLabel(null);
       setWebsiteRoundVideoValidation({ state: "idle", message: null });
-      setWebsiteRoundSuccess(`Installed "${trimmedName}".`);
+      setWebsiteRoundSuccess(t`Installed "${trimmedName}".`);
     } catch (error) {
       console.error("Failed to install website round", error);
       setWebsiteRoundError(
-        error instanceof Error ? error.message : "Failed to install the website round."
+        error instanceof Error ? error.message : t`Failed to install the website round.`
       );
     } finally {
       setIsInstallingWebsiteRound(false);
@@ -2143,7 +2180,7 @@ export function InstalledRoundsPage() {
     ) {
       setHeroGroupRoundConversion((current) =>
         current
-          ? { ...current, error: "Confirmation text did not match. No changes were made." }
+          ? { ...current, error: t`Confirmation text did not match. No changes were made.` }
           : current
       );
       return;
@@ -2162,7 +2199,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to convert hero group back to a round", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to convert hero group back to a round.",
+        error instanceof Error ? error.message : t`Failed to convert hero group back to a round.`,
         "error"
       );
     } finally {
@@ -2178,7 +2215,7 @@ export function InstalledRoundsPage() {
     const startTime = parseOptionalInteger(editingRound.startTime);
     const endTime = parseOptionalInteger(editingRound.endTime);
     if ([bpm, difficulty, startTime, endTime].some((value) => Number.isNaN(value))) {
-      showToast("Round fields must use valid numeric values.", "error");
+      showToast(t`Round fields must use valid numeric values.`, "error");
       return;
     }
 
@@ -2200,7 +2237,7 @@ export function InstalledRoundsPage() {
       await refreshInstalledRounds();
     } catch (error) {
       console.error("Failed to update round", error);
-      showToast(error instanceof Error ? error.message : "Failed to update round.", "error");
+      showToast(error instanceof Error ? error.message : t`Failed to update round.`, "error");
     } finally {
       setIsSavingEdit(false);
     }
@@ -2221,7 +2258,7 @@ export function InstalledRoundsPage() {
       await refreshInstalledRounds();
     } catch (error) {
       console.error("Failed to update hero", error);
-      showToast(error instanceof Error ? error.message : "Failed to update hero.", "error");
+      showToast(error instanceof Error ? error.message : t`Failed to update hero.`, "error");
     } finally {
       setIsSavingEdit(false);
     }
@@ -2238,7 +2275,7 @@ export function InstalledRoundsPage() {
       await refreshInstalledRounds();
     } catch (error) {
       console.error("Failed to delete round", error);
-      showToast(error instanceof Error ? error.message : "Failed to delete round.", "error");
+      showToast(error instanceof Error ? error.message : t`Failed to delete round.`, "error");
     } finally {
       setIsSavingEdit(false);
     }
@@ -2254,25 +2291,22 @@ export function InstalledRoundsPage() {
     });
   };
 
-  const confirmDeleteHero = useCallback(
-    async () => {
-      if (!deleteHeroDialog || isSavingEdit) return;
-      setDeleteHeroDialog(null);
+  const confirmDeleteHero = useCallback(async () => {
+    if (!deleteHeroDialog || isSavingEdit) return;
+    setDeleteHeroDialog(null);
 
-      setIsSavingEdit(true);
-      try {
-        await db.hero.delete(deleteHeroDialog.id);
-        setEditingHero((current) => (current?.id === deleteHeroDialog.id ? null : current));
-        await refreshInstalledRounds();
-      } catch (error) {
-        console.error("Failed to delete hero", error);
-        showToast(error instanceof Error ? error.message : "Failed to delete hero.", "error");
-      } finally {
-        setIsSavingEdit(false);
-      }
-    },
-    [deleteHeroDialog, isSavingEdit, refreshInstalledRounds, showToast]
-  );
+    setIsSavingEdit(true);
+    try {
+      await db.hero.delete(deleteHeroDialog.id);
+      setEditingHero((current) => (current?.id === deleteHeroDialog.id ? null : current));
+      await refreshInstalledRounds();
+    } catch (error) {
+      console.error("Failed to delete hero", error);
+      showToast(error instanceof Error ? error.message : t`Failed to delete hero.`, "error");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }, [deleteHeroDialog, isSavingEdit, refreshInstalledRounds, showToast]);
 
   const deleteHeroEntry = (heroDraft: HeroEditDraft | null = editingHero) => {
     if (!heroDraft || isSavingEdit) return;
@@ -2293,7 +2327,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to retry template round linking", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to retry template round linking.",
+        error instanceof Error ? error.message : t`Failed to retry template round linking.`,
         "error"
       );
     } finally {
@@ -2310,7 +2344,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to retry template hero linking", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to retry template hero linking.",
+        error instanceof Error ? error.message : t`Failed to retry template hero linking.`,
         "error"
       );
     } finally {
@@ -2321,7 +2355,7 @@ export function InstalledRoundsPage() {
   const saveRoundTemplateRepair = async () => {
     if (!repairingTemplateRound || isSavingEdit) return;
     if (!repairingTemplateRound.installedRoundId) {
-      showToast("Select an installed round to repair this template.", "error");
+      showToast(t`Select an installed round to repair this template.`, "error");
       return;
     }
     setIsSavingEdit(true);
@@ -2335,7 +2369,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to repair template round", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to repair template round.",
+        error instanceof Error ? error.message : t`Failed to repair template round.`,
         "error"
       );
     } finally {
@@ -2370,11 +2404,11 @@ export function InstalledRoundsPage() {
   const saveHeroTemplateRepair = async () => {
     if (!repairingTemplateHero || isSavingEdit) return;
     if (!repairingTemplateHero.sourceHeroId) {
-      showToast("Select a source hero first.", "error");
+      showToast(t`Select a source hero first.`, "error");
       return;
     }
     if (repairingTemplateHero.assignments.some((assignment) => !assignment.installedRoundId)) {
-      showToast("Assign every unresolved hero round before saving.", "error");
+      showToast(t`Assign every unresolved hero round before saving.`, "error");
       return;
     }
     setIsSavingEdit(true);
@@ -2392,7 +2426,7 @@ export function InstalledRoundsPage() {
     } catch (error) {
       console.error("Failed to repair template hero", error);
       showToast(
-        error instanceof Error ? error.message : "Failed to repair template hero.",
+        error instanceof Error ? error.message : t`Failed to repair template hero.`,
         "error"
       );
     } finally {
@@ -2408,14 +2442,16 @@ export function InstalledRoundsPage() {
         <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-64 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
           <div className="hidden lg:mb-5 lg:block lg:px-3">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
-              Round Vault
+              <Trans>Round Vault</Trans>
             </p>
             <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
-              Installed Rounds
+              <Trans>Installed Rounds</Trans>
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Manage imports, hero groups, and exports with the same focused shell as the new
-              settings screen.
+              <Trans>
+                Manage imports, hero groups, and exports with the same focused shell as the new
+                settings screen.
+              </Trans>
             </p>
           </div>
 
@@ -2446,19 +2482,19 @@ export function InstalledRoundsPage() {
                 <span aria-hidden="true" className="settings-sidebar-icon">
                   {section.icon}
                 </span>
-                <span>{section.title}</span>
+                <span>{section.id === "library" ? t`Library` : t`Import & Export`}</span>
               </button>
             );
           })}
 
           <div className="min-w-0 shrink-0 rounded-2xl border border-purple-400/20 bg-black/25 p-2 lg:mt-4">
             <p className="px-2 pb-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
-              Library Grouping
+              <Trans>Library Grouping</Trans>
             </p>
             <div className="flex gap-1 lg:flex-col">
               {[
-                { value: "hero", label: "Heroes" },
-                { value: "playlist", label: "Playlists" },
+                { value: "hero", label: t`Heroes` },
+                { value: "playlist", label: t`Playlists` },
               ].map((option) => {
                 const active = groupMode === option.value;
                 const disabled =
@@ -2479,28 +2515,31 @@ export function InstalledRoundsPage() {
                       });
                     }}
                     disabled={disabled}
-                    className={`rounded-xl px-3 py-2 text-left font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] transition-all duration-200 ${active
+                    className={`rounded-xl px-3 py-2 text-left font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] transition-all duration-200 ${
+                      active
                         ? "border border-cyan-300/45 bg-cyan-500/18 text-cyan-100"
                         : disabled
                           ? "cursor-wait border border-zinc-800 bg-zinc-950/50 text-zinc-500"
-                        : "border border-transparent bg-zinc-900/55 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                      }`}
+                          : "border border-transparent bg-zinc-900/55 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                    }`}
                   >
-                    {option.value === "playlist" && playlistGroupingLoading ? "Playlists..." : option.label}
+                    {option.value === "playlist" && playlistGroupingLoading
+                      ? t`Playlists...`
+                      : option.label}
                   </button>
                 );
               })}
             </div>
             {groupMode === "playlist" && playlistGroupingLoading && (
               <p className="px-2 pt-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-cyan-200/70">
-                Loading playlist groups...
+                <Trans>Loading playlist groups...</Trans>
               </p>
             )}
           </div>
 
           <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
             <MenuButton
-              label="← Back"
+              label={t`← Back`}
               controllerFocusId="rounds-back"
               onHover={handleHoverSfx}
               onClick={() => {
@@ -2520,18 +2559,20 @@ export function InstalledRoundsPage() {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.34em] text-violet-200/75">
-                    Installed Rounds
+                    <Trans>Installed Rounds</Trans>
                   </p>
                   <h2 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-4xl">
-                    {activeSection.title}
+                    {activeSection.id === "library" ? t`Library` : t`Import & Export`}
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm text-zinc-400">
-                    {activeSection.description}
+                    {activeSection.id === "library"
+                      ? t`Browse, filter, and edit installed rounds with the main library view front and center.`
+                      : t`Install new rounds, import portable files, and manage database exports from one place.`}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-xl border border-violet-200/30 bg-violet-400/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.3em] text-violet-100">
-                    {filteredRounds.length} / {rounds.length} Visible
+                    {filteredRounds.length} / {rounds.length} <Trans>Visible</Trans>
                   </div>
                   <RoundsLibraryStatusPoller
                     onStatusChange={(status) => setIsLibraryScanning(status?.state === "running")}
@@ -2540,7 +2581,7 @@ export function InstalledRoundsPage() {
                   {aggregateDownloadProgress && (
                     <div className="flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-cyan-100">
                       <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-                      {aggregateDownloadProgress.count} download
+                      {aggregateDownloadProgress.count} <Trans>download</Trans>
                       {aggregateDownloadProgress.count > 1 ? "s" : ""}
                       <span className="text-cyan-300/70">—</span>
                       {aggregateDownloadProgress.avgPercent}%
@@ -2571,16 +2612,18 @@ export function InstalledRoundsPage() {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>
                         <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-                          Library Snapshot
+                          <Trans>Library Snapshot</Trans>
                         </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Keep the main browsing tools, collection health, and import actions in one
-                          place.
+                          <Trans>
+                            Keep the main browsing tools, collection health, and import actions in
+                            one place.
+                          </Trans>
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <RoundActionButton
-                          label="Install Rounds"
+                          label={t`Install Rounds`}
                           tone="violet"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -2590,7 +2633,7 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label="Import File"
+                          label={t`Import File`}
                           tone="emerald"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -2600,7 +2643,7 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label="Install From Web"
+                          label={t`Install From Web`}
                           tone="violet"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -2611,7 +2654,7 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label={isExportingDatabase ? "Exporting..." : "Export"}
+                          label={isExportingDatabase ? t`Exporting...` : t`Export`}
                           tone="cyan"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -2621,7 +2664,7 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label={selectionMode ? "Cancel Selection" : "Select Items"}
+                          label={selectionMode ? t`Cancel Selection` : t`Select Items`}
                           tone="violet"
                           disabled={false}
                           onHover={handleHoverSfx}
@@ -2649,18 +2692,18 @@ export function InstalledRoundsPage() {
                                 setSelectedHeroIds(new Set());
                               }
                             }}
-                            className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${selectionMode
+                            className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${
+                              selectionMode
                                 ? "border-violet-300/60 bg-violet-500/25 text-violet-100"
                                 : "border-slate-600 bg-slate-900/70 text-slate-300 hover:border-violet-300/40"
-                              }`}
+                            }`}
                           >
-                            {selectionMode ? "Cancel Selection" : "Select Items"}
+                            {selectionMode ? t`Cancel Selection` : t`Select Items`}
                           </button>
                           {(selectedRoundIds.size > 0 || selectedHeroIds.size > 0) && (
                             <>
                               <span className="text-sm text-violet-200">
-                                {selectedRoundIds.size} rounds, {selectedHeroIds.size} heroes
-                                selected
+                                {t`${selectedRoundIds.size} rounds, ${selectedHeroIds.size} heroes selected`}
                               </span>
                               <button
                                 type="button"
@@ -2672,7 +2715,7 @@ export function InstalledRoundsPage() {
                                 }}
                                 className="rounded-xl border border-slate-600 bg-slate-900/70 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-slate-300 hover:border-rose-300/40 hover:text-rose-200"
                               >
-                                Clear
+                                <Trans>Clear</Trans>
                               </button>
                               <button
                                 type="button"
@@ -2683,7 +2726,7 @@ export function InstalledRoundsPage() {
                                 }}
                                 className="rounded-xl border border-cyan-300/50 bg-cyan-500/20 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] text-cyan-100 hover:border-cyan-200/75"
                               >
-                                Export Selected
+                                <Trans>Export Selected</Trans>
                               </button>
                             </>
                           )}
@@ -2707,11 +2750,15 @@ export function InstalledRoundsPage() {
                       <InlineMetrics
                         className="mt-4"
                         metrics={[
-                          { label: "Standalone", value: standaloneRoundCount, tone: "violet" },
-                          { label: "Hero Groups", value: heroGroupCount, tone: "pink" },
-                          { label: "Scripts Ready", value: roundsWithScriptCount, tone: "emerald" },
+                          { label: t`Standalone`, value: standaloneRoundCount, tone: "violet" },
+                          { label: t`Hero Groups`, value: heroGroupCount, tone: "pink" },
                           {
-                            label: "Disabled",
+                            label: t`Scripts Ready`,
+                            value: roundsWithScriptCount,
+                            tone: "emerald",
+                          },
+                          {
+                            label: t`Disabled`,
                             value: disabledIdsResource.hasLoadedOnce ? disabledRoundIds.size : "…",
                             tone: "amber",
                           },
@@ -2727,7 +2774,7 @@ export function InstalledRoundsPage() {
                     </>
                   ) : hasInitialLibraryError ? (
                     <LibraryErrorState
-                      message={roundsResource.error ?? "Failed to load installed rounds."}
+                      message={roundsResource.error ?? t`Failed to load installed rounds.`}
                       onHoverSfx={handleHoverSfx}
                       onSelectSfx={handleSelectSfx}
                       onRetry={() => {
@@ -2740,343 +2787,416 @@ export function InstalledRoundsPage() {
                     />
                   ) : (
                     <section
-                    className="relative z-40 animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
-                    style={{ animationDelay: "0.08s" }}
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-                          Search & Filter
-                        </h3>
-                        <p className="mt-1 text-sm text-zinc-300">
-                          Narrow the collection by round type, script availability, or a text search
-                          across round metadata.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-black/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-zinc-300">
-                          <input
-                            type="checkbox"
-                            checked={showDisabledRounds}
-                            onChange={(event) => setShowDisabledRounds(event.target.checked)}
-                          />
-                          Show Disabled Imports
-                        </label>
-                        <button
-                          type="button"
-                          onMouseEnter={handleHoverSfx}
-                          onClick={() => {
-                            handleSelectSfx();
-                            setQueryInput("");
-                            startTransition(() => {
-                              setQuery("");
-                              setTypeFilter("all");
-                              setScriptFilter("all");
-                              setSortMode("newest");
-                            });
-                          }}
-                          disabled={!hasActiveFilters}
-                          className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${hasActiveFilters
-                              ? "border-violet-300/50 bg-violet-500/15 text-violet-100 hover:border-violet-200/75 hover:bg-violet-500/25"
-                              : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
+                      className="relative z-40 animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                      style={{ animationDelay: "0.08s" }}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                            <Trans>Search & Filter</Trans>
+                          </h3>
+                          <p className="mt-1 text-sm text-zinc-300">
+                            <Trans>
+                              Narrow the collection by round type, script availability, or a text
+                              search across round metadata.
+                            </Trans>
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-black/30 px-3 py-2 text-xs uppercase tracking-[0.18em] text-zinc-300">
+                            <input
+                              type="checkbox"
+                              checked={showDisabledRounds}
+                              onChange={(event) => setShowDisabledRounds(event.target.checked)}
+                            />
+                            <Trans>Show Disabled Imports</Trans>
+                          </label>
+                          <button
+                            type="button"
+                            onMouseEnter={handleHoverSfx}
+                            onClick={() => {
+                              handleSelectSfx();
+                              setQueryInput("");
+                              startTransition(() => {
+                                setQuery("");
+                                setTypeFilter("all");
+                                setScriptFilter("all");
+                                setSortMode("newest");
+                              });
+                            }}
+                            disabled={!hasActiveFilters}
+                            className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${
+                              hasActiveFilters
+                                ? "border-violet-300/50 bg-violet-500/15 text-violet-100 hover:border-violet-200/75 hover:bg-violet-500/25"
+                                : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
                             }`}
-                        >
-                          Clear Filters
-                        </button>
+                          >
+                            <Trans>Clear Filters</Trans>
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
-                      <label className="lg:col-span-2">
-                        <span className="mb-2 block font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-zinc-300">
-                          Search
-                        </span>
-                        <input
-                          value={queryInput}
-                          onChange={(event) => {
-                            const nextValue = event.target.value;
-                            setQueryInput(nextValue);
+                      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-5">
+                        <label className="lg:col-span-2">
+                          <span className="mb-2 block font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-zinc-300">
+                            <Trans>Search</Trans>
+                          </span>
+                          <input
+                            value={queryInput}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setQueryInput(nextValue);
+                              startTransition(() => {
+                                setQuery(nextValue);
+                              });
+                            }}
+                            onFocus={handleHoverSfx}
+                            onMouseEnter={handleHoverSfx}
+                            placeholder={t`Search title, hero, author`}
+                            className="w-full rounded-xl border border-purple-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-all duration-200 focus:border-purple-300/75 focus:ring-2 focus:ring-purple-400/30"
+                          />
+                        </label>
+
+                        <GameDropdown
+                          label={t`Type`}
+                          value={typeFilter}
+                          options={[
+                            { value: "all", label: t`All` },
+                            { value: "Normal", label: t`Normal` },
+                            { value: "Interjection", label: t`Interjection` },
+                            { value: "Cum", label: abbreviateNsfwText(t`Cum`, sfwMode) },
+                          ]}
+                          onChange={(value) => {
                             startTransition(() => {
-                              setQuery(nextValue);
+                              setTypeFilter(value as TypeFilter);
                             });
                           }}
-                          onFocus={handleHoverSfx}
-                          onMouseEnter={handleHoverSfx}
-                          placeholder="Search title, hero, author"
-                          className="w-full rounded-xl border border-purple-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-all duration-200 focus:border-purple-300/75 focus:ring-2 focus:ring-purple-400/30"
+                          onHoverSfx={handleHoverSfx}
+                          onSelectSfx={handleSelectSfx}
                         />
-                      </label>
 
-                      <GameDropdown
-                        label="Type"
-                        value={typeFilter}
-                        options={[
-                          { value: "all", label: "All" },
-                          { value: "Normal", label: "Normal" },
-                          { value: "Interjection", label: "Interjection" },
-                          { value: "Cum", label: abbreviateNsfwText("Cum", sfwMode) },
-                        ]}
-                        onChange={(value) => {
-                          startTransition(() => {
-                            setTypeFilter(value as TypeFilter);
-                          });
-                        }}
-                        onHoverSfx={handleHoverSfx}
-                        onSelectSfx={handleSelectSfx}
-                      />
+                        <GameDropdown
+                          label={t`Script`}
+                          value={scriptFilter}
+                          options={[
+                            { value: "all", label: t`All` },
+                            { value: "installed", label: t`Installed` },
+                            { value: "missing", label: t`Missing` },
+                          ]}
+                          onChange={(value) => {
+                            startTransition(() => {
+                              setScriptFilter(value as ScriptFilter);
+                            });
+                          }}
+                          onHoverSfx={handleHoverSfx}
+                          onSelectSfx={handleSelectSfx}
+                        />
 
-                      <GameDropdown
-                        label="Script"
-                        value={scriptFilter}
-                        options={[
-                          { value: "all", label: "All" },
-                          { value: "installed", label: "Installed" },
-                          { value: "missing", label: "Missing" },
-                        ]}
-                        onChange={(value) => {
-                          startTransition(() => {
-                            setScriptFilter(value as ScriptFilter);
-                          });
-                        }}
-                        onHoverSfx={handleHoverSfx}
-                        onSelectSfx={handleSelectSfx}
-                      />
+                        <GameDropdown
+                          label={t`Sort`}
+                          value={sortMode}
+                          options={[
+                            { value: "newest", label: t`Newest` },
+                            { value: "oldest", label: t`Oldest` },
+                            { value: "difficulty", label: t`Difficulty` },
+                            { value: "bpm", label: t`BPM` },
+                            { value: "length", label: t`Length` },
+                            { value: "name", label: t`Name` },
+                          ]}
+                          onChange={(value) => {
+                            startTransition(() => {
+                              setSortMode(value as SortMode);
+                            });
+                          }}
+                          onHoverSfx={handleHoverSfx}
+                          onSelectSfx={handleSelectSfx}
+                        />
+                      </div>
 
-                      <GameDropdown
-                        label="Sort"
-                        value={sortMode}
-                        options={[
-                          { value: "newest", label: "Newest" },
-                          { value: "oldest", label: "Oldest" },
-                          { value: "difficulty", label: "Difficulty" },
-                          { value: "bpm", label: "BPM" },
-                          { value: "length", label: "Length" },
-                          { value: "name", label: "Name" },
-                        ]}
-                        onChange={(value) => {
-                          startTransition(() => {
-                            setSortMode(value as SortMode);
-                          });
-                        }}
-                        onHoverSfx={handleHoverSfx}
-                        onSelectSfx={handleSelectSfx}
-                      />
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
-                        {activeFilterCount > 0
-                          ? `${activeFilterCount} Active Filters`
-                          : "No Active Filters"}
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                          {activeFilterCount > 0
+                            ? t`${activeFilterCount} Active Filters`
+                            : t`No Active Filters`}
+                        </div>
+                        <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                          {t`Sort:`} {sortModeLabel}
+                        </div>
+                        <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                          {t`Grouping:`} {groupModeLabel}
+                          {playlistGroupingLoading && (
+                            <span className="ml-2 text-cyan-200/80">
+                              <Trans>Loading…</Trans>
+                            </span>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                          {showDisabledRounds ? t`Disabled Included` : t`Disabled Hidden`}
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
-                        Sort: {sortModeLabel}
-                      </div>
-                      <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
-                        Grouping: {groupModeLabel}
-                        {playlistGroupingLoading && <span className="ml-2 text-cyan-200/80">Loading…</span>}
-                      </div>
-                      <div className="rounded-xl border border-zinc-700/80 bg-black/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
-                        {showDisabledRounds ? "Disabled Included" : "Disabled Hidden"}
-                      </div>
-                    </div>
-                  </section>
+                    </section>
                   )}
 
                   {!isInitialLibraryLoading && !hasInitialLibraryError && !isLibraryRefreshing && (
                     <section
-                    className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
-                    style={{ animationDelay: "0.11s" }}
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-                          Round Library
-                        </h3>
-                        <p className="mt-1 text-sm text-zinc-300">
-                          {filteredRounds.length === 0
-                            ? "No rounds currently match the active search and filter state."
-                            : `${filteredRounds.length} matching rounds are currently available.`}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onMouseEnter={handleHoverSfx}
-                          onClick={() => {
-                            handleSelectSfx();
-                            setExpandedHeroGroups((previous) => {
-                              const next = { ...previous };
-                              visibleGroupKeys.forEach((groupKey) => {
-                                next[groupKey] = true;
-                              });
-                              return next;
-                            });
-                          }}
-                          disabled={visibleGroupKeys.length === 0 || allVisibleGroupsExpanded}
-                          className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${visibleGroupKeys.length > 0 && !allVisibleGroupsExpanded
-                              ? "border-cyan-300/45 bg-cyan-500/15 text-cyan-100 hover:border-cyan-200/75 hover:bg-cyan-500/25"
-                              : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
-                            }`}
-                        >
-                          Expand All Groups
-                        </button>
-                        <button
-                          type="button"
-                          onMouseEnter={handleHoverSfx}
-                          onClick={() => {
-                            handleSelectSfx();
-                            setExpandedHeroGroups((previous) => {
-                              const next = { ...previous };
-                              visibleGroupKeys.forEach((groupKey) => {
-                                delete next[groupKey];
-                              });
-                              return next;
-                            });
-                          }}
-                          disabled={visibleGroupKeys.length === 0 || !allVisibleGroupsExpanded}
-                          className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${visibleGroupKeys.length > 0 && allVisibleGroupsExpanded
-                              ? "border-violet-300/45 bg-violet-500/15 text-violet-100 hover:border-violet-200/75 hover:bg-violet-500/25"
-                              : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
-                            }`}
-                        >
-                          Collapse Groups
-                        </button>
-                      </div>
-                    </div>
-
-                    <LibraryLastMessage />
-
-                    {filteredRounds.length === 0 ? (
-                      <div className="mt-5 rounded-2xl border border-zinc-700/60 bg-zinc-950/60 p-8 text-center backdrop-blur-xl">
-                        <p className="font-[family-name:var(--font-jetbrains-mono)] text-sm uppercase tracking-[0.28em] text-zinc-400">
-                          No rounds match this filter
-                        </p>
-                        <p className="mt-3 text-sm text-zinc-400">
-                          {hasActiveFilters
-                            ? "Clear the current filters to get back to the full library."
-                            : "Install a folder or import a portable file to start building the library."}
-                        </p>
-                        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                          {hasActiveFilters ? (
-                            <RoundActionButton
-                              label="Reset Filters"
-                              tone="violet"
-                              onHover={handleHoverSfx}
-                              onClick={() => {
-                                handleSelectSfx();
-                                setQueryInput("");
-                                startTransition(() => {
-                                  setQuery("");
-                                  setTypeFilter("all");
-                                  setScriptFilter("all");
-                                  setSortMode("newest");
+                      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+                      style={{ animationDelay: "0.11s" }}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
+                            <Trans>Round Library</Trans>
+                          </h3>
+                          <p className="mt-1 text-sm text-zinc-300">
+                            {filteredRounds.length === 0
+                              ? t`No rounds currently match the active search and filter state.`
+                              : t`${filteredRounds.length} matching rounds are currently available.`}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onMouseEnter={handleHoverSfx}
+                            onClick={() => {
+                              handleSelectSfx();
+                              setExpandedHeroGroups((previous) => {
+                                const next = { ...previous };
+                                visibleGroupKeys.forEach((groupKey) => {
+                                  next[groupKey] = true;
                                 });
-                              }}
-                            />
-                          ) : (
-                            <RoundActionButton
-                              label="Open Import & Export"
-                              tone="cyan"
-                              onHover={handleHoverSfx}
-                              onClick={() => {
-                                handleSelectSfx();
-                                setActiveSectionId("transfer");
-                              }}
-                            />
-                          )}
+                                return next;
+                              });
+                            }}
+                            disabled={visibleGroupKeys.length === 0 || allVisibleGroupsExpanded}
+                            className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${
+                              visibleGroupKeys.length > 0 && !allVisibleGroupsExpanded
+                                ? "border-cyan-300/45 bg-cyan-500/15 text-cyan-100 hover:border-cyan-200/75 hover:bg-cyan-500/25"
+                                : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
+                            }`}
+                          >
+                            <Trans>Expand All Groups</Trans>
+                          </button>
+                          <button
+                            type="button"
+                            onMouseEnter={handleHoverSfx}
+                            onClick={() => {
+                              handleSelectSfx();
+                              setExpandedHeroGroups((previous) => {
+                                const next = { ...previous };
+                                visibleGroupKeys.forEach((groupKey) => {
+                                  delete next[groupKey];
+                                });
+                                return next;
+                              });
+                            }}
+                            disabled={visibleGroupKeys.length === 0 || !allVisibleGroupsExpanded}
+                            className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${
+                              visibleGroupKeys.length > 0 && allVisibleGroupsExpanded
+                                ? "border-violet-300/45 bg-violet-500/15 text-violet-100 hover:border-violet-200/75 hover:bg-violet-500/25"
+                                : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
+                            }`}
+                          >
+                            <Trans>Collapse Groups</Trans>
+                          </button>
                         </div>
                       </div>
-                    ) : (
-                      <>
-                        <div className="mt-5">
-                          <VirtualizedRoundLibraryGrid
-                            rows={renderRows}
-                            expandedGroupKeys={expandedGroupKeySet}
-                            scrollContainer={scrollContainer}
-                            renderCard={(item) => (
-                              <RoundCard
-                                key={item.key}
-                                round={item.round}
-                                index={item.renderIndex}
-                                onHoverSfx={handleHoverSfx}
-                                onConvertToHero={handleConvertRoundToHero}
-                                onPlay={handlePlayRound}
-                                onEdit={handleEditRound}
-                                onRetryTemplateLinking={retryTemplateLinkingForRound}
-                                onRepairTemplate={(templateRound) => {
+
+                      <LibraryLastMessage />
+
+                      {filteredRounds.length === 0 ? (
+                        <div className="mt-5 rounded-2xl border border-zinc-700/60 bg-zinc-950/60 p-8 text-center backdrop-blur-xl">
+                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-sm uppercase tracking-[0.28em] text-zinc-400">
+                            <Trans>No rounds match this filter</Trans>
+                          </p>
+                          <p className="mt-3 text-sm text-zinc-400">
+                            {hasActiveFilters
+                              ? t`Clear the current filters to get back to the full library.`
+                              : t`Install a folder or import a portable file to start building the library.`}
+                          </p>
+                          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                            {hasActiveFilters ? (
+                              <RoundActionButton
+                                label={t`Reset Filters`}
+                                tone="violet"
+                                onHover={handleHoverSfx}
+                                onClick={() => {
                                   handleSelectSfx();
-                                  setRepairingTemplateRound({
-                                    roundId: templateRound.id,
-                                    roundName: templateRound.name,
-                                    installedRoundId: "",
-                                  });
-                                }}
-                                animateDifficulty={
-                                  (item.round.difficulty ?? 0) === highestFilteredDifficulty &&
-                                  highestFilteredDifficulty > 0
-                                }
-                                showDisabledBadge={disabledRoundIds.has(item.round.id)}
-                                isWebsiteVideoCaching={websiteVideoScanStatus?.state === "running"}
-                                websiteVideoCachePending={
-                                  getInstalledRoundWebsiteVideoCacheStatus(item.round) === "pending"
-                                }
-                                downloadProgress={
-                                  item.round.resources
-                                    .map((r) => getDownloadProgressForVideoUri(r.videoUri))
-                                    .find((p): p is VideoDownloadProgress => p != null) ?? null
-                                }
-                                selectionMode={selectionMode}
-                                selected={selectedRoundIds.has(item.round.id)}
-                                onToggleSelection={(round) => {
-                                  handleSelectSfx();
-                                  setSelectedRoundIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(round.id)) {
-                                      next.delete(round.id);
-                                    } else {
-                                      next.add(round.id);
-                                    }
-                                    return next;
+                                  setQueryInput("");
+                                  startTransition(() => {
+                                    setQuery("");
+                                    setTypeFilter("all");
+                                    setScriptFilter("all");
+                                    setSortMode("newest");
                                   });
                                 }}
                               />
+                            ) : (
+                              <RoundActionButton
+                                label={t`Open Import & Export`}
+                                tone="cyan"
+                                onHover={handleHoverSfx}
+                                onClick={() => {
+                                  handleSelectSfx();
+                                  setActiveSectionId("transfer");
+                                }}
+                              />
                             )}
-                            renderGroupHeader={(shelf) => {
-                              const row = shelf.row;
-                              const isExpanded = expandedGroupKeySet.has(row.groupKey);
-                              if (row.kind === "hero-group") {
-                                const heroId = row.rounds[0]?.heroId;
-                                const groupRoundIds = row.rounds.map((r) => r.id);
-                                const allRoundsSelected = groupRoundIds.every((id) =>
-                                  selectedRoundIds.has(id)
-                                );
-                                const heroSelected = heroId ? selectedHeroIds.has(heroId) : false;
-                                const isGroupSelected =
-                                  groupRoundIds.length > 0 && allRoundsSelected && heroSelected;
-                                const { pendingCacheCount, pendingPreviewCount } =
-                                  summarizeHeroGroupPreviewState(
-                                    row.rounds,
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mt-5">
+                            <VirtualizedRoundLibraryGrid
+                              rows={renderRows}
+                              expandedGroupKeys={expandedGroupKeySet}
+                              scrollContainer={scrollContainer}
+                              renderCard={(item) => (
+                                <RoundCard
+                                  key={item.key}
+                                  round={item.round}
+                                  index={item.renderIndex}
+                                  onHoverSfx={handleHoverSfx}
+                                  onConvertToHero={handleConvertRoundToHero}
+                                  onPlay={handlePlayRound}
+                                  onEdit={handleEditRound}
+                                  onRetryTemplateLinking={retryTemplateLinkingForRound}
+                                  onRepairTemplate={(templateRound) => {
+                                    handleSelectSfx();
+                                    setRepairingTemplateRound({
+                                      roundId: templateRound.id,
+                                      roundName: templateRound.name,
+                                      installedRoundId: "",
+                                    });
+                                  }}
+                                  animateDifficulty={
+                                    (item.round.difficulty ?? 0) === highestFilteredDifficulty &&
+                                    highestFilteredDifficulty > 0
+                                  }
+                                  showDisabledBadge={disabledRoundIds.has(item.round.id)}
+                                  isWebsiteVideoCaching={
                                     websiteVideoScanStatus?.state === "running"
+                                  }
+                                  websiteVideoCachePending={
+                                    getInstalledRoundWebsiteVideoCacheStatus(item.round) ===
+                                    "pending"
+                                  }
+                                  downloadProgress={
+                                    item.round.resources
+                                      .map((r) => getDownloadProgressForVideoUri(r.videoUri))
+                                      .find((p): p is VideoDownloadProgress => p != null) ?? null
+                                  }
+                                  selectionMode={selectionMode}
+                                  selected={selectedRoundIds.has(item.round.id)}
+                                  onToggleSelection={(round) => {
+                                    handleSelectSfx();
+                                    setSelectedRoundIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(round.id)) {
+                                        next.delete(round.id);
+                                      } else {
+                                        next.add(round.id);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                />
+                              )}
+                              renderGroupHeader={(shelf) => {
+                                const row = shelf.row;
+                                const isExpanded = expandedGroupKeySet.has(row.groupKey);
+                                if (row.kind === "hero-group") {
+                                  const heroId = row.rounds[0]?.heroId;
+                                  const groupRoundIds = row.rounds.map((r) => r.id);
+                                  const allRoundsSelected = groupRoundIds.every((id) =>
+                                    selectedRoundIds.has(id)
                                   );
+                                  const heroSelected = heroId ? selectedHeroIds.has(heroId) : false;
+                                  const isGroupSelected =
+                                    groupRoundIds.length > 0 && allRoundsSelected && heroSelected;
+                                  const { pendingCacheCount, pendingPreviewCount } =
+                                    summarizeHeroGroupPreviewState(
+                                      row.rounds,
+                                      websiteVideoScanStatus?.state === "running"
+                                    );
+                                  return (
+                                    <HeroGroupHeader
+                                      heroName={row.heroName}
+                                      roundCount={row.rounds.length}
+                                      pendingCacheCount={pendingCacheCount}
+                                      pendingPreviewCount={pendingPreviewCount}
+                                      expanded={isExpanded}
+                                      onHoverSfx={handleHoverSfx}
+                                      converting={convertingHeroGroupKey === row.groupKey}
+                                      hasTemplateRounds={row.rounds.some((round) =>
+                                        isTemplateRound(round)
+                                      )}
+                                      selectionMode={selectionMode}
+                                      selected={isGroupSelected}
+                                      onToggleSelection={() => {
+                                        handleSelectSfx();
+                                        toggleHeroGroupSelection(row);
+                                      }}
+                                      onToggle={() => {
+                                        handleSelectSfx();
+                                        setExpandedHeroGroups((previous) => ({
+                                          ...previous,
+                                          [row.groupKey]: !previous[row.groupKey],
+                                        }));
+                                      }}
+                                      onConvertToRound={() => {
+                                        handleSelectSfx();
+                                        openHeroGroupRoundConversion(row);
+                                      }}
+                                      onEditHero={() => {
+                                        const draft = toHeroEditDraft(row.rounds[0]);
+                                        if (!draft) return;
+                                        handleSelectSfx();
+                                        setEditingHero(draft);
+                                      }}
+                                      onDeleteHero={() => {
+                                        const draft = toHeroEditDraft(row.rounds[0]);
+                                        if (!draft) return;
+                                        handleSelectSfx();
+                                        void deleteHeroEntry(draft);
+                                      }}
+                                      onRetryTemplateLinking={() => {
+                                        const heroId = row.rounds[0]?.heroId;
+                                        if (!heroId) return;
+                                        handleSelectSfx();
+                                        void retryTemplateLinkingForHero(heroId);
+                                      }}
+                                      onRepairTemplate={() => {
+                                        const heroId = row.rounds[0]?.heroId;
+                                        if (!heroId) return;
+                                        handleSelectSfx();
+                                        setRepairingTemplateHero({
+                                          heroId,
+                                          heroName: row.heroName,
+                                          sourceHeroId: "",
+                                          assignments: row.rounds
+                                            .filter((round) => isTemplateRound(round))
+                                            .map((round) => ({
+                                              roundId: round.id,
+                                              roundName: round.name,
+                                              installedRoundId: "",
+                                            })),
+                                        });
+                                      }}
+                                    />
+                                  );
+                                }
+
                                 return (
-                                  <HeroGroupHeader
-                                    heroName={row.heroName}
+                                  <PlaylistGroupHeader
+                                    playlistName={row.playlistName}
                                     roundCount={row.rounds.length}
-                                    pendingCacheCount={pendingCacheCount}
-                                    pendingPreviewCount={pendingPreviewCount}
+                                    cachePending={
+                                      playlistWebsiteCacheSummaryById.get(
+                                        row.groupKey.replace(/^playlist:/, "")
+                                      )?.hasPending ?? false
+                                    }
                                     expanded={isExpanded}
                                     onHoverSfx={handleHoverSfx}
-                                    converting={convertingHeroGroupKey === row.groupKey}
-                                    hasTemplateRounds={row.rounds.some((round) =>
-                                      isTemplateRound(round)
-                                    )}
-                                    selectionMode={selectionMode}
-                                    selected={isGroupSelected}
-                                    onToggleSelection={() => {
-                                      handleSelectSfx();
-                                      toggleHeroGroupSelection(row);
-                                    }}
                                     onToggle={() => {
                                       handleSelectSfx();
                                       setExpandedHeroGroups((previous) => ({
@@ -3084,75 +3204,14 @@ export function InstalledRoundsPage() {
                                         [row.groupKey]: !previous[row.groupKey],
                                       }));
                                     }}
-                                    onConvertToRound={() => {
-                                      handleSelectSfx();
-                                      openHeroGroupRoundConversion(row);
-                                    }}
-                                    onEditHero={() => {
-                                      const draft = toHeroEditDraft(row.rounds[0]);
-                                      if (!draft) return;
-                                      handleSelectSfx();
-                                      setEditingHero(draft);
-                                    }}
-                                    onDeleteHero={() => {
-                                      const draft = toHeroEditDraft(row.rounds[0]);
-                                      if (!draft) return;
-                                      handleSelectSfx();
-                                      void deleteHeroEntry(draft);
-                                    }}
-                                    onRetryTemplateLinking={() => {
-                                      const heroId = row.rounds[0]?.heroId;
-                                      if (!heroId) return;
-                                      handleSelectSfx();
-                                      void retryTemplateLinkingForHero(heroId);
-                                    }}
-                                    onRepairTemplate={() => {
-                                      const heroId = row.rounds[0]?.heroId;
-                                      if (!heroId) return;
-                                      handleSelectSfx();
-                                      setRepairingTemplateHero({
-                                        heroId,
-                                        heroName: row.heroName,
-                                        sourceHeroId: "",
-                                        assignments: row.rounds
-                                          .filter((round) => isTemplateRound(round))
-                                          .map((round) => ({
-                                            roundId: round.id,
-                                            roundName: round.name,
-                                            installedRoundId: "",
-                                          })),
-                                      });
-                                    }}
                                   />
                                 );
-                              }
-
-                              return (
-                                <PlaylistGroupHeader
-                                  playlistName={row.playlistName}
-                                  roundCount={row.rounds.length}
-                                  cachePending={
-                                    playlistWebsiteCacheSummaryById.get(
-                                      row.groupKey.replace(/^playlist:/, "")
-                                    )?.hasPending ?? false
-                                  }
-                                  expanded={isExpanded}
-                                  onHoverSfx={handleHoverSfx}
-                                  onToggle={() => {
-                                    handleSelectSfx();
-                                    setExpandedHeroGroups((previous) => ({
-                                      ...previous,
-                                      [row.groupKey]: !previous[row.groupKey],
-                                    }));
-                                  }}
-                                />
-                              );
-                            }}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </section>
+                              }}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </section>
                   )}
 
                   {!isInitialLibraryLoading && !hasInitialLibraryError && isLibraryRefreshing && (
@@ -3170,17 +3229,19 @@ export function InstalledRoundsPage() {
                     >
                       <div className="mb-4">
                         <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-                          Import New Content
+                          <Trans>Import New Content</Trans>
                         </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Folder installs are best for bulk local content. Portable file import is
-                          best for sidecars and packaged exports.
+                          <Trans>
+                            Folder installs are best for bulk local content. Portable file import is
+                            best for sidecars and packaged exports.
+                          </Trans>
                         </p>
                       </div>
                       <div className="space-y-3">
                         <RoundActionButton
-                          label="Install Rounds"
-                          description="Choose a folder and scan it for supported round media."
+                          label={t`Install Rounds`}
+                          description={t`Choose a folder and scan it for supported round media.`}
                           tone="violet"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -3190,8 +3251,8 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label="Import File"
-                          description="Bring in a portable round package or other supported import file."
+                          label={t`Import File`}
+                          description={t`Bring in a portable round package or other supported import file.`}
                           tone="emerald"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -3201,8 +3262,8 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label="Install From Web"
-                          description="Open a popup to create an installed round from a public website URL."
+                          label={t`Install From Web`}
+                          description={t`Open a popup to create an installed round from a public website URL.`}
                           tone="violet"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -3213,8 +3274,8 @@ export function InstalledRoundsPage() {
                           }}
                         />
                         <RoundActionButton
-                          label={scanRunning ? "Scanning..." : "Scan Now"}
-                          description="Re-run install folder discovery for sources already connected to the app."
+                          label={scanRunning ? t`Scanning...` : t`Scan Now`}
+                          description={t`Re-run install folder discovery for sources already connected to the app.`}
                           tone="cyan"
                           disabled={scanRunning}
                           onHover={handleHoverSfx}
@@ -3232,17 +3293,19 @@ export function InstalledRoundsPage() {
                     >
                       <div className="mb-4">
                         <h3 className="text-lg font-extrabold tracking-tight text-violet-100">
-                          Export & Share
+                          <Trans>Export & Share</Trans>
                         </h3>
                         <p className="mt-1 text-sm text-zinc-300">
-                          Build a clean installed-database export and choose where the package
-                          should be written.
+                          <Trans>
+                            Build a clean installed-database export and choose where the package
+                            should be written.
+                          </Trans>
                         </p>
                       </div>
                       <div className="space-y-3">
                         <RoundActionButton
-                          label={isExportingDatabase ? "Exporting..." : "Export"}
-                          description="Open the export flow and package the installed database."
+                          label={isExportingDatabase ? t`Exporting...` : t`Export`}
+                          description={t`Open the export flow and package the installed database.`}
                           tone="sky"
                           disabled={actionButtonsDisabled}
                           onHover={handleHoverSfx}
@@ -3267,7 +3330,7 @@ export function InstalledRoundsPage() {
 
             <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6">
               <MenuButton
-                label={scanRunning ? "Scanning..." : "Scan Now"}
+                label={scanRunning ? t`Scanning...` : t`Scan Now`}
                 primary
                 onClick={() => {
                   handleSelectSfx();
@@ -3276,7 +3339,7 @@ export function InstalledRoundsPage() {
                 onHover={handleHoverSfx}
               />
               <MenuButton
-                label="Back to Main Menu"
+                label={t`Back to Main Menu`}
                 onClick={() => {
                   handleSelectSfx();
                   navigate({ to: "/" });
@@ -3336,25 +3399,23 @@ export function InstalledRoundsPage() {
         }}
         onHoverSfx={handleHoverSfx}
       />
-      {activePreviewRound && (
-        <RoundVideoOverlay {...previewOverlayProps} />
-      )}
+      {activePreviewRound && <RoundVideoOverlay {...previewOverlayProps} />}
       {editingRound && (
         <EditDialog
-          title="Edit Round"
+          title={t`Edit Round`}
           onClose={() => !isSavingEdit && setEditingRound(null)}
           onSubmit={() => {
             void saveRoundEdit();
           }}
-          submitLabel={isSavingEdit ? "Saving..." : "Save Round"}
+          submitLabel={isSavingEdit ? t`Saving...` : t`Save Round`}
           disabled={isSavingEdit}
-          destructiveActionLabel={isSavingEdit ? "Deleting..." : "Delete Round"}
+          destructiveActionLabel={isSavingEdit ? t`Deleting...` : t`Delete Round`}
           onDestructiveAction={() => {
             void deleteRoundEntry();
           }}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <ModalField label="Name">
+            <ModalField label={t`Name`}>
               <input
                 value={editingRound.name}
                 onChange={(event) =>
@@ -3365,13 +3426,13 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="Type">
+            <ModalField label={t`Type`}>
               <GameDropdown
                 value={editingRound.type}
                 options={[
-                  { value: "Normal", label: "Normal" },
-                  { value: "Interjection", label: "Interjection" },
-                  { value: "Cum", label: abbreviateNsfwText("Cum", sfwMode) },
+                  { value: "Normal", label: t`Normal` },
+                  { value: "Interjection", label: t`Interjection` },
+                  { value: "Cum", label: abbreviateNsfwText(t`Cum`, sfwMode) },
                 ]}
                 onChange={(value) =>
                   setEditingRound((previous) =>
@@ -3380,7 +3441,7 @@ export function InstalledRoundsPage() {
                 }
               />
             </ModalField>
-            <ModalField label="Author">
+            <ModalField label={t`Author`}>
               <input
                 value={editingRound.author}
                 onChange={(event) =>
@@ -3391,7 +3452,7 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="BPM">
+            <ModalField label={t`BPM`}>
               <input
                 value={editingRound.bpm}
                 onChange={(event) =>
@@ -3402,7 +3463,7 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="Difficulty">
+            <ModalField label={t`Difficulty`}>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-0.5 rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2">
                   {[1, 2, 3, 4, 5].map((level) => {
@@ -3414,7 +3475,7 @@ export function InstalledRoundsPage() {
                       <button
                         key={level}
                         type="button"
-                        aria-label={`Set difficulty to ${level} star${level === 1 ? "" : "s"}`}
+                        aria-label={t`Set difficulty to ${level} star${level === 1 ? "" : "s"}`}
                         onClick={() =>
                           setEditingRound((previous) =>
                             previous ? { ...previous, difficulty: String(level) } : previous
@@ -3437,12 +3498,12 @@ export function InstalledRoundsPage() {
                     }
                     className="text-xs text-zinc-500 hover:text-zinc-400"
                   >
-                    clear
+                    <Trans>clear</Trans>
                   </button>
                 )}
               </div>
             </ModalField>
-            <ModalField label="Start Time (ms)">
+            <ModalField label={t`Start Time (ms)`}>
               <input
                 value={editingRound.startTime}
                 onChange={(event) =>
@@ -3453,7 +3514,7 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="End Time (ms)">
+            <ModalField label={t`End Time (ms)`}>
               <input
                 value={editingRound.endTime}
                 onChange={(event) =>
@@ -3464,13 +3525,15 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="Funscript" className="sm:col-span-2">
+            <ModalField label={t`Funscript`} className="sm:col-span-2">
               <div className="space-y-3 rounded-xl border border-violet-300/30 bg-black/45 p-3">
                 <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-200">
                   {editingRound.funscriptUri ? (
                     <span className="break-all">{editingRound.funscriptUri}</span>
                   ) : (
-                    <span className="text-zinc-500">No funscript attached</span>
+                    <span className="text-zinc-500">
+                      <Trans>No funscript attached</Trans>
+                    </span>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -3485,16 +3548,16 @@ export function InstalledRoundsPage() {
                           setEditingRound((previous) =>
                             previous
                               ? {
-                                ...previous,
-                                funscriptUri: window.electronAPI.file.convertFileSrc(filePath),
-                              }
+                                  ...previous,
+                                  funscriptUri: window.electronAPI.file.convertFileSrc(filePath),
+                                }
                               : previous
                           );
                         });
                     }}
                     className="rounded-xl border border-cyan-300/35 bg-cyan-500/12 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/75 hover:bg-cyan-500/24 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {editingRound.funscriptUri ? "Replace Funscript" : "Attach Funscript"}
+                    {editingRound.funscriptUri ? t`Replace Funscript` : t`Attach Funscript`}
                   </button>
                   <button
                     type="button"
@@ -3508,18 +3571,20 @@ export function InstalledRoundsPage() {
                     }
                     className="rounded-xl border border-orange-300/35 bg-orange-500/12 px-3 py-2 text-xs uppercase tracking-[0.18em] text-orange-100 transition-all duration-200 hover:border-orange-200/75 hover:bg-orange-500/24 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Detach Funscript
+                    <Trans>Detach Funscript</Trans>
                   </button>
                 </div>
                 {!editingRound.resourceId && (
                   <p className="text-xs text-zinc-500">
-                    Template rounds do not have a primary media resource, so a funscript cannot be
-                    attached here.
+                    <Trans>
+                      Template rounds do not have a primary media resource, so a funscript cannot be
+                      attached here.
+                    </Trans>
                   </p>
                 )}
               </div>
             </ModalField>
-            <ModalField label="Description" className="sm:col-span-2">
+            <ModalField label={t`Description`} className="sm:col-span-2">
               <textarea
                 value={editingRound.description}
                 onChange={(event) =>
@@ -3535,7 +3600,7 @@ export function InstalledRoundsPage() {
       )}
       {heroGroupRoundConversion && (
         <EditDialog
-          title="Convert Hero to Round"
+          title={t`Convert Hero to Round`}
           onClose={() => {
             if (convertingHeroGroupKey === heroGroupRoundConversion.groupKey) return;
             setHeroGroupRoundConversion(null);
@@ -3545,33 +3610,37 @@ export function InstalledRoundsPage() {
           }}
           submitLabel={
             convertingHeroGroupKey === heroGroupRoundConversion.groupKey
-              ? "Converting..."
-              : "Confirm Conversion"
+              ? t`Converting...`
+              : t`Confirm Conversion`
           }
           disabled={convertingHeroGroupKey === heroGroupRoundConversion.groupKey}
         >
           <div className="space-y-4">
             <div className="rounded-2xl border border-rose-300/25 bg-rose-500/10 p-4 text-sm text-zinc-200">
               <p className="font-semibold text-rose-100">
-                This keeps "{heroGroupRoundConversion.keepRoundName}" and permanently deletes{" "}
-                {heroGroupRoundConversion.roundsToDeleteCount} attached round(s).
+                <Trans>
+                  This keeps "{heroGroupRoundConversion.keepRoundName}" and permanently deletes{" "}
+                  {heroGroupRoundConversion.roundsToDeleteCount} attached round(s).
+                </Trans>
               </p>
               <p className="mt-2 text-zinc-300">
-                The hero will be removed and the kept round will become a standalone entry. This
-                cannot be undone in-app.
+                <Trans>
+                  The hero will be removed and the kept round will become a standalone entry. This
+                  cannot be undone in-app.
+                </Trans>
               </p>
             </div>
-            <ModalField label={`Type "${heroGroupRoundConversion.heroName}" to confirm`}>
+            <ModalField label={t`Type "${heroGroupRoundConversion.heroName}" to confirm`}>
               <input
                 value={heroGroupRoundConversion.confirmationText}
                 onChange={(event) =>
                   setHeroGroupRoundConversion((current) =>
                     current
                       ? {
-                        ...current,
-                        confirmationText: event.target.value,
-                        error: null,
-                      }
+                          ...current,
+                          confirmationText: event.target.value,
+                          error: null,
+                        }
                       : current
                   )
                 }
@@ -3588,20 +3657,20 @@ export function InstalledRoundsPage() {
       )}
       {editingHero && (
         <EditDialog
-          title="Edit Hero"
+          title={t`Edit Hero`}
           onClose={() => !isSavingEdit && setEditingHero(null)}
           onSubmit={() => {
             void saveHeroEdit();
           }}
-          submitLabel={isSavingEdit ? "Saving..." : "Save Hero"}
+          submitLabel={isSavingEdit ? t`Saving...` : t`Save Hero`}
           disabled={isSavingEdit}
-          destructiveActionLabel={isSavingEdit ? "Deleting..." : "Delete Hero"}
+          destructiveActionLabel={isSavingEdit ? t`Deleting...` : t`Delete Hero`}
           onDestructiveAction={() => {
             void deleteHeroEntry();
           }}
         >
           <div className="grid grid-cols-1 gap-3">
-            <ModalField label="Name">
+            <ModalField label={t`Name`}>
               <input
                 value={editingHero.name}
                 onChange={(event) =>
@@ -3612,7 +3681,7 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="Author">
+            <ModalField label={t`Author`}>
               <input
                 value={editingHero.author}
                 onChange={(event) =>
@@ -3623,7 +3692,7 @@ export function InstalledRoundsPage() {
                 className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-200/70"
               />
             </ModalField>
-            <ModalField label="Description">
+            <ModalField label={t`Description`}>
               <textarea
                 value={editingHero.description}
                 onChange={(event) =>
@@ -3639,27 +3708,29 @@ export function InstalledRoundsPage() {
       )}
       {repairingTemplateRound && (
         <EditDialog
-          title="Repair Template Round"
+          title={t`Repair Template Round`}
           onClose={() => !isSavingEdit && setRepairingTemplateRound(null)}
           onSubmit={() => {
             void saveRoundTemplateRepair();
           }}
-          submitLabel={isSavingEdit ? "Repairing..." : "Attach Source Media"}
+          submitLabel={isSavingEdit ? t`Repairing...` : t`Attach Source Media`}
           disabled={isSavingEdit}
         >
           <div className="space-y-4">
             <p className="rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4 text-sm text-zinc-200">
-              Attach installed media to{" "}
-              <span className="font-semibold text-amber-100">
-                {repairingTemplateRound.roundName}
-              </span>
-              .
+              <Trans>
+                Attach installed media to{" "}
+                <span className="font-semibold text-amber-100">
+                  {repairingTemplateRound.roundName}
+                </span>
+                .
+              </Trans>
             </p>
-            <ModalField label="Installed Round Source">
+            <ModalField label={t`Installed Round Source`}>
               <GameDropdown
                 value={repairingTemplateRound.installedRoundId as string}
                 options={[
-                  { value: "" as string, label: "Select installed round" },
+                  { value: "" as string, label: t`Select installed round` },
                   ...rounds
                     .filter((round) => !isTemplateRound(round))
                     .map((round) => ({
@@ -3679,25 +3750,29 @@ export function InstalledRoundsPage() {
       )}
       {repairingTemplateHero && (
         <EditDialog
-          title="Repair Template Hero"
+          title={t`Repair Template Hero`}
           onClose={() => !isSavingEdit && setRepairingTemplateHero(null)}
           onSubmit={() => {
             void saveHeroTemplateRepair();
           }}
-          submitLabel={isSavingEdit ? "Repairing..." : "Attach Hero Media"}
+          submitLabel={isSavingEdit ? t`Repairing...` : t`Attach Hero Media`}
           disabled={isSavingEdit}
         >
           <div className="space-y-4">
             <p className="rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4 text-sm text-zinc-200">
-              Choose a source hero for{" "}
-              <span className="font-semibold text-amber-100">{repairingTemplateHero.heroName}</span>
-              . Assignments are auto-filled by round name, then order.
+              <Trans>
+                Choose a source hero for{" "}
+                <span className="font-semibold text-amber-100">
+                  {repairingTemplateHero.heroName}
+                </span>
+                . Assignments are auto-filled by round name, then order.
+              </Trans>
             </p>
-            <ModalField label="Source Hero">
+            <ModalField label={t`Source Hero`}>
               <GameDropdown
                 value={repairingTemplateHero.sourceHeroId}
                 options={[
-                  { value: "" as string, label: "Select source hero" },
+                  { value: "" as string, label: t`Select source hero` },
                   ...sourceHeroOptions.map((option) => ({
                     value: option.heroId,
                     label: `${option.heroName} (${option.rounds.length} rounds)`,
@@ -3716,7 +3791,7 @@ export function InstalledRoundsPage() {
                     <GameDropdown
                       value={assignment.installedRoundId}
                       options={[
-                        { value: "" as string, label: "Select installed round" },
+                        { value: "" as string, label: t`Select installed round` },
                         ...(selectedSourceHero?.rounds ?? []).map((round) => ({
                           value: round.id,
                           label: round.name,
@@ -3726,13 +3801,13 @@ export function InstalledRoundsPage() {
                         setRepairingTemplateHero((current) =>
                           current
                             ? {
-                              ...current,
-                              assignments: current.assignments.map((entry) =>
-                                entry.roundId === assignment.roundId
-                                  ? { ...entry, installedRoundId: value }
-                                  : entry
-                              ),
-                            }
+                                ...current,
+                                assignments: current.assignments.map((entry) =>
+                                  entry.roundId === assignment.roundId
+                                    ? { ...entry, installedRoundId: value }
+                                    : entry
+                                ),
+                              }
                             : current
                         )
                       }
@@ -3746,24 +3821,26 @@ export function InstalledRoundsPage() {
       )}
       {legacyPlaylistReview && (
         <EditDialog
-          title="Review Legacy Import"
+          title={t`Review Legacy Import`}
           onClose={dismissLegacyPlaylistReview}
           onSubmit={() => {
             void createLegacyPlaylist();
           }}
           submitLabel={
             legacyPlaylistReview.creating
-              ? "Importing..."
+              ? t`Importing...`
               : legacyPlaylistReview.createPlaylist
-                ? "Import and Create Playlist"
-                : "Import Without Playlist"
+                ? t`Import and Create Playlist`
+                : t`Import Without Playlist`
           }
           disabled={legacyPlaylistReview.creating}
         >
           <div className="space-y-4">
             <div className="rounded-2xl border border-violet-300/25 bg-violet-500/10 p-4 text-sm text-zinc-200">
-              Review the folder before import. Ordered by filename (natural sort), so entries like
-              2, 10, and 100 stay in human order.
+              <Trans>
+                Review the folder before import. Ordered by filename (natural sort), so entries like
+                2, 10, and 100 stay in human order.
+              </Trans>
             </div>
             <label className="flex items-start gap-3 rounded-2xl border border-zinc-700/70 bg-black/35 px-4 py-3 text-sm text-zinc-200">
               <input
@@ -3773,16 +3850,18 @@ export function InstalledRoundsPage() {
                   setLegacyPlaylistReview((current) =>
                     current
                       ? {
-                        ...current,
-                        createPlaylist: event.target.checked,
-                        error: null,
-                      }
+                          ...current,
+                          createPlaylist: event.target.checked,
+                          error: null,
+                        }
                       : null
                   )
                 }
                 className="mt-0.5 h-4 w-4 rounded border-zinc-500 bg-black/40"
               />
-              <span>Create a playlist after import.</span>
+              <span>
+                <Trans>Create a playlist after import.</Trans>
+              </span>
             </label>
             <label className="flex items-start gap-3 rounded-2xl border border-zinc-700/70 bg-black/35 px-4 py-3 text-sm text-zinc-200">
               <input
@@ -3792,43 +3871,50 @@ export function InstalledRoundsPage() {
                   setLegacyPlaylistReview((current) =>
                     current
                       ? {
-                        ...current,
-                        deferPhash: event.target.checked,
-                        error: null,
-                      }
+                          ...current,
+                          deferPhash: event.target.checked,
+                          error: null,
+                        }
                       : null
                   )
                 }
                 className="mt-0.5 h-4 w-4 rounded border-zinc-500 bg-black/40"
               />
-              <span>Defer phash generation to a later moment.</span>
+              <span>
+                <Trans>Defer phash generation to a later moment.</Trans>
+              </span>
             </label>
-            <ModalField label="Playlist Name">
+            <ModalField label={t`Playlist Name`}>
               <input
                 value={legacyPlaylistReview.playlistName}
                 onChange={(event) =>
                   setLegacyPlaylistReview((current) =>
                     current
                       ? {
-                        ...current,
-                        playlistName: event.target.value,
-                        error: null,
-                      }
+                          ...current,
+                          playlistName: event.target.value,
+                          error: null,
+                        }
                       : null
                   )
                 }
                 disabled={!legacyPlaylistReview.createPlaylist}
-                className={`w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 ${legacyPlaylistReview.createPlaylist
+                className={`w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 ${
+                  legacyPlaylistReview.createPlaylist
                     ? "border-violet-300/35 bg-black/45 text-zinc-100 focus:border-violet-200/80 focus:ring-2 focus:ring-violet-400/25"
                     : "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
-                  }`}
-                placeholder="Legacy Playlist"
+                }`}
+                placeholder={t`Legacy Playlist`}
               />
             </ModalField>
             <div className="rounded-2xl border border-zinc-700/70 bg-black/35 p-4">
               <div className="mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-zinc-300">
-                <span>Import Order Preview</span>
-                <span>{legacyPlaylistReview.slots.length} slots</span>
+                <span>
+                  <Trans>Import Order Preview</Trans>
+                </span>
+                <span>
+                  {legacyPlaylistReview.slots.length} <Trans>slots</Trans>
+                </span>
               </div>
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                 {legacyPlaylistReview.slots.map((slot) => (
@@ -3842,10 +3928,10 @@ export function InstalledRoundsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold text-zinc-50">{slot.sourceLabel}</div>
                       <div className="text-xs text-zinc-400">
-                        Excluded: {slot.excludedFromImport ? "Yes" : "No"}
+                        <Trans>Excluded:</Trans> {slot.excludedFromImport ? t`Yes` : t`No`}
                       </div>
                       <div className="text-xs text-zinc-400">
-                        Checkpoint: {slot.selectedAsCheckpoint ? "Yes" : "No"}
+                        <Trans>Checkpoint:</Trans> {slot.selectedAsCheckpoint ? t`Yes` : t`No`}
                       </div>
                     </div>
                     <label className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-zinc-300">
@@ -3855,7 +3941,9 @@ export function InstalledRoundsPage() {
                         onChange={() => toggleLegacyImportExclusion(slot.id)}
                         className="h-4 w-4 rounded border-zinc-500 bg-black/40"
                       />
-                      <span>Import</span>
+                      <span>
+                        <Trans>Import</Trans>
+                      </span>
                     </label>
                     <label className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-zinc-300">
                       <input
@@ -3865,7 +3953,9 @@ export function InstalledRoundsPage() {
                         onChange={() => toggleLegacyCheckpointSelection(slot.id)}
                         className="h-4 w-4 rounded border-zinc-500 bg-black/40 disabled:cursor-not-allowed disabled:opacity-50"
                       />
-                      <span>Checkpoint</span>
+                      <span>
+                        <Trans>Checkpoint</Trans>
+                      </span>
                     </label>
                   </div>
                 ))}
@@ -3914,18 +4004,18 @@ export function InstalledRoundsPage() {
       )}
       <ConfirmDialog
         isOpen={deleteRoundDialog !== null}
-        title="Delete Round?"
-        message={`Delete round entry \u201C${deleteRoundDialog?.name ?? ""}\u201D from the database?\n\nThis removes only the database entry. Files on disk will be left untouched.`}
-        confirmLabel="Delete Round"
+        title={t`Delete Round?`}
+        message={t`Delete round entry \u201C${deleteRoundDialog?.name ?? ""}\u201D from the database?\n\nThis removes only the database entry. Files on disk will be left untouched.`}
+        confirmLabel={t`Delete Round`}
         variant="danger"
         onConfirm={confirmDeleteRound}
         onCancel={() => setDeleteRoundDialog(null)}
       />
       <ConfirmDialog
         isOpen={deleteHeroDialog !== null}
-        title="Delete Hero?"
-        message={`Delete hero entry \u201C${deleteHeroDialog?.name ?? ""}\u201D from the database?\n\nThis also permanently deletes all attached rounds from the database. Files on disk will be left untouched.`}
-        confirmLabel="Delete Hero"
+        title={t`Delete Hero?`}
+        message={t`Delete hero entry \u201C${deleteHeroDialog?.name ?? ""}\u201D from the database?\n\nThis also permanently deletes all attached rounds from the database. Files on disk will be left untouched.`}
+        confirmLabel={t`Delete Hero`}
         variant="danger"
         onConfirm={confirmDeleteHero}
         onCancel={() => setDeleteHeroDialog(null)}
@@ -3970,6 +4060,7 @@ const RoundCard = memo(function RoundCard({
   onToggleSelection?: (round: InstalledRound) => void;
 }) {
   const sfwMode = useSfwMode();
+  const { t } = useLingui();
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [hasActivatedPreview, setHasActivatedPreview] = useState(false);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
@@ -3984,15 +4075,21 @@ const RoundCard = memo(function RoundCard({
   const showWebsiteCachingState = isWebsiteRound && websiteVideoCachePending;
   const canPreview = Boolean(previewUri) && !showWebsiteCachingState;
   const difficulty = round.difficulty ?? 1;
-  const sourceLabel = getRoundInstallSourceLabel(round.installSourceKey);
+  const sourceLabel = abbreviateNsfwText(
+    getRoundInstallSourceLabel(round.installSourceKey, t),
+    sfwMode
+  );
   const durationLabel = formatDurationLabel(getRoundDurationSec(round));
   const animationDelay = index < 12 ? `${0.14 + index * 0.04}s` : undefined;
   const displayName = abbreviateNsfwText(round.name, sfwMode);
   const displayType = abbreviateNsfwText(round.type ?? "Normal", sfwMode);
-  const displayDescription = abbreviateNsfwText(round.description ?? "No description", sfwMode);
-  const displayAuthor = abbreviateNsfwText(round.author ?? "Unknown", sfwMode);
-  const displayHeroName = round.hero?.name ? abbreviateNsfwText(round.hero.name, sfwMode) : "N/A";
-  const displayLibraryLabel = abbreviateNsfwText(round.author ?? round.hero?.name ?? "Installed", sfwMode);
+  const displayDescription = abbreviateNsfwText(round.description ?? t`No description`, sfwMode);
+  const displayAuthor = abbreviateNsfwText(round.author ?? t`Unknown`, sfwMode);
+  const displayHeroName = round.hero?.name ? abbreviateNsfwText(round.hero.name, sfwMode) : t`N/A`;
+  const displayLibraryLabel = abbreviateNsfwText(
+    round.author ?? round.hero?.name ?? t`Installed`,
+    sfwMode
+  );
   const stopPreviewPlayback = useCallback(() => {
     setIsPreviewActive(false);
     setHasActivatedPreview(false);
@@ -4049,7 +4146,7 @@ const RoundCard = memo(function RoundCard({
           <SfwGuard>
             <img
               src={previewImage}
-              alt={`${displayName} preview`}
+              alt={t`${displayName} preview`}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               loading="lazy"
               decoding="async"
@@ -4083,10 +4180,10 @@ const RoundCard = memo(function RoundCard({
             )}
             <span>
               {showWebsiteCachingState
-                ? "Caching Ongoing"
+                ? t`Caching Ongoing`
                 : isPreviewBeingGenerated
-                  ? "Preview Is Being Generated"
-                  : "No Preview"}
+                  ? t`Preview Is Being Generated`
+                  : t`No Preview`}
             </span>
           </div>
         ) : null}
@@ -4115,7 +4212,7 @@ const RoundCard = memo(function RoundCard({
         ) : previewUri ? (
           <button
             type="button"
-            aria-label={`Play ${displayName}`}
+            aria-label={t`Play ${displayName}`}
             className="absolute left-1/2 top-1/2 z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/45 bg-black/55 text-white opacity-0 shadow-[0_0_30px_rgba(0,0,0,0.45)] transition-all duration-200 group-hover/video:scale-105 group-hover/video:opacity-100 focus-visible:opacity-100"
             onMouseEnter={onHoverSfx}
             onClick={() => {
@@ -4136,17 +4233,17 @@ const RoundCard = memo(function RoundCard({
           </span>
           {showDisabledBadge && (
             <span className="rounded-full border border-rose-300/35 bg-rose-500/18 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-rose-100 backdrop-blur-md">
-              Disabled
+              <Trans>Disabled</Trans>
             </span>
           )}
           {isTemplate && (
             <span className="rounded-full border border-amber-300/35 bg-amber-500/18 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-amber-100 backdrop-blur-md">
-              Template
+              <Trans>Template</Trans>
             </span>
           )}
           {showWebsiteCachingState && (
             <span className="rounded-full border border-amber-300/45 bg-amber-500/18 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-amber-100 backdrop-blur-md">
-              {downloadProgress ? `${Math.round(downloadProgress.percent)}%` : "Caching Ongoing"}
+              {downloadProgress ? `${Math.round(downloadProgress.percent)}%` : t`Caching Ongoing`}
             </span>
           )}
         </div>
@@ -4154,27 +4251,28 @@ const RoundCard = memo(function RoundCard({
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-3 pb-3">
           <div className="min-w-0 rounded-2xl border border-white/10 bg-black/25 px-3 py-2 backdrop-blur-md">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.28em] text-white/55">
-              Library
+              <Trans>Library</Trans>
             </p>
             <p className="mt-1 max-w-[12rem] truncate text-sm font-semibold text-white/90">
               {displayLibraryLabel}
             </p>
           </div>
           <span
-            className={`shrink-0 rounded-full border px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] backdrop-blur-md ${showWebsiteCachingState
+            className={`shrink-0 rounded-full border px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] backdrop-blur-md ${
+              showWebsiteCachingState
                 ? "border-amber-300/45 bg-amber-500/18 text-amber-100"
                 : hasFunscript
                   ? "border-emerald-300/35 bg-emerald-500/18 text-emerald-100"
                   : "border-orange-300/35 bg-orange-500/18 text-orange-100"
-              }`}
+            }`}
           >
             {showWebsiteCachingState
               ? downloadProgress
                 ? `${Math.round(downloadProgress.percent)}%`
-                : "Video Caching"
+                : t`Video Caching`
               : hasFunscript
-                ? "Script Ready"
-                : "No Script"}
+                ? t`Script Ready`
+                : t`No Script`}
           </span>
         </div>
 
@@ -4190,12 +4288,12 @@ const RoundCard = memo(function RoundCard({
                 transitionDelay: showTechnicalDetails ? "50ms" : "0ms",
               }}
             >
-              <TechnicalDetail label="Round Hash" value={round.phash ?? "N/A"} />
-              <TechnicalDetail label="Resource Hash" value={primaryResource?.phash ?? "N/A"} />
-              <TechnicalDetail label="Round ID" value={round.id} />
-              <TechnicalDetail label="Resource ID" value={primaryResource?.id ?? "N/A"} />
+              <TechnicalDetail label={t`Round Hash`} value={round.phash ?? "N/A"} />
+              <TechnicalDetail label={t`Resource Hash`} value={primaryResource?.phash ?? "N/A"} />
+              <TechnicalDetail label={t`Round ID`} value={round.id} />
+              <TechnicalDetail label={t`Resource ID`} value={primaryResource?.id ?? "N/A"} />
               <TechnicalDetail
-                label="Source Key"
+                label={t`Source Key`}
                 value={round.installSourceKey ?? "N/A"}
                 className="sm:col-span-2"
               />
@@ -4232,11 +4330,11 @@ const RoundCard = memo(function RoundCard({
 
         <div className="flex min-h-[4.5rem] flex-wrap content-start items-start gap-x-4 gap-y-1.5 overflow-hidden text-xs text-zinc-400">
           <span>
-            <strong className="font-medium text-zinc-300">BPM:</strong>{" "}
-            {round.bpm ? Math.round(round.bpm) : "N/A"}
+            <strong className="font-medium text-zinc-300">{t`BPM:`}</strong>{" "}
+            {round.bpm ? Math.round(round.bpm) : t`N/A`}
           </span>
           <span>
-            <strong className="font-medium text-zinc-300">Hero:</strong> {displayHeroName}
+            <strong className="font-medium text-zinc-300">{t`Hero:`}</strong> {displayHeroName}
           </span>
           <span
             className={
@@ -4247,21 +4345,20 @@ const RoundCard = memo(function RoundCard({
                   : "text-orange-300"
             }
           >
-            {isTemplate ? "Template" : hasFunscript ? "Script Ready" : "No Script"}
+            {isTemplate ? t`Template` : hasFunscript ? t`Script Ready` : t`No Script`}
           </span>
           <span>
-            <strong className="font-medium text-zinc-300">Author:</strong>{" "}
-            {displayAuthor}
+            <strong className="font-medium text-zinc-300">{t`Author:`}</strong> {displayAuthor}
           </span>
           <span>
-            <strong className="font-medium text-zinc-300">Window:</strong>{" "}
-            {formatWindow(round.startTime, round.endTime)}
+            <strong className="font-medium text-zinc-300">{t`Window:`}</strong>{" "}
+            {formatWindow(round.startTime, round.endTime, t)}
           </span>
           <span>
-            <strong className="font-medium text-zinc-300">Length:</strong> {durationLabel}
+            <strong className="font-medium text-zinc-300">{t`Length:`}</strong> {durationLabel}
           </span>
           <span>
-            <strong className="font-medium text-zinc-300">Source:</strong> {sourceLabel}
+            <strong className="font-medium text-zinc-300">{t`Source:`}</strong> {sourceLabel}
           </span>
         </div>
 
@@ -4272,7 +4369,7 @@ const RoundCard = memo(function RoundCard({
             onMouseEnter={onHoverSfx}
             type="button"
           >
-            Edit Round
+            <Trans>Edit Round</Trans>
           </button>
           <button
             className="rounded-[1.6rem] border border-violet-300/35 bg-violet-500/12 px-2.5 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.16em] text-violet-100 transition-all duration-200 hover:border-violet-200/75 hover:bg-violet-500/24"
@@ -4280,9 +4377,11 @@ const RoundCard = memo(function RoundCard({
             onMouseEnter={onHoverSfx}
             type="button"
             aria-expanded={showTechnicalDetails}
-            aria-label={showTechnicalDetails ? "Hide Technical Details" : "Show Technical Details"}
+            aria-label={
+              showTechnicalDetails ? t`Hide Technical Details` : t`Show Technical Details`
+            }
           >
-            {showTechnicalDetails ? "Hide Details" : "Details"}
+            {showTechnicalDetails ? <Trans>Hide Details</Trans> : <Trans>Details</Trans>}
           </button>
           {isTemplate && (
             <>
@@ -4292,7 +4391,7 @@ const RoundCard = memo(function RoundCard({
                 onMouseEnter={onHoverSfx}
                 type="button"
               >
-                Repair Template
+                <Trans>Repair Template</Trans>
               </button>
               <button
                 className="col-span-2 rounded-[1.6rem] border border-fuchsia-300/35 bg-fuchsia-500/14 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-fuchsia-100 transition-all duration-200 hover:border-fuchsia-200/75 hover:bg-fuchsia-500/28"
@@ -4300,7 +4399,7 @@ const RoundCard = memo(function RoundCard({
                 onMouseEnter={onHoverSfx}
                 type="button"
               >
-                Retry Auto-Link
+                <Trans>Retry Auto-Link</Trans>
               </button>
             </>
           )}
@@ -4311,7 +4410,7 @@ const RoundCard = memo(function RoundCard({
               onMouseEnter={onHoverSfx}
               type="button"
             >
-              Convert to Hero
+              <Trans>Convert to Hero</Trans>
             </button>
           )}
         </div>
@@ -4495,6 +4594,7 @@ function HeroGroupHeader({
   selected?: boolean;
   onToggleSelection?: () => void;
 }) {
+  const { t } = useLingui();
   const [showActions, setShowActions] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
 
@@ -4534,11 +4634,11 @@ function HeroGroupHeader({
         onClick={onToggle}
         className="flex min-w-0 flex-1 items-center justify-between rounded-2xl border border-violet-300/35 bg-black/45 px-4 py-3 text-left shadow-[0_0_25px_rgba(139,92,246,0.12)] transition-all duration-200 hover:border-violet-200/70 hover:bg-violet-500/12"
         aria-expanded={expanded}
-        aria-label={`${heroName} (${roundCount} rounds)`}
+        aria-label={t`${heroName} (${roundCount} rounds)`}
       >
         <div className="min-w-0">
           <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-violet-200/85">
-            Hero Group
+            <Trans>Hero Group</Trans>
           </p>
           <h2 className="mt-1 truncate text-lg font-extrabold tracking-tight text-zinc-100">
             {heroName}
@@ -4547,18 +4647,18 @@ function HeroGroupHeader({
         <div className="flex items-center gap-3 pl-3">
           {pendingCacheCount > 0 && (
             <span className="rounded-md border border-amber-300/40 bg-amber-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100">
-              {pendingCacheCount > 1 ? `${pendingCacheCount} Caching` : "Caching Ongoing"}
+              {pendingCacheCount > 1 ? t`${pendingCacheCount} Caching` : t`Caching Ongoing`}
             </span>
           )}
           {pendingPreviewCount > 0 && (
             <span className="rounded-md border border-cyan-300/40 bg-cyan-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-cyan-100">
               {pendingPreviewCount > 1
-                ? `${pendingPreviewCount} Previews Generating`
-                : "Preview Is Being Generated"}
+                ? t`${pendingPreviewCount} Previews Generating`
+                : t`Preview Is Being Generated`}
             </span>
           )}
           <span className="rounded-md border border-violet-300/40 bg-violet-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-violet-100">
-            {roundCount} Rounds
+            {t`${roundCount} Rounds`}
           </span>
           <span
             className={`text-violet-200 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -4574,7 +4674,7 @@ function HeroGroupHeader({
           onClick={() => setShowActions((v) => !v)}
           className="h-full rounded-2xl border border-violet-300/35 bg-violet-500/12 px-3 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-violet-100 transition-all duration-200 hover:border-violet-200/75 hover:bg-violet-500/24"
         >
-          Actions
+          <Trans>Actions</Trans>
         </button>
         {showActions && (
           <div className="absolute right-0 top-full z-50 mt-2 min-w-[160px] overflow-hidden rounded-xl border border-violet-300/35 bg-zinc-950/95 shadow-[0_0_24px_rgba(139,92,246,0.38)] backdrop-blur-xl">
@@ -4587,7 +4687,7 @@ function HeroGroupHeader({
               }}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-cyan-100 transition-colors hover:bg-cyan-500/15"
             >
-              Edit Hero
+              <Trans>Edit Hero</Trans>
             </button>
             <button
               type="button"
@@ -4598,7 +4698,7 @@ function HeroGroupHeader({
               }}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-rose-100 transition-colors hover:bg-rose-500/15"
             >
-              Delete Hero
+              <Trans>Delete Hero</Trans>
             </button>
             {hasTemplateRounds && (
               <>
@@ -4611,7 +4711,7 @@ function HeroGroupHeader({
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-amber-100 transition-colors hover:bg-amber-500/15"
                 >
-                  Repair Templates
+                  <Trans>Repair Templates</Trans>
                 </button>
                 <button
                   type="button"
@@ -4622,7 +4722,7 @@ function HeroGroupHeader({
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-fuchsia-100 transition-colors hover:bg-fuchsia-500/15"
                 >
-                  Retry Auto-Link
+                  <Trans>Retry Auto-Link</Trans>
                 </button>
               </>
             )}
@@ -4637,7 +4737,7 @@ function HeroGroupHeader({
               disabled={converting}
               className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${converting ? "cursor-wait text-zinc-400" : "text-rose-100 hover:bg-rose-500/15"}`}
             >
-              {converting ? "Converting..." : "Convert to Round"}
+              {converting ? <Trans>Converting...</Trans> : <Trans>Convert to Round</Trans>}
             </button>
           </div>
         )}
@@ -4661,6 +4761,7 @@ function PlaylistGroupHeader({
   onToggle: () => void;
   onHoverSfx: () => void;
 }) {
+  const { t } = useLingui();
   return (
     <button
       type="button"
@@ -4669,29 +4770,29 @@ function PlaylistGroupHeader({
       onClick={onToggle}
       className="flex w-full min-w-0 items-center justify-between rounded-2xl border border-emerald-300/35 bg-black/45 px-4 py-3 text-left shadow-[0_0_25px_rgba(16,185,129,0.12)] transition-all duration-200 hover:border-emerald-200/70 hover:bg-emerald-500/12"
       aria-expanded={expanded}
-      aria-label={`${playlistName} (${roundCount} rounds)`}
+      aria-label={t`${playlistName} (${roundCount} rounds)`}
     >
       <div className="min-w-0">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-emerald-200/85">
-          Playlist Group
+          <Trans>Playlist Group</Trans>
         </p>
         <h2 className="mt-1 truncate text-lg font-extrabold tracking-tight text-zinc-100">
           {playlistName}
         </h2>
         {cachePending && (
           <p className="mt-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-amber-200/90">
-            Caching ongoing
+            <Trans>Caching ongoing</Trans>
           </p>
         )}
       </div>
       <div className="flex items-center gap-3 pl-3">
         {cachePending && (
           <span className="rounded-md border border-amber-300/45 bg-amber-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100">
-            Caching Ongoing
+            <Trans>Caching Ongoing</Trans>
           </span>
         )}
         <span className="rounded-md border border-emerald-300/40 bg-emerald-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-100">
-          {roundCount} Rounds
+          {t`${roundCount} Rounds`}
         </span>
         <span
           className={`text-emerald-200 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -4709,7 +4810,9 @@ function DifficultyBadge({ difficulty, animate }: { difficulty: number; animate:
     <div
       className={`absolute left-3 top-3 flex items-center gap-2 rounded-full border border-pink-200/45 bg-pink-400/22 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] text-white shadow-[0_0_30px_rgba(236,72,153,0.45)] backdrop-blur-md ${animate ? "animate-difficulty-pop" : ""}`}
     >
-      <span className="text-pink-100/90">Difficulty</span>
+      <span className="text-pink-100/90">
+        <Trans>Difficulty</Trans>
+      </span>
       <span className="text-yellow-200 drop-shadow-[0_0_8px_rgba(253,224,71,0.85)]">
         {"★".repeat(level)}
       </span>
@@ -4748,7 +4851,7 @@ function EditDialog({
             disabled={disabled}
             className="rounded-xl border border-zinc-700 bg-black/40 px-3 py-2 text-xs uppercase tracking-[0.18em] text-zinc-300"
           >
-            Close
+            <Trans>Close</Trans>
           </button>
         </div>
         {children}
@@ -4758,10 +4861,11 @@ function EditDialog({
               type="button"
               onClick={onDestructiveAction}
               disabled={disabled}
-              className={`mr-auto rounded-xl border px-4 py-2 text-sm font-semibold ${disabled
+              className={`mr-auto rounded-xl border px-4 py-2 text-sm font-semibold ${
+                disabled
                   ? "cursor-not-allowed border-zinc-700 bg-zinc-800 text-zinc-500"
                   : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                }`}
+              }`}
             >
               {destructiveActionLabel}
             </button>
@@ -4772,7 +4876,7 @@ function EditDialog({
             disabled={disabled}
             className="rounded-xl border border-zinc-700 bg-black/40 px-4 py-2 text-sm text-zinc-300"
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </button>
           <button
             type="button"
@@ -4807,13 +4911,16 @@ function ModalField({
   );
 }
 
-function formatEta(ms: number | null | undefined): string {
+function formatEta(
+  ms: number | null | undefined,
+  t: (template: TemplateStringsArray, ...expressions: unknown[]) => string
+): string {
   if (ms === null || ms === undefined) return "";
   const totalSeconds = Math.round(ms / 1000);
   if (totalSeconds <= 0) return "";
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return minutes > 0 ? `~ ${minutes}m ${seconds}s remaining` : `~ ${seconds}s remaining`;
+  return minutes > 0 ? t`~ ${minutes}m ${seconds}s remaining` : t`~ ${seconds}s remaining`;
 }
 
 const RoundsLibraryInstallOverlay = memo(
@@ -4853,27 +4960,26 @@ function InstallImportOverlay({
   aborting: boolean;
   onAbort: () => void;
 }) {
+  const { t } = useLingui();
   const stats = status?.stats;
-  const processed = stats
-    ? stats.installed + stats.updated + stats.skipped + stats.failed
-    : 0;
+  const processed = stats ? stats.installed + stats.updated + stats.skipped + stats.failed : 0;
   const total = status?.phaseProgress?.total ?? stats?.totalSidecars ?? 0;
   const phaseCurrent = status?.phaseProgress?.current ?? processed;
   const progress = total > 0 ? (processed / total) * 100 : 0;
   const eta =
     status?.state === "running"
       ? status.etaMs
-        ? formatEta(status.etaMs)
-        : "Calculating ETA..."
+        ? formatEta(status.etaMs, t)
+        : t`Calculating ETA...`
       : "";
 
   const summary = status
-    ? `${status.stats.installed} rounds, ${status.stats.playlistsImported} playlists, ${status.stats.updated} updated, ${status.stats.failed} failed`
-    : "Preparing import...";
+    ? t`${status.stats.installed} rounds, ${status.stats.playlistsImported} playlists, ${status.stats.updated} updated, ${status.stats.failed} failed`
+    : t`Preparing import...`;
   const progressLabel =
     status?.phase === "extracting-pack" && status.phaseProgress
-      ? `Extracting pack ${status.phaseProgress.current} / ${status.phaseProgress.total} files`
-      : status?.lastMessage ?? "Scanning files and preparing imported rounds...";
+      ? t`Extracting pack ${status.phaseProgress.current} / ${status.phaseProgress.total} files`
+      : (status?.lastMessage ?? t`Scanning files and preparing imported rounds...`);
   const progressPercent = total > 0 ? (phaseCurrent / total) * 100 : progress;
 
   return (
@@ -4884,7 +4990,7 @@ function InstallImportOverlay({
             {status?.lastPreviewImage ? (
               <img
                 src={status.lastPreviewImage}
-                alt="Current round preview"
+                alt={t`Current round preview`}
                 className="h-full w-full rounded-2xl object-cover"
               />
             ) : (
@@ -4895,21 +5001,23 @@ function InstallImportOverlay({
           <div className="flex-1 space-y-4">
             <div>
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.32em] text-cyan-200/85">
-                Long Import Running
+                <Trans>Long Import Running</Trans>
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-50">
-                Installing rounds can take a very long time.
+                <Trans>Installing rounds can take a very long time.</Trans>
               </h2>
               <p className="mt-3 text-sm leading-6 text-zinc-300">
-                Hashes may need to be calculated, and video transcoding or preview generation may
-                also be required.
+                <Trans>
+                  Hashes may need to be calculated, and video transcoding or preview generation may
+                  also be required.
+                </Trans>
               </p>
             </div>
 
             <div className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
               <div className="flex items-center justify-between">
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100">
-                  Progress
+                  <Trans>Progress</Trans>
                 </p>
                 {eta && (
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.1em] text-cyan-300 animate-pulse">
@@ -4928,9 +5036,7 @@ function InstallImportOverlay({
               )}
 
               <p className="mt-3 text-sm text-zinc-100">{summary}</p>
-              <p className="mt-2 text-xs font-medium text-zinc-400 truncate">
-                {progressLabel}
-              </p>
+              <p className="mt-2 text-xs font-medium text-zinc-400 truncate">{progressLabel}</p>
             </div>
 
             <div className="flex justify-end">
@@ -4938,12 +5044,13 @@ function InstallImportOverlay({
                 type="button"
                 onClick={onAbort}
                 disabled={aborting}
-                className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${aborting
+                className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${
+                  aborting
                     ? "cursor-wait border-zinc-700 bg-zinc-800 text-zinc-500"
                     : "border-rose-300/55 bg-rose-500/20 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/35"
-                  }`}
+                }`}
               >
-                {aborting ? "Aborting..." : "Abort Import"}
+                {aborting ? t`Aborting...` : t`Abort Import`}
               </button>
             </div>
           </div>
@@ -4974,6 +5081,7 @@ function InstalledDatabaseExportDialog({
   selectionCount: { rounds: number; heroes: number };
   selectionIds: { roundIds: string[]; heroIds: string[] };
 }) {
+  const { t } = useLingui();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const hasResult = Boolean(state.result);
   const disableClose = exporting;
@@ -5029,8 +5137,7 @@ function InstalledDatabaseExportDialog({
             setAnalysis(null);
             onChange((current) => ({
               ...current,
-              error:
-                error instanceof Error ? error.message : "Failed to analyze library package.",
+              error: error instanceof Error ? error.message : t`Failed to analyze library package.`,
             }));
           })
           .finally(() => {
@@ -5056,8 +5163,9 @@ function InstalledDatabaseExportDialog({
     state.includeMedia,
   ]);
 
-  const effectiveMode: "copy" | "av1" =
-    !state.includeMedia ? "copy" : state.compressionMode ?? analysis?.compression.defaultMode ?? "copy";
+  const effectiveMode: "copy" | "av1" = !state.includeMedia
+    ? "copy"
+    : (state.compressionMode ?? analysis?.compression.defaultMode ?? "copy");
   const estimate = analysis?.estimate ?? null;
   const savingsBytes = estimate?.savingsBytes ?? 0;
   const canEnableCompression = state.includeMedia && (analysis?.compression.supported ?? false);
@@ -5082,9 +5190,9 @@ function InstalledDatabaseExportDialog({
     return `${Math.max(1, minutes)} min`;
   };
   const getStrengthLabel = (value: number) => {
-    if (value <= 20) return "Low compression";
-    if (value <= 60) return "Balanced";
-    return "High compression";
+    if (value <= 20) return t`Low compression`;
+    if (value <= 60) return t`Balanced`;
+    return t`High compression`;
   };
 
   return (
@@ -5103,19 +5211,19 @@ function InstalledDatabaseExportDialog({
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.34em] text-cyan-200/85">
-                Library Export
+                <Trans>Library Export</Trans>
               </p>
               <div>
                 <h2
                   id="installed-database-export-title"
                   className="text-3xl font-black tracking-tight text-white sm:text-4xl"
                 >
-                  {hasResult ? "Export complete." : "Package your library."}
+                  {hasResult ? t`Export complete.` : t`Package your library.`}
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                   {hasResult
-                    ? "Your export is ready. You can close this dialog or use the path below."
-                    : "Review scope, media handling, and AV1 compression before choosing the destination folder."}
+                    ? t`Your export is ready. You can close this dialog or use the path below.`
+                    : t`Review scope, media handling, and AV1 compression before choosing the destination folder.`}
                 </p>
               </div>
             </div>
@@ -5123,12 +5231,13 @@ function InstalledDatabaseExportDialog({
               type="button"
               onClick={onClose}
               disabled={disableClose}
-              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${disableClose
+              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${
+                disableClose
                   ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                   : "border-slate-600/80 bg-black/30 text-slate-300 transition-all duration-200 hover:border-cyan-200/60 hover:text-white"
-                }`}
+              }`}
             >
-              Close
+              <Trans>Close</Trans>
             </button>
           </div>
 
@@ -5141,16 +5250,16 @@ function InstalledDatabaseExportDialog({
                   </div>
                   <div>
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.24em] text-emerald-100/80">
-                      Export Ready
+                      <Trans>Export Ready</Trans>
                     </p>
                     <p className="text-sm text-emerald-50">
-                      Media included: {state.result?.includeMedia ? "yes" : "no"}
+                      <Trans>Media included:</Trans> {state.result?.includeMedia ? t`yes` : t`no`}
                     </p>
                   </div>
                 </div>
                 <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-slate-400">
-                    Final Artifact
+                    <Trans>Final Artifact</Trans>
                   </p>
                   <p className="mt-2 break-all text-sm text-white">
                     {state.result?.fpackPath ?? state.result?.exportDir}
@@ -5159,33 +5268,35 @@ function InstalledDatabaseExportDialog({
               </div>
 
               <div className="grid grid-cols-2 gap-3 rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5 text-sm text-slate-100">
-                <ExportStat label="Heroes" value={state.result?.heroFiles ?? 0} />
-                <ExportStat label="Standalone" value={state.result?.roundFiles ?? 0} />
-                <ExportStat label="Total Rounds" value={state.result?.exportedRounds ?? 0} />
-                <ExportStat label="Videos" value={state.result?.videoFiles ?? 0} />
+                <ExportStat label={t`Heroes`} value={state.result?.heroFiles ?? 0} />
+                <ExportStat label={t`Standalone`} value={state.result?.roundFiles ?? 0} />
+                <ExportStat label={t`Total Rounds`} value={state.result?.exportedRounds ?? 0} />
+                <ExportStat label={t`Videos`} value={state.result?.videoFiles ?? 0} />
                 {state.result?.includeMedia && (
                   <>
-                    <ExportStat label="Funscripts" value={state.result?.funscriptFiles ?? 0} />
-                    <ExportStat label="Mode" value="With Media" />
+                    <ExportStat label={t`Funscripts`} value={state.result?.funscriptFiles ?? 0} />
+                    <ExportStat label={t`Mode`} value={t`With Media`} />
                   </>
                 )}
-                {!state.result?.includeMedia && <ExportStat label="Mode" value="Sidecars Only" />}
-                {state.result?.fpackPath && <ExportStat label="Pack" value=".fpack" />}
+                {!state.result?.includeMedia && (
+                  <ExportStat label={t`Mode`} value={t`Sidecars Only`} />
+                )}
+                {state.result?.fpackPath && <ExportStat label={t`Pack`} value=".fpack" />}
                 {state.result?.includeMedia && (
                   <ExportStat
-                    label="Compression"
-                    value={state.result?.compression.enabled ? "AV1" : "Copy"}
+                    label={t`Compression`}
+                    value={state.result?.compression.enabled ? "AV1" : t`Copy`}
                   />
                 )}
                 {state.result?.compression.enabled && (
                   <ExportStat
-                    label="Reencoded"
+                    label={t`Reencoded`}
                     value={state.result?.compression.reencodedVideos ?? 0}
                   />
                 )}
                 {state.result?.compression.enabled && (
                   <ExportStat
-                    label="Already AV1"
+                    label={t`Already AV1`}
                     value={state.result?.compression.alreadyAv1Copied ?? 0}
                   />
                 )}
@@ -5196,7 +5307,7 @@ function InstalledDatabaseExportDialog({
               <div className="space-y-4">
                 <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                    Export Scope
+                    <Trans>Export Scope</Trans>
                   </p>
                   <div className="mt-4 flex gap-3">
                     <button
@@ -5215,8 +5326,12 @@ function InstalledDatabaseExportDialog({
                           : "border-slate-600 bg-slate-900/50 hover:border-slate-500"
                       }`}
                     >
-                      <p className="font-semibold text-white">All</p>
-                      <p className="mt-1 text-xs text-slate-400">Export the entire installed library.</p>
+                      <p className="font-semibold text-white">
+                        <Trans>All</Trans>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        <Trans>Export the entire installed library.</Trans>
+                      </p>
                     </button>
                     <button
                       type="button"
@@ -5236,11 +5351,13 @@ function InstalledDatabaseExportDialog({
                             : "border-slate-600 bg-slate-900/50 hover:border-slate-500"
                       }`}
                     >
-                      <p className="font-semibold text-white">Selected</p>
+                      <p className="font-semibold text-white">
+                        <Trans>Selected</Trans>
+                      </p>
                       <p className="mt-1 text-xs text-slate-400">
                         {hasSelection
-                          ? `${selectionCount.rounds} rounds, ${selectionCount.heroes} heroes`
-                          : "No selection"}
+                          ? t`${selectionCount.rounds} rounds, ${selectionCount.heroes} heroes`
+                          : t`No selection`}
                       </p>
                     </button>
                   </div>
@@ -5248,7 +5365,7 @@ function InstalledDatabaseExportDialog({
 
                 <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                    Package Options
+                    <Trans>Package Options</Trans>
                   </p>
                   <div className="mt-4 flex flex-col gap-4">
                     <label className="flex cursor-pointer items-center gap-3">
@@ -5276,189 +5393,215 @@ function InstalledDatabaseExportDialog({
                         disabled={exporting}
                       />
                       <div>
-                        <span className="text-sm font-semibold text-white">Include Media Files</span>
+                        <span className="text-sm font-semibold text-white">
+                          <Trans>Include Media Files</Trans>
+                        </span>
                         <p className="text-xs text-slate-400">
-                          If unchecked, only sidecars and scripts are exported.
+                          <Trans>If unchecked, only sidecars and scripts are exported.</Trans>
                         </p>
                       </div>
                     </label>
 
                     <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
-                      checked={state.asFpack}
-                      onChange={(event) => {
-                        onChange((current) => ({
-                          ...current,
-                          asFpack: event.target.checked,
-                          error: null,
-                        }));
-                      }}
-                      disabled={exporting}
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-white">Pack into .fpack File</span>
-                      <p className="text-xs text-slate-400">
-                        Packs all exported files into a single ZIP archive (.fpack).
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {state.includeMedia && (
-                  <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
-                    <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                      Compression
-                    </p>
-                    <div className="mt-4 grid gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          userTouchedModeRef.current = true;
+                      <input
+                        type="checkbox"
+                        className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
+                        checked={state.asFpack}
+                        onChange={(event) => {
                           onChange((current) => ({
                             ...current,
-                            compressionMode: "copy",
+                            asFpack: event.target.checked,
                             error: null,
                           }));
                         }}
                         disabled={exporting}
-                        className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
-                          effectiveMode === "copy"
-                            ? "border-emerald-300/65 bg-emerald-500/12"
-                            : "border-slate-700/80 bg-black/25 hover:border-slate-500"
-                        }`}
-                      >
-                        <p className="font-semibold text-white">Copy original media</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          Fastest export. Keeps current codec and file size.
+                      />
+                      <div>
+                        <span className="text-sm font-semibold text-white">
+                          <Trans>Pack into .fpack File</Trans>
+                        </span>
+                        <p className="text-xs text-slate-400">
+                          <Trans>
+                            Packs all exported files into a single ZIP archive (.fpack).
+                          </Trans>
                         </p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!canEnableCompression) return;
-                          userTouchedModeRef.current = true;
-                          onChange((current) => ({
-                            ...current,
-                            compressionMode: "av1",
-                            error: null,
-                          }));
-                        }}
-                        disabled={exporting || !canEnableCompression}
-                        className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
-                          !canEnableCompression
-                            ? "cursor-not-allowed border-slate-700 bg-slate-900/30 opacity-55"
-                            : effectiveMode === "av1"
-                              ? "border-amber-300/65 bg-amber-500/12"
-                              : "border-slate-700/80 bg-black/25 hover:border-slate-500"
-                        }`}
-                      >
-                        <p className="font-semibold text-white">Convert to AV1</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          Smaller packages. Takes longer because videos may be reencoded.
-                        </p>
-                      </button>
-                    </div>
+                      </div>
+                    </label>
+                  </div>
 
-                    {effectiveMode === "av1" && (
-                      <div className="mt-4 rounded-[1.25rem] border border-amber-300/18 bg-black/20 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100/90">
-                              Compression Strength
-                            </p>
-                            <p className="mt-1 text-sm text-white">
-                              {state.compressionStrength}% · {getStrengthLabel(state.compressionStrength)}
-                            </p>
-                          </div>
-                          <p className="text-xs text-slate-400">
-                            {analysis?.compression.encoderName ?? "Encoder pending"}
-                          </p>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={state.compressionStrength}
-                          disabled={exporting}
-                          onChange={(event) => {
+                  {state.includeMedia && (
+                    <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
+                      <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
+                        <Trans>Compression</Trans>
+                      </p>
+                      <div className="mt-4 grid gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
                             userTouchedModeRef.current = true;
                             onChange((current) => ({
                               ...current,
-                              compressionStrength: Number(event.target.value),
+                              compressionMode: "copy",
                               error: null,
                             }));
                           }}
-                          className="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-amber-300"
-                        />
-                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-100 sm:grid-cols-4">
-                          <ExportStat
-                            label="Source Size"
-                            value={formatByteSize(estimate?.sourceVideoBytes ?? 0)}
-                          />
-                          <ExportStat
-                            label="Expected Size"
-                            value={formatByteSize(estimate?.expectedVideoBytes ?? 0)}
-                          />
-                          <ExportStat label="Savings" value={formatByteSize(savingsBytes)} />
-                          <ExportStat
-                            label="Est. Time"
-                            value={formatDurationEstimate(estimate?.estimatedCompressionSeconds ?? 0)}
-                          />
-                        </div>
+                          disabled={exporting}
+                          className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
+                            effectiveMode === "copy"
+                              ? "border-emerald-300/65 bg-emerald-500/12"
+                              : "border-slate-700/80 bg-black/25 hover:border-slate-500"
+                          }`}
+                        >
+                          <p className="font-semibold text-white">
+                            <Trans>Copy original media</Trans>
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            <Trans>Fastest export. Keeps current codec and file size.</Trans>
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canEnableCompression) return;
+                            userTouchedModeRef.current = true;
+                            onChange((current) => ({
+                              ...current,
+                              compressionMode: "av1",
+                              error: null,
+                            }));
+                          }}
+                          disabled={exporting || !canEnableCompression}
+                          className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
+                            !canEnableCompression
+                              ? "cursor-not-allowed border-slate-700 bg-slate-900/30 opacity-55"
+                              : effectiveMode === "av1"
+                                ? "border-amber-300/65 bg-amber-500/12"
+                                : "border-slate-700/80 bg-black/25 hover:border-slate-500"
+                          }`}
+                        >
+                          <p className="font-semibold text-white">
+                            <Trans>Convert to AV1</Trans>
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            <Trans>
+                              Smaller packages. Takes longer because videos may be reencoded.
+                            </Trans>
+                          </p>
+                        </button>
                       </div>
-                    )}
 
-                    {analysis?.compression.warning && (
-                      <p className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                        {analysis.compression.warning}
-                      </p>
-                    )}
-                  </div>
-                )}
+                      {effectiveMode === "av1" && (
+                        <div className="mt-4 rounded-[1.25rem] border border-amber-300/18 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100/90">
+                                <Trans>Compression Strength</Trans>
+                              </p>
+                              <p className="mt-1 text-sm text-white">
+                                {state.compressionStrength}% ·{" "}
+                                {getStrengthLabel(state.compressionStrength)}
+                              </p>
+                            </div>
+                            <p className="text-xs text-slate-400">
+                              {analysis?.compression.encoderName ?? t`Encoder pending`}
+                            </p>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={state.compressionStrength}
+                            disabled={exporting}
+                            onChange={(event) => {
+                              userTouchedModeRef.current = true;
+                              onChange((current) => ({
+                                ...current,
+                                compressionStrength: Number(event.target.value),
+                                error: null,
+                              }));
+                            }}
+                            className="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-amber-300"
+                          />
+                          <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-100 sm:grid-cols-4">
+                            <ExportStat
+                              label={t`Source Size`}
+                              value={formatByteSize(estimate?.sourceVideoBytes ?? 0)}
+                            />
+                            <ExportStat
+                              label={t`Expected Size`}
+                              value={formatByteSize(estimate?.expectedVideoBytes ?? 0)}
+                            />
+                            <ExportStat label={t`Savings`} value={formatByteSize(savingsBytes)} />
+                            <ExportStat
+                              label={t`Est. Time`}
+                              value={formatDurationEstimate(
+                                estimate?.estimatedCompressionSeconds ?? 0
+                              )}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {analysis?.compression.warning && (
+                        <p className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                          {analysis.compression.warning}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="rounded-[1.5rem] border border-slate-700/80 bg-black/25 p-5">
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-slate-400">
-                  What happens
+                  <Trans>What happens</Trans>
                 </p>
                 <div className="mt-4 space-y-3 text-sm text-slate-200">
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="font-semibold text-white">1. Scope</p>
+                    <p className="font-semibold text-white">
+                      <Trans>1. Scope</Trans>
+                    </p>
                     <p className="mt-1 leading-6 text-slate-300">
                       {state.exportMode === "all"
-                        ? "The full installed library will be packaged."
+                        ? t`The full installed library will be packaged.`
                         : hasSelection
-                          ? `${selectionCount.rounds} rounds and ${selectionCount.heroes} heroes will be packaged.`
-                          : "Select items in the library to enable partial export."}
+                          ? t`${selectionCount.rounds} rounds and ${selectionCount.heroes} heroes will be packaged.`
+                          : t`Select items in the library to enable partial export.`}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="font-semibold text-white">2. Media</p>
+                    <p className="font-semibold text-white">
+                      <Trans>2. Media</Trans>
+                    </p>
                     <p className="mt-1 leading-6 text-slate-300">
                       {state.includeMedia
                         ? effectiveMode === "av1"
-                          ? "Videos will be packaged and reencoded to AV1 when needed. Funscripts remain attached."
-                          : "Videos and funscripts will be copied into the export package without reencoding."
-                        : "Only sidecars and script files will be written. Video URIs stay as references."}
+                          ? t`Videos will be packaged and reencoded to AV1 when needed. Funscripts remain attached.`
+                          : t`Videos and funscripts will be copied into the export package without reencoding.`
+                        : t`Only sidecars and script files will be written. Video URIs stay as references.`}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="font-semibold text-white">3. Estimate</p>
+                    <p className="font-semibold text-white">
+                      <Trans>3. Estimate</Trans>
+                    </p>
                     <p className="mt-1 leading-6 text-slate-300">
                       {analyzing
-                        ? "Analyzing package size and compression time..."
+                        ? t`Analyzing package size and compression time...`
                         : state.includeMedia
-                          ? `Expected media size: ${formatByteSize(estimate?.expectedVideoBytes ?? 0)}${effectiveMode === "av1" ? `, estimated encode time: ${formatDurationEstimate(estimate?.estimatedCompressionSeconds ?? 0)}.` : "."}`
-                          : "No video packaging step is required."}
+                          ? t`Expected media size: ${formatByteSize(estimate?.expectedVideoBytes ?? 0)}${effectiveMode === "av1" ? `, estimated encode time: ${formatDurationEstimate(estimate?.estimatedCompressionSeconds ?? 0)}.` : "."}`
+                          : t`No video packaging step is required.`}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="font-semibold text-white">4. Export</p>
+                    <p className="font-semibold text-white">
+                      <Trans>4. Export</Trans>
+                    </p>
                     <p className="mt-1 leading-6 text-slate-300">
-                      You will choose a destination folder, then a timestamped export package will be generated inside it.
+                      <Trans>
+                        You will choose a destination folder, then a timestamped export package will
+                        be generated inside it.
+                      </Trans>
                     </p>
                   </div>
                 </div>
@@ -5475,12 +5618,12 @@ function InstalledDatabaseExportDialog({
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-2">
             <p className="text-sm text-slate-400">
               {hasResult
-                ? "You can close this dialog now."
+                ? t`You can close this dialog now.`
                 : analyzing
-                  ? "Analyzing export package..."
-                : state.exportMode === "selected" && !hasSelection
-                  ? "Select items in the library first."
-                  : "Click export to choose a destination and generate the package."}
+                  ? t`Analyzing export package...`
+                  : state.exportMode === "selected" && !hasSelection
+                    ? t`Select items in the library first.`
+                    : t`Click export to choose a destination and generate the package.`}
             </p>
             <div className="flex flex-wrap gap-3">
               {!hasResult && (
@@ -5488,18 +5631,17 @@ function InstalledDatabaseExportDialog({
                   type="button"
                   onClick={onSubmit}
                   disabled={
-                    exporting ||
-                    analyzing ||
-                    (state.exportMode === "selected" && !hasSelection)
+                    exporting || analyzing || (state.exportMode === "selected" && !hasSelection)
                   }
-                  className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${exporting || analyzing || (state.exportMode === "selected" && !hasSelection)
+                  className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${
+                    exporting || analyzing || (state.exportMode === "selected" && !hasSelection)
                       ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                       : "border-cyan-300/60 bg-cyan-500/22 text-cyan-100 hover:border-cyan-200/85 hover:bg-cyan-500/36"
-                    }`}
+                  }`}
                   data-controller-focus-id="installed-library-export-submit"
                   data-controller-initial="true"
                 >
-                  {exporting ? "Exporting..." : analyzing ? "Analyzing..." : "Start Export"}
+                  {exporting ? t`Exporting...` : analyzing ? t`Analyzing...` : t`Start Export`}
                 </button>
               )}
             </div>
@@ -5542,10 +5684,11 @@ function RoundActionButton({
       onMouseEnter={onHover}
       onFocus={onHover}
       onClick={onClick}
-      className={`rounded-2xl border px-4 py-3 text-left font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${disabled
+      className={`rounded-2xl border px-4 py-3 text-left font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${
+        disabled
           ? "cursor-not-allowed border-zinc-700 bg-zinc-900/70 text-zinc-500"
           : activeToneClass
-        }`}
+      }`}
     >
       <div>{label}</div>
       {description && (
@@ -5596,6 +5739,7 @@ function WebsiteRoundInstallDialog({
   onInstall: () => void;
   onHoverSfx: () => void;
 }) {
+  const { t } = useLingui();
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useControllerSurface({
@@ -5638,21 +5782,23 @@ function WebsiteRoundInstallDialog({
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Install from web"
+        aria-label={t`Install from web`}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(217,70,239,0.14),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.12),transparent_32%)]" />
         <div className="relative space-y-6 p-6 sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.34em] text-fuchsia-200/80">
-                Website Install
+                <Trans>Website Install</Trans>
               </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight text-white">
-                Install From Web
+                <Trans>Install From Web</Trans>
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                Create an installed round directly from a supported public website URL. Playback
-                starts from the web source immediately and caches in the background.
+                <Trans>
+                  Create an installed round directly from a supported public website URL. Playback
+                  starts from the web source immediately and caches in the background.
+                </Trans>
               </p>
             </div>
             <button
@@ -5660,59 +5806,62 @@ function WebsiteRoundInstallDialog({
               onMouseEnter={onHoverSfx}
               onClick={onClose}
               disabled={installing}
-              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${installing
+              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${
+                installing
                   ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                   : "border-slate-600/80 bg-black/30 text-slate-300 transition-all duration-200 hover:border-fuchsia-200/60 hover:text-white"
-                }`}
+              }`}
             >
-              Close
+              <Trans>Close</Trans>
             </button>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                Round Name
+                <Trans>Round Name</Trans>
               </span>
               <input
                 type="text"
                 value={roundName}
                 onChange={(event) => onRoundNameChange(event.target.value)}
-                placeholder="My Website Round"
+                placeholder={t`My Website Round`}
                 className="w-full rounded-xl border border-fuchsia-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-fuchsia-200/75"
                 data-controller-focus-id="website-round-name"
                 data-controller-initial="true"
-                aria-label="Round Name"
+                aria-label={t`Round Name`}
               />
             </label>
 
             <label className="block lg:col-span-2">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                Video URL
+                <Trans>Video URL</Trans>
               </span>
               <input
                 type="url"
                 value={videoUrl}
                 onChange={(event) => onVideoUrlChange(event.target.value)}
-                placeholder="https://www.pornhub.com/view_video.php?viewkey=..."
-                className={`w-full rounded-xl border bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-fuchsia-200/75 ${videoValidation.state === "unsupported"
+                placeholder={t`https://www.pornhub.com/view_video.php?viewkey=...`}
+                className={`w-full rounded-xl border bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-fuchsia-200/75 ${
+                  videoValidation.state === "unsupported"
                     ? "border-rose-300/60"
                     : videoValidation.state === "supported"
                       ? "border-emerald-300/60"
                       : videoValidation.state === "checking"
                         ? "border-cyan-300/60"
                         : "border-fuchsia-300/30"
-                  }`}
-                aria-label="Video URL"
+                }`}
+                aria-label={t`Video URL`}
               />
               {videoValidation.message ? (
                 <span
-                  className={`mt-2 block text-xs ${videoValidation.state === "unsupported"
+                  className={`mt-2 block text-xs ${
+                    videoValidation.state === "unsupported"
                       ? "text-rose-200"
                       : videoValidation.state === "supported"
                         ? "text-emerald-200"
                         : "text-cyan-200"
-                    }`}
+                  }`}
                 >
                   {videoValidation.message}
                 </span>
@@ -5722,22 +5871,22 @@ function WebsiteRoundInstallDialog({
             {isSettingsLoading ? (
               <div className="block lg:col-span-2">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                  Funscript URL
+                  <Trans>Funscript URL</Trans>
                 </span>
                 <div className="h-12 animate-pulse rounded-xl border border-cyan-300/20 bg-black/45" />
               </div>
             ) : showFunscriptUrl ? (
               <label className="block lg:col-span-2">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                  Funscript URL
+                  <Trans>Funscript URL</Trans>
                 </span>
                 <input
                   type="url"
                   value={funscriptUrl}
                   onChange={(event) => onFunscriptUrlChange(event.target.value)}
-                  placeholder="Optional: https://example.com/video.funscript"
+                  placeholder={t`Optional: https://example.com/video.funscript`}
                   className="w-full rounded-xl border border-cyan-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-cyan-200/75"
-                  aria-label="Funscript URL"
+                  aria-label={t`Funscript URL`}
                 />
               </label>
             ) : null}
@@ -5827,9 +5976,13 @@ function TechnicalDetail({
   );
 }
 
-function formatWindow(startTime: number | null, endTime: number | null): string {
+function formatWindow(
+  startTime: number | null,
+  endTime: number | null,
+  t: (template: TemplateStringsArray, ...expressions: unknown[]) => string
+): string {
   if (typeof startTime !== "number" || !Number.isFinite(startTime)) {
-    return "Full";
+    return t`Full`;
   }
   const startLabel = formatMediaTimestamp(startTime);
   if (typeof endTime !== "number" || !Number.isFinite(endTime) || endTime <= startTime) {
@@ -5839,17 +5992,18 @@ function formatWindow(startTime: number | null, endTime: number | null): string 
 }
 
 function getRoundInstallSourceLabel(
-  installSourceKey: string | null | undefined
-): "Stash" | "Web" | "Local" {
+  installSourceKey: string | null | undefined,
+  t: (template: TemplateStringsArray) => string
+): string {
   if (installSourceKey?.startsWith("stash:")) {
-    return "Stash";
+    return t`Stash`;
   }
 
   if (installSourceKey?.startsWith("website:")) {
-    return "Web";
+    return t`Web`;
   }
 
-  return "Local";
+  return t`Local`;
 }
 
 function summarizeHeroGroupPreviewState(

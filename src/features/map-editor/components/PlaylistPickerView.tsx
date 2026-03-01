@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useControllerSurface } from "../../../controller";
 import { AnimatedBackground } from "../../../components/AnimatedBackground";
 import { playHoverSound } from "../../../utils/audio";
@@ -33,6 +34,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
     onDeletePlaylist,
     onNavigateBack,
 }) => {
+    const { t } = useLingui();
     const scopeRef = useRef<HTMLDivElement | null>(null);
 
     useControllerSurface({
@@ -53,10 +55,14 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
             <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col rounded-2xl border border-violet-300/25 bg-black/35 p-4 backdrop-blur-lg">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-violet-200/80">Map Editor</p>
-                        <h1 className="text-3xl font-black tracking-tight text-white">Select Playlist</h1>
+                        <p className="text-xs uppercase tracking-[0.16em] text-violet-200/80">
+                            <Trans>Map Editor</Trans>
+                        </p>
+                        <h1 className="text-3xl font-black tracking-tight text-white">
+                            <Trans>Select Playlist</Trans>
+                        </h1>
                         <p className="mt-1 text-sm text-zinc-300">
-                            Choose a playlist to edit, or create a new playlist first.
+                            <Trans>Choose a playlist to edit, or create a new playlist first.</Trans>
                         </p>
                     </div>
                     <button
@@ -67,7 +73,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                         data-controller-focus-id="map-editor-picker-back"
                         data-controller-back="true"
                     >
-                        Back
+                        <Trans>Back</Trans>
                     </button>
                 </div>
 
@@ -79,7 +85,9 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
 
                 <div className="mt-4 grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
                     <section className="min-h-0 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-3">
-                        <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Playlists</p>
+                        <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">
+                            <Trans>Playlists</Trans>
+                        </p>
                         <div className="mt-3 space-y-2">
                             {playlistList.map((playlist) => (
                                 <div
@@ -99,11 +107,13 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                         </button>
                                         {playlist.id === activePlaylistId && (
                                             <span className="rounded border border-emerald-500/55 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-100">
-                                                Active
+                                                <Trans>Active</Trans>
                                             </span>
                                         )}
                                     </div>
-                                    <p className="mt-1 text-xs text-zinc-400">{playlist.description ?? "No description"}</p>
+                                    <p className="mt-1 text-xs text-zinc-400">
+                                        {playlist.description ?? t`No description`}
+                                    </p>
                                     <div className="mt-3 flex flex-wrap items-center gap-2">
                                         <button
                                             type="button"
@@ -111,7 +121,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                             onMouseEnter={playHoverSound}
                                             onClick={() => onOpenPlaylist(playlist)}
                                         >
-                                            Edit
+                                            <Trans>Edit</Trans>
                                         </button>
                                         <button
                                             type="button"
@@ -120,7 +130,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                             onMouseEnter={playHoverSound}
                                             onClick={() => onDuplicatePlaylist(playlist)}
                                         >
-                                            {managePlaylistPendingId === playlist.id ? "Working..." : "Copy"}
+                                            {managePlaylistPendingId === playlist.id ? t`Working...` : t`Copy`}
                                         </button>
                                         <button
                                             type="button"
@@ -129,7 +139,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                             onMouseEnter={playHoverSound}
                                             onClick={() => onDeletePlaylist(playlist)}
                                         >
-                                            Delete
+                                            <Trans>Delete</Trans>
                                         </button>
                                     </div>
                                 </div>
@@ -138,12 +148,16 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                     </section>
 
                     <section className="rounded-xl border border-white/10 bg-black/25 p-3">
-                        <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">Create New</p>
+                        <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">
+                            <Trans>Create New</Trans>
+                        </p>
                         <label className="mt-3 block">
-                            <span className="text-[11px] uppercase tracking-[0.1em] text-zinc-400">Playlist name</span>
+                            <span className="text-[11px] uppercase tracking-[0.1em] text-zinc-400">
+                                <Trans>Playlist name</Trans>
+                            </span>
                             <input
                                 type="text"
-                                placeholder="New playlist name"
+                                placeholder={t`New playlist name`}
                                 value={newPlaylistName}
                                 onChange={(event) => onNewPlaylistNameChange(event.target.value)}
                                 className="mt-1 w-full rounded border border-zinc-600/60 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100"
@@ -158,7 +172,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                             disabled={createPlaylistPending}
                             data-controller-focus-id="map-editor-picker-create"
                         >
-                            {createPlaylistPending ? "Creating..." : "Create Playlist"}
+                            {createPlaylistPending ? t`Creating...` : t`Create Playlist`}
                         </button>
                     </section>
                 </div>

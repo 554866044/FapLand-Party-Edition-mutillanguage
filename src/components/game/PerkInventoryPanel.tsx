@@ -1,7 +1,9 @@
-import { getPerkById } from "../../game/data/perks";
+import { useLingui } from "@lingui/react/macro";
+import { getPerkById, getPerkDisplayName, getPerkDescription } from "../../game/data/perks";
 import {
   PERK_RARITY_META,
   fallbackRarityFromCost,
+  getRarityLabel,
   resolvePerkRarity,
 } from "../../game/data/perkRarity";
 import type { ActivePerkEffect, InventoryItem, PerkIconKey } from "../../game/types";
@@ -43,6 +45,7 @@ type InventoryGroup = {
   kindLabel: string;
   description: string;
   rarityMeta: typeof PERK_RARITY_META.common;
+  rarityLabel: string;
   iconKey: PerkIconKey;
 };
 
@@ -61,16 +64,17 @@ function buildInventoryGroups(items: InventoryItem[]): InventoryGroup[] {
   return Array.from(grouped.values())
     .map(({ item, itemIds }) => {
       const perk = getPerkById(item.perkId);
-      const rarityMeta =
-        PERK_RARITY_META[perk ? resolvePerkRarity(perk) : fallbackRarityFromCost(item.cost)];
+      const rarity = perk ? resolvePerkRarity(perk) : fallbackRarityFromCost(item.cost);
+      const rarityMeta = PERK_RARITY_META[rarity];
       return {
         item,
         itemIds,
-        displayName: perk?.name ?? item.name,
+        displayName: perk ? getPerkDisplayName(perk.id) : item.name,
         count: itemIds.length,
         kindLabel: item.kind === "perk" ? "Self buff" : "Targeted anti-perk",
-        description: perk?.description ?? item.name,
+        description: perk ? getPerkDescription(perk.id) : item.name,
         rarityMeta,
+        rarityLabel: getRarityLabel(rarity),
         iconKey: perk?.iconKey ?? "unknown",
       };
     })
@@ -78,19 +82,19 @@ function buildInventoryGroups(items: InventoryItem[]): InventoryGroup[] {
 }
 
 export function PerkInventoryPanel({
-  title = "Perk Inventory",
-  subtitle = "Manage your stored perks and active effects.",
+  title,
+  subtitle,
   inventory,
   activeEffects = [],
   selectedItemId,
   onSelectItem,
   onUseSelectedItem,
   onDiscardSelectedItem,
-  useActionLabel = "Use Item",
-  discardActionLabel = "Discard Item",
+  useActionLabel,
+  discardActionLabel,
   useDisabled = false,
   useDisabledReason = null,
-  emptyStateLabel = "No stored items yet.",
+  emptyStateLabel,
   targets = [],
   selectedTargetId = null,
   onSelectTarget,
@@ -98,26 +102,29 @@ export function PerkInventoryPanel({
   applyDirectly = false,
   onApplyDirectlyChange,
 }: PerkInventoryPanelProps) {
+  const { t } = useLingui();
   const groups = buildInventoryGroups(inventory);
   const selectedItem = inventory.find((item) => item.itemId === selectedItemId) ?? null;
   const selectedPerk = selectedItem ? getPerkById(selectedItem.perkId) : undefined;
-  const selectedRarityMeta =
-    PERK_RARITY_META[
-      selectedPerk
-        ? resolvePerkRarity(selectedPerk)
-        : selectedItem
-          ? fallbackRarityFromCost(selectedItem.cost)
-          : "common"
-    ];
+  const selectedRarity = selectedPerk
+    ? resolvePerkRarity(selectedPerk)
+    : selectedItem
+      ? fallbackRarityFromCost(selectedItem.cost)
+      : "common";
+  const selectedRarityMeta = PERK_RARITY_META[selectedRarity];
   const selectedIconKey = selectedPerk?.iconKey ?? "unknown";
 
   return (
     <div className="rounded-[28px] border border-cyan-300/25 bg-[linear-gradient(160deg,rgba(6,13,24,0.96),rgba(13,24,41,0.94))] p-4 shadow-[0_25px_80px_rgba(0,0,0,0.38)] backdrop-blur-xl">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-cyan-200/75">Loadout</div>
-          <h2 className="mt-1 text-xl font-black tracking-[0.04em] text-white">{title}</h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-200/80">{subtitle}</p>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-cyan-200/75">{t`Loadout`}</div>
+          <h2 className="mt-1 text-xl font-black tracking-[0.04em] text-white">
+            {title ?? t`Perk Inventory`}
+          </h2>
+          <p className="mt-1 max-w-xl text-sm text-slate-200/80">
+            {subtitle ?? t`Manage your stored perks and active effects.`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {onApplyDirectlyChange && (
@@ -129,12 +136,12 @@ export function PerkInventoryPanel({
                 className="h-3.5 w-3.5 accent-cyan-300"
               />
               <span className="text-xs uppercase tracking-[0.1em] text-cyan-100">
-                {applyDirectly ? "Auto-apply" : "Store"}
+                {applyDirectly ? t`Auto-apply` : t`Store`}
               </span>
             </label>
           )}
           <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.14em] text-cyan-100">
-            {inventory.length} items
+            {inventory.length} {t`items`}
           </span>
           {headerBadge && (
             <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.14em] text-zinc-200">
@@ -148,14 +155,16 @@ export function PerkInventoryPanel({
         <section className="rounded-[24px] border border-white/10 bg-black/20 p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">
-              Stored Items
+              {t`Stored Items`}
             </div>
-            <div className="text-xs text-zinc-400">{groups.length} stacks</div>
+            <div className="text-xs text-zinc-400">
+              {groups.length} {t`stacks`}
+            </div>
           </div>
           <div className="grid max-h-[52vh] gap-2 overflow-y-auto pr-1">
             {groups.length === 0 && (
               <div className="rounded-[20px] border border-dashed border-white/10 bg-black/20 px-4 py-6 text-sm text-zinc-400">
-                {emptyStateLabel}
+                {emptyStateLabel ?? t`No stored items yet.`}
               </div>
             )}
             {groups.map((group) => {
@@ -181,7 +190,7 @@ export function PerkInventoryPanel({
                           <span
                             className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${group.rarityMeta.tailwind.badge}`}
                           >
-                            {group.rarityMeta.label}
+                            {group.rarityLabel}
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-zinc-300">{group.kindLabel}</div>
@@ -203,7 +212,7 @@ export function PerkInventoryPanel({
         <section className="space-y-4">
           <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
             <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">
-              Selected Item
+              {t`Selected Item`}
             </div>
             {selectedItem ? (
               <>
@@ -213,29 +222,31 @@ export function PerkInventoryPanel({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-zinc-100">
-                      {selectedPerk?.name ?? selectedItem.name}
+                      {selectedPerk ? getPerkDisplayName(selectedPerk.id) : selectedItem.name}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2">
                       <span
                         className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selectedRarityMeta.tailwind.badge}`}
                       >
-                        {selectedRarityMeta.label}
+                        {getRarityLabel(selectedRarity)}
                       </span>
                       <span className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-200">
-                        Turn {selectedItem.acquiredTurn}
+                        {t`Turn`} {selectedItem.acquiredTurn}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 <p className="mt-4 text-sm text-zinc-300">
-                  {selectedPerk?.description ?? "Stored item with no local definition."}
+                  {selectedPerk
+                    ? getPerkDescription(selectedPerk.id)
+                    : t`Stored item with no local definition.`}
                 </p>
 
                 {selectedItem.kind === "antiPerk" && targets.length > 0 && (
                   <div className="mt-4">
                     <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                      Target Player
+                      {t`Target Player`}
                     </div>
                     <div className="grid gap-2">
                       {targets.map((target) => (
@@ -266,7 +277,7 @@ export function PerkInventoryPanel({
                     className="rounded-2xl border border-cyan-400/60 bg-cyan-500/15 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => onUseSelectedItem(selectedItem)}
                   >
-                    {useActionLabel}
+                    {useActionLabel ?? t`Use Item`}
                   </button>
                   {onDiscardSelectedItem && (
                     <button
@@ -274,7 +285,7 @@ export function PerkInventoryPanel({
                       className="rounded-2xl border border-amber-400/60 bg-amber-500/15 px-3 py-2.5 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/25"
                       onClick={() => onDiscardSelectedItem(selectedItem)}
                     >
-                      {discardActionLabel}
+                      {discardActionLabel ?? t`Discard Item`}
                     </button>
                   )}
                 </div>
@@ -285,7 +296,7 @@ export function PerkInventoryPanel({
               </>
             ) : (
               <div className="mt-3 rounded-[20px] border border-dashed border-white/10 bg-black/20 px-4 py-6 text-sm text-zinc-400">
-                Select a stored item to inspect and use it.
+                {t`Select a stored item to inspect and use it.`}
               </div>
             )}
           </div>
@@ -293,19 +304,22 @@ export function PerkInventoryPanel({
           <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">
-                Active Effects
+                {t`Active Effects`}
               </div>
-              <div className="text-xs text-zinc-400">{activeEffects.length} active</div>
+              <div className="text-xs text-zinc-400">
+                {activeEffects.length} {t`active`}
+              </div>
             </div>
             <div className="mt-3 grid gap-2">
               {activeEffects.length === 0 && (
                 <div className="rounded-[20px] border border-dashed border-white/10 bg-black/20 px-4 py-5 text-xs text-zinc-400">
-                  No active perk effects.
+                  {t`No active perk effects.`}
                 </div>
               )}
               {activeEffects.map((effect) => {
                 const perk = getPerkById(effect.id);
-                const rarityMeta = PERK_RARITY_META[perk ? resolvePerkRarity(perk) : "common"];
+                const rarity = perk ? resolvePerkRarity(perk) : "common";
+                const rarityMeta = PERK_RARITY_META[rarity];
                 return (
                   <div
                     key={`${effect.kind}-${effect.id}-${effect.remainingRounds ?? "persist"}`}
@@ -314,14 +328,16 @@ export function PerkInventoryPanel({
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 font-semibold text-zinc-100">
                         <PerkIcon iconKey={perk?.iconKey ?? "unknown"} className="h-4 w-4" />
-                        <span>{effect.name ?? perk?.name ?? effect.id}</span>
+                        <span>
+                          {effect.name ?? (perk ? getPerkDisplayName(perk.id) : effect.id)}
+                        </span>
                       </div>
                       <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-300">
                         {effect.remainingRounds === null
-                          ? "Permanent"
+                          ? t`Permanent`
                           : effect.remainingRounds === 0
-                            ? "Pending"
-                            : `${effect.remainingRounds} rounds`}
+                            ? t`Pending`
+                            : t`${effect.remainingRounds} rounds`}
                       </span>
                     </div>
                   </div>

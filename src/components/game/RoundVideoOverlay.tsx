@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { useControllerSurface, useControllerSubscription } from "../../controller";
 import type {
   ActiveRound,
@@ -359,6 +360,7 @@ export function RoundVideoOverlay({
   initialShowAntiPerkBeatbar = DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
   lastLogMessage,
 }: RoundVideoOverlayProps) {
+  const { t } = useLingui();
   const { playRandomOneShot, startContinuousLoop, stopContinuousLoop } = useGameplayMoaning();
   const {
     connectionKey,
@@ -430,7 +432,7 @@ export function RoundVideoOverlay({
 
   const [segment, setSegment] = useState<SegmentState>({ kind: "main" });
   const [activeVideoUri, setActiveVideoUri] = useState<string | null>(null);
-  const [status, setStatus] = useState("Preparing playback...");
+  const [status, setStatus] = useState(t`Preparing playback...`);
   const [playbackRateLabel, setPlaybackRateLabel] = useState("1.00");
   const [playbackTimeLabel, setPlaybackTimeLabel] = useState("0:00 / 0:00");
   const [playbackProgress, setPlaybackProgress] = useState(0);
@@ -669,10 +671,10 @@ export function RoundVideoOverlay({
     (forceHandySyncMsRef.current !== null || handyBootstrapKeyRef.current === null);
   const handyWaitHint =
     handySyncState === "error"
-      ? "The device reported a sync error. Retrying handshake..."
+      ? t`The device reported a sync error. Retrying handshake...`
       : handySyncState === "connecting"
-        ? "Aligning timeline with TheHandy before playback starts."
-        : "Preparing TheHandy synchronization.";
+        ? t`Aligning timeline with TheHandy before playback starts.`
+        : t`Preparing TheHandy synchronization.`;
   const isOnlyNoRest = useMemo(
     () => idleBoardSequence === "no-rest" && !activeRound && !boardSequence,
     [idleBoardSequence, activeRound, boardSequence]
@@ -908,7 +910,7 @@ export function RoundVideoOverlay({
       })
       .catch((error) => {
         const message =
-          error instanceof Error ? error.message : "Failed to initialize TheHandy session.";
+          error instanceof Error ? error.message : t`Failed to initialize TheHandy session.`;
         resetHandySync("error", message);
         return null;
       })
@@ -988,10 +990,7 @@ export function RoundVideoOverlay({
                 session.activeScriptId !== null ||
                 session.streamedPoints !== null
               ) {
-                await stopHandyPlayback(
-                  { connectionKey: connKey, appApiKey: appKey },
-                  session
-                );
+                await stopHandyPlayback({ connectionKey: connKey, appApiKey: appKey }, session);
                 if (generatedSequenceSyncTokenRef.current !== syncToken) return;
               }
               await preloadHspScript(
@@ -1026,7 +1025,7 @@ export function RoundVideoOverlay({
           } catch (error) {
             if (generatedSequenceSyncTokenRef.current !== syncToken) return;
             const message =
-              error instanceof Error ? error.message : "Generated sequence sync failed.";
+              error instanceof Error ? error.message : t`Generated sequence sync failed.`;
             setHandySyncState("error");
             setHandySyncError(message);
             setSyncStatus({ synced: false, error: message });
@@ -1186,12 +1185,12 @@ export function RoundVideoOverlay({
       return;
     }
     if (isIntermediaryScreenActive) {
-      setStatus("Playback paused for transition...");
+      setStatus(t`Playback paused for transition...`);
       return;
     }
 
     if (shouldGatePlaybackForHandyStart) {
-      setStatus("Waiting for TheHandy sync before playback...");
+      setStatus(t`Waiting for TheHandy sync before playback...`);
       return;
     }
     if (!video.paused) return;
@@ -1297,9 +1296,9 @@ export function RoundVideoOverlay({
       firedTriggersRef.current.add(trigger.id);
       mainResumePositionSecRef.current = Math.max(0, resumeAtSec);
       runSegmentTransition({
-        label: "LOADING INTERMEDIARY",
+        label: t`LOADING INTERMEDIARY`,
         countdownSec: intermediaryLoadingDurationSec,
-        statusWhileCountdown: "Loading intermediary assets...",
+        statusWhileCountdown: t`Loading intermediary assets...`,
         sound: "intermediary",
         plan: {
           nextSegment: { kind: "intermediary", trigger, resumeAtSec },
@@ -1312,7 +1311,7 @@ export function RoundVideoOverlay({
   );
 
   const endIntermediaryAndResume = useCallback(
-    (statusText = "Returning to main round video.") => {
+    (statusText = t`Returning to main round video.`) => {
       if (!resolvedMainResource) return;
       if (segment.kind !== "intermediary") return;
       const knownDurationSec =
@@ -1327,9 +1326,9 @@ export function RoundVideoOverlay({
       mainResumePositionSecRef.current = resumeAtSec;
 
       runSegmentTransition({
-        label: "RETURNING TO MAIN",
+        label: t`RETURNING TO MAIN`,
         countdownSec: intermediaryReturnPauseSec,
-        statusWhileCountdown: "Preparing main round resume...",
+        statusWhileCountdown: t`Preparing main round resume...`,
         sound: "return",
         plan: {
           nextSegment: { kind: "main" },
@@ -1352,11 +1351,11 @@ export function RoundVideoOverlay({
   const triggerTestIntermediary = useCallback(() => {
     if (!activeRound || !resolvedMainResource) return;
     if (segment.kind !== "main") {
-      setStatus("Already inside an intermediary segment.");
+      setStatus(t`Already inside an intermediary segment.`);
       return;
     }
     if (intermediaryResourcePool.length === 0) {
-      setStatus("No intermediary resources available for this round.");
+      setStatus(t`No intermediary resources available for this round.`);
       return;
     }
 
@@ -1382,7 +1381,7 @@ export function RoundVideoOverlay({
 
     allowPauseRef.current = true;
     video.pause();
-    startIntermediary(trigger, resumeAtSec, "Development: forced intermediary clip.");
+    startIntermediary(trigger, resumeAtSec, t`Development: forced intermediary clip.`);
   }, [
     activeRound,
     deterministicTestIntermediary,
@@ -1395,18 +1394,18 @@ export function RoundVideoOverlay({
 
   const resyncHandyTiming = useCallback(async () => {
     if (!activeRound || !activeVideoUri) {
-      setStatus("No active video to resync.");
+      setStatus(t`No active video to resync.`);
       return;
     }
     if (!shouldUseHandySync) {
-      setStatus("No active TheHandy timeline to resync.");
+      setStatus(t`No active TheHandy timeline to resync.`);
       return;
     }
     const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
     const actions = timeline?.actions ?? [];
     if (!video || actions.length === 0) return;
 
-    setStatus("Resyncing TheHandy timing...");
+    setStatus(t`Resyncing TheHandy timing...`);
     setHandySyncState("connecting");
     setHandySyncError(null);
     setSyncStatus({ synced: false, error: null });
@@ -1418,14 +1417,14 @@ export function RoundVideoOverlay({
 
       if (!connectionKey.trim() || !appApiKey.trim()) {
         setHandySyncState("missing-key");
-        setSyncStatus({ synced: false, error: "Missing Application ID/API key for TheHandy v3." });
-        setStatus("Cannot resync: missing Application ID/API key.");
+        setSyncStatus({ synced: false, error: t`Missing Application ID/API key for TheHandy v3.` });
+        setStatus(t`Cannot resync: missing Application ID/API key.`);
         return;
       }
 
       const session = await ensureHandySession();
       if (!session) {
-        setStatus("Failed to initialize TheHandy session for resync.");
+        setStatus(t`Failed to initialize TheHandy session for resync.`);
         return;
       }
 
@@ -1458,14 +1457,14 @@ export function RoundVideoOverlay({
       setHandySyncState("synced");
       setHandySyncError(null);
       setSyncStatus({ synced: true, error: null });
-      setStatus("TheHandy timing resynced.");
+      setStatus(t`TheHandy timing resynced.`);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to resync timing with TheHandy.";
+        error instanceof Error ? error.message : t`Failed to resync timing with TheHandy.`;
       setHandySyncState("error");
       setHandySyncError(message);
       setSyncStatus({ synced: false, error: message });
-      setStatus(`Resync failed: ${message}`);
+      setStatus(t`Resync failed: ${message}`);
     }
   }, [
     activeRound,
@@ -1527,7 +1526,7 @@ export function RoundVideoOverlay({
 
       if (!connectionKey.trim() || !appApiKey.trim()) {
         setHandySyncState("missing-key");
-        setSyncStatus({ synced: false, error: "Missing Application ID/API key for TheHandy v3." });
+        setSyncStatus({ synced: false, error: t`Missing Application ID/API key for TheHandy v3.` });
         return false;
       }
 
@@ -1568,7 +1567,7 @@ export function RoundVideoOverlay({
       return true;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to initialize TheHandy sync.";
+        error instanceof Error ? error.message : t`Failed to initialize TheHandy sync.`;
       setHandySyncState("error");
       setHandySyncError(message);
       setSyncStatus({ synced: false, error: message });
@@ -1709,7 +1708,7 @@ export function RoundVideoOverlay({
     setActiveAntiPerkSequence(sequence);
     setLoadingLabel(sequence.definition.label);
     setLoadingCountdown(durationSec);
-    setStatus("Running anti-perk sequence...");
+    setStatus(t`Running anti-perk sequence...`);
     setActiveVideoUri(null);
     setLoadingMediaIndex(0);
     setSegment({ kind: "main" });
@@ -1762,7 +1761,7 @@ export function RoundVideoOverlay({
           setLoadingLabel("");
           setLoadingMedia([]);
           setLoadingMediaIndex(0);
-          setStatus("Board sequence completed.");
+          setStatus(t`Board sequence completed.`);
           void pauseHandyIfNeeded();
           onCompleteBoardSequenceRef.current?.(boardSequence);
           return null;
@@ -1910,7 +1909,7 @@ export function RoundVideoOverlay({
       setRandomIntermediaryQueue([]);
       setSegment({ kind: "main" });
       setActiveVideoUri(null);
-      setStatus("No active round.");
+      setStatus(t`No active round.`);
       setLoadingCountdown(null);
       setLoadingLabel("");
       setLoadingMedia([]);
@@ -1945,7 +1944,7 @@ export function RoundVideoOverlay({
     antiPerkCountAtRoundStartRef.current = currentPlayer?.antiPerks.length ?? 0;
 
     setSegment({ kind: "main" });
-    setStatus("Preparing round video...");
+    setStatus(t`Preparing round video...`);
     activateVideoUri(resolvedMainResource.videoUri);
     setLoadingCountdown(null);
     setLoadingLabel("");
@@ -2067,7 +2066,7 @@ export function RoundVideoOverlay({
       plan: {
         nextSegment: { kind: "main" },
         nextVideoUri: resolvedMainResource.videoUri,
-        status: "Returning to main round video.",
+        status: t`Returning to main round video.`,
         pendingSeekSec: resumeAtSec,
       },
       onComplete: () => {
@@ -2124,7 +2123,7 @@ export function RoundVideoOverlay({
       setTimelineUri(null);
       setFunscriptCount(0);
       setFunscriptPosition(null);
-      setStatus((prev) => (prev.startsWith("Loading") ? prev : "Playing video (no funscript)."));
+      setStatus((prev) => (loadingCountdown !== null ? prev : t`Playing video (no funscript).`));
       return;
     }
 
@@ -2135,7 +2134,7 @@ export function RoundVideoOverlay({
       setTimelineUri(funscriptUri);
       const count = resolvedTimeline?.actions.length ?? 0;
       setFunscriptCount(count);
-      setStatus(count > 0 ? "Playing video + funscript." : "Playing video (empty funscript).");
+      setStatus(count > 0 ? t`Playing video + funscript.` : t`Playing video (empty funscript).`);
       return;
     }
 
@@ -2152,7 +2151,7 @@ export function RoundVideoOverlay({
       setTimelineUri(funscriptUri);
       const count = resolvedTimeline?.actions.length ?? 0;
       setFunscriptCount(count);
-      setStatus(count > 0 ? "Playing video + funscript." : "Playing video (empty funscript).");
+      setStatus(count > 0 ? t`Playing video + funscript.` : t`Playing video (empty funscript).`);
     });
 
     return () => {
@@ -2251,7 +2250,7 @@ export function RoundVideoOverlay({
           const resumeAtSec = clampToPlaybackWindow(mainCurrentTimeSec, { startSec, endSec });
           allowPauseRef.current = true;
           video.pause();
-          startIntermediary(nextTrigger, resumeAtSec, "Intermediary clip spawned.");
+          startIntermediary(nextTrigger, resumeAtSec, t`Intermediary clip spawned.`);
         }
       } else {
         const knownDurationSec =
@@ -2265,7 +2264,10 @@ export function RoundVideoOverlay({
         }
 
         const intermediaryCurrentTimeSec = Math.max(video.currentTime, startSec);
-        if (endSec !== null && intermediaryCurrentTimeSec >= endSec - MAIN_WINDOW_END_TOLERANCE_SEC) {
+        if (
+          endSec !== null &&
+          intermediaryCurrentTimeSec >= endSec - MAIN_WINDOW_END_TOLERANCE_SEC
+        ) {
           allowPauseRef.current = true;
           video.pause();
           endIntermediaryAndResume();
@@ -2338,7 +2340,7 @@ export function RoundVideoOverlay({
     if (!appApiKey.trim()) {
       handyBootstrapKeyRef.current = null;
       handyBootstrapInFlightRef.current = null;
-      resetHandySync("missing-key", "Missing Application ID/API key for TheHandy v3.");
+      resetHandySync("missing-key", t`Missing Application ID/API key for TheHandy v3.`);
       return;
     }
     setHandySyncState("connecting");
@@ -2353,7 +2355,7 @@ export function RoundVideoOverlay({
     setHandySyncState("disconnected");
     setHandySyncError(null);
     setSyncStatus({ synced: false, error: null });
-    setStatus("TheHandy stopped manually.");
+    setStatus(t`TheHandy stopped manually.`);
     void stopHandyIfNeeded();
   }, [handyManuallyStopped, setSyncStatus, stopHandyIfNeeded]);
 
@@ -2391,7 +2393,7 @@ export function RoundVideoOverlay({
     if (!isIntermediaryScreenActive) return;
     if (!shouldUseHandySync) return;
     if (!resolvedMainResource?.funscriptUri) return;
-    if (loadingLabel !== "RETURNING TO MAIN") return;
+    if (loadingLabel !== t`RETURNING TO MAIN`) return;
 
     // IMPORTANT: Read the MAIN timeline from cache, NOT from `timeline` state.
     // During the intermediary, `timeline` state holds the intermediary's funscript.
@@ -2578,7 +2580,7 @@ export function RoundVideoOverlay({
           setSyncStatus({ synced: true, error: null });
         } catch (error) {
           const message =
-            error instanceof Error ? error.message : "Failed to stream sync position to TheHandy.";
+            error instanceof Error ? error.message : t`Failed to stream sync position to TheHandy.`;
           setHandySyncState("error");
           setHandySyncError(message);
           setSyncStatus({ synced: false, error: message });
@@ -2627,12 +2629,12 @@ export function RoundVideoOverlay({
     if (shouldGatePlaybackForHandyStart) {
       let timer: number | null = null;
       if (handySyncState === "error") {
-        setStatus("The device reported a sync error. Retrying momentarily...");
+        setStatus(t`The device reported a sync error. Retrying momentarily...`);
         timer = window.setTimeout(() => {
           void bootstrapHandySyncIfReady();
         }, 1500);
       } else {
-        setStatus("Waiting for TheHandy sync before playback...");
+        setStatus(t`Waiting for TheHandy sync before playback...`);
         void bootstrapHandySyncIfReady();
       }
 
@@ -2718,7 +2720,7 @@ export function RoundVideoOverlay({
       }
       if (key === "j") {
         event.preventDefault();
-        endIntermediaryAndResume("Development: intermediary ended early.");
+        endIntermediaryAndResume(t`Development: intermediary ended early.`);
         return;
       }
       if (key === "k") {
@@ -2788,11 +2790,11 @@ export function RoundVideoOverlay({
     allowPauseRef.current = true;
     video.pause();
     void pauseHandyIfNeeded();
-    setStatus("Manual pause active (15s).");
+    setStatus(t`Manual pause active (15s).`);
 
     manualPauseTimerRef.current = window.setTimeout(() => {
       manualPauseTimerRef.current = null;
-      setStatus("Manual pause ended.");
+      setStatus(t`Manual pause ended.`);
       tryPlayVideo();
     }, MANUAL_PAUSE_DURATION_MS);
   }, [
@@ -2970,7 +2972,7 @@ export function RoundVideoOverlay({
             style={{ animation: "labelPulse 2.4s ease-in-out infinite" }}
           >
             <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-pink-500/10 via-fuchsia-500/15 to-violet-500/10" />
-            <span className="relative">{loadingLabel || "Anti-perk sequence"}</span>
+            <span className="relative">{loadingLabel || t`Anti-perk sequence`}</span>
           </div>
           <div
             className="bg-gradient-to-r from-pink-200 via-fuchsia-200 to-violet-200 bg-clip-text pl-1 text-6xl font-black leading-none text-transparent drop-shadow-[0_0_30px_rgba(236,72,153,0.5)] sm:text-7xl"
@@ -2991,7 +2993,7 @@ export function RoundVideoOverlay({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]">
         <div className="max-w-lg rounded-xl border border-red-400/50 bg-[rgba(18,9,21,0.88)] p-6 text-white shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
           <p className="text-sm">
-            No video resource found for this round. The board is still running underneath.
+            {t`No video resource found for this round. The board is still running underneath.`}
           </p>
           <button
             className="mt-4 rounded-md bg-red-700 px-4 py-2 text-sm font-semibold"
@@ -3002,7 +3004,7 @@ export function RoundVideoOverlay({
             onMouseEnter={() => playHoverSound()}
             type="button"
           >
-            Continue
+            {t`Continue`}
           </button>
         </div>
       </div>
@@ -3010,16 +3012,16 @@ export function RoundVideoOverlay({
   }
 
   const handyStatusLabel = !handyConnected
-    ? "Disconnected"
+    ? t`Disconnected`
     : handyManuallyStopped
-      ? "Stopped"
+      ? t`Stopped`
       : handySyncState === "missing-key"
-        ? "Missing API Key"
+        ? t`Missing API Key`
         : handySyncState === "synced"
-          ? "Synced"
+          ? t`Synced`
           : handySyncState === "error"
-            ? "Sync Error"
-            : "Syncing";
+            ? t`Sync Error`
+            : t`Syncing`;
 
   const handyStatusTone = !handyConnected
     ? "border-zinc-300/25 bg-zinc-700/30 text-zinc-100"
@@ -3166,7 +3168,7 @@ export function RoundVideoOverlay({
         <div
           className={`pointer-events-auto absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 text-xs tracking-wide text-fuchsia-100 transition-opacity duration-250 ${isUiVisible ? "opacity-100" : "opacity-0"}`}
         >
-          <span>{resolvedRound?.name ?? activeRound?.roundName ?? "Round"}</span>
+          <span>{resolvedRound?.name ?? activeRound?.roundName ?? t`Round`}</span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span>{status}</span>
 
@@ -3185,7 +3187,7 @@ export function RoundVideoOverlay({
               type="button"
               data-controller-focus-id="round-overlay-resync"
             >
-              Resync (R)
+              {t`Resync (R)`}
             </button>
             <button
               className="pointer-events-auto rounded-md border border-cyan-300/45 bg-cyan-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition-colors hover:bg-cyan-500/30"
@@ -3197,7 +3199,7 @@ export function RoundVideoOverlay({
               type="button"
               data-controller-focus-id="round-overlay-handy-menu"
             >
-              Handy Menu
+              {t`Handy Menu`}
             </button>
             {canUseRoundControls && (
               <>
@@ -3216,7 +3218,7 @@ export function RoundVideoOverlay({
                   type="button"
                   data-controller-focus-id="round-overlay-pause"
                 >
-                  Pause {roundControl?.pauseCharges ?? 0}
+                  {t`Pause ${roundControl?.pauseCharges ?? 0}`}
                 </button>
                 <button
                   className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
@@ -3233,7 +3235,7 @@ export function RoundVideoOverlay({
                   type="button"
                   data-controller-focus-id="round-overlay-skip"
                 >
-                  Skip {roundControl?.skipCharges ?? 0}
+                  {t`Skip ${roundControl?.skipCharges ?? 0}`}
                 </button>
               </>
             )}
@@ -3248,7 +3250,7 @@ export function RoundVideoOverlay({
                 type="button"
                 data-controller-focus-id="round-overlay-options"
               >
-                Options
+                {t`Options`}
               </button>
             )}
             <button
@@ -3265,7 +3267,7 @@ export function RoundVideoOverlay({
               type="button"
               data-controller-focus-id="round-overlay-progress-bar"
             >
-              Bar {showProgressBarAlways ? "Pinned" : "Auto"}
+              {t`Bar ${showProgressBarAlways ? "Pinned" : "Auto"}`}
             </button>
             <button
               className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
@@ -3278,7 +3280,7 @@ export function RoundVideoOverlay({
                 playSelectSound();
                 if (handyManuallyStopped) {
                   void toggleManualStop().then(() => {
-                    setStatus("TheHandy resumed.");
+                    setStatus(t`TheHandy resumed.`);
                   });
                   return;
                 }
@@ -3286,7 +3288,7 @@ export function RoundVideoOverlay({
                   .catch(() => undefined)
                   .finally(() => {
                     void toggleManualStop().then(() => {
-                      setStatus("TheHandy stopped manually.");
+                      setStatus(t`TheHandy stopped manually.`);
                     });
                   });
               }}
@@ -3295,7 +3297,7 @@ export function RoundVideoOverlay({
               data-controller-focus-id="round-overlay-handy-toggle"
               data-controller-initial="true"
             >
-              {handyManuallyStopped ? "Resume Handy" : "Force Stop"}
+              {handyManuallyStopped ? t`Resume Handy` : t`Force Stop`}
             </button>
             {onRequestCum && (
               <button
@@ -3308,7 +3310,7 @@ export function RoundVideoOverlay({
                 type="button"
                 data-controller-focus-id="round-overlay-cum"
               >
-                {abbreviateNsfwText("Cum (C)", sfwMode)}
+                {abbreviateNsfwText(t`Cum (C)`, sfwMode)}
               </button>
             )}
             {showCloseButton && onClose && (
@@ -3324,7 +3326,7 @@ export function RoundVideoOverlay({
                 data-controller-focus-id="round-overlay-close"
                 data-controller-back="true"
               >
-                Close
+                {t`Close`}
               </button>
             )}
             {canUseDebugRoundControls && (
@@ -3338,7 +3340,7 @@ export function RoundVideoOverlay({
                   onMouseEnter={() => playHoverSound()}
                   type="button"
                 >
-                  Test Intermediary (I)
+                  {t`Test Intermediary (I)`}
                 </button>
                 <button
                   className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
@@ -3349,12 +3351,12 @@ export function RoundVideoOverlay({
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {
                     playSelectSound();
-                    endIntermediaryAndResume("Development: intermediary ended early.");
+                    endIntermediaryAndResume(t`Development: intermediary ended early.`);
                   }}
                   onMouseEnter={() => playHoverSound()}
                   type="button"
                 >
-                  End Intermediary (J)
+                  {t`End Intermediary (J)`}
                 </button>
                 <button
                   className="pointer-events-auto rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition-colors hover:bg-amber-500/35"
@@ -3365,7 +3367,7 @@ export function RoundVideoOverlay({
                   onMouseEnter={() => playHoverSound()}
                   type="button"
                 >
-                  Dev Skip (K)
+                  {t`Dev Skip (K)`}
                 </button>
               </>
             )}
@@ -3484,7 +3486,7 @@ export function RoundVideoOverlay({
                   return;
                 }
                 if (isIntermediaryScreenActive) {
-                  setStatus("Playback paused for transition...");
+                  setStatus(t`Playback paused for transition...`);
                   return;
                 }
                 tryPlayVideo();
@@ -3495,7 +3497,7 @@ export function RoundVideoOverlay({
                 finishWithSummary();
               }}
             >
-              <track kind="captions" label="Gameplay captions" />
+              <track kind="captions" label={t`Gameplay captions`} />
             </video>
           )}
 
@@ -3581,7 +3583,7 @@ export function RoundVideoOverlay({
                   return;
                 }
                 if (isIntermediaryScreenActive) {
-                  setStatus("Playback paused for transition...");
+                  setStatus(t`Playback paused for transition...`);
                   return;
                 }
                 tryPlayVideo();
@@ -3591,14 +3593,14 @@ export function RoundVideoOverlay({
                 endIntermediaryAndResume();
               }}
             >
-              <track kind="captions" label="Gameplay captions" />
+              <track kind="captions" label={t`Gameplay captions`} />
             </video>
           )}
 
           {!unsafeMediaUnlocked && (resolvedMainResource || segment.kind === "intermediary") && (
             <SfwOneTimeOverridePrompt
-              confirmLabel="Show Video Once"
-              mediaLabel="video"
+              confirmLabel={t`Show Video Once`}
+              mediaLabel={t`video`}
               onConfirm={() => setAllowUnsafeMediaOnce(true)}
             />
           )}
@@ -3616,10 +3618,10 @@ export function RoundVideoOverlay({
               <div className="rounded-xl border border-red-400/50 bg-black/70 px-6 py-4 backdrop-blur-sm">
                 <p className="text-center text-sm text-red-200">
                   {isWebsiteVideoProxySrc(failedVideoUri)
-                    ? "Website stream playback failed"
+                    ? t`Website stream playback failed`
                     : isLocalVideoUriForFallback(failedVideoUri)
-                      ? "Local media file not found"
-                      : "Remote media file not found"}
+                      ? t`Local media file not found`
+                      : t`Remote media file not found`}
                 </p>
               </div>
             </div>
@@ -3664,10 +3666,10 @@ export function RoundVideoOverlay({
                   className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.32em] text-cyan-200/95"
                   style={{ animation: "handySyncGlow 1.6s ease-in-out infinite" }}
                 >
-                  TheHandy Linkup
+                  {t`TheHandy Linkup`}
                 </p>
                 <h3 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-100 via-sky-100 to-indigo-100 sm:text-4xl">
-                  Waiting For Device Sync
+                  {t`Waiting For Device Sync`}
                 </h3>
                 <p className="mx-auto mt-2 max-w-lg text-sm text-cyan-100/90">{handyWaitHint}</p>
               </div>
@@ -3733,7 +3735,7 @@ export function RoundVideoOverlay({
                         animation: `loadingMediaFadeIn ${LOADING_MEDIA_FADE_MS}ms ease forwards`,
                       }}
                     >
-                      <track kind="captions" label="Loading captions" />
+                      <track kind="captions" label={t`Loading captions`} />
                     </video>
                   ) : (
                     <img
@@ -3750,8 +3752,8 @@ export function RoundVideoOverlay({
               )}
               {activeLoadingMedia && !unsafeMediaUnlocked && (
                 <SfwOneTimeOverridePrompt
-                  confirmLabel="Show Video Once"
-                  mediaLabel="video"
+                  confirmLabel={t`Show Video Once`}
+                  mediaLabel={t`video`}
                   onConfirm={() => setAllowUnsafeMediaOnce(true)}
                 />
               )}
@@ -3788,7 +3790,7 @@ export function RoundVideoOverlay({
                   className="max-w-[20rem] rounded-xl border border-fuchsia-200/15 bg-gradient-to-br from-black/30 via-black/25 to-black/30 px-3.5 py-2.5 text-xs tracking-wide text-zinc-100/80 backdrop-blur-sm"
                   style={{ animation: "promptSlide 0.4s ease-out forwards" }}
                 >
-                  <span className="text-fuchsia-200/60">Prompt:</span>{" "}
+                  <span className="text-fuchsia-200/60">{t`Prompt:`}</span>{" "}
                   <span className="text-zinc-100/90">{booruSearchPrompt}</span>
                 </div>
                 {activeLoadingMedia && unsafeMediaUnlocked && (
@@ -3810,13 +3812,13 @@ export function RoundVideoOverlay({
                 className="w-full max-w-xl rounded-2xl border border-cyan-300/45 bg-[linear-gradient(145deg,rgba(6,15,38,0.96),rgba(17,8,36,0.96))] p-6 text-zinc-100 shadow-[0_0_55px_rgba(56,189,248,0.25)] backdrop-blur-xl"
               >
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.28em] text-cyan-200/85">
-                  {abbreviateNsfwText("Cum Round Check", sfwMode)}
+                  {abbreviateNsfwText(t`Cum Round Check`, sfwMode)}
                 </p>
                 <h3 className="mt-2 text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-100 via-sky-100 to-fuchsia-100">
-                  {abbreviateNsfwText("Did you cum as instructed?", sfwMode)}
+                  {abbreviateNsfwText(t`Did you cum as instructed?`, sfwMode)}
                 </h3>
                 <p className="mt-2 text-sm text-zinc-200/90">
-                  {abbreviateNsfwText("Confirm what happened in this cum round.", sfwMode)}
+                  {abbreviateNsfwText(t`Confirm what happened in this cum round.`, sfwMode)}
                 </p>
                 <div className="mt-5 grid gap-2">
                   <button
@@ -3826,7 +3828,7 @@ export function RoundVideoOverlay({
                     data-controller-focus-id="round-cum-outcome-came"
                     data-controller-initial="true"
                   >
-                    {abbreviateNsfwText("Came as told", sfwMode)}
+                    {abbreviateNsfwText(t`Came as told`, sfwMode)}
                   </button>
                   <button
                     type="button"
@@ -3834,7 +3836,7 @@ export function RoundVideoOverlay({
                     onClick={() => resolveCumRoundOutcome("did_not_cum")}
                     data-controller-focus-id="round-cum-outcome-no-cum"
                   >
-                    {abbreviateNsfwText("Did not cum", sfwMode)}
+                    {abbreviateNsfwText(t`Did not cum`, sfwMode)}
                   </button>
                   <button
                     type="button"
@@ -3842,7 +3844,7 @@ export function RoundVideoOverlay({
                     onClick={() => resolveCumRoundOutcome("failed_instruction")}
                     data-controller-focus-id="round-cum-outcome-failed"
                   >
-                    Failed instruction
+                    {t`Failed instruction`}
                   </button>
                 </div>
                 <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -3852,7 +3854,7 @@ export function RoundVideoOverlay({
                     onClick={handleCloseCumDialog}
                     data-controller-focus-id="round-cum-outcome-close"
                   >
-                    Close
+                    {t`Close`}
                   </button>
                 </div>
               </div>
@@ -3902,7 +3904,7 @@ export function RoundVideoOverlay({
               <div
                 className={`pointer-events-none absolute bottom-3 right-3 z-40 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] backdrop-blur transition-opacity duration-250 ${handyStatusTone} ${isUiVisible ? "opacity-100" : "opacity-0"}`}
               >
-                TheHandy {handyStatusLabel}
+                {t`TheHandy ${handyStatusLabel}`}
               </div>
               {handySyncError && (
                 <div
@@ -3925,15 +3927,27 @@ export function RoundVideoOverlay({
             <div
               className={`pointer-events-none absolute bottom-14 left-3 z-30 rounded-md border border-fuchsia-200/25 bg-black/45 px-3 py-2 text-xs text-fuchsia-100 backdrop-blur transition-opacity duration-250 ${isUiVisible ? "opacity-100" : "opacity-0"}`}
             >
-              <div>Segment: {segment.kind === "main" ? "Main" : "Intermediary"}</div>
-              <div>Duration: {playbackTimeLabel}</div>
-              <div>Playback: {playbackRateLabel}x</div>
-              <div>Funscript actions: {funscriptCount}</div>
               <div>
-                Current script position:{" "}
+                {t`Segment`}: {segment.kind === "main" ? t`Main` : t`Intermediary`}
+              </div>
+              <div>
+                {t`Duration`}: {playbackTimeLabel}
+              </div>
+              <div>
+                {t`Playback`}: {playbackRateLabel}x
+              </div>
+              <div>
+                {t`Funscript actions`}: {funscriptCount}
+              </div>
+              <div>
+                {t`Current script position`}:{" "}
                 {typeof funscriptPosition === "number" ? Math.trunc(funscriptPosition) : "-"}
               </div>
-              {isDevelopmentMode && <div>Intermediary queue: {fullIntermediaryQueue.length}</div>}
+              {isDevelopmentMode && (
+                <div>
+                  {t`Intermediary queue`}: {fullIntermediaryQueue.length}
+                </div>
+              )}
             </div>
           )}
 
@@ -3949,7 +3963,7 @@ export function RoundVideoOverlay({
                 <div className="flex items-center gap-3">
                   <div className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
                   <span className="text-[10px] font-black uppercase tracking-[0.4em] text-rose-200/90 [text-shadow:0_0_15px_rgba(251,113,133,0.4)]">
-                    System Warning
+                    {t`System Warning`}
                   </span>
                   <div className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
                 </div>
@@ -3966,9 +3980,9 @@ export function RoundVideoOverlay({
               bottomClassName={roundControllerHintsBottomClassName}
               hints={[
                 ...(roundControl && roundControl.pauseCharges > 0
-                  ? [{ label: "Pause Round", action: "ACTION_Y" as const }]
+                  ? [{ label: t`Pause Round`, action: "ACTION_Y" as const }]
                   : []),
-                { label: "Options", action: "START" as const },
+                { label: t`Options`, action: "START" as const },
               ]}
             />
           )}
@@ -3977,8 +3991,11 @@ export function RoundVideoOverlay({
             <ControllerHints
               contextId="cum-outcome"
               hints={[
-                { label: abbreviateNsfwText("Came as Told", sfwMode), action: "ACTION_X" as const },
-                { label: abbreviateNsfwText("Did Not Cum", sfwMode), action: "ACTION_Y" as const },
+                {
+                  label: abbreviateNsfwText(t`Came as Told`, sfwMode),
+                  action: "ACTION_X" as const,
+                },
+                { label: abbreviateNsfwText(t`Did Not Cum`, sfwMode), action: "ACTION_Y" as const },
               ]}
             />
           )}

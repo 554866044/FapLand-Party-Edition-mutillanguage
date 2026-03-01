@@ -1,6 +1,15 @@
-import { Component, Suspense, lazy, type ErrorInfo, type ReactNode, useEffect, useState } from "react";
+import {
+  Component,
+  Suspense,
+  lazy,
+  type ErrorInfo,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Trans } from "@lingui/react/macro";
 import { CommandPalette } from "../components/CommandPalette";
 import { ControllerProvider } from "../controller";
 import { CommandPaletteGuardProvider } from "../contexts/CommandPaletteGuardContext";
@@ -52,10 +61,10 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
         <div className="relative z-10 mx-4 max-w-lg text-center">
           <div className="mb-6 text-6xl">⚠️</div>
           <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-red-100">
-            Something went wrong
+            <Trans>Something went wrong</Trans>
           </h1>
           <p className="mb-2 text-sm text-zinc-400">
-            An unexpected error occurred. The app may continue to function partially.
+            <Trans>An unexpected error occurred. The app may continue to function partially.</Trans>
           </p>
           {this.state.error instanceof Error && (
             <p className="mb-6 max-h-24 overflow-auto rounded-lg border border-red-500/30 bg-red-500/10 p-3 font-mono text-xs text-red-300">
@@ -68,14 +77,14 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
               onClick={() => this.setState({ hasError: false, error: null })}
               className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-6 py-2.5 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
             >
-              Try Again
+              <Trans>Try Again</Trans>
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
               className="rounded-xl border border-zinc-600 bg-zinc-800/80 px-6 py-2.5 text-sm font-semibold text-zinc-300 transition-all duration-200 hover:border-zinc-500 hover:bg-zinc-700/80"
             >
-              Reload App
+              <Trans>Reload App</Trans>
             </button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { InstallSidecarTrustModalHost } from "./components/InstallSidecarTrustMo
 import { InstallConfirmationModalHost } from "./components/InstallConfirmationModalHost";
 import { showGlobalToast, ToastProvider } from "./components/ui/ToastHost";
 import { GameplayMoaningProvider } from "./contexts/GameplayMoaningContext";
+import { I18nProvider } from "./i18n";
 
 import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
@@ -142,12 +143,14 @@ registerSafeModeStartupShortcut();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ToastProvider>
-      <GameplayMoaningProvider>
-        <InstallConfirmationModalHost />
-        <InstallSidecarTrustModalHost />
-        <RouterProvider router={router} />
-      </GameplayMoaningProvider>
-    </ToastProvider>
+    <I18nProvider>
+      <ToastProvider>
+        <GameplayMoaningProvider>
+          <InstallConfirmationModalHost />
+          <InstallSidecarTrustModalHost />
+          <RouterProvider router={router} />
+        </GameplayMoaningProvider>
+      </ToastProvider>
+    </I18nProvider>
   </StrictMode>
 );

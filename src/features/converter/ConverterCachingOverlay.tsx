@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { motion } from "framer-motion";
 import React from "react";
 import { playHoverSound, playSelectSound } from "../../utils/audio";
@@ -70,7 +71,9 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
             <>
               <div className="mb-1 flex items-center gap-2">
                 <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-violet-400" />
-                <h2 className="text-lg font-bold text-violet-100">Caching Video</h2>
+                <h2 className="text-lg font-bold text-violet-100">
+                  <Trans>Caching Video</Trans>
+                </h2>
               </div>
               <p className="mb-5 truncate text-xs text-zinc-500" title={url}>
                 {truncateUrl(url)}
@@ -92,7 +95,7 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
               <div className="mb-5 grid grid-cols-3 gap-3 text-center">
                 <div>
                   <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-zinc-500">
-                    Speed
+                    <Trans>Speed</Trans>
                   </div>
                   <div className="mt-0.5 text-xs tabular-nums text-zinc-300">
                     {formatSpeed(progress?.speedBytesPerSec ?? null)}
@@ -100,7 +103,7 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
                 </div>
                 <div>
                   <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-zinc-500">
-                    Downloaded
+                    <Trans>Downloaded</Trans>
                   </div>
                   <div className="mt-0.5 text-xs tabular-nums text-zinc-300">
                     {formatBytes(progress?.downloadedBytes ?? null)}
@@ -128,14 +131,16 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
                 }}
                 className="w-full rounded-xl border border-zinc-600/60 bg-zinc-800/50 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-500/60 hover:bg-zinc-700/50 hover:text-zinc-100"
               >
-                Cancel
+                <Trans>Cancel</Trans>
               </button>
             </>
           ) : (
             <>
               <div className="mb-1 flex items-center gap-2">
                 <div className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                <h2 className="text-lg font-bold text-rose-100">Caching Failed</h2>
+                <h2 className="text-lg font-bold text-rose-100">
+                  <Trans>Caching Failed</Trans>
+                </h2>
               </div>
               <p className="mb-4 truncate text-xs text-zinc-500" title={url}>
                 {truncateUrl(url)}
@@ -155,7 +160,7 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
                   }}
                   className="flex-1 rounded-xl border border-zinc-600/60 bg-zinc-800/50 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-500/60 hover:bg-zinc-700/50 hover:text-zinc-100"
                 >
-                  Go Back
+                  <Trans>Go Back</Trans>
                 </button>
                 <button
                   type="button"
@@ -166,7 +171,7 @@ export const ConverterCachingOverlay: React.FC<ConverterCachingOverlayProps> = R
                   }}
                   className="flex-1 rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2.5 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
                 >
-                  Retry
+                  <Trans>Retry</Trans>
                 </button>
               </div>
             </>

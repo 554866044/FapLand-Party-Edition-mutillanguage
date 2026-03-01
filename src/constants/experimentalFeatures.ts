@@ -39,6 +39,13 @@ export function normalizeInstallWebFunscriptUrlEnabled(value: unknown): boolean 
   return typeof value === "boolean" ? value : DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED;
 }
 
+export const SYSTEM_LANGUAGE_ENABLED_KEY = "experimental.systemLanguageEnabled";
+export const DEFAULT_SYSTEM_LANGUAGE_ENABLED = false;
+
+export function normalizeSystemLanguageEnabled(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULT_SYSTEM_LANGUAGE_ENABLED;
+}
+
 export const PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY =
   "experimental.playlistCacheOngoingRestrictionDisabled";
 export const DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED = false;

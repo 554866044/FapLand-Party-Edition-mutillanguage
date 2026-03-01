@@ -1,22 +1,18 @@
-const NSFW_WORDS = [
-  "cumming",
-  "cumload",
-  "cum",
-  "cums",
-  "came",
-  "orgasmic",
-  "orgasms",
-  "orgasm",
-  "fapping",
-  "fapped",
-  "fap",
-  "faps",
-] as const;
+import type { SfwRuleSet } from "../i18n";
+import { getSfwRulesForLocale } from "../i18n";
 
-const NSFW_WORD_PATTERN = new RegExp(`\\b(?:${NSFW_WORDS.join("|")})\\b`, "giu");
-
-export function abbreviateNsfwText(text: string, enabled: boolean): string {
+export function abbreviateNsfwText(
+  text: string,
+  rulesOrEnabled: SfwRuleSet | boolean,
+  enabled = typeof rulesOrEnabled === "boolean" ? rulesOrEnabled : false
+): string {
   if (!enabled || text.length === 0) return text;
 
-  return text.replace(NSFW_WORD_PATTERN, (match) => match[0] ?? match);
+  const rules = typeof rulesOrEnabled === "boolean" ? getSfwRulesForLocale("en") : rulesOrEnabled;
+
+  let nextText = text;
+  for (const pattern of rules.patterns) {
+    nextText = nextText.replace(pattern.match, (match) => pattern.replace(match));
+  }
+  return nextText;
 }

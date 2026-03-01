@@ -37,6 +37,21 @@ body {
   overflow: hidden;
 }
 
+.text-gradient-safe {
+  color: #f5f3ff;
+  background-image: linear-gradient(to right, #ddd6fe, #f3e8ff, #c7d2fe);
+  background-clip: text;
+  -webkit-background-clip: text;
+  filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.45));
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .text-gradient-safe {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
 /* ─── Keyframes ─────────────────────────────────────────────────── */
 
 @keyframes float {
@@ -1079,6 +1094,12 @@ body {
 
 .settings-panel-enter {
   animation: settings-panel-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-entrance:has([data-controller-skip="true"]),
+.settings-panel-enter:has([data-controller-skip="true"]) {
+  position: relative;
+  z-index: 1000;
 }
 
 .settings-sidebar-item {

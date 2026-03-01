@@ -8,6 +8,7 @@ const CARD_ROW_ESTIMATE_PX = 480;
 const SHELF_GAP_PX = 20;
 const CARD_MIN_WIDTH_PX = 320;
 const MAX_COLUMNS = 2;
+const GROUPED_VIRTUALIZATION_MIN_SHELVES = 12;
 
 type VirtualizedRoundLibraryGridProps = {
   rows: RoundRenderRow[];
@@ -66,7 +67,9 @@ export function VirtualizedRoundLibraryGrid({
     () => buildRoundLibraryShelves(rows, columns, expandedGroupKeys),
     [columns, expandedGroupKeys, rows],
   );
-  const canVirtualize = shouldVirtualize && !hasGroupedRows;
+  const canVirtualize =
+    shouldVirtualize &&
+    (!hasGroupedRows || shelves.length >= GROUPED_VIRTUALIZATION_MIN_SHELVES);
 
   const shelfRenderer = useMemo(
     () => (shelf: RoundLibraryShelf) => {

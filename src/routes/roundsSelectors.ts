@@ -5,6 +5,7 @@ import {
 import type { InstalledRound, VideoDownloadProgress } from "../services/db";
 import type { StoredPlaylist } from "../services/playlists";
 import { getRoundDurationSec } from "../utils/duration";
+import type { PlaylistWebsiteCacheSummary } from "../features/webVideo/cacheStatus";
 
 export type TypeFilter = "all" | NonNullable<InstalledRound["type"]>;
 export type ScriptFilter = "all" | "installed" | "missing";
@@ -30,6 +31,11 @@ export type SourceHeroOption = {
   heroId: string;
   heroName: string;
   rounds: InstalledRound[];
+};
+
+export type PlaylistGroupingData = {
+  playlistsByRoundId: Map<string, PlaylistMembership[]>;
+  cacheSummaryByPlaylistId: Map<string, PlaylistWebsiteCacheSummary>;
 };
 
 const roundNameCollator = new Intl.Collator();
@@ -130,11 +136,21 @@ export function buildPlaylistsByRoundId(
   playlists: StoredPlaylist[],
   rounds: InstalledRound[]
 ): Map<string, PlaylistMembership[]> {
+  return buildPlaylistGroupingData(playlists, rounds).playlistsByRoundId;
+}
+
+export function buildPlaylistGroupingData(
+  playlists: StoredPlaylist[],
+  rounds: InstalledRound[]
+): PlaylistGroupingData {
   const roundResolver = createPortableRoundRefResolver(rounds);
   const memberships = new Map<string, PlaylistMembership[]>();
+  const cacheSummaryByPlaylistId = new Map<string, PlaylistWebsiteCacheSummary>();
 
   for (const playlist of playlists) {
     const seenRoundIds = new Set<string>();
+    const pendingRoundNames: string[] = [];
+
     for (const entry of collectPlaylistRefs(playlist.config)) {
       const resolved = roundResolver.resolve(entry.ref);
       if (!resolved || seenRoundIds.has(resolved.id)) continue;
@@ -147,10 +163,30 @@ export function buildPlaylistsByRoundId(
       } else {
         memberships.set(resolved.id, [membership]);
       }
+
+      let hasPendingCache = false;
+      for (const resource of resolved.resources) {
+        if (resource.websiteVideoCacheStatus === "pending") {
+          hasPendingCache = true;
+          break;
+        }
+      }
+      if (hasPendingCache) {
+        pendingRoundNames.push(resolved.name);
+      }
     }
+
+    cacheSummaryByPlaylistId.set(playlist.id, {
+      hasPending: pendingRoundNames.length > 0,
+      pendingRoundCount: pendingRoundNames.length,
+      pendingRoundNames,
+    });
   }
 
-  return memberships;
+  return {
+    playlistsByRoundId: memberships,
+    cacheSummaryByPlaylistId,
+  };
 }
 
 export function buildSourceHeroOptions(rounds: InstalledRound[]): SourceHeroOption[] {

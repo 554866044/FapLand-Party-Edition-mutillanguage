@@ -1,4 +1,5 @@
 import type { PerkDefinition, PerkRarity } from "../types";
+import { i18n } from "../../i18n";
 
 type PerkRarityMeta = {
   label: string;
@@ -37,7 +38,8 @@ export const PERK_RARITY_META: Record<PerkRarity, PerkRarityMeta> = {
     tailwind: {
       badge: "border-slate-300/55 bg-slate-500/20 text-slate-100",
       setupSelected: "border-slate-300/70 bg-slate-500/20 text-slate-100",
-      setupIdle: "border-slate-500/45 bg-slate-500/10 text-slate-100 hover:border-slate-300/55 hover:bg-slate-500/16",
+      setupIdle:
+        "border-slate-500/45 bg-slate-500/10 text-slate-100 hover:border-slate-300/55 hover:bg-slate-500/16",
       inventorySelected: "border-slate-300/80 bg-slate-500/18",
       inventoryIdle: "border-slate-500/50 bg-zinc-900/70 hover:border-slate-300/65",
       chip: "border-slate-300/40 bg-slate-500/20 text-slate-50",
@@ -58,7 +60,8 @@ export const PERK_RARITY_META: Record<PerkRarity, PerkRarityMeta> = {
     tailwind: {
       badge: "border-cyan-300/55 bg-cyan-500/20 text-cyan-100",
       setupSelected: "border-cyan-300/70 bg-cyan-500/20 text-cyan-100",
-      setupIdle: "border-cyan-500/45 bg-cyan-500/10 text-cyan-100 hover:border-cyan-300/60 hover:bg-cyan-500/16",
+      setupIdle:
+        "border-cyan-500/45 bg-cyan-500/10 text-cyan-100 hover:border-cyan-300/60 hover:bg-cyan-500/16",
       inventorySelected: "border-cyan-300/80 bg-cyan-500/18",
       inventoryIdle: "border-cyan-500/45 bg-zinc-900/70 hover:border-cyan-300/65",
       chip: "border-cyan-300/40 bg-cyan-500/16 text-cyan-50",
@@ -79,7 +82,8 @@ export const PERK_RARITY_META: Record<PerkRarity, PerkRarityMeta> = {
     tailwind: {
       badge: "border-fuchsia-300/55 bg-fuchsia-500/20 text-fuchsia-100",
       setupSelected: "border-fuchsia-300/70 bg-fuchsia-500/20 text-fuchsia-100",
-      setupIdle: "border-fuchsia-500/45 bg-fuchsia-500/10 text-fuchsia-100 hover:border-fuchsia-300/60 hover:bg-fuchsia-500/16",
+      setupIdle:
+        "border-fuchsia-500/45 bg-fuchsia-500/10 text-fuchsia-100 hover:border-fuchsia-300/60 hover:bg-fuchsia-500/16",
       inventorySelected: "border-fuchsia-300/80 bg-fuchsia-500/18",
       inventoryIdle: "border-fuchsia-500/45 bg-zinc-900/70 hover:border-fuchsia-300/65",
       chip: "border-fuchsia-300/40 bg-fuchsia-500/16 text-fuchsia-50",
@@ -100,7 +104,8 @@ export const PERK_RARITY_META: Record<PerkRarity, PerkRarityMeta> = {
     tailwind: {
       badge: "border-amber-300/55 bg-amber-500/20 text-amber-100",
       setupSelected: "border-amber-300/70 bg-amber-500/20 text-amber-100",
-      setupIdle: "border-amber-500/45 bg-amber-500/10 text-amber-100 hover:border-amber-300/60 hover:bg-amber-500/16",
+      setupIdle:
+        "border-amber-500/45 bg-amber-500/10 text-amber-100 hover:border-amber-300/60 hover:bg-amber-500/16",
       inventorySelected: "border-amber-300/80 bg-amber-500/18",
       inventoryIdle: "border-amber-500/45 bg-zinc-900/70 hover:border-amber-300/65",
       chip: "border-amber-300/40 bg-amber-500/16 text-amber-50",
@@ -108,6 +113,19 @@ export const PERK_RARITY_META: Record<PerkRarity, PerkRarityMeta> = {
     },
   },
 };
+
+export function getRarityLabel(rarity: PerkRarity): string {
+  switch (rarity) {
+    case "common":
+      return i18n._({ id: "perk.rarity.common", message: "COMMON" });
+    case "rare":
+      return i18n._({ id: "perk.rarity.rare", message: "RARE" });
+    case "epic":
+      return i18n._({ id: "perk.rarity.epic", message: "EPIC" });
+    case "legendary":
+      return i18n._({ id: "perk.rarity.legendary", message: "LEGENDARY" });
+  }
+}
 
 export function fallbackRarityFromCost(cost: number): PerkRarity {
   const normalizedCost = Number.isFinite(cost) ? Math.max(0, Math.floor(cost)) : 0;

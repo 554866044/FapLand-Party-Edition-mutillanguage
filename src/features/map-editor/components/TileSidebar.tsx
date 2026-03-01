@@ -1,4 +1,5 @@
 import React from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useSfwMode } from "../../../hooks/useSfwMode";
 import { playHoverSound, playSelectSound } from "../../../utils/audio";
 import { abbreviateNsfwText } from "../../../utils/sfwText";
@@ -36,13 +37,16 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
     onSearchChange,
     onArmTile,
 }) => {
+    const { t } = useLingui();
     const sfwMode = useSfwMode();
 
     return (
     <aside className="editor-panel flex min-h-0 w-full flex-col rounded-xl border border-white/8 bg-black/30 xl:w-64 xl:flex-shrink-0">
         {/* ── Header ─────────────────── */}
         <div className="flex-shrink-0 border-b border-white/6 px-3 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Tiles</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                <Trans>Tiles</Trans>
+            </p>
         </div>
 
         {/* ── Category pills ─────────────────── */}
@@ -74,7 +78,7 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
             <input
                 id="tile-search-input"
                 type="text"
-                placeholder="Search tiles"
+                placeholder={t`Search tiles`}
                 value={tileSearch}
                 onChange={(event) => onSearchChange(event.target.value)}
                 className="w-full rounded-md border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 text-xs text-zinc-200 outline-none placeholder:text-zinc-600 transition-colors focus:border-cyan-500/50"
@@ -118,7 +122,7 @@ export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
             })}
             {filteredTiles.length === 0 && (
                 <div className="rounded-lg px-3 py-4 text-center text-xs text-zinc-600">
-                    No tiles match this filter.
+                    <Trans>No tiles match this filter.</Trans>
                 </div>
             )}
         </div>

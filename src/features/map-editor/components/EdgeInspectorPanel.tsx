@@ -1,4 +1,5 @@
 import React from "react";
+import { Trans } from "@lingui/react/macro";
 import type { EditorEdge } from "../EditorState";
 
 interface EdgeInspectorPanelProps {
@@ -17,7 +18,7 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
     if (!selectedEdge) {
         return (
             <div className="flex items-center justify-center py-8 text-xs text-zinc-600">
-                Select an edge to inspect
+                <Trans>Select an edge to inspect</Trans>
             </div>
         );
     }
@@ -36,7 +37,9 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
 
             {/* ── Gate cost ─────────────────── */}
             <label className="block">
-                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">Gate cost ($)</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+                    <Trans>Gate cost ($)</Trans>
+                </span>
                 <input
                     type="number"
                     min={0}
@@ -52,7 +55,9 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
 
             {/* ── Weight ─────────────────── */}
             <label className="block">
-                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">Weight</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+                    <Trans>Weight</Trans>
+                </span>
                 <input
                     type="number"
                     min={0.1}
@@ -68,7 +73,9 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
 
             {/* ── Label ─────────────────── */}
             <label className="block">
-                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">Label</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
+                    <Trans>Label</Trans>
+                </span>
                 <input
                     type="text"
                     value={selectedEdge.label ?? ""}
@@ -82,7 +89,7 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
 
             {/* ── Gate info ─────────────────── */}
             <p className="text-[11px] text-zinc-600">
-                Gate: if the player lacks money, this edge is unavailable.
+                <Trans>Gate: if the player lacks money, this edge is unavailable.</Trans>
             </p>
 
             {showFallbackHint && (
@@ -91,8 +98,8 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
                     : "border-amber-600/35 bg-amber-950/20 text-amber-300"
                     }`}>
                     {hasFreeAlternative
-                        ? "✓ Fallback path available."
-                        : "⚠ No free fallback path — add another outgoing edge."}
+                        ? <Trans>✓ Fallback path available.</Trans>
+                        : <Trans>⚠ No free fallback path - add another outgoing edge.</Trans>}
                 </p>
             )}
 
@@ -101,7 +108,7 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
                 className="w-full rounded-md border border-rose-500/40 bg-rose-500/8 px-2.5 py-2 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/15"
                 onClick={() => onDeleteEdge(selectedEdge.id)}
             >
-                Delete Edge
+                <Trans>Delete Edge</Trans>
             </button>
         </div>
     );

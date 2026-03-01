@@ -136,6 +136,52 @@ describe("VirtualizedRoundLibraryGrid", () => {
     expect(measure).not.toHaveBeenCalled();
   });
 
+  it("virtualizes large grouped libraries", async () => {
+    const measure = vi.fn();
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 1280 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 900 });
+
+    let latestOptions: Record<string, unknown> | null = null;
+    useVirtualizerMock.mockImplementation((options: Record<string, unknown>) => {
+      latestOptions = options;
+      const count = Number(options.count ?? 0);
+      return {
+        measure,
+        measureElement: vi.fn(),
+        getTotalSize: () => count * 100,
+        getVirtualItems: () =>
+          Array.from({ length: Math.min(count, 4) }, (_, index) => ({
+            index,
+            start: index * 100,
+          })),
+      };
+    });
+
+    const rows: RoundRenderRow[] = Array.from({ length: 6 }, (_, index) => ({
+      kind: "hero-group",
+      groupKey: `hero:${index}`,
+      heroName: `Hero ${index}`,
+      rounds: [makeRound(`r-${index}-1`), makeRound(`r-${index}-2`), makeRound(`r-${index}-3`)],
+    }));
+
+    render(
+      <VirtualizedRoundLibraryGrid
+        rows={rows}
+        expandedGroupKeys={new Set(rows.map((row) => row.groupKey))}
+        scrollContainer={container}
+        renderCard={(item) => <div key={item.key}>{item.key}</div>}
+        renderGroupHeader={(shelf) => <div key={shelf.key}>{shelf.key}</div>}
+      />
+    );
+
+    await waitFor(() => {
+      expect(useVirtualizerMock).toHaveBeenCalled();
+      expect(latestOptions?.enabled).toBe(true);
+      expect(measure).toHaveBeenCalled();
+    });
+  });
+
   it("remeasures a virtualized shelf when media finishes loading", async () => {
     const measure = vi.fn();
     const measureElement = vi.fn();

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { db, type InstalledRound } from "../../services/db";
 import { trpc } from "../../services/trpc";
 import { playHoverSound, playSelectSound } from "../../utils/audio";
@@ -50,6 +51,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
     onSelectLocalFunscript,
     onSelectWebsiteSource,
   }) => {
+    const { t } = useLingui();
     const [rounds, setRounds] = useState<InstalledRound[]>([]);
     const [heroes, setHeroes] = useState<HeroSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -126,11 +128,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       const query = searchQuery.trim().toLowerCase();
       if (!query) return rounds;
       return rounds.filter((round) => {
-        const searchText = [
-          round.name,
-          round.author ?? "",
-          round.description ?? "",
-        ]
+        const searchText = [round.name, round.author ?? "", round.description ?? ""]
           .join(" ")
           .toLowerCase();
         return searchText.includes(query);
@@ -141,11 +139,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       const query = searchQuery.trim().toLowerCase();
       if (!query) return heroes;
       return heroes.filter((hero) => {
-        const searchText = [
-          hero.name,
-          hero.author ?? "",
-          hero.description ?? "",
-        ]
+        const searchText = [hero.name, hero.author ?? "", hero.description ?? ""]
           .join(" ")
           .toLowerCase();
         return searchText.includes(query);
@@ -156,9 +150,11 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       return (
         <div className="space-y-4">
           <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
-            <h3 className="text-lg font-bold text-violet-100">Local Video File</h3>
+            <h3 className="text-lg font-bold text-violet-100">
+              <Trans>Local Video File</Trans>
+            </h3>
             <p className="mt-1 text-sm text-zinc-400">
-              Select a video file from your computer to convert into rounds.
+              <Trans>Select a video file from your computer to convert into rounds.</Trans>
             </p>
             <button
               type="button"
@@ -169,14 +165,16 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               }}
               className="mt-4 rounded-xl border border-violet-300/60 bg-violet-500/30 px-5 py-3 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
             >
-              Select Video File
+              <Trans>Select Video File</Trans>
             </button>
           </div>
 
           <div className="rounded-2xl border border-cyan-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
-            <h3 className="text-lg font-bold text-cyan-100">Attach Funscript (Optional)</h3>
+            <h3 className="text-lg font-bold text-cyan-100">
+              <Trans>Attach Funscript (Optional)</Trans>
+            </h3>
             <p className="mt-1 text-sm text-zinc-400">
-              Attach a funscript file for auto-detection of round boundaries.
+              <Trans>Attach a funscript file for auto-detection of round boundaries.</Trans>
             </p>
             <button
               type="button"
@@ -187,7 +185,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               }}
               className="mt-4 rounded-xl border border-cyan-300/60 bg-cyan-500/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition-all duration-200 hover:border-cyan-200/80 hover:bg-cyan-500/45"
             >
-              Select Funscript File
+              <Trans>Select Funscript File</Trans>
             </button>
           </div>
         </div>
@@ -198,15 +196,20 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       return (
         <div className="space-y-4">
           <div className="rounded-2xl border border-violet-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
-            <h3 className="text-lg font-bold text-violet-100">Website Video URL</h3>
+            <h3 className="text-lg font-bold text-violet-100">
+              <Trans>Website Video URL</Trans>
+            </h3>
             <p className="mt-1 text-sm text-zinc-400">
-              Paste a supported website video URL and jump straight into the converter. The app will cache the video first, then you can start editing.
+              <Trans>
+                Paste a supported website video URL and jump straight into the converter. The app
+                will cache the video first, then you can start editing.
+              </Trans>
             </p>
 
             <div className="mt-4 space-y-3">
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                  Video URL
+                  <Trans>Video URL</Trans>
                 </span>
                 <input
                   type="url"
@@ -223,7 +226,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
               {installWebFunscriptUrlEnabled && (
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                    Funscript URL
+                    <Trans>Funscript URL</Trans>
                   </span>
                   <input
                     type="url"
@@ -264,7 +267,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
                 }}
                 className="rounded-xl border border-cyan-300/60 bg-cyan-500/25 px-5 py-3 text-sm font-semibold text-cyan-100 transition-all duration-200 hover:border-cyan-200/80 hover:bg-cyan-500/40"
               >
-                Select Local Funscript
+                <Trans>Select Local Funscript</Trans>
               </button>
               <button
                 type="button"
@@ -273,40 +276,41 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
                   playSelectSound();
                   const normalizedVideoUrl = normalizeHttpUrl(websiteVideoUrl);
                   if (!normalizedVideoUrl) {
-                    setWebsitePickerError("Enter a valid http(s) video URL.");
+                    setWebsitePickerError(t`Enter a valid http(s) video URL.`);
                     return;
                   }
 
                   const trimmedFunscriptUrl = websiteFunscriptUrl.trim();
-                  const normalizedFunscriptUrl = trimmedFunscriptUrl.length > 0
-                    ? normalizeHttpUrl(trimmedFunscriptUrl)
-                    : null;
+                  const normalizedFunscriptUrl =
+                    trimmedFunscriptUrl.length > 0 ? normalizeHttpUrl(trimmedFunscriptUrl) : null;
                   if (trimmedFunscriptUrl.length > 0 && !normalizedFunscriptUrl) {
-                    setWebsitePickerError("Funscript URL must also be a valid http(s) URL.");
+                    setWebsitePickerError(t`Funscript URL must also be a valid http(s) URL.`);
                     return;
                   }
 
                   setWebsitePickerError(null);
                   onSelectWebsiteSource(
                     normalizedVideoUrl,
-                    websiteFunscriptFileUri ?? normalizedFunscriptUrl,
+                    websiteFunscriptFileUri ?? normalizedFunscriptUrl
                   );
                 }}
                 className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-5 py-3 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
               >
-                Use Website Source
+                <Trans>Use Website Source</Trans>
               </button>
             </div>
 
             {websiteFunscriptFileLabel ? (
               <div className="mt-3 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
-                Local funscript attached: {websiteFunscriptFileLabel}
+                {t`Local funscript attached: ${websiteFunscriptFileLabel}`}
               </div>
             ) : null}
 
             <div className="mt-4 rounded-xl border border-zinc-700/70 bg-black/30 px-4 py-3 text-xs text-zinc-400">
-              Supported in practice through yt-dlp-backed playback. Paste sites like Pornhub,
-              XVideos, or xHamster here, then add segments the same way as any other source.
+              <Trans>
+                Supported in practice through yt-dlp-backed playback. Paste sites like Pornhub,
+                XVideos, or xHamster here, then add segments the same way as any other source.
+              </Trans>
             </div>
           </div>
         </div>
@@ -320,22 +324,22 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${section === "round" ? "rounds" : "heroes"}...`}
+            placeholder={t`Search ${section === "round" ? "rounds" : "heroes"}...`}
             className="w-full rounded-xl border border-zinc-700/80 bg-black/40 px-4 py-2 text-sm text-zinc-100 outline-none transition-colors focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/20"
           />
         </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="text-sm text-zinc-400">Loading...</div>
+            <div className="text-sm text-zinc-400">{t`Loading...`}</div>
           </div>
         ) : section === "round" ? (
           filteredRounds.length === 0 ? (
             <div className="rounded-2xl border border-zinc-700/50 bg-black/20 p-8 text-center">
               <p className="text-sm text-zinc-400">
                 {searchQuery.trim()
-                  ? "No rounds match your search."
-                  : "No standalone rounds available. Install some rounds first."}
+                  ? t`No rounds match your search.`
+                  : t`No standalone rounds available. Install some rounds first.`}
               </p>
             </div>
           ) : (
@@ -371,8 +375,8 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
           <div className="rounded-2xl border border-zinc-700/50 bg-black/20 p-8 text-center">
             <p className="text-sm text-zinc-400">
               {searchQuery.trim()
-                ? "No heroes match your search."
-                : "No heroes with rounds available. Create a hero first."}
+                ? t`No heroes match your search.`
+                : t`No heroes with rounds available. Create a hero first.`}
             </p>
           </div>
         ) : (

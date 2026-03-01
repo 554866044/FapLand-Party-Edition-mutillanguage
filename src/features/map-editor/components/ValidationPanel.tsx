@@ -1,4 +1,5 @@
 import React from "react";
+import { Trans } from "@lingui/react/macro";
 import { useSfwMode } from "../../../hooks/useSfwMode";
 import { abbreviateNsfwText } from "../../../utils/sfwText";
 import type { GraphValidationResult } from "../validateGraphConfig";
@@ -15,7 +16,9 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = React.memo(({ val
         {validation.errors.length === 0 && validation.warnings.length === 0 && (
             <div className="flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-950/15 px-3 py-2.5">
                 <span className="text-emerald-400">✓</span>
-                <p className="text-xs text-emerald-300">Graph is valid</p>
+                <p className="text-xs text-emerald-300">
+                    <Trans>Graph is valid</Trans>
+                </p>
             </div>
         )}
         {validation.errors.map((entry, index) => (

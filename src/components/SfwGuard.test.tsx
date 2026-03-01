@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SfwGuard } from "./SfwGuard";
 
@@ -16,6 +16,7 @@ vi.mock("../hooks/useSfwMode", () => ({
 describe("SfwGuard", () => {
   afterEach(() => {
     mocks.sfwEnabled = true;
+    cleanup();
   });
 
   it("reveals guarded media only after confirming the internal prompt", () => {

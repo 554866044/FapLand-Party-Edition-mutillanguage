@@ -1,60 +1,114 @@
 import { describe, expect, it } from "vitest";
-import { pruneLinearSetupToRoundCount } from "./playlist-workshop";
+import {
+  ensureLinearSetupCapacity,
+  getRequiredLinearRoundCount,
+  sortSelectedRoundsByDifficulty,
+} from "./playlist-workshop";
 
-describe("pruneLinearSetupToRoundCount", () => {
-  it("deselects normal rounds whose assigned field exceeds the reduced round count", () => {
-    const next = pruneLinearSetupToRoundCount(
-      {
-        roundCount: 10,
-        safePointsEnabled: false,
-        safePointIndices: [],
-        normalRoundOrder: ["round-1", "round-2", "round-3", "round-4", "round-5", "round-6"],
-        enabledCumRoundIds: [],
-        enabledPerkIds: [],
-        enabledAntiPerkIds: [],
-        perkTriggerChancePerRound: 0,
-        roundStartDelaySec: 0,
-        startingMoney: 120,
-        diceMin: 1,
-        diceMax: 6,
-        probabilities: {
-          intermediary: { initial: 0, increasePerRound: 0, max: 0 },
-          antiPerk: { initial: 0, increasePerRound: 0, max: 0 },
-        },
-        scorePerCumRoundSuccess: 0,
-      },
-      5
-    );
+function makeSetup(
+  overrides: Partial<Parameters<typeof ensureLinearSetupCapacity>[0]> = {}
+): Parameters<typeof ensureLinearSetupCapacity>[0] {
+  return {
+    roundCount: 10,
+    safePointsEnabled: false,
+    safePointIndices: [],
+    saveMode: "none",
+    normalRoundOrder: [],
+    enabledCumRoundIds: [],
+    enabledPerkIds: [],
+    enabledAntiPerkIds: [],
+    perkTriggerChancePerRound: 0,
+    roundStartDelaySec: 0,
+    startingMoney: 120,
+    probabilities: {
+      intermediary: { initial: 0, increasePerRound: 0, max: 0 },
+      antiPerk: { initial: 0, increasePerRound: 0, max: 0 },
+    },
+    scorePerCumRoundSuccess: 0,
+    diceMin: 1,
+    diceMax: 6,
+    ...overrides,
+  };
+}
 
-    expect(next.roundCount).toBe(5);
-    expect(next.normalRoundOrder).toEqual(["round-1", "round-2", "round-3", "round-4", "round-5"]);
+function makeRound(
+  id: string,
+  name: string,
+  difficulty: number | null
+): Parameters<typeof sortSelectedRoundsByDifficulty>[0][number] {
+  return {
+    id,
+    heroId: null,
+    name,
+    author: "Author",
+    type: "Normal",
+    difficulty,
+    previewImage: null,
+    startTime: 0,
+    endTime: 180000,
+    resources: [],
+  };
+}
+
+describe("getRequiredLinearRoundCount", () => {
+  it("matches selected count when safe points are disabled", () => {
+    expect(getRequiredLinearRoundCount(4, [2, 5], false)).toBe(4);
   });
 
-  it("drops safe points above the reduced max before pruning round placement", () => {
-    const next = pruneLinearSetupToRoundCount(
-      {
-        roundCount: 10,
+  it("accounts for blocked safe-point indices when safe points are enabled", () => {
+    expect(getRequiredLinearRoundCount(4, [2, 5], true)).toBe(6);
+  });
+});
+
+describe("ensureLinearSetupCapacity", () => {
+  it("increases round count to fit the selected queue", () => {
+    const next = ensureLinearSetupCapacity(
+      makeSetup({
+        roundCount: 2,
         safePointsEnabled: true,
-        safePointIndices: [2, 8],
-        normalRoundOrder: ["round-1", "round-2", "round-3", "round-4", "round-5"],
-        enabledCumRoundIds: [],
-        enabledPerkIds: [],
-        enabledAntiPerkIds: [],
-        perkTriggerChancePerRound: 0,
-        roundStartDelaySec: 0,
-        startingMoney: 120,
-        diceMin: 1,
-        diceMax: 6,
-        probabilities: {
-          intermediary: { initial: 0, increasePerRound: 0, max: 0 },
-          antiPerk: { initial: 0, increasePerRound: 0, max: 0 },
-        },
-        scorePerCumRoundSuccess: 0,
-      },
-      5
+        safePointIndices: [2],
+        normalRoundOrder: ["round-1", "round-2"],
+      })
     );
 
-    expect(next.safePointIndices).toEqual([2]);
-    expect(next.normalRoundOrder).toEqual(["round-1", "round-2", "round-3", "round-4"]);
+    expect(next.roundCount).toBe(3);
+    expect(next.normalRoundOrder).toEqual(["round-1", "round-2"]);
+  });
+
+  it("never decreases an already large enough round count", () => {
+    const next = ensureLinearSetupCapacity(
+      makeSetup({
+        roundCount: 12,
+        safePointsEnabled: true,
+        safePointIndices: [2, 8],
+        normalRoundOrder: ["round-1", "round-2", "round-3"],
+      })
+    );
+
+    expect(next.roundCount).toBe(12);
+    expect(next.safePointIndices).toEqual([2, 8]);
+  });
+});
+
+describe("sortSelectedRoundsByDifficulty", () => {
+  it("orders unknown difficulty first and preserves relative order for equal name+difficulty", () => {
+    const secondSame = makeRound("round-2", "Same", 2);
+    const firstSame = makeRound("round-1", "Same", 2);
+
+    const sorted = sortSelectedRoundsByDifficulty([
+      makeRound("hard", "Hard", 5),
+      secondSame,
+      makeRound("unknown", "Mystery", null),
+      makeRound("easy", "Easy", 1),
+      firstSame,
+    ]);
+
+    expect(sorted.map((round) => round.id)).toEqual([
+      "unknown",
+      "easy",
+      "round-2",
+      "round-1",
+      "hard",
+    ]);
   });
 });

@@ -19,35 +19,9 @@ import { SegmentList } from "../features/converter/SegmentList";
 import { StatusBar } from "../features/converter/StatusBar";
 import { HotkeyOverlay } from "../features/converter/HotkeyOverlay";
 import { ConverterSourcePicker } from "../features/converter/ConverterSourcePicker";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 type SourceSection = "round" | "hero" | "file" | "url";
-
-const SOURCE_SECTIONS: { id: SourceSection; icon: string; title: string; description: string }[] = [
-  {
-    id: "round",
-    icon: "🎬",
-    title: "From Round",
-    description: "Convert a standalone round into a hero with segments.",
-  },
-  {
-    id: "hero",
-    icon: "🦸",
-    title: "From Hero",
-    description: "Edit an existing hero and add or modify segments.",
-  },
-  {
-    id: "file",
-    icon: "📂",
-    title: "From File",
-    description: "Load a local video file and convert manually.",
-  },
-  {
-    id: "url",
-    icon: "🌐",
-    title: "From URL",
-    description: "Use a website video URL like Pornhub, XVideos, or rule34video as the source.",
-  },
-];
 
 export const Route = createFileRoute("/converter")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -60,6 +34,34 @@ export const Route = createFileRoute("/converter")({
 function ConverterPage() {
   const navigate = useNavigate();
   const { sourceRoundId, heroName } = Route.useSearch();
+  const { t } = useLingui();
+  const sourceSections: { id: SourceSection; icon: string; title: string; description: string }[] =
+    [
+      {
+        id: "round",
+        icon: "🎬",
+        title: t`From Round`,
+        description: t`Convert a standalone round into a hero with segments.`,
+      },
+      {
+        id: "hero",
+        icon: "🦸",
+        title: t`From Hero`,
+        description: t`Edit an existing hero and add or modify segments.`,
+      },
+      {
+        id: "file",
+        icon: "📂",
+        title: t`From File`,
+        description: t`Load a local video file and convert manually.`,
+      },
+      {
+        id: "url",
+        icon: "🌐",
+        title: t`From URL`,
+        description: t`Use a website video URL like Pornhub, XVideos, or rule34video as the source.`,
+      },
+    ];
   const state = useConverterState({ sourceRoundId, heroName });
   const [activeSectionId, setActiveSectionId] = useState<SourceSection>("round");
 
@@ -86,7 +88,7 @@ function ConverterPage() {
     onBack: handleControllerBack,
   });
 
-  const activeSection = SOURCE_SECTIONS.find((s) => s.id === activeSectionId) ?? SOURCE_SECTIONS[0];
+  const activeSection = sourceSections.find((s) => s.id === activeSectionId) ?? sourceSections[0];
 
   if (state.step === "select" || state.step === "caching") {
     return (
@@ -97,14 +99,14 @@ function ConverterPage() {
           <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-60 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
             <div className="hidden lg:mb-5 lg:block lg:px-3">
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
-                Conversion Lab
+                <Trans>Conversion Lab</Trans>
               </p>
               <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
-                Round Converter
+                <Trans>Round Converter</Trans>
               </h1>
             </div>
 
-            {SOURCE_SECTIONS.map((section, index) => {
+            {sourceSections.map((section, index) => {
               const active = section.id === activeSectionId;
               return (
                 <button
@@ -112,12 +114,12 @@ function ConverterPage() {
                   type="button"
                   data-controller-focus-id={`converter-sidebar-${section.id}`}
                   data-controller-down={
-                    index < SOURCE_SECTIONS.length - 1
-                      ? `converter-sidebar-${SOURCE_SECTIONS[index + 1].id}`
+                    index < sourceSections.length - 1
+                      ? `converter-sidebar-${sourceSections[index + 1].id}`
                       : undefined
                   }
                   data-controller-up={
-                    index > 0 ? `converter-sidebar-${SOURCE_SECTIONS[index - 1].id}` : undefined
+                    index > 0 ? `converter-sidebar-${sourceSections[index - 1].id}` : undefined
                   }
                   onMouseEnter={playHoverSound}
                   onFocus={playHoverSound}
@@ -135,7 +137,7 @@ function ConverterPage() {
 
             <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
               <MenuButton
-                label="← Back"
+                label={t`← Back`}
                 controllerFocusId="converter-back"
                 onHover={playHoverSound}
                 onClick={() => {
@@ -170,7 +172,7 @@ function ConverterPage() {
 
               <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6 lg:hidden">
                 <MenuButton
-                  label="Back to Main Menu"
+                  label={t`Back to Main Menu`}
                   onHover={playHoverSound}
                   onClick={() => {
                     playSelectSound();
@@ -224,7 +226,7 @@ function ConverterPage() {
                       onClick={() => {}}
                       className="flex-1 px-4 py-2.5 text-sm font-medium border-b-2 border-violet-400 text-violet-100"
                     >
-                      Segments{" "}
+                      <Trans>Segments</Trans>{" "}
                       {state.sortedSegments.length > 0 && (
                         <span className="ml-1 text-xs text-violet-300">
                           ({state.sortedSegments.length})
@@ -272,7 +274,7 @@ function ConverterPage() {
 
           <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6">
             <MenuButton
-              label="Back to Main Menu"
+              label={t`Back to Main Menu`}
               onHover={playHoverSound}
               onClick={() => {
                 playSelectSound();

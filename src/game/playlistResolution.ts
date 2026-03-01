@@ -131,6 +131,7 @@ export function createPortableRoundRefResolver<T extends PlaylistResolutionRound
   installedRounds: ReadonlyArray<T>,
 ): PortableRoundRefResolver<T> {
   const roundById = new Map<string, T>();
+  const roundByInstallSourceKey = new Map<string, T>();
   const roundByMetadata = new Map<string, T>();
   const roundByNameAndType = new Map<string, T>();
   const roundByPhash = new Map<string, T>();
@@ -138,6 +139,10 @@ export function createPortableRoundRefResolver<T extends PlaylistResolutionRound
   for (const round of installedRounds) {
     if (!roundById.has(round.id)) {
       roundById.set(round.id, round);
+    }
+    const installSourceKey = normalizeText(round.installSourceKey);
+    if (installSourceKey.length > 0 && !roundByInstallSourceKey.has(installSourceKey)) {
+      roundByInstallSourceKey.set(installSourceKey, round);
     }
 
     const metadataKey = toMetadataKey(
@@ -165,6 +170,12 @@ export function createPortableRoundRefResolver<T extends PlaylistResolutionRound
 
   return {
     resolve: (ref) => {
+      const installSourceKeyHint = normalizeText(ref.installSourceKeyHint);
+      if (installSourceKeyHint.length > 0) {
+        const installSourceMatch = roundByInstallSourceKey.get(installSourceKeyHint);
+        if (installSourceMatch) return installSourceMatch;
+      }
+
       const phash = normalizeText(ref.phash);
       if (phash.length > 0) {
         const phashMatch = roundByPhash.get(phash);

@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { GameScene } from "../components/game/GameScene";
@@ -289,7 +290,7 @@ export const Route = createFileRoute("/game")({
     ]);
 
     if (!activePlaylist) {
-      throw new Error("No playlist available.");
+      throw new Error(t`No playlist available.`);
     }
 
     const playedByPool = await playlists.getDistinctPlayedByPool(activePlaylist.id);
@@ -299,7 +300,7 @@ export const Route = createFileRoute("/game")({
     if (deps.resume && deps.playlistId) {
       const savedRun = await db.singlePlayerSaves.getByPlaylist(deps.playlistId).catch(() => null);
       if (!savedRun) {
-        resumeRedirectNotice = "Saved run could not be resumed and was cleared.";
+        resumeRedirectNotice = t`Saved run could not be resumed and was cleared.`;
       } else {
         try {
           const parsedSnapshot = ZSinglePlayerRunSaveSnapshot.parse(
@@ -308,13 +309,13 @@ export const Route = createFileRoute("/game")({
               : savedRun.snapshotJson
           );
           if (parsedSnapshot.playlistId !== activePlaylist.id) {
-            throw new Error("Saved run playlist mismatch.");
+            throw new Error(t`Saved run playlist mismatch.`);
           }
           savedSnapshot = parsedSnapshot;
         } catch (error) {
           console.warn("Failed to validate saved single-player run", error);
           await db.singlePlayerSaves.deleteByPlaylist(deps.playlistId).catch(() => undefined);
-          resumeRedirectNotice = "Saved run could not be resumed and was cleared.";
+          resumeRedirectNotice = t`Saved run could not be resumed and was cleared.`;
         }
       }
     }
@@ -345,6 +346,7 @@ export const Route = createFileRoute("/game")({
 });
 
 function GameRoute() {
+  const { t } = useLingui();
   const {
     installedRounds,
     initialHighscore,
@@ -369,11 +371,16 @@ function GameRoute() {
   const mapEditorTestPlaylistIdRef = useRef<string | null>(getMapEditorTestPlaylistId());
   const isMapEditorTestRun = mapEditorTestPlaylistIdRef.current !== null;
   const [applyPerkDirectly, setApplyPerkDirectly] = useState(initialApplyPerkDirectly);
-  const [saveNotification, setSaveNotification] = useState<{ nonce: number; message: string } | null>(null);
+  const [saveNotification, setSaveNotification] = useState<{
+    nonce: number;
+    message: string;
+  } | null>(null);
   const { connected: handyConnected } = useHandy();
 
   const currentPlaylistSaveMode = activePlaylist.config.saveMode;
-  const scoringSaveMode = savedSnapshot?.saveMode ?? (currentPlaylistSaveMode === "none" ? null : currentPlaylistSaveMode);
+  const scoringSaveMode =
+    savedSnapshot?.saveMode ??
+    (currentPlaylistSaveMode === "none" ? null : currentPlaylistSaveMode);
   const effectiveCheatMode = cheatModeEnabled;
   const effectiveAssisted = Boolean(scoringSaveMode) && isAssistedSaveMode(scoringSaveMode);
   const effectiveAssistedSaveMode = scoringSaveMode;
@@ -388,10 +395,10 @@ function GameRoute() {
         ...economyOverrides,
       },
       perkPool: {
-        enabledPerkIds: filterPerkIdsByGameplayCapabilities(
-          baseConfig.perkPool.enabledPerkIds,
-          { handyConnected, moaningAvailable }
-        ),
+        enabledPerkIds: filterPerkIdsByGameplayCapabilities(baseConfig.perkPool.enabledPerkIds, {
+          handyConnected,
+          moaningAvailable,
+        }),
         enabledAntiPerkIds: filterPerkIdsByGameplayCapabilities(
           baseConfig.perkPool.enabledAntiPerkIds,
           { handyConnected, moaningAvailable }
@@ -530,7 +537,7 @@ function GameRoute() {
           lastAutosaveKeyRef.current = autosaveKey;
           void persistRunSnapshot(nextState)
             .then((saved) => {
-              if (saved) showSaveNotification("Checkpoint reached. Game saved.");
+              if (saved) showSaveNotification(t`Checkpoint reached. Game saved.`);
             })
             .catch((error) => {
               console.warn("Failed to autosave single-player run", error);
@@ -629,13 +636,13 @@ function GameRoute() {
     return [
       {
         id: "save-game",
-        label: "Save Game",
+        label: t`Save Game`,
         disabled: Boolean(latestState.activeRound),
         tone: "default" as const,
         onClick: () => {
           void persistRunSnapshot(latestStateRef.current)
             .then((saved) => {
-              if (saved) showSaveNotification("Game saved.");
+              if (saved) showSaveNotification(t`Game saved.`);
             })
             .catch((error) => {
               console.warn("Failed to manually save single-player run", error);
@@ -662,7 +669,7 @@ function GameRoute() {
         sessionStartedAtMs={sessionStartedAtMsRef.current}
         installedRounds={installedRounds}
         onGiveUp={handleBack}
-        giveUpLabel={isMapEditorTestRun ? "Back to Editor" : "Give Up"}
+        giveUpLabel={isMapEditorTestRun ? t`Back to Editor` : t`Give Up`}
         optionsActions={optionsActions}
         allowDebugRoundControls={isMapEditorTestRun || cheatModeEnabled}
         showDevPerkMenu={isGameDevelopmentMode() || cheatModeEnabled}

@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as z from "zod";
@@ -57,11 +58,6 @@ export const Route = createFileRoute("/multiplayer-lobby")({
   component: MultiplayerLobbyRoute,
 });
 
-function formatRole(player: MultiplayerLobbyPlayer): string {
-  if (player.role === "host") return "Host";
-  return "Player";
-}
-
 function getResolutionStorageKey(
   lobbyId: string,
   playerId: string,
@@ -77,6 +73,7 @@ function getResolutionStorageKey(
 }
 
 function MultiplayerLobbyRoute() {
+  const { t } = useLingui();
   const navigate = useNavigate();
   const sfwModeEnabled = useMultiplayerSfwRedirect();
   const {
@@ -152,7 +149,7 @@ function MultiplayerLobbyRoute() {
             void refreshLobby().catch((refreshError) => {
               if (!mounted) return;
               setError(
-                refreshError instanceof Error ? refreshError.message : "Failed to refresh lobby."
+                refreshError instanceof Error ? refreshError.message : t`Failed to refresh lobby.`
               );
             });
           },
@@ -166,7 +163,7 @@ function MultiplayerLobbyRoute() {
         setError(
           subscribeError instanceof Error
             ? subscribeError.message
-            : "Failed to subscribe to lobby updates."
+            : t`Failed to subscribe to lobby updates.`
         );
       }
     })();
@@ -189,7 +186,7 @@ function MultiplayerLobbyRoute() {
           setError(
             heartbeatError instanceof Error
               ? heartbeatError.message
-              : "Failed to send lobby heartbeat."
+              : t`Failed to send lobby heartbeat.`
           );
         });
     }, 15000);
@@ -276,7 +273,9 @@ function MultiplayerLobbyRoute() {
   useEffect(() => {
     const interval = window.setInterval(() => {
       void refreshLobby().catch((refreshError) => {
-        setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh lobby.");
+        setError(
+          refreshError instanceof Error ? refreshError.message : t`Failed to refresh lobby.`
+        );
       });
     }, 15000);
 
@@ -353,7 +352,7 @@ function MultiplayerLobbyRoute() {
 
   const handleReady = async () => {
     if (!ownPlayerId) {
-      setError("Missing player id.");
+      setError(t`Missing player id.`);
       return;
     }
 
@@ -368,7 +367,7 @@ function MultiplayerLobbyRoute() {
       });
       await refreshLobby();
     } catch (readyError) {
-      setError(readyError instanceof Error ? readyError.message : "Failed to set ready state.");
+      setError(readyError instanceof Error ? readyError.message : t`Failed to set ready state.`);
     } finally {
       setPending(false);
     }
@@ -376,7 +375,7 @@ function MultiplayerLobbyRoute() {
 
   const handleStartForAll = async () => {
     if (!snapshot) {
-      setError("Missing lobby snapshot.");
+      setError(t`Missing lobby snapshot.`);
       return;
     }
 
@@ -387,7 +386,7 @@ function MultiplayerLobbyRoute() {
       await refreshLobby();
     } catch (startError) {
       setError(
-        startError instanceof Error ? startError.message : "Failed to start for all players."
+        startError instanceof Error ? startError.message : t`Failed to start for all players.`
       );
     } finally {
       setPending(false);
@@ -419,7 +418,7 @@ function MultiplayerLobbyRoute() {
         await refreshLobby();
       } catch (readyError) {
         setError(
-          readyError instanceof Error ? readyError.message : "Failed to auto-set ready state."
+          readyError instanceof Error ? readyError.message : t`Failed to auto-set ready state.`
         );
       } finally {
         autoReadyInFlightRef.current = false;
@@ -479,7 +478,9 @@ function MultiplayerLobbyRoute() {
       } catch (autoEnterError) {
         autoEnterNavigatedRef.current = false;
         setError(
-          autoEnterError instanceof Error ? autoEnterError.message : "Failed to join running match."
+          autoEnterError instanceof Error
+            ? autoEnterError.message
+            : t`Failed to join running match.`
         );
       } finally {
         autoEnterInFlightRef.current = false;
@@ -507,20 +508,23 @@ function MultiplayerLobbyRoute() {
     ownPlayerState !== "kicked" &&
     !ownPlayerIsTerminal;
 
-  const copyFallback = useCallback((text: string) => {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "true");
-    textarea.style.position = "absolute";
-    textarea.style.left = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const success = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    if (!success) {
-      throw new Error("Failed to copy invite info.");
-    }
-  }, []);
+  const copyFallback = useCallback(
+    (text: string) => {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const success = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (!success) {
+        throw new Error(t`Failed to copy invite info.`);
+      }
+    },
+    [t]
+  );
 
   const copyToClipboard = useCallback(
     async (text: string, target: "code" | "link") => {
@@ -540,7 +544,7 @@ function MultiplayerLobbyRoute() {
           copyResetTimeoutRef.current = null;
         }, 1200);
       } catch (copyError) {
-        setError(copyError instanceof Error ? copyError.message : "Failed to copy invite info.");
+        setError(copyError instanceof Error ? copyError.message : t`Failed to copy invite info.`);
       }
     },
     [copyFallback]
@@ -557,19 +561,20 @@ function MultiplayerLobbyRoute() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="mb-2 inline-flex items-center rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
-                  Matchmaking Terminal
+                  <Trans>Matchmaking Terminal</Trans>
                 </p>
                 <h1 className="font-[family-name:var(--font-jetbrains-mono)] text-3xl font-bold uppercase tracking-[0.08em] sm:text-4xl">
-                  Lobby <span className="text-cyan-400">{inviteCode || "Unknown"}</span>
+                  <Trans>Lobby</Trans>{" "}
+                  <span className="text-cyan-400">{inviteCode || t`Unknown`}</span>
                 </h1>
                 <p className="mt-2 text-sm font-medium tracking-wide text-zinc-300">
-                  Status:{" "}
+                  <Trans>Status:</Trans>{" "}
                   <span
                     className={lobby?.status === "running" ? "text-emerald-400" : "text-amber-400"}
                   >
-                    {lobby?.status ?? "unknown"}
+                    {lobby?.status ?? t`unknown`}
                   </span>{" "}
-                  | Lobby: {lobby?.name ?? "-"}
+                  | <Trans>Lobby:</Trans> {lobby?.name ?? "-"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -580,7 +585,7 @@ function MultiplayerLobbyRoute() {
                     void navigate({ to: "/multiplayer" });
                   }}
                 >
-                  Back
+                  <Trans>Back</Trans>
                 </button>
                 <button
                   type="button"
@@ -596,7 +601,7 @@ function MultiplayerLobbyRoute() {
                   }}
                   disabled={!ownPlayerId || (lobby?.status === "running" && unresolvedCount > 0)}
                 >
-                  Open Match View
+                  <Trans>Open Match View</Trans>
                 </button>
               </div>
             </div>
@@ -620,12 +625,12 @@ function MultiplayerLobbyRoute() {
               }}
               role="button"
               tabIndex={0}
-              aria-label="Copy invite code"
+              aria-label={t`Copy invite code`}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent translate-x-[-100%] transition-transform duration-1000 group-hover:translate-x-[100%]" />
               <div className="glass noise flex flex-col items-center justify-center rounded-xl py-8 sm:py-12 relative z-10">
                 <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-300 transition-colors group-hover:text-cyan-200">
-                  {copiedTarget === "code" ? "Copied to Clipboard!" : "Click to Copy Invite Code"}
+                  {copiedTarget === "code" ? t`Copied to Clipboard!` : t`Click to Copy Invite Code`}
                 </p>
                 <div className="mt-4 font-[family-name:var(--font-jetbrains-mono)] text-6xl font-black tracking-[0.2em] text-cyan-50 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)] sm:text-7xl transition-all group-hover:drop-shadow-[0_0_25px_rgba(34,211,238,0.8)] group-hover:scale-105">
                   {inviteCode}
@@ -637,21 +642,25 @@ function MultiplayerLobbyRoute() {
           {lobby && (
             <section className="glass noise rounded-2xl p-4 sm:p-5 border-cyan-300/20">
               <h2 className="font-[family-name:var(--font-jetbrains-mono)] text-lg font-bold uppercase tracking-[0.06em] text-cyan-100">
-                Lobby Controls
+                <Trans>Lobby Controls</Trans>
               </h2>
               <p className="mt-1 text-xs text-zinc-300 font-medium tracking-wide">
-                Visibility is{" "}
+                <Trans>Visibility is</Trans>{" "}
                 <span className="font-semibold text-cyan-300">
-                  {lobby.isPublic ? "public" : "private"}
+                  {lobby.isPublic ? t`public` : t`private`}
                 </span>
-                . Late join is{" "}
+                . <Trans>Late join is</Trans>{" "}
                 <span className="font-semibold text-cyan-300">
-                  {lobby.allowLateJoin ? "enabled" : "disabled"}
+                  {lobby.allowLateJoin ? t`enabled` : t`disabled`}
                 </span>
                 .{" "}
-                {lobby.isPublic
-                  ? "Public lobbies appear in the browser when they are also open and joinable."
-                  : "Private lobbies are invite-code only."}
+                {lobby.isPublic ? (
+                  <Trans>
+                    Public lobbies appear in the browser when they are also open and joinable.
+                  </Trans>
+                ) : (
+                  <Trans>Private lobbies are invite-code only.</Trans>
+                )}
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -661,7 +670,7 @@ function MultiplayerLobbyRoute() {
                   className="rounded-xl border border-cyan-400/50 bg-cyan-500/20 px-5 py-3 text-sm font-bold uppercase tracking-wider text-cyan-50 shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all hover:bg-cyan-500/30 hover:shadow-[0_0_25px_rgba(34,211,238,0.3)] disabled:opacity-50 active:scale-[0.98]"
                   onClick={() => void handleReady()}
                 >
-                  {pending ? "Submitting..." : "Ready (Manual Retry)"}
+                  {pending ? t`Submitting...` : t`Ready (Manual Retry)`}
                 </button>
 
                 {isHost && (
@@ -671,7 +680,7 @@ function MultiplayerLobbyRoute() {
                     className="rounded-xl border border-rose-400/50 bg-gradient-to-r from-rose-500/20 to-pink-500/20 px-5 py-3 text-sm font-bold uppercase tracking-wider text-rose-50 shadow-[0_0_15px_rgba(244,63,94,0.15)] transition-all hover:shadow-[0_0_25px_rgba(244,63,94,0.3)] hover:brightness-125 disabled:opacity-50 active:scale-[0.98]"
                     onClick={() => void handleStartForAll()}
                   >
-                    START MATCH
+                    <Trans>START MATCH</Trans>
                   </button>
                 )}
 
@@ -688,15 +697,15 @@ function MultiplayerLobbyRoute() {
                           setError(
                             visibilityError instanceof Error
                               ? visibilityError.message
-                              : "Failed to update public lobby visibility."
+                              : t`Failed to update public lobby visibility.`
                           );
                         }
                       })();
                     }}
                   >
                     {lobby.isPublic
-                      ? "Public Listing Enabled (Click to Hide)"
-                      : "Private Lobby (Click to Advertise)"}
+                      ? t`Public Listing Enabled (Click to Hide)`
+                      : t`Private Lobby (Click to Advertise)`}
                   </button>
                 )}
 
@@ -713,15 +722,15 @@ function MultiplayerLobbyRoute() {
                           setError(
                             openError instanceof Error
                               ? openError.message
-                              : "Failed to update lobby lock state."
+                              : t`Failed to update lobby lock state.`
                           );
                         }
                       })();
                     }}
                   >
                     {lobby.isOpen
-                      ? "Lobby Unlocked (Click to Lock)"
-                      : "Lobby Locked (Click to Unlock)"}
+                      ? t`Lobby Unlocked (Click to Lock)`
+                      : t`Lobby Locked (Click to Unlock)`}
                   </button>
                 )}
               </div>
@@ -729,13 +738,13 @@ function MultiplayerLobbyRoute() {
               {(resolution.issues.length > 0 || unresolvedCount > 0) && (
                 <div className="mt-5 rounded-xl border border-rose-500/30 bg-rose-950/40 p-4">
                   <div className="text-xs font-semibold uppercase tracking-widest text-rose-300">
-                    Exact:{" "}
+                    <Trans>Exact:</Trans>{" "}
                     <span className="font-bold text-emerald-300">{resolution.counts.exact}</span>
                     {" • "}
-                    Suggested:{" "}
+                    <Trans>Suggested:</Trans>{" "}
                     <span className="font-bold text-cyan-300">{resolution.counts.suggested}</span>
                     {" • "}
-                    Remaining missing:{" "}
+                    <Trans>Remaining missing:</Trans>{" "}
                     <span className="font-bold text-rose-400">{unresolvedCount}</span>
                   </div>
                   <div className="mt-3">
@@ -744,7 +753,7 @@ function MultiplayerLobbyRoute() {
                       className="rounded-xl border border-cyan-400/45 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
                       onClick={() => setResolutionModalOpen(true)}
                     >
-                      {unresolvedCount > 0 ? "Resolve Missing" : "Review Auto-Resolve"}
+                      {unresolvedCount > 0 ? t`Resolve Missing` : t`Review Auto-Resolve`}
                     </button>
                   </div>
                   <ul className="mt-3 grid gap-2 sm:grid-cols-2 text-xs font-medium text-zinc-300">
@@ -756,7 +765,7 @@ function MultiplayerLobbyRoute() {
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.8)]"></span>
                         <span className="truncate">
                           {item.ref.name}{" "}
-                          <span className="opacity-50">({item.ref.type ?? "Unknown"})</span>
+                          <span className="opacity-50">({item.ref.type ?? t`Unknown`})</span>
                         </span>
                       </li>
                     ))}
@@ -765,7 +774,9 @@ function MultiplayerLobbyRoute() {
               )}
               {showRunningConflictBlocker && (
                 <div className="mt-4 rounded-xl border border-amber-500/60 bg-amber-500/10 p-4 font-medium text-sm text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
-                  Match started. Install or resolve missing rounds to automatically join.
+                  <Trans>
+                    Match started. Install or resolve missing rounds to automatically join.
+                  </Trans>
                 </div>
               )}
             </section>
@@ -774,7 +785,7 @@ function MultiplayerLobbyRoute() {
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 pb-8">
             <div className="glass noise rounded-2xl p-4 sm:p-5 lg:col-span-2 flex flex-col gap-4 border-emerald-300/20">
               <h2 className="font-[family-name:var(--font-jetbrains-mono)] text-lg font-bold uppercase tracking-[0.06em] text-emerald-100">
-                Active Players
+                <Trans>Active Players</Trans>
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {players.map((player) => {
@@ -797,7 +808,7 @@ function MultiplayerLobbyRoute() {
                         <div className="min-w-0 flex-1">
                           <div className="font-[family-name:var(--font-jetbrains-mono)] text-xl font-bold text-zinc-100 truncate flex items-center gap-2">
                             {isHostPlayer && (
-                              <span title="Host" className="text-amber-400">
+                              <span title={t`Host`} className="text-amber-400">
                                 ★
                               </span>
                             )}
@@ -805,7 +816,7 @@ function MultiplayerLobbyRoute() {
                           </div>
                           <div className="mt-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
                             <span className={isHostPlayer ? "text-amber-400" : ""}>
-                              {formatRole(player)}
+                              {player.role === "host" ? t`Host` : t`Player`}
                             </span>
                             <span className="h-1 w-1 rounded-full bg-zinc-600"></span>
                             <span className={isReady ? "text-emerald-400" : "text-amber-400"}>
@@ -815,13 +826,13 @@ function MultiplayerLobbyRoute() {
                         </div>
                         <div className="flex shrink-0 flex-col items-end text-right text-[11px] font-semibold tracking-widest text-zinc-400 bg-black/40 rounded-lg p-2 border border-white/5">
                           <span className="mb-1">
-                            POS{" "}
+                            <Trans>POS</Trans>{" "}
                             <span className="text-zinc-200 text-xs">
                               {progress?.positionIndex ?? 0}
                             </span>
                           </span>
                           <span className="mb-1">
-                            PTS{" "}
+                            <Trans>PTS</Trans>{" "}
                             <span className="text-zinc-200 text-xs">
                               {progress?.score ?? player.finalScore ?? 0}
                             </span>
@@ -844,13 +855,13 @@ function MultiplayerLobbyRoute() {
                                   setError(
                                     kickError instanceof Error
                                       ? kickError.message
-                                      : "Failed to kick player."
+                                      : t`Failed to kick player.`
                                   );
                                 }
                               })();
                             }}
                           >
-                            Kick
+                            <Trans>Kick</Trans>
                           </button>
                           <button
                             type="button"
@@ -858,19 +869,19 @@ function MultiplayerLobbyRoute() {
                             onClick={() => {
                               void (async () => {
                                 try {
-                                  await banLobbyPlayer(search.lobbyId, player.id, "Host ban");
+                                  await banLobbyPlayer(search.lobbyId, player.id, t`Host ban`);
                                   await refreshLobby();
                                 } catch (banError) {
                                   setError(
                                     banError instanceof Error
                                       ? banError.message
-                                      : "Failed to ban player."
+                                      : t`Failed to ban player.`
                                   );
                                 }
                               })();
                             }}
                           >
-                            Ban
+                            <Trans>Ban</Trans>
                           </button>
                         </div>
                       )}
@@ -886,12 +897,12 @@ function MultiplayerLobbyRoute() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
                 </span>
-                Anti-Perk Feed
+                <Trans>Anti-Perk Feed</Trans>
               </h2>
               <div className="mt-5 flex flex-1 flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar">
                 {antiPerkFeed.length === 0 && (
                   <div className="flex h-32 items-center justify-center rounded-xl border border-white/5 bg-black/20 text-xs font-semibold tracking-widest text-zinc-500">
-                    NO ACTIVE THREATS
+                    <Trans>NO ACTIVE THREATS</Trans>
                   </div>
                 )}
                 {antiPerkFeed.map((event) => (
@@ -902,10 +913,10 @@ function MultiplayerLobbyRoute() {
                     <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-rose-400 to-pink-600"></div>
                     <div className="pl-3 flex flex-col gap-1">
                       <div className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-bold tracking-wider text-rose-100">
-                        {event.perkId} ACTIVATED
+                        {t`${event.perkId} ACTIVATED`}
                       </div>
                       <div className="text-[10px] font-bold tracking-[0.2em] text-rose-300/80">
-                        IMPACT COST: ₪{event.cost}
+                        {t`IMPACT COST: ₪${event.cost}`}
                       </div>
                     </div>
                   </div>
@@ -918,11 +929,11 @@ function MultiplayerLobbyRoute() {
         {snapshot && (
           <PlaylistResolutionModal
             open={resolutionModalOpen}
-            title={`Resolve ${lobby?.name ?? "Lobby Playlist"}`}
+            title={t`Resolve ${lobby?.name ?? t`Lobby Playlist`}`}
             installedRounds={installedRounds}
             analysis={resolution}
             initialOverrides={manualOverrides}
-            primaryActionLabel="Save Resolutions"
+            primaryActionLabel={t`Save Resolutions`}
             onClose={() => setResolutionModalOpen(false)}
             onPrimaryAction={(overrides) => {
               setManualOverrides(overrides);

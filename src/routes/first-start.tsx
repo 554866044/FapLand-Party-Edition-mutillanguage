@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
@@ -19,6 +20,8 @@ import { importOpenedFile } from "../services/openedFiles";
 import { trpc } from "../services/trpc";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { abbreviateNsfwText } from "../utils/sfwText";
+import { i18n } from "../i18n";
+import { useLocale } from "../i18n/useLocale";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
@@ -32,176 +35,477 @@ function normalizeReturnTarget(value: unknown): ReturnTarget {
 type StepDefinition = {
   id: string;
   icon: string;
-  shortLabel: string;
-  eyebrow: string;
-  title: string;
-  description: string;
-  details: string[];
   interactive?:
-    | "music"
-    | "moaning"
-    | "round-packs"
-    | "storage"
-    | "booru"
-    | "handy"
-    | "phash";
+  | "language"
+  | "music"
+  | "moaning"
+  | "round-packs"
+  | "storage"
+  | "booru"
+  | "handy"
+  | "phash";
 };
 
-const STEPS: StepDefinition[] = [
-  {
-    id: "welcome",
-    icon: "🎮",
-    shortLabel: "Welcome",
-    eyebrow: "Start Here",
-    title: "What Fap Land Party Edition is and how the two play modes work",
-    description:
-      "Fap Land Party Edition is a board-game style app. You move across a map, trigger rounds, and try to finish with a strong score and a good run.",
-    details: [
-      "Fap and cockheroes are like guitarhero for your dick. You masturbate up AND down per beat. When a beat hits, you are down at the shaft. Normally there is a beatbar. You can also automate this using thehandy",
-      "Singleplayer is the solo mode. You build or choose a playlist, play alone, and try to survive the board, clear rounds, and push your personal highscore as far as you can.",
-      "Multiplayer is the shared mode. Several players run the same board setup and compare how well they do. The goal is to outscore the other players and finish the match in a better state than they do.",
-      "Both modes use rounds as the core content. The board decides what happens next, and your choices change how risky or rewarding the run becomes.",
-    ],
-  },
-  {
-    id: "heroes",
-    icon: "📦",
-    shortLabel: "Content",
-    eyebrow: "Content",
-    title: "How to add fap or cock heroes and round content",
-    description:
-      "Heroes and rounds are the content packs the game uses during play. If you do not add any, the game has very little to work with.",
-    details: [
-      "You can import a single `.hero` or `.round` file. That is the direct way to add one hero or one round pack at a time.",
-      "You can also add a whole folder as a source. Fap Land Party Edition scans that folder right away, imports what it understands, and checks it again on later app starts.",
-      "Imported content shows up in Installed Rounds. From there you can review what was added, edit metadata, and use the rounds in playlists and maps.",
-      "Making your own packs is also pretty easy. You can use the Round Converter to turn source material into playable rounds, then organize them with the Playlist Workshop or Map Editor.",
-      "Exporting your own work is meant to be simple too. Once your rounds or playlists are ready, the app gives you direct export paths so sharing packs is not a complicated process.",
-    ],
-  },
-  {
-    id: "music",
-    icon: "🎵",
-    shortLabel: "Music",
-    eyebrow: "Optional Setup",
-    title: "Install some music for the menus and downtime",
-    description:
-      "Music is optional, but it makes the app feel much more alive. Fap Land Party Edition can keep a global music queue running while you move through menus.",
-    details: [
-      "Music does not replace your round videos. It is background audio for the app when no foreground video is actively playing.",
-      "You can add normal audio files from your computer. The game stores them in a queue, and you can reorder or remove them later in Settings.",
-      "If you want, you can skip this now and come back later.",
-    ],
-    interactive: "music",
-  },
-  {
-    id: "moaning",
-    icon: "🔊",
-    shortLabel: "Moaning",
-    eyebrow: "Optional Setup",
-    title: "Set up gameplay moaning so moaning perks actually have content",
-    description:
-      "Gameplay moaning is optional, but some perks and anti-perks use it. If you want those effects to do something, add a few moaning files now.",
-    details: [
-      "The moaning library is separate from menu music. It is used by gameplay events that trigger one-shot or looping moaning audio.",
-      "You can add local audio files from your computer or download supported URLs through yt-dlp.",
-      "If you skip this, moaning-related gameplay effects stay unavailable until you add files later in Settings.",
-    ],
-    interactive: "moaning",
-  },
-  {
-    id: "round-packs",
-    icon: "💿",
-    shortLabel: "Rounds",
-    eyebrow: "Optional Setup",
-    title: "Install some round packs now",
-    description:
-      "Round packs are the gameplay library. This is the content the board pulls from when a round starts.",
-    details: [
-      "Adding a folder is best when you already keep your packs together in one place. The app scans the folder and imports supported content.",
-      "Importing a single file is better when someone sent you one `.hero` or `.round` file and you just want that item.",
-      "You can install content now, or skip this and manage it later from Installed Rounds or Settings.",
-    ],
-    interactive: "round-packs",
-  },
-  {
-    id: "maps",
-    icon: "🗺️",
-    shortLabel: "Maps",
-    eyebrow: "Creation",
-    title: "Linear maps, graph maps, and their two editors",
-    description:
-      "Fap Land Party Edition supports two board styles, because not every run should feel the same.",
-    details: [
-      "A linear map is a straight path. It is easier to understand, quicker to build, and good when you want a classic start-to-finish run.",
-      "A graph map is a branching board with nodes and connections. It gives you more control, more choice, and more advanced route design.",
-      "Because those two map styles work differently, the app has two editors: Playlist Workshop for linear boards, and Map Editor for graph boards.",
-      "If you want to build your own pack, the usual flow is simple: create rounds in the Round Converter, place them into a linear or graph board, then export the finished result.",
-      "That means you do not need a hard workflow to start making content. The converter, the editors, and the export tools are built so custom pack creation stays approachable.",
-    ],
-  },
-  {
-    id: "storage",
-    icon: "🗄️",
-    shortLabel: "Storage",
-    eyebrow: "Optional Setup",
-    title: "Choose where cached and extracted files should live",
-    description:
-      "You can keep the default app-managed folders, or point storage-heavy features at custom locations now.",
-    details: [
-      "Music cache stores downloaded menu music and YouTube imports.",
-      "Website video cache stores downloaded website videos and related playback files.",
-      ".fpack extraction location stores extracted pack contents in a persistent folder so those rounds stay playable later.",
-      "You can skip this and change any of these later in Settings under Data & Storage.",
-    ],
-    interactive: "storage",
-  },
-  {
-    id: "phash",
-    icon: "🐢",
-    shortLabel: "Performance",
-    eyebrow: "Performance",
-    title: "Do you have an old slow computer? Consider turning off background hashing",
-    description:
-      "The app can compute visual fingerprints in the background to improve round matching. On slower machines, that extra work can be worth disabling.",
-    details: [
-      "Background pHash scanning helps the app recognize visually similar rounds and imported content more accurately.",
-      "If your computer is older or already struggles during startup, disabling background hashing can reduce background load.",
-      "You can change this later in Settings under Data & Storage.",
-    ],
-    interactive: "phash",
-  },
-  {
-    id: "handy",
-    icon: "🔌",
-    shortLabel: "Hardware",
-    eyebrow: "Hardware",
-    title: "Linking your Handy device",
-    description:
-      "Connect your Handy device for synchronized motion support. This is optional but enhances the experience.",
-    details: [
-      "Enter your Handy connection key below to connect directly. You can find this key in the Handy app or on the device.",
-      "If you do not own a Handy, skip this step. You can still use the app and play the game without hardware.",
-      "You can always connect or change settings later in Settings > Hardware & Sync.",
-    ],
-    interactive: "handy",
-  },
-  {
-    id: "booru",
-    icon: "🔍",
-    shortLabel: "Media",
-    eyebrow: "Intermediary Media",
-    title: "Choose a booru search prompt",
-    description:
-      "Fap Land Party Edition can use a booru search prompt for intermediary loading media. If you do nothing, the default prompt stays in place.",
-    details: [
-      "This prompt tells the app what kind of media it should look for during loading and intermediary moments.",
-      "A simple, specific prompt usually works better than a long one. You can keep the default if you are unsure.",
-      "You can change this later in Settings under Gameplay.",
-    ],
-    interactive: "booru",
-  },
-];
+function getSteps(): StepDefinition[] {
+  return [
+    {
+      id: "welcome",
+      icon: "🎮",
+      interactive: "language",
+    },
+    {
+      id: "heroes",
+      icon: "📦",
+    },
+    {
+      id: "music",
+      icon: "🎵",
+      interactive: "music",
+    },
+    {
+      id: "moaning",
+      icon: "🔊",
+      interactive: "moaning",
+    },
+    {
+      id: "round-packs",
+      icon: "💿",
+      interactive: "round-packs",
+    },
+    {
+      id: "maps",
+      icon: "🗺️",
+    },
+    {
+      id: "storage",
+      icon: "🗄️",
+      interactive: "storage",
+    },
+    {
+      id: "phash",
+      icon: "🐢",
+      interactive: "phash",
+    },
+    {
+      id: "handy",
+      icon: "🔌",
+      interactive: "handy",
+    },
+    {
+      id: "booru",
+      icon: "🔍",
+      interactive: "booru",
+    },
+  ];
+}
+
+function getStepShortLabel(id: string): string {
+  switch (id) {
+    case "welcome":
+      return i18n._({ id: "first-start.step.welcome.shortLabel", message: "Welcome" });
+    case "heroes":
+      return i18n._({ id: "first-start.step.heroes.shortLabel", message: "Content" });
+    case "music":
+      return i18n._({ id: "first-start.step.music.shortLabel", message: "Music" });
+    case "moaning":
+      return i18n._({ id: "first-start.step.moaning.shortLabel", message: "Moaning" });
+    case "round-packs":
+      return i18n._({ id: "first-start.step.round-packs.shortLabel", message: "Rounds" });
+    case "maps":
+      return i18n._({ id: "first-start.step.maps.shortLabel", message: "Maps" });
+    case "storage":
+      return i18n._({ id: "first-start.step.storage.shortLabel", message: "Storage" });
+    case "phash":
+      return i18n._({ id: "first-start.step.phash.shortLabel", message: "Performance" });
+    case "handy":
+      return i18n._({ id: "first-start.step.handy.shortLabel", message: "Hardware" });
+    case "booru":
+      return i18n._({ id: "first-start.step.booru.shortLabel", message: "Media" });
+    default:
+      return id;
+  }
+}
+
+function getStepEyebrow(id: string): string {
+  switch (id) {
+    case "welcome":
+      return i18n._({ id: "first-start.step.welcome.eyebrow", message: "Start Here" });
+    case "heroes":
+      return i18n._({ id: "first-start.step.heroes.eyebrow", message: "Content" });
+    case "maps":
+      return i18n._({ id: "first-start.step.maps.eyebrow", message: "Creation" });
+    case "phash":
+      return i18n._({ id: "first-start.step.phash.eyebrow", message: "Performance" });
+    case "handy":
+      return i18n._({ id: "first-start.step.handy.eyebrow", message: "Hardware" });
+    case "booru":
+      return i18n._({
+        id: "first-start.step.booru.eyebrow",
+        message: "Intermediary Media",
+      });
+    case "music":
+    case "moaning":
+    case "round-packs":
+    case "storage":
+      return i18n._({
+        id: "first-start.step.optional-setup.eyebrow",
+        message: "Optional Setup",
+      });
+    default:
+      return "";
+  }
+}
+
+function getStepTitle(id: string): string {
+  switch (id) {
+    case "welcome":
+      return i18n._({
+        id: "first-start.step.welcome.title",
+        message: "What Fap Land Party Edition is and how the two play modes work",
+      });
+    case "heroes":
+      return i18n._({
+        id: "first-start.step.heroes.title",
+        message: "How to add fap or cock heroes and round content",
+      });
+    case "music":
+      return i18n._({
+        id: "first-start.step.music.title",
+        message: "Install some music for the menus and downtime",
+      });
+    case "moaning":
+      return i18n._({
+        id: "first-start.step.moaning.title",
+        message: "Set up gameplay moaning so moaning perks actually have content",
+      });
+    case "round-packs":
+      return i18n._({
+        id: "first-start.step.round-packs.title",
+        message: "Install some round packs now",
+      });
+    case "maps":
+      return i18n._({
+        id: "first-start.step.maps.title",
+        message: "Linear maps, graph maps, and their two editors",
+      });
+    case "storage":
+      return i18n._({
+        id: "first-start.step.storage.title",
+        message: "Choose where cached and extracted files should live",
+      });
+    case "phash":
+      return i18n._({
+        id: "first-start.step.phash.title",
+        message: "Do you have an old slow computer? Consider turning off background hashing",
+      });
+    case "handy":
+      return i18n._({
+        id: "first-start.step.handy.title",
+        message: "Linking your Handy device",
+      });
+    case "booru":
+      return i18n._({
+        id: "first-start.step.booru.title",
+        message: "Choose a booru search prompt",
+      });
+    default:
+      return id;
+  }
+}
+
+function getStepDescription(id: string): string {
+  switch (id) {
+    case "welcome":
+      return i18n._({
+        id: "first-start.step.welcome.description",
+        message:
+          "Fap Land Party Edition is a board-game style app. You move across a map, trigger rounds, and try to finish with a strong score and a good run.",
+      });
+    case "heroes":
+      return i18n._({
+        id: "first-start.step.heroes.description",
+        message:
+          "Heroes and rounds are the content packs the game uses during play. If you do not add any, the game has very little to work with.",
+      });
+    case "music":
+      return i18n._({
+        id: "first-start.step.music.description",
+        message:
+          "Music is optional, but it makes the app feel much more alive. Fap Land Party Edition can keep a global music queue running while you move through menus.",
+      });
+    case "moaning":
+      return i18n._({
+        id: "first-start.step.moaning.description",
+        message:
+          "Gameplay moaning is optional, but some perks and anti-perks use it. If you want those effects to do something, add a few moaning files now.",
+      });
+    case "round-packs":
+      return i18n._({
+        id: "first-start.step.round-packs.description",
+        message:
+          "Round packs are the gameplay library. This is the content the board pulls from when a round starts.",
+      });
+    case "maps":
+      return i18n._({
+        id: "first-start.step.maps.description",
+        message:
+          "Fap Land Party Edition supports two board styles, because not every run should feel the same.",
+      });
+    case "storage":
+      return i18n._({
+        id: "first-start.step.storage.description",
+        message:
+          "You can keep the default app-managed folders, or point storage-heavy features at custom locations now.",
+      });
+    case "phash":
+      return i18n._({
+        id: "first-start.step.phash.description",
+        message:
+          "The app can compute visual fingerprints in the background to improve round matching. On slower machines, that extra work can be worth disabling.",
+      });
+    case "handy":
+      return i18n._({
+        id: "first-start.step.handy.description",
+        message:
+          "Connect your Handy device for synchronized motion support. This is optional but enhances the experience.",
+      });
+    case "booru":
+      return i18n._({
+        id: "first-start.step.booru.description",
+        message:
+          "Fap Land Party Edition can use a booru search prompt for intermediary loading media. If you do nothing, the default prompt stays in place.",
+      });
+    default:
+      return "";
+  }
+}
+
+function getLocaleCardDescription(locale: string): string {
+  switch (locale) {
+    case "de":
+      return i18n._({ id: "first-start.language-option.de", message: "German interface" });
+    case "es":
+      return i18n._({ id: "first-start.language-option.es", message: "Spanish interface" });
+    case "fr":
+      return i18n._({ id: "first-start.language-option.fr", message: "French interface" });
+    case "zh":
+      return i18n._({ id: "first-start.language-option.zh", message: "Chinese interface" });
+    default:
+      return i18n._({ id: "first-start.language-option.en", message: "English interface" });
+  }
+}
+
+function getStepDetails(id: string): string[] {
+  switch (id) {
+    case "welcome":
+      return [
+        i18n._({
+          id: "first-start.step.welcome.detail.1",
+          message:
+            "Fap and cockheroes are like guitarhero for your dick. You masturbate up AND down per beat. When a beat hits, you are down at the shaft. Normally there is a beatbar. You can also automate this using thehandy",
+        }),
+        i18n._({
+          id: "first-start.step.welcome.detail.2",
+          message:
+            "Singleplayer is the solo mode. You build or choose a playlist, play alone, and try to survive the board, clear rounds, and push your personal highscore as far as you can.",
+        }),
+        i18n._({
+          id: "first-start.step.welcome.detail.3",
+          message:
+            "Multiplayer is the shared mode. Several players run the same board setup and compare how well they do. The goal is to outscore the other players and finish the match in a better state than they do.",
+        }),
+        i18n._({
+          id: "first-start.step.welcome.detail.4",
+          message:
+            "Both modes use rounds as the core content. The board decides what happens next, and your choices change how risky or rewarding the run becomes.",
+        }),
+      ];
+    case "heroes":
+      return [
+        i18n._({
+          id: "first-start.step.heroes.detail.1",
+          message:
+            "You can import a single `.hero` or `.round` file. That is the direct way to add one hero or one round pack at a time.",
+        }),
+        i18n._({
+          id: "first-start.step.heroes.detail.2",
+          message:
+            "You can also add a whole folder as a source. Fap Land Party Edition scans that folder right away, imports what it understands, and checks it again on later app starts.",
+        }),
+        i18n._({
+          id: "first-start.step.heroes.detail.3",
+          message:
+            "Imported content shows up in Installed Rounds. From there you can review what was added, edit metadata, and use the rounds in playlists and maps.",
+        }),
+        i18n._({
+          id: "first-start.step.heroes.detail.4",
+          message:
+            "Making your own packs is also pretty easy. You can use the Round Converter to turn source material into playable rounds, then organize them with the Playlist Workshop or Map Editor.",
+        }),
+        i18n._({
+          id: "first-start.step.heroes.detail.5",
+          message:
+            "Exporting your own work is meant to be simple too. Once your rounds or playlists are ready, the app gives you direct export paths so sharing packs is not a complicated process.",
+        }),
+      ];
+    case "music":
+      return [
+        i18n._({
+          id: "first-start.step.music.detail.1",
+          message:
+            "Music does not replace your round videos. It is background audio for the app when no foreground video is actively playing.",
+        }),
+        i18n._({
+          id: "first-start.step.music.detail.2",
+          message:
+            "You can add normal audio files from your computer. The game stores them in a queue, and you can reorder or remove them later in Settings.",
+        }),
+        i18n._({
+          id: "first-start.step.music.detail.3",
+          message: "If you want, you can skip this now and come back later.",
+        }),
+      ];
+    case "moaning":
+      return [
+        i18n._({
+          id: "first-start.step.moaning.detail.1",
+          message:
+            "The moaning library is separate from menu music. It is used by gameplay events that trigger one-shot or looping moaning audio.",
+        }),
+        i18n._({
+          id: "first-start.step.moaning.detail.2",
+          message:
+            "You can add local audio files from your computer or download supported URLs through yt-dlp.",
+        }),
+        i18n._({
+          id: "first-start.step.moaning.detail.3",
+          message:
+            "If you skip this, moaning-related gameplay effects stay unavailable until you add files later in Settings.",
+        }),
+      ];
+    case "round-packs":
+      return [
+        i18n._({
+          id: "first-start.step.round-packs.detail.1",
+          message:
+            "Adding a folder is best when you already keep your packs together in one place. The app scans the folder and imports supported content.",
+        }),
+        i18n._({
+          id: "first-start.step.round-packs.detail.2",
+          message:
+            "Importing a single file is better when someone sent you one `.hero` or `.round` file and you just want that item.",
+        }),
+        i18n._({
+          id: "first-start.step.round-packs.detail.3",
+          message:
+            "You can install content now, or skip this and manage it later from Installed Rounds or Settings.",
+        }),
+      ];
+    case "maps":
+      return [
+        i18n._({
+          id: "first-start.step.maps.detail.1",
+          message:
+            "A linear map is a straight path. It is easier to understand, quicker to build, and good when you want a classic start-to-finish run.",
+        }),
+        i18n._({
+          id: "first-start.step.maps.detail.2",
+          message:
+            "A graph map is a branching board with nodes and connections. It gives you more control, more choice, and more advanced route design.",
+        }),
+        i18n._({
+          id: "first-start.step.maps.detail.3",
+          message:
+            "Because those two map styles work differently, the app has two editors: Playlist Workshop for linear boards, and Map Editor for graph boards.",
+        }),
+        i18n._({
+          id: "first-start.step.maps.detail.4",
+          message:
+            "If you want to build your own pack, the usual flow is simple: create rounds in the Round Converter, place them into a linear or graph board, then export the finished result.",
+        }),
+        i18n._({
+          id: "first-start.step.maps.detail.5",
+          message:
+            "That means you do not need a hard workflow to start making content. The converter, the editors, and the export tools are built so custom pack creation stays approachable.",
+        }),
+      ];
+    case "storage":
+      return [
+        i18n._({
+          id: "first-start.step.storage.detail.1",
+          message: "Music cache stores downloaded menu music and YouTube imports.",
+        }),
+        i18n._({
+          id: "first-start.step.storage.detail.2",
+          message:
+            "Website video cache stores downloaded website videos and related playback files.",
+        }),
+        i18n._({
+          id: "first-start.step.storage.detail.3",
+          message:
+            ".fpack extraction location stores extracted pack contents in a persistent folder so those rounds stay playable later.",
+        }),
+        i18n._({
+          id: "first-start.step.storage.detail.4",
+          message:
+            "You can skip this and change any of these later in Settings under Data & Storage.",
+        }),
+      ];
+    case "phash":
+      return [
+        i18n._({
+          id: "first-start.step.phash.detail.1",
+          message:
+            "Background pHash scanning helps the app recognize visually similar rounds and imported content more accurately.",
+        }),
+        i18n._({
+          id: "first-start.step.phash.detail.2",
+          message:
+            "If your computer is older or already struggles during startup, disabling background hashing can reduce background load.",
+        }),
+        i18n._({
+          id: "first-start.step.phash.detail.3",
+          message: "You can change this later in Settings under Data & Storage.",
+        }),
+      ];
+    case "handy":
+      return [
+        i18n._({
+          id: "first-start.step.handy.detail.1",
+          message:
+            "Enter your Handy connection key below to connect directly. You can find this key in the Handy app or on the device.",
+        }),
+        i18n._({
+          id: "first-start.step.handy.detail.2",
+          message:
+            "If you do not own a Handy, skip this step. You can still use the app and play the game without hardware.",
+        }),
+        i18n._({
+          id: "first-start.step.handy.detail.3",
+          message: "You can always connect or change settings later in Settings > Hardware & Sync.",
+        }),
+      ];
+    case "booru":
+      return [
+        i18n._({
+          id: "first-start.step.booru.detail.1",
+          message:
+            "This prompt tells the app what kind of media it should look for during loading and intermediary moments.",
+        }),
+        i18n._({
+          id: "first-start.step.booru.detail.2",
+          message:
+            "A simple, specific prompt usually works better than a long one. You can keep the default if you are unsure.",
+        }),
+        i18n._({
+          id: "first-start.step.booru.detail.3",
+          message: "You can change this later in Settings under Gameplay.",
+        }),
+      ];
+    default:
+      return [];
+  }
+}
 
 export const Route = createFileRoute("/first-start")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -211,6 +515,9 @@ export const Route = createFileRoute("/first-start")({
 });
 
 function FirstStartPage() {
+  const { t } = useLingui();
+  const { locale, locales, setLocale } = useLocale();
+  const STEPS = getSteps();
   const sfwMode = useSfwMode();
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -265,11 +572,14 @@ function FirstStartPage() {
   const stepNavRef = useRef<HTMLDivElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const currentStep = STEPS[stepIndex] ?? STEPS[0]!;
-  const displayStepTitle = abbreviateNsfwText(currentStep.title, sfwMode);
-  const displayStepDescription = abbreviateNsfwText(currentStep.description, sfwMode);
-  const displayStepDetails = currentStep.details.map((detail) =>
+  const displayStepTitle = abbreviateNsfwText(getStepTitle(currentStep.id), sfwMode);
+  const displayStepDescription = abbreviateNsfwText(getStepDescription(currentStep.id), sfwMode);
+  const displayStepDetails = getStepDetails(currentStep.id).map((detail) =>
     abbreviateNsfwText(detail, sfwMode)
   );
+  const musicMessageWasAdded = musicMessage?.startsWith(t`Added`) ?? false;
+  const moaningMessageWasAdded = moaningMessage?.startsWith(t`Added`) ?? false;
+  const roundMessageWasImported = roundMessage?.startsWith(t`Imported`) ?? false;
   const isLastStep = stepIndex >= STEPS.length - 1;
   const isContinueDisabled =
     isBusy ||
@@ -417,17 +727,17 @@ function FirstStartPage() {
       const filePaths = await window.electronAPI.dialog.selectMusicFiles();
       if (filePaths.length === 0) {
         setMusicMessage(
-          "No music files were selected. You can continue and add them later in Settings."
+          t`No music files were selected. You can continue and add them later in Settings.`
         );
         return;
       }
       await addTracks(filePaths);
       setMusicMessage(
-        `Added ${filePaths.length} track${filePaths.length === 1 ? "" : "s"} to the global music queue.`
+        t`Added ${filePaths.length} track${filePaths.length === 1 ? "" : "s"} to the global music queue.`
       );
     } catch (error) {
       console.error("Failed to add onboarding music tracks", error);
-      setMusicMessage(error instanceof Error ? error.message : "Failed to add music files.");
+      setMusicMessage(error instanceof Error ? error.message : t`Failed to add music files.`);
     } finally {
       setIsBusy(false);
     }
@@ -437,13 +747,13 @@ function FirstStartPage() {
     if (isBusy) return;
     const trimmed = urlInput.trim();
     if (!trimmed) {
-      setUrlError("Please enter a URL");
+      setUrlError(t`Please enter a URL`);
       return;
     }
     try {
       new URL(trimmed);
     } catch {
-      setUrlError("Invalid URL format");
+      setUrlError(t`Invalid URL format`);
       return;
     }
     setUrlError(null);
@@ -454,21 +764,21 @@ function FirstStartPage() {
         const result = await addPlaylistFromUrl(trimmed);
         if (result.addedCount > 0) {
           setMusicMessage(
-            `Added playlist: ${result.addedCount} track${result.addedCount === 1 ? "" : "s"} added${result.errorCount > 0 ? ` (${result.errorCount} failed)` : ""}.`
+            t`Added playlist: ${result.addedCount} track${result.addedCount === 1 ? "" : "s"} added${result.errorCount > 0 ? ` (${result.errorCount} failed)` : ""}.`
           );
           setUrlInput("");
           setShowUrlInput(false);
         } else {
-          setMusicMessage("All tracks from this playlist are already in your queue.");
+          setMusicMessage(t`All tracks from this playlist are already in your queue.`);
         }
       } else {
         await addTrackFromUrl(trimmed);
-        setMusicMessage("Track added to the global music queue.");
+        setMusicMessage(t`Track added to the global music queue.`);
         setUrlInput("");
         setShowUrlInput(false);
       }
     } catch (error) {
-      setMusicMessage(error instanceof Error ? error.message : "Failed to add from URL.");
+      setMusicMessage(error instanceof Error ? error.message : t`Failed to add from URL.`);
     } finally {
       setIsBusy(false);
     }
@@ -481,7 +791,7 @@ function FirstStartPage() {
     try {
       const selectedFolders = await window.electronAPI.dialog.selectFolders();
       if (selectedFolders.length === 0) {
-        setRoundMessage("No folder was selected. You can continue and import content later.");
+        setRoundMessage(t`No folder was selected. You can continue and import content later.`);
         return;
       }
 
@@ -489,12 +799,12 @@ function FirstStartPage() {
       const added = await db.install.addAutoScanFolderAndScan(folderPath);
       const stats = added.result.status.stats;
       setRoundMessage(
-        `Imported folder. Installed ${stats.installed} rounds, imported ${stats.playlistsImported} playlists, updated ${stats.updated}, and failed ${stats.failed}.`
+        t`Imported folder. Installed ${stats.installed} rounds, imported ${stats.playlistsImported} playlists, updated ${stats.updated}, and failed ${stats.failed}.`
       );
     } catch (error) {
       console.error("Failed to add onboarding round folder", error);
       setRoundMessage(
-        error instanceof Error ? error.message : "Failed to import the selected folder."
+        error instanceof Error ? error.message : t`Failed to import the selected folder.`
       );
     } finally {
       setIsBusy(false);
@@ -509,7 +819,7 @@ function FirstStartPage() {
       const filePath = await window.electronAPI.dialog.selectInstallImportFile();
       if (!filePath) {
         setRoundMessage(
-          "No file was selected. You can continue and import files later from Installed Rounds."
+          t`No file was selected. You can continue and import files later from Installed Rounds.`
         );
         return;
       }
@@ -525,11 +835,11 @@ function FirstStartPage() {
         return;
       }
 
-      setRoundMessage("That file type is not supported here.");
+      setRoundMessage(t`That file type is not supported here.`);
     } catch (error) {
       console.error("Failed to import onboarding hero or round", error);
       setRoundMessage(
-        error instanceof Error ? error.message : "Failed to import the selected file."
+        error instanceof Error ? error.message : t`Failed to import the selected file.`
       );
     } finally {
       setIsBusy(false);
@@ -544,17 +854,17 @@ function FirstStartPage() {
       const filePaths = await window.electronAPI.dialog.selectMoaningFiles();
       if (filePaths.length === 0) {
         setMoaningMessage(
-          "No moaning files were selected. You can continue and add them later in Settings."
+          t`No moaning files were selected. You can continue and add them later in Settings.`
         );
         return;
       }
       await addMoaningTracks(filePaths);
       setMoaningMessage(
-        `Added ${filePaths.length} moaning file${filePaths.length === 1 ? "" : "s"} to the gameplay library.`
+        t`Added ${filePaths.length} moaning file${filePaths.length === 1 ? "" : "s"} to the gameplay library.`
       );
     } catch (error) {
       console.error("Failed to add onboarding moaning tracks", error);
-      setMoaningMessage(error instanceof Error ? error.message : "Failed to add moaning files.");
+      setMoaningMessage(error instanceof Error ? error.message : t`Failed to add moaning files.`);
     } finally {
       setIsBusy(false);
     }
@@ -564,13 +874,13 @@ function FirstStartPage() {
     if (isBusy) return;
     const trimmed = moaningUrlInput.trim();
     if (!trimmed) {
-      setMoaningUrlError("Please enter a URL");
+      setMoaningUrlError(t`Please enter a URL`);
       return;
     }
     try {
       new URL(trimmed);
     } catch {
-      setMoaningUrlError("Invalid URL format");
+      setMoaningUrlError(t`Invalid URL format`);
       return;
     }
     setMoaningUrlError(null);
@@ -581,21 +891,21 @@ function FirstStartPage() {
         const result = await addMoaningPlaylistFromUrl(trimmed);
         if (result.addedCount > 0) {
           setMoaningMessage(
-            `Added playlist: ${result.addedCount} moaning file${result.addedCount === 1 ? "" : "s"} added${result.errorCount > 0 ? ` (${result.errorCount} failed)` : ""}.`
+            t`Added playlist: ${result.addedCount} moaning file${result.addedCount === 1 ? "" : "s"} added${result.errorCount > 0 ? ` (${result.errorCount} failed)` : ""}.`
           );
           setMoaningUrlInput("");
           setShowMoaningUrlInput(false);
         } else {
-          setMoaningMessage("All files from this playlist are already in your moaning library.");
+          setMoaningMessage(t`All files from this playlist are already in your moaning library.`);
         }
       } else {
         await addMoaningTrackFromUrl(trimmed);
-        setMoaningMessage("Moaning file added to the gameplay library.");
+        setMoaningMessage(t`Moaning file added to the gameplay library.`);
         setMoaningUrlInput("");
         setShowMoaningUrlInput(false);
       }
     } catch (error) {
-      setMoaningMessage(error instanceof Error ? error.message : "Failed to add from URL.");
+      setMoaningMessage(error instanceof Error ? error.message : t`Failed to add from URL.`);
     } finally {
       setIsBusy(false);
     }
@@ -684,7 +994,7 @@ function FirstStartPage() {
                   className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.35em] text-violet-300/70 animate-entrance"
                   style={{ animationDelay: "0.1s" }}
                 >
-                  Getting Started
+                  <Trans>Getting Started</Trans>
                 </p>
                 <div className="h-px flex-1 bg-gradient-to-r from-violet-400/30 via-violet-400/10 to-transparent" />
               </div>
@@ -692,16 +1002,18 @@ function FirstStartPage() {
                 className="text-2xl font-black tracking-tight text-white sm:text-3xl xl:text-4xl animate-entrance"
                 style={{ animationDelay: "0.2s" }}
               >
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]">
-                  {abbreviateNsfwText("Welcome to Fap Land", sfwMode)}
+                <span className="text-gradient-safe">
+                  {abbreviateNsfwText(t`Welcome to Fap Land`, sfwMode)}
                 </span>
               </h1>
               <p
                 className="max-w-xl text-sm text-zinc-400 animate-entrance"
                 style={{ animationDelay: "0.3s" }}
               >
-                Let's get you set up. This quick walkthrough covers the essentials and lets you
-                import content right away.
+                <Trans>
+                  Let's get you set up. This quick walkthrough covers the essentials and lets you
+                  import content right away.
+                </Trans>
               </p>
             </div>
 
@@ -713,23 +1025,26 @@ function FirstStartPage() {
                 playSelectSound();
                 void skip();
               }}
-              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${
-                isSkipping
-                  ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                  : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
-              }`}
+              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${isSkipping
+                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
+                }`}
               style={{ animationDelay: "0.4s" }}
             >
               <span className="absolute inset-0 rounded-xl opacity-0 transition-opacity group-hover:opacity-100 bg-gradient-to-r from-violet-500/5 to-indigo-500/5" />
               {isSkipping ? (
                 <>
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-500 border-t-zinc-300" />
-                  <span>Skipping...</span>
+                  <span>
+                    <Trans>Skipping...</Trans>
+                  </span>
                 </>
               ) : (
                 <>
                   <span>⏭</span>
-                  <span>Skip Setup</span>
+                  <span>
+                    <Trans>Skip Setup</Trans>
+                  </span>
                 </>
               )}
             </button>
@@ -781,23 +1096,21 @@ function FirstStartPage() {
                           playSelectSound();
                           setStepIndex(index);
                         }}
-                        className={`relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${
-                          active
-                            ? "bg-violet-500/15 text-white"
-                            : complete
-                              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                              : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
-                        }`}
+                        className={`relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${active
+                          ? "bg-violet-500/15 text-white"
+                          : complete
+                            ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                            : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
+                          }`}
                       >
                         {/* Step Indicator */}
                         <span
-                          className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition-all ${
-                            active
-                              ? "bg-violet-500/30 ring-2 ring-violet-400/50 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
-                              : complete
-                                ? "bg-emerald-500/20 ring-1 ring-emerald-400/30"
-                                : "bg-zinc-800 ring-1 ring-zinc-700"
-                          }`}
+                          className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition-all ${active
+                            ? "bg-violet-500/30 ring-2 ring-violet-400/50 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
+                            : complete
+                              ? "bg-emerald-500/20 ring-1 ring-emerald-400/30"
+                              : "bg-zinc-800 ring-1 ring-zinc-700"
+                            }`}
                         >
                           {complete ? (
                             <span className="text-emerald-400">✓</span>
@@ -808,15 +1121,14 @@ function FirstStartPage() {
 
                         {/* Step Label */}
                         <span
-                          className={`text-xs font-medium transition-all ${
-                            active
-                              ? "text-violet-100"
-                              : complete
-                                ? "text-zinc-300"
-                                : "text-zinc-500"
-                          }`}
+                          className={`text-xs font-medium transition-all ${active
+                            ? "text-violet-100"
+                            : complete
+                              ? "text-zinc-300"
+                              : "text-zinc-500"
+                            }`}
                         >
-                          {step.shortLabel}
+                          {getStepShortLabel(step.id)}
                         </span>
 
                         {active && (
@@ -842,7 +1154,7 @@ function FirstStartPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-lg">{currentStep.icon}</span>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.25em] text-cyan-300/70">
-                    {currentStep.eyebrow}
+                    {getStepEyebrow(currentStep.id)}
                   </p>
                 </div>
 
@@ -872,6 +1184,58 @@ function FirstStartPage() {
                   </div>
                 ))}
 
+                {currentStep.interactive === "language" && (
+                  <div
+                    className="mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 p-4 animate-entrance"
+                    style={{ animationDelay: "0.3s" }}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-emerald-300">🌐</span>
+                      <p className="text-sm font-semibold text-emerald-100">
+                        <Trans>Language</Trans> / Language
+                      </p>
+                    </div>
+                    <p className="text-sm text-zinc-400">
+                      <Trans>
+                        Choose the language used on this page and across the app. Changes apply
+                        immediately.
+                      </Trans>
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {locales.map((entry) => {
+                        const selected = entry.code === locale;
+                        return (
+                          <button
+                            key={entry.code}
+                            type="button"
+                            onMouseEnter={playHoverSound}
+                            onClick={() => {
+                              playSelectSound();
+                              void setLocale(entry.code);
+                            }}
+                            className={`rounded-xl border px-4 py-3 text-left transition-all ${selected
+                              ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.18)]"
+                              : "border-white/10 bg-black/20 text-zinc-200 hover:border-emerald-400/40 hover:bg-emerald-500/10"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold">{entry.label}</span>
+                              {selected && (
+                                <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+                                  <Trans>Selected</Trans>
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-zinc-400">
+                              {getLocaleCardDescription(entry.code)}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Music Section */}
                 {currentStep.interactive === "music" && (
                   <div
@@ -880,16 +1244,20 @@ function FirstStartPage() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-violet-400">🎵</span>
-                      <p className="text-sm font-semibold text-violet-200">Music Queue</p>
+                      <p className="text-sm font-semibold text-violet-200">
+                        <Trans>Music Queue</Trans>
+                      </p>
                       {queue.length > 0 && (
                         <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          {queue.length} track{queue.length === 1 ? "" : "s"}
+                          {t`${queue.length} track${queue.length === 1 ? "" : "s"}`}
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Pick music files from your computer, or add YouTube videos and playlists to
-                      download as MP3.
+                      <Trans>
+                        Pick music files from your computer, or add YouTube videos and playlists to
+                        download as MP3.
+                      </Trans>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -900,21 +1268,24 @@ function FirstStartPage() {
                           playSelectSound();
                           void addMusicTracks();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                          }`}
                       >
                         {isBusy ? (
                           <>
                             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
-                            <span>Adding...</span>
+                            <span>
+                              <Trans>Adding...</Trans>
+                            </span>
                           </>
                         ) : (
                           <>
                             <span>📁</span>
-                            <span>Add Music Files</span>
+                            <span>
+                              <Trans>Add Music Files</Trans>
+                            </span>
                           </>
                         )}
                       </button>
@@ -927,27 +1298,30 @@ function FirstStartPage() {
                           setShowUrlInput((current) => !current);
                           setUrlError(null);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          showUrlInput
-                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                            : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showUrlInput
+                          ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                          : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                          }`}
                       >
                         <span>⊕</span>
-                        <span>Add from YouTube</span>
+                        <span>
+                          <Trans>Add from YouTube</Trans>
+                        </span>
                       </button>
                     </div>
 
                     {showUrlInput && (
                       <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
                         <p className="text-xs text-zinc-400">
-                          Paste a YouTube video or playlist URL. Audio is downloaded as MP3 via
-                          yt-dlp.
+                          <Trans>
+                            Paste a YouTube video or playlist URL. Audio is downloaded as MP3 via
+                            yt-dlp.
+                          </Trans>
                         </p>
                         <div className="flex gap-2">
                           <input
                             type="url"
-                            placeholder="https://example.com/video-or-playlist"
+                            placeholder={t`https://example.com/video-or-playlist`}
                             value={urlInput}
                             onChange={(e) => {
                               setUrlInput(e.target.value);
@@ -959,24 +1333,22 @@ function FirstStartPage() {
                               }
                             }}
                             disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                              urlError
-                                ? "border-rose-400/40 focus:border-rose-400/60"
-                                : "border-white/10 focus:border-violet-400/60"
-                            }`}
+                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
+                              ? "border-rose-400/40 focus:border-rose-400/60"
+                              : "border-white/10 focus:border-violet-400/60"
+                              }`}
                           />
                           <button
                             type="button"
                             onMouseEnter={playHoverSound}
                             onClick={() => void addMusicFromUrl()}
                             disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-                              isBusy
-                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                            }`}
+                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
+                              ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                              : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                              }`}
                           >
-                            {isBusy ? "Downloading..." : "Add"}
+                            {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
                           </button>
                         </div>
                         {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
@@ -985,13 +1357,12 @@ function FirstStartPage() {
 
                     {musicMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          musicMessage.includes("Added")
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${musicMessageWasAdded
+                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                          }`}
                       >
-                        <span>{musicMessage.includes("Added") ? "✓" : "ℹ"}</span>
+                        <span>{musicMessageWasAdded ? "✓" : "ℹ"}</span>
                         <span>{musicMessage}</span>
                       </div>
                     )}
@@ -1005,21 +1376,25 @@ function FirstStartPage() {
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <span className="text-rose-300">🔊</span>
-                      <p className="text-sm font-semibold text-rose-100">Gameplay Moaning</p>
+                      <p className="text-sm font-semibold text-rose-100">
+                        <Trans>Gameplay Moaning</Trans>
+                      </p>
                       {moaningQueue.length > 0 && (
                         <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          {moaningQueue.length} file{moaningQueue.length === 1 ? "" : "s"}
+                          {t`${moaningQueue.length} file${moaningQueue.length === 1 ? "" : "s"}`}
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Add moaning audio so moaning-based perks and anti-perks have something to
-                      play during the run.
+                      <Trans>
+                        Add moaning audio so moaning-based perks and anti-perks have something to
+                        play during the run.
+                      </Trans>
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        aria-label="Toggle Enable Moaning"
+                        aria-label={t`Toggle Enable Moaning`}
                         role="switch"
                         aria-checked={moaningEnabled}
                         onMouseEnter={playHoverSound}
@@ -1036,7 +1411,8 @@ function FirstStartPage() {
                       <span
                         className={`text-sm font-medium ${moaningEnabled ? "text-zinc-100" : "text-zinc-400"}`}
                       >
-                        Moaning {moaningEnabled ? "Enabled" : "Disabled"}
+                        <Trans>Moaning</Trans>{" "}
+                        {moaningEnabled ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1048,21 +1424,24 @@ function FirstStartPage() {
                           playSelectSound();
                           void addMoaningFiles();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
+                          }`}
                       >
                         {isBusy ? (
                           <>
                             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-400/30 border-t-rose-300" />
-                            <span>Adding...</span>
+                            <span>
+                              <Trans>Adding...</Trans>
+                            </span>
                           </>
                         ) : (
                           <>
                             <span>📁</span>
-                            <span>Add Moaning Files</span>
+                            <span>
+                              <Trans>Add Moaning Files</Trans>
+                            </span>
                           </>
                         )}
                       </button>
@@ -1074,14 +1453,15 @@ function FirstStartPage() {
                           playSelectSound();
                           void previewMoaningTrack(moaningQueue[0]!.id);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy || moaningQueue.length === 0
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy || moaningQueue.length === 0
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
+                          }`}
                       >
                         <span>▶</span>
-                        <span>Preview First File</span>
+                        <span>
+                          <Trans>Preview First File</Trans>
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1093,7 +1473,9 @@ function FirstStartPage() {
                         className="flex items-center gap-2 rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70"
                       >
                         <span>⏹</span>
-                        <span>Stop Preview</span>
+                        <span>
+                          <Trans>Stop Preview</Trans>
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1104,22 +1486,25 @@ function FirstStartPage() {
                           setShowMoaningUrlInput((current) => !current);
                           setMoaningUrlError(null);
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          showMoaningUrlInput
-                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                            : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showMoaningUrlInput
+                          ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                          : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
+                          }`}
                       >
                         <span>⊕</span>
-                        <span>Add from URL</span>
+                        <span>
+                          <Trans>Add from URL</Trans>
+                        </span>
                       </button>
                     </div>
 
                     {showMoaningUrlInput && (
                       <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
                         <p className="text-xs text-zinc-400">
-                          Add from any yt-dlp-supported URL. Single tracks and playlists are both
-                          supported.
+                          <Trans>
+                            Add from any yt-dlp-supported URL. Single tracks and playlists are both
+                            supported.
+                          </Trans>
                         </p>
                         <div className="flex gap-1.5">
                           <button
@@ -1129,13 +1514,12 @@ function FirstStartPage() {
                               playSelectSound();
                               setMoaningUrlMode("track");
                             }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                              moaningUrlMode === "track"
-                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                            }`}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "track"
+                              ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                              : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                              }`}
                           >
-                            Single Track
+                            <Trans>Single Track</Trans>
                           </button>
                           <button
                             type="button"
@@ -1144,13 +1528,12 @@ function FirstStartPage() {
                               playSelectSound();
                               setMoaningUrlMode("playlist");
                             }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                              moaningUrlMode === "playlist"
-                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                            }`}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "playlist"
+                              ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                              : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                              }`}
                           >
-                            Playlist
+                            <Trans>Playlist</Trans>
                           </button>
                         </div>
                         <div className="flex gap-2">
@@ -1158,8 +1541,8 @@ function FirstStartPage() {
                             type="url"
                             placeholder={
                               moaningUrlMode === "playlist"
-                                ? "https://example.com/playlist-or-collection"
-                                : "https://example.com/video-or-audio"
+                                ? t`https://example.com/playlist-or-collection`
+                                : t`https://example.com/video-or-audio`
                             }
                             value={moaningUrlInput}
                             onChange={(e) => {
@@ -1172,39 +1555,38 @@ function FirstStartPage() {
                               }
                             }}
                             disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                              moaningUrlError
-                                ? "border-rose-400/40 focus:border-rose-400/60"
-                                : "border-white/10 focus:border-rose-400/60"
-                            }`}
+                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${moaningUrlError
+                              ? "border-rose-400/40 focus:border-rose-400/60"
+                              : "border-white/10 focus:border-rose-400/60"
+                              }`}
                           />
                           <button
                             type="button"
                             onMouseEnter={playHoverSound}
                             onClick={() => void addMoaningFromUrl()}
                             disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-                              isBusy
-                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                            }`}
+                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
+                              ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                              : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                              }`}
                           >
-                            {isBusy ? "Downloading..." : "Add"}
+                            {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
                           </button>
                         </div>
-                        {moaningUrlError && <p className="text-xs text-rose-300">{moaningUrlError}</p>}
+                        {moaningUrlError && (
+                          <p className="text-xs text-rose-300">{moaningUrlError}</p>
+                        )}
                       </div>
                     )}
 
                     {moaningMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          moaningMessage.includes("Added")
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${moaningMessageWasAdded
+                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                          }`}
                       >
-                        <span>{moaningMessage.includes("Added") ? "✓" : "ℹ"}</span>
+                        <span>{moaningMessageWasAdded ? "✓" : "ℹ"}</span>
                         <span>{moaningMessage}</span>
                       </div>
                     )}
@@ -1219,10 +1601,12 @@ function FirstStartPage() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-cyan-400">💿</span>
-                      <p className="text-sm font-semibold text-cyan-200">Import Content</p>
+                      <p className="text-sm font-semibold text-cyan-200">
+                        <Trans>Import Content</Trans>
+                      </p>
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Add a content folder or import a single hero/round file.
+                      <Trans>Add a content folder or import a single hero/round file.</Trans>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -1233,21 +1617,24 @@ function FirstStartPage() {
                           playSelectSound();
                           void addRoundFolder();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                          }`}
                       >
                         {isBusy ? (
                           <>
                             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
-                            <span>Working...</span>
+                            <span>
+                              <Trans>Working...</Trans>
+                            </span>
                           </>
                         ) : (
                           <>
                             <span>📁</span>
-                            <span>Add Folder</span>
+                            <span>
+                              <Trans>Add Folder</Trans>
+                            </span>
                           </>
                         )}
                       </button>
@@ -1259,34 +1646,36 @@ function FirstStartPage() {
                           playSelectSound();
                           void importHeroOrRound();
                         }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                          : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                          }`}
                       >
                         {isBusy ? (
                           <>
                             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
-                            <span>Working...</span>
+                            <span>
+                              <Trans>Working...</Trans>
+                            </span>
                           </>
                         ) : (
                           <>
                             <span>📄</span>
-                            <span>Import File</span>
+                            <span>
+                              <Trans>Import File</Trans>
+                            </span>
                           </>
                         )}
                       </button>
                     </div>
                     {roundMessage && (
                       <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          roundMessage.includes("Imported")
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${roundMessageWasImported
+                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                          : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                          }`}
                       >
-                        <span>{roundMessage.includes("Imported") ? "✓" : "ℹ"}</span>
+                        <span>{roundMessageWasImported ? "✓" : "ℹ"}</span>
                         <span>{roundMessage}</span>
                       </div>
                     )}
@@ -1300,30 +1689,32 @@ function FirstStartPage() {
                   >
                     <div className="mb-3 flex items-center gap-2">
                       <span className="text-sky-300">🗄️</span>
-                      <p className="text-sm font-semibold text-sky-100">Storage Locations</p>
+                      <p className="text-sm font-semibold text-sky-100">
+                        <Trans>Storage Locations</Trans>
+                      </p>
                     </div>
                     <div className="space-y-3">
                       {[
                         {
                           id: "music-cache" as const,
-                          title: "Music Cache",
-                          description: "Downloaded menu music and imported YouTube audio.",
+                          title: t`Music Cache`,
+                          description: t`Downloaded menu music and imported YouTube audio.`,
                           value: musicCacheRootPath,
-                          fallback: "Default app data folder",
+                          fallback: t`Default app data folder`,
                         },
                         {
                           id: "website-video-cache" as const,
-                          title: "Website Video Cache",
-                          description: "Downloaded website videos and cache files.",
+                          title: t`Website Video Cache`,
+                          description: t`Downloaded website videos and cache files.`,
                           value: websiteVideoCacheRootPath,
-                          fallback: "Default app data folder",
+                          fallback: t`Default app data folder`,
                         },
                         {
                           id: "fpack-extraction" as const,
-                          title: ".fpack Extraction",
-                          description: "Persistent extracted contents from imported .fpack files.",
+                          title: t`.fpack Extraction`,
+                          description: t`Persistent extracted contents from imported .fpack files.`,
                           value: fpackExtractionPath,
-                          fallback: "Default app data folder",
+                          fallback: t`Default app data folder`,
                         },
                       ].map((location) => {
                         const isPending = updatingStorageTarget === location.id;
@@ -1337,7 +1728,11 @@ function FirstStartPage() {
                               <p className="text-xs text-zinc-400">{location.description}</p>
                             </div>
                             <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-300">
-                              {isLoadingStorageSettings ? "Loading..." : (location.value ?? location.fallback)}
+                              {isLoadingStorageSettings ? (
+                                <Trans>Loading...</Trans>
+                              ) : (
+                                (location.value ?? location.fallback)
+                              )}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
@@ -1350,11 +1745,17 @@ function FirstStartPage() {
                                 }}
                                 className="rounded-xl border border-sky-400/50 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-sky-100 transition-all hover:border-sky-300/70 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {isPending ? "Updating..." : "Choose Folder"}
+                                {isPending ? (
+                                  <Trans>Updating...</Trans>
+                                ) : (
+                                  <Trans>Choose Folder</Trans>
+                                )}
                               </button>
                               <button
                                 type="button"
-                                disabled={isLoadingStorageSettings || isPending || location.value === null}
+                                disabled={
+                                  isLoadingStorageSettings || isPending || location.value === null
+                                }
                                 onMouseEnter={playHoverSound}
                                 onClick={() => {
                                   playSelectSound();
@@ -1362,7 +1763,7 @@ function FirstStartPage() {
                                 }}
                                 className="rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                Use Default
+                                <Trans>Use Default</Trans>
                               </button>
                             </div>
                           </div>
@@ -1380,10 +1781,15 @@ function FirstStartPage() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-pink-400">🔍</span>
-                      <p className="text-sm font-semibold text-pink-200">Search Prompt</p>
+                      <p className="text-sm font-semibold text-pink-200">
+                        <Trans>Search Prompt</Trans>
+                      </p>
                     </div>
                     <p className="text-sm text-zinc-400">
-                      This determines what media appears during loading. Keep the default if unsure.
+                      <Trans>
+                        This determines what media appears during loading. Keep the default if
+                        unsure.
+                      </Trans>
                     </p>
                     <textarea
                       id="first-start-booru-prompt"
@@ -1391,7 +1797,7 @@ function FirstStartPage() {
                       disabled={isLoadingPrompt}
                       onChange={(event) => setBooruPrompt(event.target.value)}
                       className="mt-3 min-h-24 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-pink-400/50 focus:ring-2 focus:ring-pink-400/20 disabled:opacity-60"
-                      placeholder="Enter search prompt..."
+                      placeholder={t`Enter search prompt...`}
                     />
                   </div>
                 )}
@@ -1405,11 +1811,13 @@ function FirstStartPage() {
                     <div className="mb-2 flex items-center gap-2">
                       <span className="text-amber-300">🐢</span>
                       <p className="text-sm font-semibold text-amber-100">
-                        Background Hashing
+                        <Trans>Background Hashing</Trans>
                       </p>
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Do you have an old slow computer? Consider turning off background hashing.
+                      <Trans>
+                        Do you have an old slow computer? Consider turning off background hashing.
+                      </Trans>
                     </p>
                     <label
                       htmlFor="first-start-background-phash-scanning"
@@ -1433,11 +1841,13 @@ function FirstStartPage() {
                       />
                       <div className="space-y-1">
                         <p className="text-sm font-semibold text-white">
-                          Enable background pHash scanning
+                          <Trans>Enable background pHash scanning</Trans>
                         </p>
                         <p className="text-xs leading-relaxed text-zinc-400">
-                          Recommended on faster machines. Disable this if startup work or
-                          background CPU load feels too heavy.
+                          <Trans>
+                            Recommended on faster machines. Disable this if startup work or
+                            background CPU load feels too heavy.
+                          </Trans>
                         </p>
                       </div>
                     </label>
@@ -1452,35 +1862,37 @@ function FirstStartPage() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-emerald-400">🔌</span>
-                      <p className="text-sm font-semibold text-emerald-200">Device Connection</p>
+                      <p className="text-sm font-semibold text-emerald-200">
+                        <Trans>Device Connection</Trans>
+                      </p>
                       {handyConnected && (
                         <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          Connected
+                          <Trans>Connected</Trans>
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Enter your Handy connection key to enable synchronized motion.
+                      <Trans>Enter your Handy connection key to enable synchronized motion.</Trans>
                     </p>
                     <div className="mt-3 flex flex-col gap-2">
                       <label
                         className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
                         htmlFor="first-start-handy-key"
                       >
-                        Connection Key
+                        <Trans>Connection Key</Trans>
                       </label>
                       <input
                         id="first-start-handy-key"
                         type="text"
                         value={handyInputKey}
                         onChange={(event) => setHandyInputKey(event.target.value)}
-                        placeholder="Enter connection key from Handy app"
+                        placeholder={t`Enter connection key from Handy app`}
                         disabled={handyConnected || handyIsConnecting}
                         className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20 disabled:opacity-60"
                       />
                     </div>
                     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 mt-3 text-xs font-[family-name:var(--font-jetbrains-mono)] text-amber-200">
-                      Only firmware version 4 and up is supported.
+                      <Trans>Only firmware version 4 and up is supported.</Trans>
                     </div>
                     {handyError && (
                       <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
@@ -1496,28 +1908,33 @@ function FirstStartPage() {
                         playSelectSound();
                         void handleHandyConnect();
                       }}
-                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                        handyIsConnecting
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : handyConnected
-                            ? "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30"
-                            : "border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                      }`}
+                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${handyIsConnecting
+                        ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                        : handyConnected
+                          ? "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30"
+                          : "border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                        }`}
                     >
                       {handyIsConnecting ? (
                         <>
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-400/30 border-t-emerald-300" />
-                          <span>Connecting...</span>
+                          <span>
+                            <Trans>Connecting...</Trans>
+                          </span>
                         </>
                       ) : handyConnected ? (
                         <>
                           <span>⏹</span>
-                          <span>Disconnect</span>
+                          <span>
+                            <Trans>Disconnect</Trans>
+                          </span>
                         </>
                       ) : (
                         <>
                           <span>🔌</span>
-                          <span>Connect</span>
+                          <span>
+                            <Trans>Connect</Trans>
+                          </span>
                         </>
                       )}
                     </button>
@@ -1535,18 +1952,19 @@ function FirstStartPage() {
                     playSelectSound();
                     setStepIndex((current) => Math.max(0, current - 1));
                   }}
-                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                    stepIndex === 0
-                      ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
-                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
-                  }`}
+                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${stepIndex === 0
+                    ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
+                    : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
+                    }`}
                 >
                   <span
                     className={`transition-transform ${stepIndex === 0 ? "" : "group-hover:-translate-x-1"}`}
                   >
                     ←
                   </span>
-                  <span>Back</span>
+                  <span>
+                    <Trans>Back</Trans>
+                  </span>
                 </button>
 
                 <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -1558,14 +1976,15 @@ function FirstStartPage() {
                       playSelectSound();
                       void skip();
                     }}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                      isSkipping
-                        ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                        : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
-                    }`}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isSkipping
+                      ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
+                      }`}
                   >
                     <span>⏭</span>
-                    <span>Skip All</span>
+                    <span>
+                      <Trans>Skip All</Trans>
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -1575,19 +1994,22 @@ function FirstStartPage() {
                       playSelectSound();
                       void goNext();
                     }}
-                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${
-                      isContinueDisabled
-                        ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
-                        : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
-                    }`}
+                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${isContinueDisabled
+                      ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                      : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
+                      }`}
                   >
                     <span className="absolute inset-0 bg-gradient-to-r from-violet-500/0 via-white/10 to-violet-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     <span>
-                      {isLastStep
-                        ? search.returnTo === "settings"
-                          ? "Finish"
-                          : "Start Playing"
-                        : "Continue"}
+                      {isLastStep ? (
+                        search.returnTo === "settings" ? (
+                          <Trans>Finish</Trans>
+                        ) : (
+                          <Trans>Start Playing</Trans>
+                        )
+                      ) : (
+                        <Trans>Continue</Trans>
+                      )}
                     </span>
                     <span
                       className={`transition-transform ${isContinueDisabled ? "" : "group-hover:translate-x-1"}`}

@@ -1,4 +1,6 @@
+// @i18n-enforced
 import { useState, type ReactNode, type SyntheticEvent } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useSfwModeState } from "../hooks/useSfwMode";
 
 type SfwGuardProps = {
@@ -16,6 +18,7 @@ export function SfwOneTimeOverridePrompt({
   mediaLabel = "media",
   onConfirm,
 }: SfwOneTimeOverridePromptProps) {
+  const { t } = useLingui();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const stopEventPropagation = (event: SyntheticEvent) => {
     event.stopPropagation();
@@ -44,9 +47,13 @@ export function SfwOneTimeOverridePrompt({
             d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
           />
         </svg>
-        <span className="text-sm font-medium text-zinc-300">Safe Mode Enabled</span>
+        <span className="text-sm font-medium text-zinc-300">
+          <Trans>Safe Mode Enabled</Trans>
+        </span>
         <p className="text-xs text-zinc-400">
-          This {mediaLabel} is hidden while safe mode is active.
+          {t`This ${{
+            mediaLabel,
+          }} is hidden while safe mode is active.`}
         </p>
         <button
           className="rounded-lg border border-amber-300/45 bg-amber-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-500/28"
@@ -69,14 +76,15 @@ export function SfwOneTimeOverridePrompt({
             role="dialog"
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-200/80">
-              Confirm Reveal
+              <Trans>Confirm Reveal</Trans>
             </p>
             <h3 className="mt-2 text-xl font-black tracking-tight text-white">
-              Show this {mediaLabel} anyway?
+              {t`Show this ${{ mediaLabel }} anyway?`}
             </h3>
             <p className="mt-2 text-sm text-zinc-300">
-              This only reveals the current {mediaLabel} for this view. Safe mode stays enabled
-              globally.
+              {t`This only reveals the current ${
+                { mediaLabel }
+              } for this view. Safe mode stays enabled globally.`}
             </p>
             <div className="mt-5 flex items-center justify-end gap-3">
               <button
@@ -84,7 +92,7 @@ export function SfwOneTimeOverridePrompt({
                 onClick={() => setConfirmOpen(false)}
                 type="button"
               >
-                Cancel
+                <Trans>Cancel</Trans>
               </button>
               <button
                 className="rounded-lg border border-amber-300/45 bg-amber-500/18 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-500/30"
@@ -94,7 +102,7 @@ export function SfwOneTimeOverridePrompt({
                 }}
                 type="button"
               >
-                Show Once
+                <Trans>Show Once</Trans>
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from "pixi.js";
 import "pixi.js/events";
 import { memo, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { useControllerSurface } from "../../controller";
 import {
   CONTROLLER_SUPPORT_ENABLED_EVENT,
@@ -18,6 +19,8 @@ import {
 import { useHandy } from "../../contexts/HandyContext";
 import {
   getPerkById,
+  getPerkDisplayName,
+  getPerkDescription,
   getSinglePlayerAntiPerkPool,
   getSinglePlayerPerkPool,
 } from "../../game/data/perks";
@@ -31,15 +34,13 @@ import {
   useGameAnimation,
 } from "../../game/useGameAnimation";
 import type { BoardField, GameState, PlayerState } from "../../game/types";
-import { PERK_RARITY_META, resolvePerkRarity } from "../../game/data/perkRarity";
+import { PERK_RARITY_META, resolvePerkRarity, getRarityLabel } from "../../game/data/perkRarity";
 import type { InstalledRound } from "../../services/db";
 import { trpc } from "../../services/trpc";
 import { describePerkEffects } from "../../game/engine";
 import { useSfwMode } from "../../hooks/useSfwMode";
-import {
-  THEHANDY_OFFSET_FINE_STEP_MS,
-  THEHANDY_OFFSET_STEP_MS,
-} from "../../constants/theHandy";
+import { i18n } from "../../i18n";
+import { THEHANDY_OFFSET_FINE_STEP_MS, THEHANDY_OFFSET_STEP_MS } from "../../constants/theHandy";
 import { playRoundRewardSound, playRoundRewardTickSound } from "../../utils/audio";
 
 import { formatDurationLabel } from "../../utils/duration";
@@ -174,9 +175,9 @@ function buildTileLayout(board: BoardField[]): TileLayout {
     const graphOrigins = board.map((field, index) =>
       hasFiniteStyleHintXY(field)
         ? {
-          x: field.styleHint!.x as number,
-          y: field.styleHint!.y as number,
-        }
+            x: field.styleHint!.x as number,
+            y: field.styleHint!.y as number,
+          }
         : fallbackOrigins[index]!
     );
     const xs = graphOrigins.map((point) => point.x);
@@ -1093,8 +1094,9 @@ const HUD_H = 390;
 const HUD_MARGIN = 16;
 
 function formatHudDurationRounds(rounds: number | null | undefined): string {
-  if (rounds === null) return "perm";
-  if (typeof rounds !== "number" || !Number.isFinite(rounds) || rounds <= 0) return "active";
+  if (rounds === null) return i18n._({ id: "hud.duration.perm", message: "perm" });
+  if (typeof rounds !== "number" || !Number.isFinite(rounds) || rounds <= 0)
+    return i18n._({ id: "hud.duration.active", message: "active" });
   return `${rounds}r`;
 }
 
@@ -1113,26 +1115,37 @@ function buildHudActiveEffectLines(player: PlayerState | undefined): string[] {
   for (const antiPerkId of player.antiPerks) {
     if (seenIds.has(antiPerkId)) continue;
     const antiPerk = getPerkById(antiPerkId);
-    entries.push(`${antiPerk?.name ?? antiPerkId} (active)`);
+    entries.push(
+      `${antiPerk ? getPerkDisplayName(antiPerk.id) : antiPerkId} (${i18n._({ id: "hud.effect.active", message: "active" })})`
+    );
   }
 
   if ((player.shieldRoundsRemaining ?? 0) > 0) {
-    entries.push(`Shield (${player.shieldRoundsRemaining}r)`);
+    entries.push(
+      `${i18n._({ id: "hud.shield", message: "Shield" })} (${player.shieldRoundsRemaining}r)`
+    );
   }
   if ((player.pendingRollMultiplier ?? 0) > 0) {
-    entries.push(`Next roll x${player.pendingRollMultiplier}`);
+    entries.push(
+      `${i18n._({ id: "hud.nextRollMultiplier", message: "Next roll" })} x${player.pendingRollMultiplier}`
+    );
   }
   if ((player.pendingRollCeiling ?? 0) > 0) {
-    entries.push(`Roll cap ${player.pendingRollCeiling}`);
+    entries.push(
+      `${i18n._({ id: "hud.rollCap", message: "Roll cap" })} ${player.pendingRollCeiling}`
+    );
   }
   if ((player.pendingIntensityCap ?? 0) > 0) {
-    entries.push(`Intensity <= ${Math.round((player.pendingIntensityCap ?? 0) * 100)}%`);
+    const pct = Math.round((player.pendingIntensityCap ?? 0) * 100);
+    entries.push(`${i18n._({ id: "hud.intensityCap", message: "Intensity <=" })} ${pct}%`);
   }
 
   const pauseCharges = Math.max(0, player.roundControl?.pauseCharges ?? 0);
   const skipCharges = Math.max(0, player.roundControl?.skipCharges ?? 0);
   if (pauseCharges > 0 || skipCharges > 0) {
-    entries.push(`Controls P${pauseCharges} S${skipCharges}`);
+    entries.push(
+      `${i18n._({ id: "hud.controls", message: "Controls" })} P${pauseCharges} S${skipCharges}`
+    );
   }
 
   return entries;
@@ -1140,24 +1153,29 @@ function buildHudActiveEffectLines(player: PlayerState | undefined): string[] {
 
 function formatHudActiveEffects(player: PlayerState | undefined): string {
   const entries = buildHudActiveEffectLines(player);
-  if (entries.length === 0) return "ACTIVE EFFECTS\nNone";
+  if (entries.length === 0)
+    return `${i18n._({ id: "hud.activeEffects", message: "ACTIVE EFFECTS" })}\n${i18n._({ id: "hud.none", message: "None" })}`;
 
   const visible = entries.slice(0, 3);
   if (entries.length > visible.length) {
-    visible.push(`+${entries.length - visible.length} more`);
+    visible.push(
+      `+${entries.length - visible.length} ${i18n._({ id: "hud.more", message: "more" })}`
+    );
   }
-  return `ACTIVE EFFECTS ${entries.length}\n${visible.join("\n")}`;
+  return `${i18n._({ id: "hud.activeEffects", message: "ACTIVE EFFECTS" })} ${entries.length}\n${visible.join("\n")}`;
 }
 
 function formatHudDiceMeta(player: PlayerState | undefined): string {
-  if (!player) return "RANGE 1-6";
+  if (!player) return `${i18n._({ id: "hud.range", message: "RANGE" })} 1-6`;
 
-  const parts = [`RANGE ${player.stats.diceMin}-${player.stats.diceMax}`];
+  const parts = [
+    `${i18n._({ id: "hud.range", message: "RANGE" })} ${player.stats.diceMin}-${player.stats.diceMax}`,
+  ];
   if ((player.pendingRollMultiplier ?? 0) > 0) {
-    parts.push(`NEXT x${player.pendingRollMultiplier}`);
+    parts.push(`${i18n._({ id: "hud.next", message: "NEXT" })} x${player.pendingRollMultiplier}`);
   }
   if ((player.pendingRollCeiling ?? 0) > 0) {
-    parts.push(`CAP ${player.pendingRollCeiling}`);
+    parts.push(`${i18n._({ id: "hud.cap", message: "CAP" })} ${player.pendingRollCeiling}`);
   }
 
   return parts.join("  ");
@@ -1408,7 +1426,7 @@ export const GameScene = memo(function GameScene({
   sessionStartedAtMs,
   installedRounds,
   onGiveUp,
-  giveUpLabel = "Give Up",
+  giveUpLabel = undefined,
   optionsActions = [],
   allowDebugRoundControls = false,
   showDevPerkMenu = false,
@@ -1435,6 +1453,7 @@ export const GameScene = memo(function GameScene({
   hideInventoryButton = false,
   controllerSupportEnabled: initialControllerSupportEnabled = false,
 }: GameSceneProps) {
+  const { t } = useLingui();
   const sfwMode = useSfwMode();
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -1597,33 +1616,38 @@ export const GameScene = memo(function GameScene({
   const handleHandyManualToggle = useCallback(() => {
     void toggleManualStop().then((result) => {
       if (result === "stopped") {
-        showHandyNotification("TheHandy stopped.");
+        showHandyNotification(i18n._({ id: "game.handy.stopped", message: "TheHandy stopped." }));
         return;
       }
       if (result === "resumed") {
-        showHandyNotification("TheHandy resumed.");
+        showHandyNotification(i18n._({ id: "game.handy.resumed", message: "TheHandy resumed." }));
         return;
       }
-      showHandyNotification("No connected TheHandy to toggle.");
+      showHandyNotification(
+        i18n._({ id: "game.handy.noDevice", message: "No connected TheHandy to toggle." })
+      );
     });
   }, [showHandyNotification, toggleManualStop]);
 
   const handleHandyOffsetAdjust = useCallback(
     (deltaMs: number) => {
       void adjustOffset(deltaMs).then((nextOffsetMs) => {
-        showHandyNotification(`TheHandy offset: ${nextOffsetMs >= 0 ? "+" : ""}${nextOffsetMs}ms`);
+        showHandyNotification(
+          `${i18n._({ id: "game.handy.offset", message: "TheHandy offset" })}: ${nextOffsetMs >= 0 ? "+" : ""}${nextOffsetMs}ms`
+        );
       });
     },
     [adjustOffset, showHandyNotification]
   );
 
   const handleHandyOffsetReset = useCallback(() => {
+    const resetMsg = i18n._({ id: "game.handy.offsetReset", message: "TheHandy offset reset" });
     if (offsetMs === 0) {
-      showHandyNotification("TheHandy offset reset");
+      showHandyNotification(resetMsg);
       return;
     }
     void resetOffset().then(() => {
-      showHandyNotification("TheHandy offset reset");
+      showHandyNotification(resetMsg);
     });
   }, [offsetMs, resetOffset, showHandyNotification]);
 
@@ -1797,7 +1821,7 @@ export const GameScene = memo(function GameScene({
       const latestItem = newlyAdded[0];
       if (latestItem) {
         showHandyNotification(
-          `Received ${latestItem.kind === "antiPerk" ? "anti-perk" : "perk"}: ${latestItem.name}.`
+          `${i18n._({ id: "game.inventory.received", message: "Received" })} ${latestItem.kind === "antiPerk" ? i18n._({ id: "game.inventory.antiPerk", message: "anti-perk" }) : i18n._({ id: "game.inventory.perk", message: "perk" })}: ${latestItem.name}.`
         );
       }
     }
@@ -1832,18 +1856,18 @@ export const GameScene = memo(function GameScene({
   shouldShowControllerPromptsRef.current = shouldShowControllerPrompts;
   const controllerPrimaryHint =
     !showPerkInventoryMenu &&
-      !showOptionsMenu &&
-      !showDevPerkMenuModal &&
-      !state.pendingPathChoice &&
-      !state.pendingPerkSelection
+    !showOptionsMenu &&
+    !showDevPerkMenuModal &&
+    !state.pendingPathChoice &&
+    !state.pendingPerkSelection
       ? canRollViaController
-        ? "Roll Dice"
+        ? t`Roll Dice`
         : canStartQueuedRoundViaController
           ? state.queuedRound?.skippable
-            ? "Play"
-            : "Start Video"
+            ? t`Play`
+            : t`Start Video`
           : canFinishRoundViaController
-            ? "Finish Round"
+            ? t`Finish Round`
             : null
       : null;
   const tryHandlePrimaryGameplayAction = () => {
@@ -2017,12 +2041,16 @@ export const GameScene = memo(function GameScene({
       }
       if (event.code === "BracketLeft") {
         event.preventDefault();
-        handleHandyOffsetAdjust(event.shiftKey ? -THEHANDY_OFFSET_FINE_STEP_MS : -THEHANDY_OFFSET_STEP_MS);
+        handleHandyOffsetAdjust(
+          event.shiftKey ? -THEHANDY_OFFSET_FINE_STEP_MS : -THEHANDY_OFFSET_STEP_MS
+        );
         return;
       }
       if (event.code === "BracketRight") {
         event.preventDefault();
-        handleHandyOffsetAdjust(event.shiftKey ? THEHANDY_OFFSET_FINE_STEP_MS : THEHANDY_OFFSET_STEP_MS);
+        handleHandyOffsetAdjust(
+          event.shiftKey ? THEHANDY_OFFSET_FINE_STEP_MS : THEHANDY_OFFSET_STEP_MS
+        );
         return;
       }
       if (event.code === "Backslash") {
@@ -2059,12 +2087,16 @@ export const GameScene = memo(function GameScene({
         const optionCount = pending.options.length;
         if (event.key === "ArrowLeft") {
           event.preventDefault();
-          setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(optionCount, previous - 1)));
+          setControllerPerkSelectionIndex((previous) =>
+            Math.max(0, Math.min(optionCount, previous - 1))
+          );
           return;
         }
         if (event.key === "ArrowRight") {
           event.preventDefault();
-          setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(optionCount, previous + 1)));
+          setControllerPerkSelectionIndex((previous) =>
+            Math.max(0, Math.min(optionCount, previous + 1))
+          );
           return;
         }
         if (event.key === "ArrowDown") {
@@ -2405,10 +2437,10 @@ export const GameScene = memo(function GameScene({
           nameT.interactiveChildren = false;
 
           const KIND_MAP: Record<string, string> = {
-            start: "START",
-            path: "PATH",
-            event: "EVENT★",
-            perk: "✦ PERK",
+            start: i18n._({ id: "gameboard.kind.start", message: "START" }),
+            path: i18n._({ id: "gameboard.kind.path", message: "PATH" }),
+            event: i18n._({ id: "gameboard.kind.event", message: "EVENT★" }),
+            perk: i18n._({ id: "gameboard.kind.perk", message: "✦ PERK" }),
           };
           const kindT = new Text({
             text: KIND_MAP[field.kind] ?? field.kind,
@@ -2675,7 +2707,7 @@ export const GameScene = memo(function GameScene({
         btnContainer.addChild(rollBtn);
 
         const rollBtnLabel = new Text({
-          text: "ROLL DICE (SPACE)",
+          text: i18n._({ id: "game.btn.rollDice", message: "ROLL DICE (SPACE)" }),
           style: new TextStyle({
             fontFamily: "Inter,sans-serif",
             fontSize: 11,
@@ -2715,7 +2747,7 @@ export const GameScene = memo(function GameScene({
         btnContainer.addChild(finishBtn);
 
         const finishLabel = new Text({
-          text: "FINISH ROUND",
+          text: i18n._({ id: "game.btn.finishRound", message: "FINISH ROUND" }),
           style: new TextStyle({
             fontFamily: "Inter,sans-serif",
             fontSize: 12,
@@ -2755,7 +2787,7 @@ export const GameScene = memo(function GameScene({
         btnContainer.addChild(startRoundBtn);
 
         const startRoundLabel = new Text({
-          text: "PLAY",
+          text: i18n._({ id: "game.btn.play", message: "PLAY" }),
           style: new TextStyle({
             fontFamily: "Inter,sans-serif",
             fontSize: 12,
@@ -3051,7 +3083,7 @@ export const GameScene = memo(function GameScene({
 
         // Perk overlay header text
         const perkHeaderLabel = new Text({
-          text: "✦ PICK A PERK ✦",
+          text: i18n._({ id: "game.perk.header", message: "✦ PICK A PERK ✦" }),
           style: new TextStyle({
             fontFamily: "Inter,sans-serif",
             fontSize: 18,
@@ -3157,7 +3189,9 @@ export const GameScene = memo(function GameScene({
             const player = currentPlayerRef.current;
             if (!perkId) return;
             if (!player) return;
-            const perk = stateRef.current.pendingPerkSelection?.options.find((option) => option.id === perkId);
+            const perk = stateRef.current.pendingPerkSelection?.options.find(
+              (option) => option.id === perkId
+            );
             if (!perk) return;
             if (player.money < perk.cost) return;
             handleSelectPerkRef.current(perkId, { applyDirectly: applyPerkDirectlyRef.current });
@@ -3173,7 +3207,7 @@ export const GameScene = memo(function GameScene({
         stage.addChild(skipPerkBtn);
 
         const skipPerkLabel = new Text({
-          text: "DON'T BUY ANY PERKS",
+          text: i18n._({ id: "game.perk.skip", message: "DON'T BUY ANY PERKS" }),
           style: new TextStyle({
             fontFamily: "JetBrains Mono,monospace",
             fontSize: 11,
@@ -3698,44 +3732,70 @@ export const GameScene = memo(function GameScene({
             hudProbabilityLabel.y = probY + 9;
 
             // Update HUD text
-            setTextIfChanged(hudTurnLabel, `TURN ${s.turn.toString().padStart(2, "0")}`);
+            setTextIfChanged(
+              hudTurnLabel,
+              `${i18n._({ id: "hud.turn", message: "TURN" })} ${s.turn.toString().padStart(2, "0")}`
+            );
             const phaseLabelMap: Record<AnimPhase["kind"], string> = {
-              idle: "STANDBY",
-              rollingDice: "ROLLING",
-              diceResultReveal: "RESULT",
-              movingToken: "TRAVEL",
-              landingEffect: "LANDING",
-              roundCountdown: "COUNTDOWN",
-              perkReveal: "PERK",
+              idle: i18n._({ id: "hud.phase.idle", message: "STANDBY" }),
+              rollingDice: i18n._({ id: "hud.phase.rolling", message: "ROLLING" }),
+              diceResultReveal: i18n._({ id: "hud.phase.result", message: "RESULT" }),
+              movingToken: i18n._({ id: "hud.phase.travel", message: "TRAVEL" }),
+              landingEffect: i18n._({ id: "hud.phase.landing", message: "LANDING" }),
+              roundCountdown: i18n._({ id: "hud.phase.countdown", message: "COUNTDOWN" }),
+              perkReveal: i18n._({ id: "hud.phase.perk", message: "PERK" }),
             };
             setTextIfChanged(hudPhaseLabel, phaseLabelMap[phase.kind]);
-            setTextIfChanged(hudPlayerLabel, currentPlayer?.name ?? "Player");
+            setTextIfChanged(
+              hudPlayerLabel,
+              currentPlayer?.name ?? i18n._({ id: "hud.player", message: "Player" })
+            );
             const currentField = board[currentPos];
             setTextIfChanged(
               hudFieldLabel,
-              currentField ? `FIELD ${currentPos}: ${currentField.name}` : ""
+              currentField
+                ? `${i18n._({ id: "hud.field", message: "FIELD" })} ${currentPos}: ${currentField.name}`
+                : ""
             );
             const boardProgressPct = getBoardProgressRatio(s, currentPos) * 100;
-            setTextIfChanged(hudProgressLabel, `BOARD PROGRESS ${boardProgressPct.toFixed(0)}%`);
+            setTextIfChanged(
+              hudProgressLabel,
+              `${i18n._({ id: "hud.boardProgress", message: "BOARD PROGRESS" })} ${boardProgressPct.toFixed(0)}%`
+            );
             setTextIfChanged(hudDiceLabel, s.lastRoll ? `${s.lastRoll}` : "");
             setTextIfChanged(hudDiceMetaLabel, formatHudDiceMeta(currentPlayer));
-            setTextIfChanged(hudScoreLabel, `SCORE ${currentPlayer?.score ?? 0}`);
-            setTextIfChanged(hudMoneyLabel, `MONEY $${currentPlayer?.money ?? 0}`);
-            setTextIfChanged(hudHighscoreLabel, `BEST ${s.highscore}`);
+            setTextIfChanged(
+              hudScoreLabel,
+              `${i18n._({ id: "hud.score", message: "SCORE" })} ${currentPlayer?.score ?? 0}`
+            );
+            setTextIfChanged(
+              hudMoneyLabel,
+              `${i18n._({ id: "hud.money", message: "MONEY" })} $${currentPlayer?.money ?? 0}`
+            );
+            setTextIfChanged(
+              hudHighscoreLabel,
+              `${i18n._({ id: "hud.best", message: "BEST" })} ${s.highscore}`
+            );
             const elapsedSec =
               completedElapsedSecRef.current ??
               Math.max(0, Math.floor((nowMsRef.current - sessionStartedAtMs) / 1000));
-            setTextIfChanged(hudTimeLabel, `TIME ${formatDurationLabel(elapsedSec)}`);
+            setTextIfChanged(
+              hudTimeLabel,
+              `${i18n._({ id: "hud.time", message: "TIME" })} ${formatDurationLabel(elapsedSec)}`
+            );
             setTextIfChanged(hudEffectsLabel, formatHudActiveEffects(currentPlayer));
             setTextIfChanged(
               hudProbabilityLabel,
-              `INTERMEDIARY ${(s.intermediaryProbability * 100).toFixed(0)}%\nANTI-PERK ${(s.antiPerkProbability * 100).toFixed(0)}%`
+              `${i18n._({ id: "hud.intermediary", message: "INTERMEDIARY" })} ${(s.intermediaryProbability * 100).toFixed(0)}%\n${i18n._({ id: "hud.antiPerk", message: "ANTI-PERK" })} ${(s.antiPerkProbability * 100).toFixed(0)}%`
             );
             const topLog = s.log[0] ?? "";
             if (topLog !== lastTopLog) {
               lastTopLog = topLog;
               if (topLog.includes("applied anti-perk:")) {
-                antiPerkAlertText = topLog.replace(/.*applied anti-perk:/, "ANTI-PERK APPLIED:");
+                antiPerkAlertText = topLog.replace(
+                  /.*applied anti-perk:/,
+                  `${i18n._({ id: "hud.antiPerkApplied", message: "ANTI-PERK APPLIED:" })}`
+                );
                 antiPerkAlertStart = t;
               }
               if (topLog.startsWith("Round finished.")) {
@@ -3769,9 +3829,9 @@ export const GameScene = memo(function GameScene({
               phase.kind === "idle" && !!s.queuedRound && !s.pendingPerkSelection && !s.activeRound;
             const controllerPrimaryTarget =
               showOptionsMenuRef.current ||
-                showDevPerkMenuModalRef.current ||
-                s.pendingPathChoice ||
-                s.pendingPerkSelection
+              showDevPerkMenuModalRef.current ||
+              s.pendingPathChoice ||
+              s.pendingPerkSelection
                 ? null
                 : canRoll
                   ? "roll"
@@ -3784,12 +3844,15 @@ export const GameScene = memo(function GameScene({
             const primaryActionSuffix = shouldShowControllerPromptsRef.current ? " (A)" : "";
             setTextIfChanged(
               rollBtnLabel,
-              `ROLL DICE${shouldShowControllerPromptsRef.current ? " (A)" : " (SPACE)"}`
+              `${i18n._({ id: "game.btn.rollDice.short", message: "ROLL DICE" })}${shouldShowControllerPromptsRef.current ? " (A)" : " (SPACE)"}`
             );
-            setTextIfChanged(finishLabel, `FINISH ROUND${primaryActionSuffix}`);
+            setTextIfChanged(
+              finishLabel,
+              `${i18n._({ id: "game.btn.finishRound", message: "FINISH ROUND" })}${primaryActionSuffix}`
+            );
             setTextIfChanged(
               startRoundLabel,
-              `${s.queuedRound?.skippable ? "PLAY" : "START VIDEO"}${primaryActionSuffix}`
+              `${s.queuedRound?.skippable ? i18n._({ id: "game.btn.play", message: "PLAY" }) : i18n._({ id: "game.btn.startVideo", message: "START VIDEO" })}${primaryActionSuffix}`
             );
 
             if (previousCanRoll !== canRoll) {
@@ -3883,7 +3946,10 @@ export const GameScene = memo(function GameScene({
               autoRollLabel.visible = true;
               autoRollLabel.x = W / 2;
               autoRollLabel.y = panelY + 16;
-              setTextIfChanged(autoRollLabel, `NEXT AUTO ROLL IN ${autoRollRemaining.toFixed(1)}s`);
+              setTextIfChanged(
+                autoRollLabel,
+                `${i18n._({ id: "hud.autoRoll", message: "NEXT AUTO ROLL IN" })} ${autoRollRemaining.toFixed(1)}s`
+              );
             }
 
             antiPerkAlertG.clear();
@@ -3969,7 +4035,10 @@ export const GameScene = memo(function GameScene({
               rewardFxG.alpha = rewardAlpha;
 
               rewardTitleLabel.visible = true;
-              setTextIfChanged(rewardTitleLabel, "ROUND COMPLETE");
+              setTextIfChanged(
+                rewardTitleLabel,
+                i18n._({ id: "game.reward.title", message: "ROUND COMPLETE" })
+              );
               rewardTitleLabel.alpha = rewardAlpha;
               rewardTitleLabel.x = W / 2;
               rewardTitleLabel.y = H * 0.29 - rise * 0.6;
@@ -3983,21 +4052,30 @@ export const GameScene = memo(function GameScene({
               rewardMoneyLabel.scale.set(0.92 + pop * 0.2 + pulse * 0.05);
 
               rewardScoreLabel.visible = true;
-              setTextIfChanged(rewardScoreLabel, `+${roundRewardScore} SCORE`);
+              setTextIfChanged(
+                rewardScoreLabel,
+                `+${roundRewardScore} ${i18n._({ id: "game.reward.score", message: "SCORE" })}`
+              );
               rewardScoreLabel.alpha = rewardAlpha;
               rewardScoreLabel.x = W / 2;
               rewardScoreLabel.y = H * 0.49 - rise * 0.8;
               rewardScoreLabel.scale.set(0.92 + pop * 0.16 + pulse * 0.03);
 
               rewardTotalMoneyLabel.visible = true;
-              setTextIfChanged(rewardTotalMoneyLabel, `NEW MONEY TOTAL: $${countingMoney}`);
+              setTextIfChanged(
+                rewardTotalMoneyLabel,
+                `${i18n._({ id: "game.reward.newMoneyTotal", message: "NEW MONEY TOTAL" })}: $${countingMoney}`
+              );
               rewardTotalMoneyLabel.alpha = rewardAlpha;
               rewardTotalMoneyLabel.x = W / 2;
               rewardTotalMoneyLabel.y = H * 0.58 - rise * 0.5;
               rewardTotalMoneyLabel.scale.set(0.94 + pop * 0.08);
 
               rewardTotalScoreLabel.visible = true;
-              setTextIfChanged(rewardTotalScoreLabel, `NEW SCORE TOTAL: ${countingScore}`);
+              setTextIfChanged(
+                rewardTotalScoreLabel,
+                `${i18n._({ id: "game.reward.newScoreTotal", message: "NEW SCORE TOTAL" })}: ${countingScore}`
+              );
               rewardTotalScoreLabel.alpha = rewardAlpha;
               rewardTotalScoreLabel.x = W / 2;
               rewardTotalScoreLabel.y = H * 0.63 - rise * 0.4;
@@ -4072,7 +4150,7 @@ export const GameScene = memo(function GameScene({
               const rarityT = perkRarityBadgeTs[pi];
               if (!nameT || !descT || !effectT || !rarityT) continue;
 
-              nameT.text = `${getPerkIconGlyph(perk.iconKey)} ${perk.name}`;
+              nameT.text = `${getPerkIconGlyph(perk.iconKey)} ${getPerkDisplayName(perk.id)}`;
               nameT.style.fill = rarityMeta.pixi.nameText;
 
               descT.y = nameT.y + nameT.height + 6;
@@ -4083,13 +4161,13 @@ export const GameScene = memo(function GameScene({
 
               const directLabel =
                 applyPerkDirectlyRef.current && perk.kind === "perk"
-                  ? "Direct apply"
-                  : "Stored in inventory";
-              const costText = `💰 $${perk.cost}${canAfford ? "" : " (too expensive)"} • ${directLabel}`;
-              descT.text = `${perk.description}\n${costText}`;
+                  ? i18n._({ id: "game.perk.directApply", message: "Direct apply" })
+                  : i18n._({ id: "game.perk.storedInInventory", message: "Stored in inventory" });
+              const costText = `💰 $${perk.cost}${canAfford ? "" : ` (${i18n._({ id: "game.perk.tooExpensive", message: "too expensive" })})`} • ${directLabel}`;
+              descT.text = `${getPerkDescription(perk.id)}\n${costText}`;
               descT.style.fill = canAfford ? 0xddddee : 0xffb6b6;
 
-              rarityT.text = rarityMeta.label;
+              rarityT.text = getRarityLabel(rarity);
               rarityT.style.fill = rarityMeta.pixi.badgeText;
               const badgePaddingX = 7;
               const badgePaddingY = 3;
@@ -4175,22 +4253,22 @@ export const GameScene = memo(function GameScene({
     null;
   const boardAntiPerkSequence =
     !state.activeRound &&
-      !state.pendingPathChoice &&
-      !state.pendingPerkSelection &&
-      !state.queuedRound &&
-      state.sessionPhase === "normal" &&
-      currentPlayer
+    !state.pendingPathChoice &&
+    !state.pendingPerkSelection &&
+    !state.queuedRound &&
+    state.sessionPhase === "normal" &&
+    currentPlayer
       ? ((["milker", "jackhammer"] as const).find((id) => currentPlayer.antiPerks.includes(id)) ??
         null)
       : null;
 
   const idleBoardSequence =
     !state.activeRound &&
-      !state.queuedRound &&
-      state.sessionPhase === "normal" &&
-      currentPlayer &&
-      !currentPlayer.antiPerks.includes("milker") &&
-      !currentPlayer.antiPerks.includes("jackhammer")
+    !state.queuedRound &&
+    state.sessionPhase === "normal" &&
+    currentPlayer &&
+    !currentPlayer.antiPerks.includes("milker") &&
+    !currentPlayer.antiPerks.includes("jackhammer")
       ? currentPlayer.antiPerks.includes("no-rest")
         ? "no-rest"
         : null
@@ -4316,7 +4394,7 @@ export const GameScene = memo(function GameScene({
                 data-controller-focus-id="game-handy-toggle"
                 data-controller-initial="true"
               >
-                {handyManuallyStopped ? "Resume Handy" : "Force Stop Handy"}
+                {handyManuallyStopped ? t`Resume Handy` : t`Force Stop Handy`}
               </button>
             )}
             <button
@@ -4325,7 +4403,7 @@ export const GameScene = memo(function GameScene({
               onClick={() => requestCumConfirmation()}
               data-controller-focus-id="game-cum-open"
             >
-              {abbreviateNsfwText("Cum (C)", sfwMode)}
+              {abbreviateNsfwText(t`Cum (C)`, sfwMode)}
             </button>
             <button
               type="button"
@@ -4333,7 +4411,7 @@ export const GameScene = memo(function GameScene({
               onClick={() => setShowOptionsMenu(true)}
               data-controller-focus-id="game-options-open"
             >
-              Options
+              {t`Options`}
             </button>
           </div>
         )}
@@ -4349,7 +4427,7 @@ export const GameScene = memo(function GameScene({
               onChange={(event) => onApplyPerkDirectlyChange(event.target.checked)}
               className="h-4 w-4 accent-cyan-300"
             />
-            <span>Apply directly</span>
+            <span>{t`Apply directly`}</span>
           </label>
         </div>
       )}
@@ -4365,12 +4443,12 @@ export const GameScene = memo(function GameScene({
                 data-controller-initial="true"
                 data-controller-back="true"
               >
-                Close
+                {t`Close`}
               </button>
             </div>
             <PerkInventoryPanel
-              title="Perk Inventory"
-              subtitle="Apply stored perks to your run or clear out items you do not want to keep."
+              title={t`Perk Inventory`}
+              subtitle={t`Apply stored perks to your run or clear out items you do not want to keep.`}
               inventory={currentPlayerInventory}
               activeEffects={currentPlayerActiveEffects}
               selectedItemId={selectedInventoryItemId}
@@ -4386,10 +4464,10 @@ export const GameScene = memo(function GameScene({
                 handleConsumeInventoryItemRef.current({
                   playerId: currentPlayer.id,
                   itemId: item.itemId,
-                  reason: `Discarded item: ${item.name}.`,
+                  reason: `${t`Discarded item`}: ${item.name}.`,
                 });
               }}
-              useActionLabel="Apply Perk"
+              useActionLabel={t`Apply Perk`}
               useDisabled={
                 !currentPlayerInventory.some(
                   (item) => item.itemId === selectedInventoryItemId && item.kind === "perk"
@@ -4399,11 +4477,11 @@ export const GameScene = memo(function GameScene({
                 currentPlayerInventory.some(
                   (item) => item.itemId === selectedInventoryItemId && item.kind === "antiPerk"
                 )
-                  ? "Anti-perk items cannot be applied to yourself in singleplayer."
+                  ? t`Anti-perk items cannot be applied to yourself in singleplayer.`
                   : null
               }
-              emptyStateLabel="No stored perks yet."
-              headerBadge={`Score ${currentPlayer.score}`}
+              emptyStateLabel={t`No stored perks yet.`}
+              headerBadge={`${t`Score`} ${currentPlayer.score}`}
               applyDirectly={applyPerkDirectly}
               onApplyDirectlyChange={onApplyPerkDirectlyChange}
             />
@@ -4416,20 +4494,19 @@ export const GameScene = memo(function GameScene({
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-amber-200/80">
-                  Split Ahead
+                  {t`Split Ahead`}
                 </div>
                 <h2 className="mt-1 text-xl font-black tracking-[0.04em] text-white">
-                  Choose your route
+                  {t`Choose your route`}
                 </h2>
                 <p className="mt-1 text-sm text-slate-200/85">
-                  Hover, focus, or click a route to preview it on the board. You can also click the
-                  glowing destination tiles.
+                  {t`Hover, focus, or click a route to preview it on the board. You can also click the glowing destination tiles.`}
                 </p>
               </div>
               <div className="self-start rounded-full border border-amber-300/35 bg-amber-300/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] text-amber-100">
                 {pathChoiceRemainingMs !== null
-                  ? `Auto-pick in ${(pathChoiceRemainingMs / 1000).toFixed(1)}s`
-                  : "Auto-pick pending"}
+                  ? `${t`Auto-pick in`} ${(pathChoiceRemainingMs / 1000).toFixed(1)}s`
+                  : t`Auto-pick pending`}
               </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -4443,17 +4520,18 @@ export const GameScene = memo(function GameScene({
                     onClick={() => handleSelectPathEdgeRef.current(option.edgeId)}
                     onMouseEnter={() => setHighlightedPathEdgeId(option.edgeId)}
                     onFocus={() => setHighlightedPathEdgeId(option.edgeId)}
-                    className={`rounded-[24px] border px-4 py-4 text-left transition-all duration-150 ${isActive
+                    className={`rounded-[24px] border px-4 py-4 text-left transition-all duration-150 ${
+                      isActive
                         ? "border-amber-200/70 bg-amber-300/12 text-white shadow-[0_0_0_1px_rgba(253,224,71,0.28)]"
                         : "border-slate-300/15 bg-slate-950/40 text-slate-100 hover:border-cyan-200/45 hover:bg-slate-900/70"
-                      }`}
+                    }`}
                     data-controller-focus-id={`game-path-${option.edgeId}`}
                     data-controller-initial={index === 0 ? "true" : undefined}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">
-                          Route {index + 1}
+                          {t`Route`} {index + 1}
                         </div>
                         <div className="mt-1 text-lg font-bold">
                           {option.label ?? option.toFieldName}
@@ -4462,16 +4540,18 @@ export const GameScene = memo(function GameScene({
                       <div
                         className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${isActive ? "bg-amber-200/20 text-amber-100" : "bg-slate-200/10 text-slate-200/80"}`}
                       >
-                        {isActive ? "Previewing" : "Preview"}
+                        {isActive ? t`Previewing` : t`Preview`}
                       </div>
                     </div>
                     <div className="mt-3 text-sm text-slate-200/88">
-                      Destination:{" "}
+                      {t`Destination:`}{" "}
                       <span className="font-semibold text-white">{option.toFieldName}</span>
                     </div>
                     <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-300/70">
-                      {option.gateCost > 0 ? `Gate cost $${option.gateCost}` : "No gate cost"}
-                      {previewLength > 1 ? ` • ${previewLength} visible steps` : ""}
+                      {option.gateCost > 0
+                        ? `${t`Gate cost`} $${option.gateCost}`
+                        : t`No gate cost`}
+                      {previewLength > 1 ? ` • ${previewLength} ${t`visible steps`}` : ""}
                     </div>
                   </button>
                 );
@@ -4484,13 +4564,13 @@ export const GameScene = memo(function GameScene({
         <div className="pointer-events-none fixed left-1/2 top-5 z-[51] -translate-x-1/2 px-4">
           <div className="rounded-full border border-cyan-200/35 bg-slate-950/78 px-4 py-2 text-center shadow-xl backdrop-blur-md">
             <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/70">
-              Current Preview
+              {t`Current Preview`}
             </div>
             <div className="mt-1 text-sm font-semibold text-white">
               {activePathChoiceOption.label ?? activePathChoiceOption.toFieldName}
               {activePathChoiceOption.gateCost > 0
                 ? ` • $${activePathChoiceOption.gateCost}`
-                : " • Free"}
+                : ` • ${t`Free`}`}
             </div>
           </div>
         </div>
@@ -4499,14 +4579,14 @@ export const GameScene = memo(function GameScene({
         <div className="pointer-events-none fixed inset-0 z-[200] flex items-center justify-center bg-black/80 px-4">
           <div className="pointer-events-auto w-full max-w-xl rounded-2xl border border-rose-300/45 bg-[linear-gradient(145deg,rgba(38,6,6,0.96),rgba(36,8,8,0.96))] p-6 text-zinc-100 shadow-[0_0_55px_rgba(248,56,56,0.25)] backdrop-blur-xl">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.28em] text-rose-200/85">
-              Self-Reported Finish
+              {t`Self-Reported Finish`}
             </p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-rose-100 via-red-100 to-orange-100">
-              {abbreviateNsfwText("Did you cum?", sfwMode)}
+              {abbreviateNsfwText(t`Did you cum?`, sfwMode)}
             </h3>
             <p className="mt-2 text-sm text-zinc-200/90">
               {abbreviateNsfwText(
-                "Confirm your orgasm. Because this is not a cum round, this will immediately end the round and the entire game as a loss.",
+                t`Confirm your orgasm. Because this is not a cum round, this will immediately end the round and the entire game as a loss.`,
                 sfwMode
               )}
             </p>
@@ -4521,8 +4601,8 @@ export const GameScene = memo(function GameScene({
                 data-controller-focus-id="non-cum-outcome-came"
                 data-controller-initial="true"
               >
-                <span>{abbreviateNsfwText("Confirm you came", sfwMode)}</span>
-                <span className="opacity-60 text-xs">Press C</span>
+                <span>{abbreviateNsfwText(t`Confirm you came`, sfwMode)}</span>
+                <span className="opacity-60 text-xs">{t`Press C`}</span>
               </button>
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -4535,7 +4615,7 @@ export const GameScene = memo(function GameScene({
                 }}
                 data-controller-focus-id="non-cum-outcome-close"
               >
-                Proceed
+                {t`Proceed`}
               </button>
             </div>
           </div>
@@ -4544,8 +4624,8 @@ export const GameScene = memo(function GameScene({
       {showOptionsMenu && (
         <div className="pointer-events-none fixed inset-0 z-[141] flex items-center justify-center bg-black/60 px-4">
           <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-indigo-300/45 bg-zinc-950/95 p-5 shadow-2xl">
-            <h2 className="text-lg font-bold text-indigo-100">Options</h2>
-            <p className="mt-2 text-sm text-zinc-200">The game keeps running in the background.</p>
+            <h2 className="text-lg font-bold text-indigo-100">{t`Options`}</h2>
+            <p className="mt-2 text-sm text-zinc-200">{t`The game keeps running in the background.`}</p>
             <div className="mt-4 space-y-2">
               <button
                 type="button"
@@ -4555,7 +4635,7 @@ export const GameScene = memo(function GameScene({
                 data-controller-initial="true"
                 data-controller-back="true"
               >
-                Proceed
+                {t`Proceed`}
               </button>
               <button
                 type="button"
@@ -4566,7 +4646,7 @@ export const GameScene = memo(function GameScene({
                 }}
                 data-controller-focus-id="game-options-inventory"
               >
-                Perk Inventory
+                {t`Perk Inventory`}
               </button>
               {canShowDevPerkMenu && currentPlayer && (
                 <button
@@ -4578,7 +4658,7 @@ export const GameScene = memo(function GameScene({
                   }}
                   data-controller-focus-id="game-options-dev-perks"
                 >
-                  Dev Perks
+                  {t`Dev Perks`}
                 </button>
               )}
               {optionsActions.map((action) => (
@@ -4586,10 +4666,11 @@ export const GameScene = memo(function GameScene({
                   key={action.id}
                   type="button"
                   disabled={action.disabled}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${action.tone === "danger"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
+                    action.tone === "danger"
                       ? "border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
                       : "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-                    }`}
+                  }`}
                   onClick={() => {
                     setShowOptionsMenu(false);
                     action.onClick();
@@ -4608,7 +4689,7 @@ export const GameScene = memo(function GameScene({
                 }}
                 data-controller-focus-id="game-options-give-up"
               >
-                {giveUpLabel}
+                {giveUpLabel ?? t`Give Up`}
               </button>
             </div>
           </div>
@@ -4619,9 +4700,10 @@ export const GameScene = memo(function GameScene({
           <div className="pointer-events-auto w-full max-w-5xl rounded-2xl border border-cyan-300/45 bg-zinc-950/95 p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-cyan-100">Dev Perks</h2>
+                <h2 className="text-lg font-bold text-cyan-100">{t`Dev Perks`}</h2>
                 <p className="mt-2 text-sm text-zinc-200">
-                  Trigger perks and anti-perks for {currentPlayer.name} in development mode.
+                  {t`Trigger perks and anti-perks for`} {currentPlayer.name}{" "}
+                  {t`in development mode.`}
                 </p>
               </div>
               <button
@@ -4632,13 +4714,13 @@ export const GameScene = memo(function GameScene({
                 data-controller-initial="true"
                 data-controller-back="true"
               >
-                Close
+                {t`Close`}
               </button>
             </div>
             <div className="mt-4 grid max-h-[70vh] gap-4 overflow-y-auto lg:grid-cols-2">
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-200">
-                  Perks
+                  {t`Perks`}
                 </h3>
                 <div className="mt-3 grid gap-2">
                   {devPerkPool.map((perk) => (
@@ -4650,24 +4732,26 @@ export const GameScene = memo(function GameScene({
                         handleApplyExternalPerkRef.current({
                           targetPlayerId: currentPlayer.id,
                           perkId: perk.id,
-                          sourceLabel: "Dev menu",
+                          sourceLabel: t`Dev menu`,
                         });
                       }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-semibold text-emerald-100">{perk.name}</span>
+                        <span className="font-semibold text-emerald-100">
+                          {getPerkDisplayName(perk.id)}
+                        </span>
                         <span className="text-xs uppercase tracking-[0.14em] text-emerald-300">
                           {perk.rarity}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-zinc-300">{perk.description}</p>
+                      <p className="mt-1 text-sm text-zinc-300">{getPerkDescription(perk.id)}</p>
                     </button>
                   ))}
                 </div>
               </section>
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-rose-200">
-                  Anti-Perks
+                  {t`Anti-Perks`}
                 </h3>
                 <div className="mt-3 grid gap-2">
                   {devAntiPerkPool.map((perk) => (
@@ -4679,17 +4763,19 @@ export const GameScene = memo(function GameScene({
                         handleApplyExternalPerkRef.current({
                           targetPlayerId: currentPlayer.id,
                           perkId: perk.id,
-                          sourceLabel: "Dev menu",
+                          sourceLabel: t`Dev menu`,
                         });
                       }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-semibold text-rose-100">{perk.name}</span>
+                        <span className="font-semibold text-rose-100">
+                          {getPerkDisplayName(perk.id)}
+                        </span>
                         <span className="text-xs uppercase tracking-[0.14em] text-rose-300">
                           {perk.rarity}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-zinc-300">{perk.description}</p>
+                      <p className="mt-1 text-sm text-zinc-300">{getPerkDescription(perk.id)}</p>
                     </button>
                   ))}
                 </div>
@@ -4711,9 +4797,9 @@ export const GameScene = memo(function GameScene({
               ...(shouldShowControllerPrompts && controllerPrimaryHint
                 ? [{ label: controllerPrimaryHint, action: "PRIMARY" as const }]
                 : []),
-              { label: "Inventory", action: "ACTION_X" as const },
-              ...(handyConnected ? [{ label: "Toggle Handy", action: "ACTION_Y" as const }] : []),
-              { label: "Options", action: "START" as const },
+              { label: t`Inventory`, action: "ACTION_X" as const },
+              ...(handyConnected ? [{ label: t`Toggle Handy`, action: "ACTION_Y" as const }] : []),
+              { label: t`Options`, action: "START" as const },
             ]}
           />
         )}
@@ -4722,8 +4808,8 @@ export const GameScene = memo(function GameScene({
           contextId="perk-selection"
           enabled={controllerSupportEnabled}
           hints={[
-            { label: "Skip Perk", action: "ACTION_X" as const },
-            { label: "Select Perk", action: "ACTION_Y" as const },
+            { label: t`Skip Perk`, action: "ACTION_X" as const },
+            { label: t`Select Perk`, action: "ACTION_Y" as const },
           ]}
         />
       )}

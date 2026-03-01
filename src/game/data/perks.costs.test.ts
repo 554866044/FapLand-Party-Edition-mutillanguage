@@ -18,7 +18,6 @@ const EXPECTED_COSTS: Record<string, number> = {
   "be-gentle": 200,
   "treasure-magnet": 180,
   "lucky-star": 200,
-  "high-roller": 220,
   "coupon-clipper": 190,
   "no-rest": 220,
   highspeed: 240,
@@ -36,7 +35,7 @@ const EXPECTED_COSTS: Record<string, number> = {
   "bad-omen": 240,
   "sticky-fingers": 280,
   "snake-eyes": 320,
-  "im-close": 400,
+  "im-close": 690,
 };
 
 const EXPECTED_RARITIES: Record<string, PerkRarity> = {
@@ -54,7 +53,6 @@ const EXPECTED_RARITIES: Record<string, PerkRarity> = {
   "be-gentle": "rare",
   "treasure-magnet": "rare",
   "lucky-star": "rare",
-  "high-roller": "rare",
   "coupon-clipper": "rare",
   "no-rest": "rare",
   highspeed: "epic",

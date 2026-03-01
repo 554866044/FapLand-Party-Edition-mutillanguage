@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useControllerSubscription, useControllerSurface } from "../controller";
 import {
   THEHANDY_OFFSET_MAX_MS,
@@ -30,6 +31,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function GlobalHandyOverlay() {
+  const { t } = useLingui();
   const {
     connected,
     isConnecting,
@@ -98,16 +100,16 @@ export function GlobalHandyOverlay() {
     playSelectSound();
     void toggleManualStop().then((result) => {
       if (result === "stopped") {
-        setActionMessage("TheHandy stopped.");
+        setActionMessage(t`TheHandy stopped.`);
         return;
       }
       if (result === "resumed") {
-        setActionMessage("TheHandy resumed.");
+        setActionMessage(t`TheHandy resumed.`);
         return;
       }
-      setActionMessage("No connected TheHandy to toggle.");
+      setActionMessage(t`No connected TheHandy to toggle.`);
     });
-  }, [toggleManualStop]);
+  }, [t, toggleManualStop]);
 
   const handleConnect = useCallback(() => {
     playSelectSound();
@@ -120,12 +122,12 @@ export function GlobalHandyOverlay() {
   }, [disconnect]);
 
   const statusLabel = !connected
-    ? "Disconnected"
+    ? t`Disconnected`
     : manuallyStopped
-      ? "Stopped"
+      ? t`Stopped`
       : synced
-        ? "Synced"
-        : "Syncing";
+        ? t`Synced`
+        : t`Syncing`;
 
   useControllerSubscription(
     useCallback((action) => {
@@ -178,7 +180,7 @@ export function GlobalHandyOverlay() {
             ref={overlayRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Global TheHandy controls"
+            aria-label={t`Global TheHandy controls`}
             initial={{ opacity: 0, y: 24, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -194,14 +196,14 @@ export function GlobalHandyOverlay() {
             <header className="relative flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-300/90">
-                  TheHandy Controls
+                  <Trans>TheHandy Controls</Trans>
                 </p>
                 <p className="mt-0.5 text-xs text-zinc-300">
-                  Press{" "}
+                  <Trans>Press</Trans>{" "}
                   <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                     Ctrl+H
                   </span>{" "}
-                  to toggle
+                  <Trans>to toggle</Trans>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -219,11 +221,11 @@ export function GlobalHandyOverlay() {
                     setOpen(false);
                   }}
                   className="rounded-full border border-white/15 bg-white/[0.08] px-3.5 py-1.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/15"
-                  aria-label="Close TheHandy overlay"
+                  aria-label={t`Close TheHandy overlay`}
                   data-controller-focus-id="handy-close"
                   data-controller-back="true"
                 >
-                  Close
+                  <Trans>Close</Trans>
                 </button>
               </div>
             </header>
@@ -253,9 +255,11 @@ export function GlobalHandyOverlay() {
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-semibold text-white">Sync Offset</p>
+                      <p className="text-xs font-semibold text-white">
+                        <Trans>Sync Offset</Trans>
+                      </p>
                       <p className="mt-0.5 text-[10px] text-zinc-400">
-                        Fine tune delay if motion leads or lags video
+                        <Trans>Fine tune delay if motion leads or lags video</Trans>
                       </p>
                     </div>
                     <div className="text-right">
@@ -271,7 +275,7 @@ export function GlobalHandyOverlay() {
                     <input
                       id="global-handy-offset-slider"
                       data-controller-focus-id="handy-offset-slider"
-                      aria-label="TheHandy global offset slider"
+                      aria-label={t`TheHandy global offset slider`}
                       type="range"
                       min={THEHANDY_OFFSET_MIN_MS}
                       max={THEHANDY_OFFSET_MAX_MS}
@@ -316,7 +320,7 @@ export function GlobalHandyOverlay() {
                       onClick={handleReset}
                       onMouseEnter={() => playHoverSound()}
                     >
-                      Reset
+                      <Trans>Reset</Trans>
                     </button>
                     <button
                       type="button"
@@ -339,9 +343,11 @@ export function GlobalHandyOverlay() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-semibold text-white">Connection</p>
+                    <p className="text-xs font-semibold text-white">
+                      <Trans>Connection</Trans>
+                    </p>
                     <p className="mt-0.5 text-[10px] text-zinc-400">
-                      {connected ? "Device connected" : "No device connected"}
+                      {connected ? t`Device connected` : t`No device connected`}
                     </p>
                     <button
                       type="button"
@@ -357,14 +363,16 @@ export function GlobalHandyOverlay() {
                       onMouseEnter={() => playHoverSound()}
                       data-controller-focus-id="handy-connect"
                     >
-                      {isConnecting ? "Connecting..." : connected ? "Disconnect" : "Connect"}
+                      {isConnecting ? t`Connecting...` : connected ? t`Disconnect` : t`Connect`}
                     </button>
                   </div>
 
                   <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-semibold text-white">Playback</p>
+                    <p className="text-xs font-semibold text-white">
+                      <Trans>Playback</Trans>
+                    </p>
                     <p className="mt-0.5 text-[10px] text-zinc-400">
-                      {manuallyStopped ? "Device stopped" : "Device active"}
+                      {manuallyStopped ? t`Device stopped` : t`Device active`}
                     </p>
                     <button
                       type="button"
@@ -377,7 +385,7 @@ export function GlobalHandyOverlay() {
                       onMouseEnter={() => playHoverSound()}
                       data-controller-focus-id="handy-toggle"
                     >
-                      {manuallyStopped ? "Start TheHandy" : "Stop TheHandy"}
+                      {manuallyStopped ? t`Start TheHandy` : t`Stop TheHandy`}
                     </button>
                   </div>
                 </div>
@@ -388,7 +396,7 @@ export function GlobalHandyOverlay() {
                       <code className="rounded border border-white/15 bg-white/[0.08] px-1 py-0.5 text-[9px] font-semibold text-zinc-200">
                         Ctrl+W
                       </code>{" "}
-                      start / stop
+                      <Trans>start / stop</Trans>
                     </span>
                     <span>
                       <code className="rounded border border-white/15 bg-white/[0.08] px-1 py-0.5 text-[9px] font-semibold text-zinc-200">
@@ -398,19 +406,19 @@ export function GlobalHandyOverlay() {
                       <code className="rounded border border-white/15 bg-white/[0.08] px-1 py-0.5 text-[9px] font-semibold text-zinc-200">
                         ]
                       </code>{" "}
-                      adjust in-game
+                      <Trans>adjust in-game</Trans>
                     </span>
                     <span>
                       <code className="rounded border border-white/15 bg-white/[0.08] px-1 py-0.5 text-[9px] font-semibold text-zinc-200">
                         Shift
                       </code>{" "}
-                      fine 1ms tuning
+                      <Trans>fine 1ms tuning</Trans>
                     </span>
                     <span>
                       <code className="rounded border border-white/15 bg-white/[0.08] px-1 py-0.5 text-[9px] font-semibold text-zinc-200">
                         \
                       </code>{" "}
-                      reset in-game
+                      <Trans>reset in-game</Trans>
                     </span>
                   </div>
                 </div>

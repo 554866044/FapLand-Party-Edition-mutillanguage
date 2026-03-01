@@ -1,4 +1,5 @@
 import type { PerkDefinition } from "../types";
+import { i18n } from "../../i18n";
 
 // Pricing tiers for balancing against default economy (starting money 120 / +50 per round).
 // Utility: 120-170, Strong: 180-240, Extreme: 250-360.
@@ -475,6 +476,18 @@ export function getSinglePlayerAntiPerkPool(): PerkDefinition[] {
 
 export function getPerkById(perkId: string): PerkDefinition | undefined {
   return PERK_LIBRARY.find((perk) => perk.id === perkId);
+}
+
+export function getPerkDisplayName(perkId: string): string {
+  const perk = getPerkById(perkId);
+  if (!perk) return perkId;
+  return i18n._({ id: `perk.name.${perk.id}`, message: perk.name });
+}
+
+export function getPerkDescription(perkId: string): string {
+  const perk = getPerkById(perkId);
+  if (!perk) return "";
+  return i18n._({ id: `perk.description.${perk.id}`, message: perk.description });
 }
 
 export function getPerksRequiringHandy(): Set<string> {

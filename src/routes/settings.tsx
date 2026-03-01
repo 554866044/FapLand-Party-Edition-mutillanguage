@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
@@ -33,6 +34,7 @@ import {
 } from "../services/integrations";
 import { security } from "../services/security";
 import { trpc } from "../services/trpc";
+import { useLocale } from "../i18n";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { abbreviateNsfwText } from "../utils/sfwText";
 import {
@@ -85,6 +87,9 @@ import {
   INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
   DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
   normalizeInstallWebFunscriptUrlEnabled,
+  SYSTEM_LANGUAGE_ENABLED_KEY,
+  DEFAULT_SYSTEM_LANGUAGE_ENABLED,
+  normalizeSystemLanguageEnabled,
   PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY,
   DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED,
   normalizePlaylistCacheOngoingRestrictionDisabled,
@@ -144,110 +149,107 @@ type ShortcutGroup = {
   shortcuts: ShortcutDefinition[];
 };
 
-const CONVERTER_SHORTCUT_GROUP: ShortcutGroup = {
-  id: "converter",
-  title: "Converter",
-  description: "Used while trimming and classifying segments in the converter.",
-  shortcuts: CONVERTER_SHORTCUTS.map((shortcut) => ({
-    keys: shortcut.keysLabel,
-    description: shortcut.description,
-  })),
-};
-
-const SHORTCUT_GROUPS: ShortcutGroup[] = [
-  {
-    id: "global",
-    title: "Global",
-    description: "Available anywhere unless an input field is actively being edited.",
-    shortcuts: [
-      { keys: "Ctrl/Cmd+M", description: "Open or close the global music overlay." },
-      { keys: "Ctrl/Cmd+H", description: "Open or close the global TheHandy overlay." },
-      { keys: "Escape", description: "Close the global music overlay when it is open." },
-      { keys: "F11", description: "Toggle fullscreen for the app window." },
-      { keys: "Ctrl/Cmd+= or Ctrl/Cmd++", description: "Zoom the app window in." },
-      { keys: "Ctrl/Cmd+-", description: "Zoom the app window out." },
-      {
-        keys: "Ctrl/Cmd+0 or Ctrl/Cmd+O",
-        description: "Reset the app window zoom level to default.",
-      },
-    ],
-  },
-  {
-    id: "controller",
-    title: "Keyboard Controller Navigation",
-    description:
-      "Keyboard mappings that mirror controller input when controller support surfaces are active.",
-    shortcuts: [
-      { keys: "Arrow Keys", description: "Move focus between controller-navigable controls." },
-      { keys: "Enter or Space", description: "Trigger the primary action on the focused control." },
-      { keys: "Escape or Backspace", description: "Trigger the secondary/back action." },
-      { keys: "Q", description: "Use the left bumper action." },
-      { keys: "E", description: "Use the right bumper action." },
-    ],
-  },
-  {
-    id: "game",
-    title: "Game Session",
-    description: "Used during active gameplay and round playback.",
-    shortcuts: [
-      { keys: "Space", description: "Roll the dice or trigger the main gameplay action." },
-      { keys: "1 / 2 / 3", description: "Select a perk during the perk selection phase." },
-      { keys: "C", description: "Open the cum confirmation flow." },
-      { keys: "Escape", description: "Open the in-game options menu." },
-      { keys: "Ctrl/Cmd+W", description: "Toggle TheHandy manual stop state." },
-      {
-        keys: "[ / ] / \\\\ physical keys",
-        description: "Adjust the global TheHandy offset; hold Shift for 1ms fine tuning.",
-      },
-      { keys: "R", description: "Resync TheHandy timing to the current round video." },
-    ],
-  },
-  {
-    id: "game-debug",
-    title: "Game Debug",
-    description:
-      "Development-only shortcuts that are only active when round debug controls are enabled.",
-    shortcuts: [
-      { keys: "I", description: "Trigger a test intermediary immediately." },
-      { keys: "J", description: "End the current intermediary early and resume the main round." },
-      { keys: "K", description: "Finish the round and jump to the summary screen." },
-    ],
-  },
-  CONVERTER_SHORTCUT_GROUP,
-  {
-    id: "map-editor",
-    title: "Map Editor",
-    description: "Shortcuts for graph editing, layout, and viewport control.",
-    shortcuts: [
-      { keys: "Hold Space", description: "Temporarily enable panning." },
-      { keys: "Ctrl/Cmd+Z", description: "Undo the last graph edit." },
-      { keys: "Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y", description: "Redo the last undone graph edit." },
-      { keys: "Ctrl/Cmd+S", description: "Save the current playlist." },
-      { keys: "X", description: "Delete the current selection." },
-      { keys: "1-9", description: "Arm one of the first nine visible tile types for placement." },
-      {
-        keys: "Escape",
-        description: "Clear the current selection and cancel a pending connection.",
-      },
-      { keys: "V", description: "Switch to the Select tool." },
-      { keys: "P", description: "Switch to the Place tool." },
-      { keys: "C", description: "Switch to the Connect tool." },
-      { keys: "G", description: "Show or hide the editor grid." },
-      { keys: "L", description: "Apply the current graph layout strategy." },
-      { keys: "0", description: "Reset the editor camera to the default view." },
-    ],
-  },
-];
-
 export function getVisibleShortcutGroups(
+  t: ReturnType<typeof useLingui>["t"],
   isProductionBuild = import.meta.env.PROD,
   cheatModeEnabled = false
 ): ShortcutGroup[] {
+  const shortcutGroups: ShortcutGroup[] = [
+    {
+      id: "global",
+      title: t`Global`,
+      description: t`Available anywhere unless an input field is actively being edited.`,
+      shortcuts: [
+        { keys: "Ctrl/Cmd+M", description: t`Open or close the global music overlay.` },
+        { keys: "Ctrl/Cmd+H", description: t`Open or close the global TheHandy overlay.` },
+        { keys: "Escape", description: t`Close the global music overlay when it is open.` },
+        { keys: "F11", description: t`Toggle fullscreen for the app window.` },
+        { keys: "Ctrl/Cmd+= or Ctrl/Cmd++", description: t`Zoom the app window in.` },
+        { keys: "Ctrl/Cmd+-", description: t`Zoom the app window out.` },
+        {
+          keys: "Ctrl/Cmd+0 or Ctrl/Cmd+O",
+          description: t`Reset the app window zoom level to default.`,
+        },
+      ],
+    },
+    {
+      id: "controller",
+      title: t`Keyboard Controller Navigation`,
+      description: t`Keyboard mappings that mirror controller input when controller support surfaces are active.`,
+      shortcuts: [
+        { keys: "Arrow Keys", description: t`Move focus between controller-navigable controls.` },
+        { keys: "Enter or Space", description: t`Trigger the primary action on the focused control.` },
+        { keys: "Escape or Backspace", description: t`Trigger the secondary/back action.` },
+        { keys: "Q", description: t`Use the left bumper action.` },
+        { keys: "E", description: t`Use the right bumper action.` },
+      ],
+    },
+    {
+      id: "game",
+      title: t`Game Session`,
+      description: t`Used during active gameplay and round playback.`,
+      shortcuts: [
+        { keys: "Space", description: t`Roll the dice or trigger the main gameplay action.` },
+        { keys: "1 / 2 / 3", description: t`Select a perk during the perk selection phase.` },
+        { keys: "C", description: t`Open the cum confirmation flow.` },
+        { keys: "Escape", description: t`Open the in-game options menu.` },
+        { keys: "Ctrl/Cmd+W", description: t`Toggle TheHandy manual stop state.` },
+        {
+          keys: "[ / ] / \\\\ physical keys",
+          description: t`Adjust the global TheHandy offset; hold Shift for 1ms fine tuning.`,
+        },
+        { keys: "R", description: t`Resync TheHandy timing to the current round video.` },
+      ],
+    },
+    {
+      id: "game-debug",
+      title: t`Game Debug`,
+      description: t`Development-only shortcuts that are only active when round debug controls are enabled.`,
+      shortcuts: [
+        { keys: "I", description: t`Trigger a test intermediary immediately.` },
+        { keys: "J", description: t`End the current intermediary early and resume the main round.` },
+        { keys: "K", description: t`Finish the round and jump to the summary screen.` },
+      ],
+    },
+    {
+      id: "converter",
+      title: t`Converter`,
+      description: t`Used while trimming and classifying segments in the converter.`,
+      shortcuts: CONVERTER_SHORTCUTS.map((shortcut) => ({
+        keys: shortcut.keysLabel,
+        description: shortcut.description,
+      })),
+    },
+    {
+      id: "map-editor",
+      title: t`Map Editor`,
+      description: t`Shortcuts for graph editing, layout, and viewport control.`,
+      shortcuts: [
+        { keys: "Hold Space", description: t`Temporarily enable panning.` },
+        { keys: "Ctrl/Cmd+Z", description: t`Undo the last graph edit.` },
+        { keys: "Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y", description: t`Redo the last undone graph edit.` },
+        { keys: "Ctrl/Cmd+S", description: t`Save the current playlist.` },
+        { keys: "X", description: t`Delete the current selection.` },
+        { keys: "1-9", description: t`Arm one of the first nine visible tile types for placement.` },
+        {
+          keys: "Escape",
+          description: t`Clear the current selection and cancel a pending connection.`,
+        },
+        { keys: "V", description: t`Switch to the Select tool.` },
+        { keys: "P", description: t`Switch to the Place tool.` },
+        { keys: "C", description: t`Switch to the Connect tool.` },
+        { keys: "G", description: t`Show or hide the editor grid.` },
+        { keys: "L", description: t`Apply the current graph layout strategy.` },
+        { keys: "0", description: t`Reset the editor camera to the default view.` },
+      ],
+    },
+  ];
+
   if (isProductionBuild && !cheatModeEnabled) {
-    return SHORTCUT_GROUPS.filter((group) => group.id !== "game-debug");
+    return shortcutGroups.filter((group) => group.id !== "game-debug");
   }
 
-  return SHORTCUT_GROUPS;
+  return shortcutGroups;
 }
 
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
@@ -340,7 +342,8 @@ export const Route = createFileRoute("/settings")({
 });
 
 export function SettingsPage() {
-  const sfwMode = useSfwMode();
+  const { t } = useLingui();
+  const { locale, locales, setLocale } = useLocale();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const appUpdate = useAppUpdate();
@@ -383,6 +386,9 @@ export function SettingsPage() {
   );
   const [installWebFunscriptUrlEnabled, setInstallWebFunscriptUrlEnabled] = useState(
     DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED
+  );
+  const [systemLanguageEnabled, setSystemLanguageEnabled] = useState(
+    DEFAULT_SYSTEM_LANGUAGE_ENABLED
   );
   const [playlistCacheOngoingRestrictionDisabled, setPlaylistCacheOngoingRestrictionDisabled] =
     useState(DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED);
@@ -461,6 +467,7 @@ export function SettingsPage() {
           rawApplyPerkDirectly,
           rawMultiplayerSkipRoundsCheck,
           rawInstallWebFunscriptUrlEnabled,
+          rawSystemLanguageEnabled,
           rawPlaylistCacheOngoingRestrictionDisabled,
           rawStartupSafeModeShortcutEnabled,
           rawWebsiteVideoCacheRootPath,
@@ -485,6 +492,7 @@ export function SettingsPage() {
           trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY }),
           trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
           trpc.store.get.query({ key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY }),
+          trpc.store.get.query({ key: SYSTEM_LANGUAGE_ENABLED_KEY }),
           trpc.store.get.query({ key: PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY }),
           trpc.store.get.query({ key: STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY }),
           trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
@@ -537,6 +545,7 @@ export function SettingsPage() {
           setInstallWebFunscriptUrlEnabled(
             normalizeInstallWebFunscriptUrlEnabled(rawInstallWebFunscriptUrlEnabled)
           );
+          setSystemLanguageEnabled(normalizeSystemLanguageEnabled(rawSystemLanguageEnabled));
           setPlaylistCacheOngoingRestrictionDisabled(
             normalizePlaylistCacheOngoingRestrictionDisabled(
               rawPlaylistCacheOngoingRestrictionDisabled
@@ -611,14 +620,14 @@ export function SettingsPage() {
       {
         id: "general",
         icon: "⚙",
-        title: "General",
-        description: "Window and display preferences.",
+        title: t`General`,
+        description: t`Window and display preferences.`,
         settings: [
           {
             id: "fullscreen",
             type: "toggle",
-            label: "Fullscreen",
-            description: "Enable or disable fullscreen mode for the game window.",
+            label: t`Fullscreen`,
+            description: t`Enable or disable fullscreen mode for the game window.`,
             value: isFullscreen,
             onChange: async (next: boolean) => {
               const applied = await window.electronAPI.window.setFullscreen(next);
@@ -628,9 +637,8 @@ export function SettingsPage() {
           {
             id: "background-video-enabled",
             type: "toggle",
-            label: "Load Background Videos",
-            description:
-              "When disabled, animated backgrounds keep the visual effects but skip loading video files.",
+            label: t`Load Background Videos`,
+            description: t`When disabled, animated backgrounds keep the visual effects but skip loading video files.`,
             value: backgroundVideoEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: BACKGROUND_VIDEO_ENABLED_KEY, value: next });
@@ -640,21 +648,31 @@ export function SettingsPage() {
               );
             },
           },
+          {
+            id: "language",
+            type: "select",
+            // KI: Keep the / Language at the end. This is for users to find the setting if they accidentally mistyped the language
+            label: t`Language` + " / Language",
+            description: t`Choose the language used for app labels, dialogs, and safe mode prompts. English stays the default unless the experimental system language option is enabled.`,
+            value: locale,
+            options: locales.map((entry) => ({ value: entry.code, label: entry.label })),
+            onChange: async (next: string) => {
+              await setLocale(next as typeof locale);
+            },
+          },
         ],
       },
       {
         id: "gameplay",
         icon: "🎮",
-        title: "Gameplay",
-        description:
-          "In-game HUD, anti-perks, intermediary session behavior, and gameplay modifiers.",
+        title: t`Gameplay`,
+        description: t`In-game HUD, anti-perks, intermediary session behavior, and gameplay modifiers.`,
         settings: [
           {
             id: "anti-perk-beatbar-enabled",
             type: "toggle",
-            label: "Show Anti-Perk Beatbar",
-            description:
-              "Shows a synchronized manual beatbar during jackhammer and milker anti-perk sequences.",
+            label: t`Show Anti-Perk Beatbar`,
+            description: t`Shows a synchronized manual beatbar during jackhammer and milker anti-perk sequences.`,
             value: antiPerkBeatbarEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: ANTI_PERK_BEATBAR_ENABLED_KEY, value: next });
@@ -664,9 +682,8 @@ export function SettingsPage() {
           {
             id: "round-progress-bar-always-visible",
             type: "toggle",
-            label: "Pin Round Progress Bar",
-            description:
-              "Keep the round playback progress bar visible even after the rest of the HUD fades out.",
+            label: t`Pin Round Progress Bar`,
+            description: t`Keep the round playback progress bar visible even after the rest of the HUD fades out.`,
             value: roundProgressBarAlwaysVisible,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({
@@ -679,9 +696,8 @@ export function SettingsPage() {
           {
             id: "apply-perk-directly",
             type: "toggle",
-            label: "Auto-Apply Perks",
-            description:
-              "When enabled, perks (not anti-perks) are applied immediately when received instead of being stored in inventory.",
+            label: t`Auto-Apply Perks`,
+            description: t`When enabled, perks (not anti-perks) are applied immediately when received instead of being stored in inventory.`,
             value: applyPerkDirectly,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: APPLY_PERK_DIRECTLY_KEY, value: next });
@@ -691,8 +707,8 @@ export function SettingsPage() {
           {
             id: "intermediary-loading-prompt",
             type: "text",
-            label: "Intermediary Loading Prompt",
-            description: "Search prompt used for loading-screen media from rule34/booru sites.",
+            label: t`Intermediary Loading Prompt`,
+            description: t`Search prompt used for loading-screen media from rule34/booru sites.`,
             value: intermediaryLoadingPrompt,
             placeholder: DEFAULT_INTERMEDIARY_LOADING_PROMPT,
             onChange: async (next: string) => {
@@ -706,9 +722,8 @@ export function SettingsPage() {
           {
             id: "intermediary-loading-duration",
             type: "number",
-            label: "Intermediary Loading Duration (s)",
-            description:
-              "How long the intermediary loading countdown runs before switching videos.",
+            label: t`Intermediary Loading Duration (s)`,
+            description: t`How long the intermediary loading countdown runs before switching videos.`,
             value: intermediaryLoadingDurationSec,
             min: 1,
             max: 60,
@@ -721,8 +736,8 @@ export function SettingsPage() {
           {
             id: "intermediary-return-pause",
             type: "number",
-            label: "Return Pause After Intermediary (s)",
-            description: "Pause duration after intermediary ends before resuming the main round.",
+            label: t`Return Pause After Intermediary (s)`,
+            description: t`Pause duration after intermediary ends before resuming the main round.`,
             value: intermediaryReturnPauseSec,
             min: 0,
             max: 60,
@@ -735,9 +750,8 @@ export function SettingsPage() {
           {
             id: "cheat-mode-enabled",
             type: "toggle",
-            label: "Cheat Mode",
-            description:
-              "Enables dev menu features in singleplayer. Any highscore achieved will be permanently marked with 🎭. Does not work in multiplayer.",
+            label: t`Cheat Mode`,
+            description: t`Enables dev menu features in singleplayer. Any highscore achieved will be permanently marked with 🎭. Does not work in multiplayer.`,
             value: cheatModeEnabled,
             onChange: async (next: boolean) => {
               if (next) {
@@ -754,9 +768,8 @@ export function SettingsPage() {
           {
             id: "multiplayer-skip-rounds-check",
             type: "toggle",
-            label: "Skip Multiplayer Safeguards",
-            description:
-              "Allow multiplayer access regardless of the global minimum and playlist-specific round requirements. Disabling these safeguards may result in a bad user experience.",
+            label: t`Skip Multiplayer Safeguards`,
+            description: t`Allow multiplayer access regardless of the global minimum and playlist-specific round requirements. Disabling these safeguards may result in a bad user experience.`,
             value: multiplayerSkipRoundsCheck,
             onChange: async (next: boolean) => {
               if (next) {
@@ -780,22 +793,21 @@ export function SettingsPage() {
       {
         id: "audio",
         icon: "🎵",
-        title: "Audio",
-        description: "Global background music queue and playback preferences.",
+        title: t`Audio`,
+        description: t`Global background music queue and playback preferences.`,
         settings: [],
       },
       {
         id: "hardware",
         icon: "🔗",
-        title: "Hardware & Sync",
-        description: "TheHandy hardware integration and funscript compatibility.",
+        title: t`Hardware & Sync`,
+        description: t`TheHandy hardware integration and funscript compatibility.`,
         settings: [
           {
             id: "autofix-broken-funscripts",
             type: "toggle",
-            label: "Autofix Broken Funscripts",
-            description:
-              "When enabled, funscripts with `range: 90` are normalized to `100` in memory so TheHandy playback keeps working.",
+            label: t`Autofix Broken Funscripts`,
+            description: t`When enabled, funscripts with \`range: 90\` are normalized to \`100\` in memory so TheHandy playback keeps working.`,
             value: autofixBrokenFunscripts,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY, value: next });
@@ -807,22 +819,21 @@ export function SettingsPage() {
       {
         id: "sources",
         icon: "📂",
-        title: "Sources & Library",
-        description: "External source integrations, Stash sync, and local library folders.",
+        title: t`Sources & Library`,
+        description: t`External source integrations, Stash sync, and local library folders.`,
         settings: [],
       },
       {
         id: "security-privacy",
         icon: "🛡",
-        title: "Security & Privacy",
-        description: "Content safety, trusted domains, and safe site lists.",
+        title: t`Security & Privacy`,
+        description: t`Content safety, trusted domains, and safe site lists.`,
         settings: [
           {
             id: "sfw-mode-enabled",
             type: "toggle",
-            label: "SFW Mode",
-            description:
-              "Prevents all media from loading. Videos, images, previews, and booru media are replaced with a placeholder banner. Does not affect gameplay logic.",
+            label: t`SFW Mode`,
+            description: t`Prevents all media from loading. Videos, images, previews, and booru media are replaced with a placeholder banner. Does not affect gameplay logic.`,
             value: sfwModeEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: SFW_MODE_ENABLED_KEY, value: next });
@@ -836,9 +847,8 @@ export function SettingsPage() {
           {
             id: "startup-safe-mode-shortcut-enabled",
             type: "toggle",
-            label: "Safe Mode Startup Shortcut",
-            description:
-              "When enabled, holding 'S' during the first 5 seconds of app startup will automatically enable SFW Mode. Useful for emergency situations.",
+            label: t`Safe Mode Startup Shortcut`,
+            description: t`When enabled, holding 'S' during the first 5 seconds of app startup will automatically enable SFW Mode. Useful for emergency situations.`,
             value: startupSafeModeShortcutEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({
@@ -854,15 +864,14 @@ export function SettingsPage() {
       {
         id: "app",
         icon: "🗄",
-        title: "Data & Storage",
-        description: "Application data maintenance and destructive actions.",
+        title: t`Data & Storage`,
+        description: t`Application data maintenance and destructive actions.`,
         settings: [
           {
             id: "background-phash-scanning-enabled",
             type: "toggle",
-            label: "Background Phash Scanning",
-            description:
-              "Automatically compute visual fingerprints for rounds in the background. Highly recommended for accurate similarity matching.",
+            label: t`Background Phash Scanning`,
+            description: t`Automatically compute visual fingerprints for rounds in the background. Highly recommended for accurate similarity matching.`,
             value: backgroundPhashScanningEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({
@@ -877,20 +886,19 @@ export function SettingsPage() {
       {
         id: "advanced",
         icon: "🔧",
-        title: "Advanced",
-        description: "Technical preferences for power users.",
+        title: t`Advanced`,
+        description: t`Technical preferences for power users.`,
         settings: [
           {
             id: "videohash-ffmpeg-source",
             type: "select",
-            label: "VideoHash FFmpeg Source",
-            description:
-              "Auto keeps current behavior (prefer newer system binaries). Use Bundled/System to force source selection.",
+            label: t`VideoHash FFmpeg Source`,
+            description: t`Auto keeps current behavior (prefer newer system binaries). Use Bundled/System to force source selection.`,
             value: videoHashFfmpegSourcePreference,
             options: [
-              { value: "auto", label: "Auto (Default)" },
-              { value: "bundled", label: "Bundled Only" },
-              { value: "system", label: "System Only" },
+              { value: "auto", label: t`Auto (Default)` },
+              { value: "bundled", label: t`Bundled Only` },
+              { value: "system", label: t`System Only` },
             ],
             onChange: async (next: string) => {
               const value = normalizeVideoHashFfmpegSourcePreference(next);
@@ -901,14 +909,13 @@ export function SettingsPage() {
           {
             id: "yt-dlp-binary-source",
             type: "select",
-            label: "yt-dlp Binary Source",
-            description:
-              "Auto keeps current behavior (prefer the bundled local binary). Use Local/System to force source selection.",
+            label: t`yt-dlp Binary Source`,
+            description: t`Auto keeps current behavior (prefer the bundled local binary). Use Local/System to force source selection.`,
             value: ytDlpBinaryPreference,
             options: [
-              { value: "auto", label: "Auto (Default)" },
-              { value: "bundled", label: "Local Only" },
-              { value: "system", label: "System Only" },
+              { value: "auto", label: t`Auto (Default)` },
+              { value: "bundled", label: t`Local Only` },
+              { value: "system", label: t`System Only` },
             ],
             onChange: async (next: string) => {
               const value = normalizeYtDlpBinaryPreference(next);
@@ -921,15 +928,28 @@ export function SettingsPage() {
       {
         id: "experimental",
         icon: "🧪",
-        title: "Experimental",
-        description: "Opt into unfinished features that may change or break between builds.",
+        title: t`Experimental`,
+        description: t`Opt into unfinished features that may change or break between builds.`,
         settings: [
+          {
+            id: "system-language-enabled",
+            type: "toggle",
+            label: t`Use System Language`,
+            description: t`When enabled, first launch may use your system language if it is supported. Disabled by default so English remains the default language.`,
+            value: systemLanguageEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({
+                key: SYSTEM_LANGUAGE_ENABLED_KEY,
+                value: next,
+              });
+              setSystemLanguageEnabled(next);
+            },
+          },
           {
             id: "controller-support-enabled",
             type: "toggle",
-            label: "Controller Support",
-            description:
-              "Experimental gamepad navigation and input support. Disabled by default until it is more stable. Expect some things to not work as expected.",
+            label: t`Controller Support`,
+            description: t`Experimental gamepad navigation and input support. Disabled by default until it is more stable. Expect some things to not work as expected.`,
             value: controllerSupportEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: CONTROLLER_SUPPORT_ENABLED_KEY, value: next });
@@ -942,9 +962,8 @@ export function SettingsPage() {
           {
             id: "playlist-cache-ongoing-restriction-disabled",
             type: "toggle",
-            label: "Allow Playlist Start During Cache Ongoing",
-            description:
-              "Lets singleplayer start while required web rounds are still caching. Warning: some rounds may not play, and the web version is used instead of the local cache.",
+            label: t`Allow Playlist Start During Cache Ongoing`,
+            description: t`Lets singleplayer start while required web rounds are still caching. Warning: some rounds may not play, and the web version is used instead of the local cache.`,
             value: playlistCacheOngoingRestrictionDisabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({
@@ -957,9 +976,8 @@ export function SettingsPage() {
           {
             id: "install-web-funscript-url-enabled",
             type: "toggle",
-            label: "Show Web Install Funscript URL",
-            description:
-              "Exposes an optional remote funscript URL field in the Install From Web dialog. Disabled by default so web installs prefer a local funscript file.",
+            label: t`Show Web Install Funscript URL`,
+            description: t`Exposes an optional remote funscript URL field in the Install From Web dialog. Disabled by default so web installs prefer a local funscript file.`,
             value: installWebFunscriptUrlEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({
@@ -974,15 +992,15 @@ export function SettingsPage() {
       {
         id: "help",
         icon: "?",
-        title: "Help",
-        description: "Keyboard shortcut reference for the app, editor, and gameplay screens.",
+        title: t`Help`,
+        description: t`Keyboard shortcut reference for the app, editor, and gameplay screens.`,
         settings: [],
       },
       {
         id: "credits",
         icon: "★",
-        title: "Credits / License",
-        description: "Special thanks & inspiration.",
+        title: t`Credits / License`,
+        description: t`Special thanks & inspiration.`,
         settings: [],
       },
     ],
@@ -1001,11 +1019,16 @@ export function SettingsPage() {
       sfwModeEnabled,
       multiplayerSkipRoundsCheck,
       installWebFunscriptUrlEnabled,
+      systemLanguageEnabled,
       playlistCacheOngoingRestrictionDisabled,
       videoHashFfmpegSourcePreference,
       ytDlpBinaryPreference,
       backgroundPhashScanningEnabled,
       startupSafeModeShortcutEnabled,
+      locale,
+      locales,
+      setLocale,
+      t,
     ]
   );
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(
@@ -1230,10 +1253,10 @@ export function SettingsPage() {
           {/* Title — only visible on lg+ */}
           <div className="hidden lg:block lg:mb-5 lg:px-3">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
-              System Config
+              <Trans>System Config</Trans>
             </p>
             <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
-              Settings
+              <Trans>Settings</Trans>
             </h1>
           </div>
 
@@ -1269,7 +1292,7 @@ export function SettingsPage() {
           {/* Back button — sidebar footer */}
           <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
             <MenuButton
-              label="← Back"
+              label={t`← Back`}
               controllerFocusId="settings-back"
               onHover={playHoverSound}
               onClick={() => {
@@ -1438,7 +1461,7 @@ export function SettingsPage() {
             {/* Back button — visible only on small viewports */}
             <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6 lg:hidden">
               <MenuButton
-                label="Back to Main Menu"
+                label={t`Back to Main Menu`}
                 onHover={playHoverSound}
                 onClick={() => {
                   playSelectSound();
@@ -1517,6 +1540,8 @@ function FpackExtractionLocationCard({
   onOpenCurrentLocation: () => void;
   onReset: () => void;
 }) {
+  const { t } = useLingui();
+
   return (
     <section
       className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
@@ -1524,22 +1549,28 @@ function FpackExtractionLocationCard({
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          .fpack Extraction Location
+          <Trans>.fpack Extraction Location</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Store extracted content from .fpack files in a persistent folder. This ensures that rounds
-          referring to extracted media remain playable across app restarts.
+          <Trans>
+            Store extracted content from .fpack files in a persistent folder. This ensures that
+            rounds referring to extracted media remain playable across app restarts.
+          </Trans>
         </p>
       </div>
 
       <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Current Location</div>
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+          <Trans>Current Location</Trans>
+        </div>
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
-          {isLoading ? "Loading..." : (configuredPath ?? "Default app data folder (persistent)")}
+          {isLoading ? t`Loading...` : (configuredPath ?? t`Default app data folder (persistent)`)}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
-          Changing this only affects future .fpack extractions. Existing extracted files are not
-          moved automatically.
+          <Trans>
+            Changing this only affects future .fpack extractions. Existing extracted files are not
+            moved automatically.
+          </Trans>
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1550,7 +1581,7 @@ function FpackExtractionLocationCard({
             onClick={onChooseFolder}
             className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Updating..." : "Choose Folder"}
+            {isPending ? t`Updating...` : t`Choose Folder`}
           </button>
           <button
             type="button"
@@ -1559,7 +1590,7 @@ function FpackExtractionLocationCard({
             onClick={onOpenCurrentLocation}
             className="rounded-xl border border-cyan-300/60 bg-cyan-500/20 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200/80 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isOpening ? "Opening..." : "Open Current Folder"}
+            {isOpening ? t`Opening...` : t`Open Current Folder`}
           </button>
           <button
             type="button"
@@ -1568,7 +1599,7 @@ function FpackExtractionLocationCard({
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Use Default
+            <Trans>Use Default</Trans>
           </button>
         </div>
       </div>
@@ -1593,6 +1624,8 @@ function WebsiteVideoCacheLocationCard({
   onOpenCurrentLocation: () => void;
   onReset: () => void;
 }) {
+  const { t } = useLingui();
+
   return (
     <section
       className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
@@ -1600,24 +1633,30 @@ function WebsiteVideoCacheLocationCard({
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Website Video Cache Location
+          <Trans>Website Video Cache Location</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Store downloaded website videos in a custom folder, or leave this unset to keep using the
-          built-in default location.
+          <Trans>
+            Store downloaded website videos in a custom folder, or leave this unset to keep using
+            the built-in default location.
+          </Trans>
         </p>
       </div>
 
       <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Current Location</div>
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+          <Trans>Current Location</Trans>
+        </div>
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
           {isLoading
-            ? "Loading..."
-            : (configuredPath ?? "Default app data folder (existing behavior)")}
+            ? t`Loading...`
+            : (configuredPath ?? t`Default app data folder (existing behavior)`)}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
-          Changing this only affects the website video cache path. Existing cached files are not
-          moved automatically.
+          <Trans>
+            Changing this only affects the website video cache path. Existing cached files are not
+            moved automatically.
+          </Trans>
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1628,7 +1667,7 @@ function WebsiteVideoCacheLocationCard({
             onClick={onChooseFolder}
             className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Updating..." : "Choose Folder"}
+            {isPending ? t`Updating...` : t`Choose Folder`}
           </button>
           <button
             type="button"
@@ -1637,7 +1676,7 @@ function WebsiteVideoCacheLocationCard({
             onClick={onOpenCurrentLocation}
             className="rounded-xl border border-cyan-300/60 bg-cyan-500/20 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200/80 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isOpening ? "Opening..." : "Open Current Folder"}
+            {isOpening ? t`Opening...` : t`Open Current Folder`}
           </button>
           <button
             type="button"
@@ -1646,7 +1685,7 @@ function WebsiteVideoCacheLocationCard({
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Use Default
+            <Trans>Use Default</Trans>
           </button>
         </div>
       </div>
@@ -1671,6 +1710,8 @@ function MusicCacheLocationCard({
   onOpenCurrentLocation: () => void;
   onReset: () => void;
 }) {
+  const { t } = useLingui();
+
   return (
     <section
       className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
@@ -1678,24 +1719,30 @@ function MusicCacheLocationCard({
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Music Cache Location
+          <Trans>Music Cache Location</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Store downloaded music files in a custom folder, or leave this unset to keep using the
-          built-in default location.
+          <Trans>
+            Store downloaded music files in a custom folder, or leave this unset to keep using the
+            built-in default location.
+          </Trans>
         </p>
       </div>
 
       <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Current Location</div>
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+          <Trans>Current Location</Trans>
+        </div>
         <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
           {isLoading
-            ? "Loading..."
-            : (configuredPath ?? "Default app data folder (existing behavior)")}
+            ? t`Loading...`
+            : (configuredPath ?? t`Default app data folder (existing behavior)`)}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
-          Changing this only affects the music cache path. Existing downloaded files are not moved
-          automatically.
+          <Trans>
+            Changing this only affects the music cache path. Existing downloaded files are not
+            moved automatically.
+          </Trans>
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1706,7 +1753,7 @@ function MusicCacheLocationCard({
             onClick={onChooseFolder}
             className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Updating..." : "Choose Folder"}
+            {isPending ? t`Updating...` : t`Choose Folder`}
           </button>
           <button
             type="button"
@@ -1715,7 +1762,7 @@ function MusicCacheLocationCard({
             onClick={onOpenCurrentLocation}
             className="rounded-xl border border-cyan-300/60 bg-cyan-500/20 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200/80 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isOpening ? "Opening..." : "Open Current Folder"}
+            {isOpening ? t`Opening...` : t`Open Current Folder`}
           </button>
           <button
             type="button"
@@ -1724,7 +1771,7 @@ function MusicCacheLocationCard({
             onClick={onReset}
             className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Use Default
+            <Trans>Use Default</Trans>
           </button>
         </div>
       </div>
@@ -1733,6 +1780,7 @@ function MusicCacheLocationCard({
 }
 
 function PhashScanCard() {
+  const { t } = useLingui();
   const [scanStatus, setScanStatus] = useState<PhashScanStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -1794,10 +1842,13 @@ function PhashScanCard() {
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Video Fingerprint Scanner
+          <Trans>Video Fingerprint Scanner</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Manually trigger a scan to compute perceptual hashes for rounds that don't have them yet.
+          <Trans>
+            Manually trigger a scan to compute perceptual hashes for rounds that don't have them
+            yet.
+          </Trans>
         </p>
       </div>
 
@@ -1809,7 +1860,7 @@ function PhashScanCard() {
           <>
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded-full border border-cyan-300/40 bg-cyan-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                Scanning
+                <Trans>Scanning</Trans>
               </span>
             </div>
 
@@ -1822,13 +1873,15 @@ function PhashScanCard() {
 
             {scanStatus.currentRoundName && (
               <div className="mb-2 truncate font-[family-name:var(--font-jetbrains-mono)] text-xs text-cyan-100/90">
-                Processing: {scanStatus.currentRoundName}
+                {t`Processing:`} {scanStatus.currentRoundName}
               </div>
             )}
 
             <div className="mb-3 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-xs">
               <span className="text-cyan-400/60">
-                {scanStatus.completedCount} / {scanStatus.totalCount} videos
+                <Trans>
+                  {scanStatus.completedCount} / {scanStatus.totalCount} videos
+                </Trans>
               </span>
               <span className="text-cyan-300/80">{Math.round(progress)}%</span>
             </div>
@@ -1842,22 +1895,21 @@ function PhashScanCard() {
             scanStatus.state === "error") && (
             <div className="mb-3 flex items-center gap-2">
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
-                  scanStatus.state === "done"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
                     ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
                     : scanStatus.state === "aborted"
                       ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
                       : "border-rose-300/40 bg-rose-500/15 text-rose-100"
-                }`}
+                  }`}
               >
                 {scanStatus.state === "done"
-                  ? "Complete"
+                  ? t`Complete`
                   : scanStatus.state === "aborted"
-                    ? "Aborted"
-                    : "Error"}
+                    ? t`Aborted`
+                    : t`Error`}
               </span>
               <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
-                {scanStatus.completedCount} hashed
+                <Trans>{scanStatus.completedCount} hashed</Trans>
                 {scanStatus.skippedCount > 0 && <span>, {scanStatus.skippedCount} skipped</span>}
               </span>
             </div>
@@ -1866,10 +1918,10 @@ function PhashScanCard() {
         {!isRunning && scanStatus?.state === "idle" && (
           <div className="mb-3 flex items-center gap-2">
             <span className="rounded-full border border-zinc-500/40 bg-zinc-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-300">
-              Idle
+              <Trans>Idle</Trans>
             </span>
             <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
-              Ready to scan
+              <Trans>Ready to scan</Trans>
             </span>
           </div>
         )}
@@ -1879,13 +1931,12 @@ function PhashScanCard() {
             type="button"
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isRunning || isStarting
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
-            {isStarting ? "Starting..." : isRunning ? "Scanning..." : "Scan Now"}
+            {isStarting ? t`Starting...` : isRunning ? t`Scanning...` : t`Scan Now`}
           </button>
 
           {isRunning && (
@@ -1894,7 +1945,7 @@ function PhashScanCard() {
               onClick={handleAbortScan}
               className="rounded-xl border border-rose-300/60 bg-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-100 transition-all duration-200 hover:border-rose-200/80 hover:bg-rose-500/45"
             >
-              Abort
+              <Trans>Abort</Trans>
             </button>
           )}
         </div>
@@ -1904,6 +1955,7 @@ function PhashScanCard() {
 }
 
 function WebsiteVideoCacheScanCard() {
+  const { t } = useLingui();
   const [scanStatus, setScanStatus] = useState<WebsiteVideoScanStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -1965,11 +2017,13 @@ function WebsiteVideoCacheScanCard() {
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Website Video Cache
+          <Trans>Website Video Cache</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Download and cache videos from website rounds for offline playback. A background scan runs
-          automatically every 5 minutes.
+          <Trans>
+            Download and cache videos from website rounds for offline playback. A background scan
+            runs automatically every 5 minutes.
+          </Trans>
         </p>
       </div>
 
@@ -1981,7 +2035,7 @@ function WebsiteVideoCacheScanCard() {
           <>
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded-full border border-amber-300/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100">
-                Caching
+                <Trans>Caching</Trans>
               </span>
             </div>
 
@@ -1994,13 +2048,15 @@ function WebsiteVideoCacheScanCard() {
 
             {scanStatus.currentRoundName && (
               <div className="mb-2 truncate font-[family-name:var(--font-jetbrains-mono)] text-xs text-amber-100/90">
-                Downloading: {scanStatus.currentRoundName}
+                {t`Downloading:`} {scanStatus.currentRoundName}
               </div>
             )}
 
             <div className="mb-3 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-xs">
               <span className="text-amber-400/60">
-                {scanStatus.completedCount} / {scanStatus.totalCount} videos
+                <Trans>
+                  {scanStatus.completedCount} / {scanStatus.totalCount} videos
+                </Trans>
               </span>
               <span className="text-amber-300/80">{Math.round(progress)}%</span>
             </div>
@@ -2014,22 +2070,21 @@ function WebsiteVideoCacheScanCard() {
             scanStatus.state === "error") && (
             <div className="mb-3 flex items-center gap-2">
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
-                  scanStatus.state === "done"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
                     ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
                     : scanStatus.state === "aborted"
                       ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
                       : "border-rose-300/40 bg-rose-500/15 text-rose-100"
-                }`}
+                  }`}
               >
                 {scanStatus.state === "done"
-                  ? "Complete"
+                  ? t`Complete`
                   : scanStatus.state === "aborted"
-                    ? "Aborted"
-                    : "Error"}
+                    ? t`Aborted`
+                    : t`Error`}
               </span>
               <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
-                {scanStatus.completedCount} cached
+                <Trans>{scanStatus.completedCount} cached</Trans>
                 {scanStatus.skippedCount > 0 && <span>, {scanStatus.skippedCount} failed</span>}
               </span>
             </div>
@@ -2038,10 +2093,10 @@ function WebsiteVideoCacheScanCard() {
         {!isRunning && scanStatus?.state === "idle" && (
           <div className="mb-3 flex items-center gap-2">
             <span className="rounded-full border border-zinc-500/40 bg-zinc-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-300">
-              Idle
+              <Trans>Idle</Trans>
             </span>
             <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
-              All website videos cached
+              <Trans>All website videos cached</Trans>
             </span>
           </div>
         )}
@@ -2051,13 +2106,12 @@ function WebsiteVideoCacheScanCard() {
             type="button"
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isRunning || isStarting
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
-            {isStarting ? "Starting..." : isRunning ? "Caching..." : "Cache Now"}
+            {isStarting ? t`Starting...` : isRunning ? t`Caching...` : t`Cache Now`}
           </button>
 
           {isRunning && (
@@ -2066,7 +2120,7 @@ function WebsiteVideoCacheScanCard() {
               onClick={handleAbortScan}
               className="rounded-xl border border-rose-300/60 bg-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-100 transition-all duration-200 hover:border-rose-200/80 hover:bg-rose-500/45"
             >
-              Abort
+              <Trans>Abort</Trans>
             </button>
           )}
         </div>
@@ -2076,6 +2130,7 @@ function WebsiteVideoCacheScanCard() {
 }
 
 function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdate> }) {
+  const { t } = useLingui();
   const statusTone =
     appUpdate.state.status === "update_available"
       ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
@@ -2086,14 +2141,14 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
           : "border-zinc-600/40 bg-black/35 text-zinc-200";
   const statusLabel =
     appUpdate.state.status === "checking"
-      ? "Checking"
+      ? t`Checking`
       : appUpdate.state.status === "update_available"
-        ? "Update Available"
+        ? t`Update Available`
         : appUpdate.state.status === "up_to_date"
-          ? "Up to Date"
+          ? t`Up to Date`
           : appUpdate.state.status === "error"
-            ? "Check Failed"
-            : "Not Checked Yet";
+            ? t`Check Failed`
+            : t`Not Checked Yet`;
 
   return (
     <section
@@ -2101,9 +2156,11 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
       style={{ animationDelay: "0.08s" }}
     >
       <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Updates</h2>
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          <Trans>Updates</Trans>
+        </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Check for new releases or open the latest available download for this build.
+          <Trans>Check for new releases or open the latest available download for this build.</Trans>
         </p>
       </div>
 
@@ -2113,9 +2170,13 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
             <p className="font-semibold text-current">{statusLabel}</p>
             <p className="mt-1 text-sm text-current/80">{appUpdate.systemMessage}</p>
             <div className="mt-3 space-y-1 text-xs font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.16em] text-current/80">
-              <div>Installed v{appUpdate.state.currentVersion}</div>
+              <div>
+                <Trans>Installed</Trans> v{appUpdate.state.currentVersion}
+              </div>
               {appUpdate.state.latestVersion ? (
-                <div>Latest v{appUpdate.state.latestVersion}</div>
+                <div>
+                  <Trans>Latest</Trans> v{appUpdate.state.latestVersion}
+                </div>
               ) : null}
             </div>
           </div>
@@ -2127,11 +2188,10 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
               playSelectSound();
               void appUpdate.triggerPrimaryAction();
             }}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              appUpdate.isBusy
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${appUpdate.isBusy
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
             {appUpdate.actionLabel}
           </button>
@@ -2142,6 +2202,7 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
 }
 
 function OnboardingCard() {
+  const { t } = useLingui();
   const navigate = useNavigate();
 
   return (
@@ -2151,11 +2212,13 @@ function OnboardingCard() {
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          First Start Workflow
+          <Trans>First Start Workflow</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Run the guided introduction again if you want a refresher on play modes, content installs,
-          editors, Handy setup, music, and booru search.
+          <Trans>
+            Run the guided introduction again if you want a refresher on play modes, content
+            installs, editors, Handy setup, music, and booru search.
+          </Trans>
         </p>
       </div>
 
@@ -2168,7 +2231,7 @@ function OnboardingCard() {
         }}
         className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
       >
-        Open First Start Workflow
+        {t`Open First Start Workflow`}
       </button>
     </section>
   );
@@ -2181,6 +2244,7 @@ function HardwareSettingsCard({
   section: SettingsSection;
   loading: boolean;
 }) {
+  const { t } = useLingui();
   const {
     connectionKey,
     appApiKeyOverride,
@@ -2241,16 +2305,16 @@ function HardwareSettingsCard({
             <span
               className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${connected ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100" : "border-rose-300/35 bg-rose-500/10 text-rose-100"}`}
             >
-              {connected ? "Connected" : "Disconnected"}
+              {connected ? t`Connected` : t`Disconnected`}
             </span>
             <span
               className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${synced ? "border-cyan-300/40 bg-cyan-500/15 text-cyan-100" : "border-zinc-500/40 bg-zinc-800/70 text-zinc-300"}`}
             >
-              {synced ? "Synced" : "Not Synced"}
+              {synced ? t`Synced` : t`Not Synced`}
             </span>
             {isConnecting ? (
               <span className="rounded-full border border-amber-300/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100">
-                Connecting
+                <Trans>Connecting</Trans>
               </span>
             ) : null}
           </div>
@@ -2261,33 +2325,33 @@ function HardwareSettingsCard({
                 className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
                 htmlFor="settings-handy-connection-key"
               >
-                Connection Key / Channel Ref
+                <Trans>Connection Key / Channel Ref</Trans>
               </label>
               <input
                 id="settings-handy-connection-key"
                 type="text"
                 value={inputKey}
                 onChange={(event) => setInputKey(event.target.value)}
-                placeholder="Device connection key"
+                placeholder={t`Device connection key`}
                 disabled={connected || isConnecting}
                 className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition-all focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
               />
             </div>
 
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-200">
-              Only firmware version 4 and up is supported.
+              <Trans>Only firmware version 4 and up is supported.</Trans>
             </div>
 
             <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] text-cyan-200/80">
-                    App Key
+                    <Trans>App Key</Trans>
                   </p>
                   <p className="mt-1 text-sm text-cyan-50">
                     {useCustomApiKey
-                      ? "Using your custom TheHandy app key."
-                      : "Using the built-in TheHandy app key automatically."}
+                      ? t`Using your custom TheHandy app key.`
+                      : t`Using the built-in TheHandy app key automatically.`}
                   </p>
                 </div>
                 <button
@@ -2304,7 +2368,7 @@ function HardwareSettingsCard({
                   }}
                   className="rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100 transition-colors hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {useCustomApiKey ? "Use Built-In" : "Use Custom"}
+                  {useCustomApiKey ? t`Use Built-In` : t`Use Custom`}
                 </button>
               </div>
 
@@ -2314,14 +2378,14 @@ function HardwareSettingsCard({
                     className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
                     htmlFor="settings-handy-api-key"
                   >
-                    Application ID
+                    <Trans>Application ID</Trans>
                   </label>
                   <input
                     id="settings-handy-api-key"
                     type="password"
                     value={inputApiKeyOverride}
                     onChange={(event) => setInputApiKeyOverride(event.target.value)}
-                    placeholder="Enter your Handy application ID"
+                    placeholder={t`Enter your Handy application ID`}
                     disabled={connected || isConnecting}
                     className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition-all focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                   />
@@ -2331,28 +2395,36 @@ function HardwareSettingsCard({
                     rel="noreferrer"
                     className="mt-1 inline-flex w-fit items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100 transition-colors hover:bg-cyan-500/25"
                   >
-                    Open Handy User Portal
+                    <Trans>Open Handy User Portal</Trans>
                   </a>
                   <p className="ml-1 text-xs text-zinc-400">
-                    Do not use your access token here. Create or select an app at Handy and paste
-                    the application ID instead.
+                    <Trans>
+                      Do not use your access token here. Create or select an app at Handy and paste
+                      the application ID instead.
+                    </Trans>
                   </p>
                   <p className="ml-1 text-xs text-zinc-400">
-                    Leave custom mode off unless you explicitly want to override the built-in app
-                    identity.
+                    <Trans>
+                      Leave custom mode off unless you explicitly want to override the built-in app
+                      identity.
+                    </Trans>
                   </p>
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-zinc-400">
-                  Built-in key loaded. Override only if you need a different app identity.
+                  <Trans>
+                    Built-in key loaded. Override only if you need a different app identity.
+                  </Trans>
                 </p>
               )}
             </div>
 
             {DEFAULT_THEHANDY_APP_API_KEY.trim().length === 0 ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-300">
-                No bundled TheHandy app key is configured in this build. Enable custom mode and
-                enter one manually.
+                <Trans>
+                  No bundled TheHandy app key is configured in this build. Enable custom mode and
+                  enter one manually.
+                </Trans>
               </div>
             ) : null}
 
@@ -2377,7 +2449,7 @@ function HardwareSettingsCard({
                 }}
                 className="inline-flex rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
               >
-                {connected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
+                {connected ? t`Disconnect` : isConnecting ? t`Connecting...` : t`Connect`}
               </button>
               <button
                 type="button"
@@ -2387,7 +2459,7 @@ function HardwareSettingsCard({
                 }}
                 className="inline-flex rounded-xl border border-zinc-500/60 bg-zinc-800/70 px-4 py-2 text-sm font-semibold text-zinc-100 transition-all duration-200 hover:border-zinc-300/80 hover:bg-zinc-700/80"
               >
-                Force Stop
+                <Trans>Force Stop</Trans>
               </button>
             </div>
           </div>
@@ -2401,16 +2473,18 @@ function HardwareSettingsCard({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] text-cyan-200/80">
-                Global Sync Offset
+                <Trans>Global Sync Offset</Trans>
               </p>
               <p className="mt-1 text-sm text-zinc-200">
-                Applies to all TheHandy sync operations. Use this if the device is slightly ahead
-                or behind the video.
+                <Trans>
+                  Applies to all TheHandy sync operations. Use this if the device is slightly ahead
+                  or behind the video.
+                </Trans>
               </p>
             </div>
             <div className="rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-right">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/70">
-                Current
+                <Trans>Current</Trans>
               </div>
               <div className="bg-gradient-to-r from-cyan-100 via-sky-100 to-indigo-100 bg-clip-text text-3xl font-black tracking-tight text-transparent">
                 {offsetMs >= 0 ? "+" : ""}
@@ -2448,7 +2522,7 @@ function HardwareSettingsCard({
               }}
               className="rounded-xl border border-violet-300/30 bg-violet-500/10 px-3 py-2 text-sm font-semibold text-violet-100 transition-colors hover:bg-violet-500/20"
             >
-              Reset
+              <Trans>Reset</Trans>
             </button>
             <button
               type="button"
@@ -2477,7 +2551,7 @@ function HardwareSettingsCard({
               className="mb-2 block font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/70"
               htmlFor="settings-handy-offset-slider"
             >
-              Offset Slider
+              <Trans>Offset Slider</Trans>
             </label>
             <input
               id="settings-handy-offset-slider"
@@ -2486,7 +2560,7 @@ function HardwareSettingsCard({
               max={THEHANDY_OFFSET_MAX_MS}
               step={1}
               value={offsetMs}
-              aria-label="TheHandy offset slider"
+              aria-label={t`TheHandy offset slider`}
               onChange={(event) => {
                 const nextOffsetMs = Number(event.target.value);
                 if (!Number.isFinite(nextOffsetMs)) return;
@@ -2521,6 +2595,7 @@ function HardwareSettingsCard({
 }
 
 function MusicSettingsCard() {
+  const { t } = useLingui();
   const {
     enabled,
     queue,
@@ -2604,13 +2679,13 @@ function MusicSettingsCard() {
     if (isAddingFromUrl) return;
     const trimmed = urlInput.trim();
     if (!trimmed) {
-      setUrlError("Please enter a URL");
+      setUrlError(t`Please enter a URL`);
       return;
     }
     try {
       new URL(trimmed);
     } catch {
-      setUrlError("Invalid URL format");
+      setUrlError(t`Invalid URL format`);
       return;
     }
     setUrlError(null);
@@ -2630,7 +2705,7 @@ function MusicSettingsCard() {
         setShowUrlInput(false);
       }
     } catch (error) {
-      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+      setUrlError(error instanceof Error ? error.message : t`Failed to add from URL`);
     } finally {
       setIsAddingFromUrl(false);
     }
@@ -2659,364 +2734,370 @@ function MusicSettingsCard() {
         className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
         style={{ animationDelay: "0.08s" }}
       >
-      <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Music</h2>
-        <p className="mt-1 text-sm text-zinc-300">
-          Build a global queue from local audio files. Music pauses for foreground video playback
-          and resumes from the same spot.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-violet-300/15 pb-4">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              aria-label="Toggle Enable Global Music"
-              role="switch"
-              aria-checked={enabled}
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void setEnabled(!enabled);
-              }}
-              className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
-              />
-            </button>
-            <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
-              Music {enabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void previous();
-              }}
-              className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
-            >
-              Prev
-            </button>
-            <button
-              type="button"
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                if (isPlaying) {
-                  pause();
-                  return;
-                }
-                void play();
-              }}
-              className="rounded-lg border border-violet-300/60 bg-violet-500/30 px-2.5 py-1.5 text-xs font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            >
-              {isPlaying ? "Pause" : "Play"}
-            </button>
-            <button
-              type="button"
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void next();
-              }}
-              className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
-            >
-              Next
-            </button>
-            <span className="text-xs text-zinc-400">
-              {currentTrack ? currentTrack.name : "No track"}
-            </span>
-          </div>
+        <div className="mb-4">
+          <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+            <Trans>Music</Trans>
+          </h2>
+          <p className="mt-1 text-sm text-zinc-300">
+            <Trans>
+              Build a global queue from local audio files. Music pauses for foreground video playback
+              and resumes from the same spot.
+            </Trans>
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-6 text-sm">
-          <label className="flex items-center gap-2">
-            <span className="text-zinc-400">Volume:</span>
-            <input
-              aria-label="Music volume"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={volumeDraft}
-              onChange={(event) => setVolumeDraft(Number(event.target.value))}
-              onMouseUp={() => void commitVolumeDraft()}
-              onTouchEnd={() => void commitVolumeDraft()}
-              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
-            />
-            <span className="w-8 text-zinc-300">{volumeDraft}%</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-zinc-400">SFX:</span>
-            <input
-              aria-label="Sound effects volume"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={sfxVolumeDraft}
-              onChange={(event) => setSfxVolumeDraft(Number(event.target.value))}
-              onMouseUp={() => void commitSfxVolumeDraft()}
-              onTouchEnd={() => void commitSfxVolumeDraft()}
-              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
-            />
-            <span className="w-8 text-zinc-300">{sfxVolumeDraft}%</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Toggle Shuffle"
-              role="switch"
-              aria-checked={shuffle}
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void setShuffle(!shuffle);
-              }}
-              className={`relative h-5 w-10 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${shuffle ? "border-violet-300/80 bg-violet-500/50" : "border-zinc-600 bg-zinc-800"}`}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-md transition-transform duration-200 ${shuffle ? "translate-x-5" : "translate-x-0"}`}
-              />
-            </button>
-            <span className="text-zinc-400">Shuffle</span>
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-400">Loop:</span>
-            <GameDropdown
-              value={loopDraft}
-              options={[
-                { value: "queue", label: "Queue" },
-                { value: "track", label: "Track" },
-                { value: "off", label: "Off" },
-              ]}
-              onChange={(value) => setLoopDraft(value as MusicLoopMode)}
-              className="w-auto"
-            />
-          </div>
-        </div>
-
-        <div className="border-t border-violet-300/15 pt-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-zinc-100">
-              Queue ({queue.length} tracks)
-            </span>
-            <div className="flex gap-2">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-violet-300/15 pb-4">
+            <div className="flex items-center gap-4">
               <button
                 type="button"
-                disabled={isAddingTracks}
+                aria-label={t`Toggle Enable Global Music`}
+                role="switch"
+                aria-checked={enabled}
                 onMouseEnter={playHoverSound}
                 onClick={() => {
                   playSelectSound();
-                  void addSelectedTracks();
+                  void setEnabled(!enabled);
                 }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  isAddingTracks
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-                }`}
+                className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
               >
-                {isAddingTracks ? "Adding..." : "Add Tracks"}
+                <span
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
+                />
+              </button>
+              <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
+                {enabled ? t`Music Enabled` : t`Music Disabled`}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void previous();
+                }}
+                className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
+              >
+                <Trans>Prev</Trans>
               </button>
               <button
                 type="button"
                 onMouseEnter={playHoverSound}
                 onClick={() => {
                   playSelectSound();
-                  setShowUrlInput((current) => !current);
-                  setUrlError(null);
+                  if (isPlaying) {
+                    pause();
+                    return;
+                  }
+                  void play();
                 }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  showUrlInput
-                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                    : "border-purple-300/60 bg-purple-500/30 text-purple-100 hover:border-purple-200/80 hover:bg-purple-500/45"
-                }`}
+                className="rounded-lg border border-violet-300/60 bg-violet-500/30 px-2.5 py-1.5 text-xs font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
               >
-                {showUrlInput ? "Cancel" : "Add from URL"}
+                {isPlaying ? t`Pause` : t`Play`}
               </button>
               <button
                 type="button"
-                disabled={queue.length === 0}
                 onMouseEnter={playHoverSound}
-                onClick={handleRequestClearQueue}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  queue.length === 0
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                }`}
+                onClick={() => {
+                  playSelectSound();
+                  void next();
+                }}
+                className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
               >
-                Clear
+                <Trans>Next</Trans>
               </button>
+              <span className="text-xs text-zinc-400">
+                {currentTrack ? currentTrack.name : t`No track`}
+              </span>
             </div>
           </div>
 
-          {showUrlInput && (
-            <div className="mb-3 space-y-2 rounded-lg border border-violet-300/15 bg-black/20 p-3">
-              <p className="text-xs text-zinc-400">
-                Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => {
-                    playSelectSound();
-                    setUrlMode("track");
-                    setUrlResult(null);
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                    urlMode === "track"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                >
-                  Single Track
-                </button>
-                <button
-                  type="button"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => {
-                    playSelectSound();
-                    setUrlMode("playlist");
-                    setUrlResult(null);
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                    urlMode === "playlist"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                >
-                  Playlist
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center gap-6 text-sm">
+            <label className="flex items-center gap-2">
+              <span className="text-zinc-400">
+                <Trans>Volume:</Trans>
+              </span>
+              <input
+                aria-label={t`Music volume`}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={volumeDraft}
+                onChange={(event) => setVolumeDraft(Number(event.target.value))}
+                onMouseUp={() => void commitVolumeDraft()}
+                onTouchEnd={() => void commitVolumeDraft()}
+                className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
+              />
+              <span className="w-8 text-zinc-300">{volumeDraft}%</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-zinc-400">SFX:</span>
+              <input
+                aria-label={t`Sound effects volume`}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={sfxVolumeDraft}
+                onChange={(event) => setSfxVolumeDraft(Number(event.target.value))}
+                onMouseUp={() => void commitSfxVolumeDraft()}
+                onTouchEnd={() => void commitSfxVolumeDraft()}
+                className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
+              />
+              <span className="w-8 text-zinc-300">{sfxVolumeDraft}%</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label={t`Toggle Shuffle`}
+                role="switch"
+                aria-checked={shuffle}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void setShuffle(!shuffle);
+                }}
+                className={`relative h-5 w-10 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${shuffle ? "border-violet-300/80 bg-violet-500/50" : "border-zinc-600 bg-zinc-800"}`}
+              >
+                <span
+                  className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-md transition-transform duration-200 ${shuffle ? "translate-x-5" : "translate-x-0"}`}
+                />
+              </button>
+              <span className="text-zinc-400">
+                <Trans>Shuffle</Trans>
+              </span>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-400">
+                <Trans>Loop:</Trans>
+              </span>
+              <GameDropdown
+                value={loopDraft}
+                options={[
+                  { value: "queue", label: t`Queue` },
+                  { value: "track", label: t`Track` },
+                  { value: "off", label: t`Off` },
+                ]}
+                onChange={(value) => setLoopDraft(value as MusicLoopMode)}
+                className="w-auto"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-violet-300/15 pt-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-zinc-100">
+                {t`Queue (${queue.length} tracks)`}
+              </span>
               <div className="flex gap-2">
-                <input
-                  type="url"
-                  placeholder={
-                    urlMode === "playlist"
-                      ? "https://example.com/playlist-or-collection"
-                      : "https://example.com/video-or-audio"
-                  }
-                  value={urlInput}
-                  onChange={(e) => {
-                    setUrlInput(e.target.value);
+                <button
+                  type="button"
+                  disabled={isAddingTracks}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    void addSelectedTracks();
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingTracks
+                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                      : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+                    }`}
+                >
+                  {isAddingTracks ? t`Adding...` : t`Add Tracks`}
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setShowUrlInput((current) => !current);
                     setUrlError(null);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void handleAddFromUrl();
-                    }
-                  }}
-                  disabled={isAddingFromUrl}
-                  className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                    urlError
-                      ? "border-rose-400/40 focus:border-rose-400/60"
-                      : "border-violet-300/30 focus:border-cyan-400/60"
-                  }`}
-                />
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${showUrlInput
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-purple-300/60 bg-purple-500/30 text-purple-100 hover:border-purple-200/80 hover:bg-purple-500/45"
+                    }`}
+                >
+                  {showUrlInput ? t`Cancel` : t`Add from URL`}
+                </button>
                 <button
                   type="button"
+                  disabled={queue.length === 0}
                   onMouseEnter={playHoverSound}
-                  onClick={() => void handleAddFromUrl()}
-                  disabled={isAddingFromUrl}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                    isAddingFromUrl
+                  onClick={handleRequestClearQueue}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${queue.length === 0
                       ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                      : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
-                  }`}
+                      : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                    }`}
                 >
-                  {isAddingFromUrl ? "Downloading..." : "Add"}
+                  <Trans>Clear</Trans>
                 </button>
               </div>
-              {urlResult && (
-                <p className="text-xs text-emerald-300">
-                  Added {urlResult.added} track{urlResult.added !== 1 ? "s" : ""}
-                  {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
-                </p>
-              )}
-              {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
             </div>
-          )}
 
-          <div className="divide-y divide-violet-300/10">
-            {queue.length === 0 ? (
-              <div className="py-3 text-sm text-zinc-400">No music tracks configured.</div>
-            ) : (
-              queue.map((entry, index) => {
-                const isCurrent = currentTrack?.id === entry.id;
-                return (
-                  <div
-                    key={entry.id}
-                    className={`flex flex-wrap items-center justify-between gap-2 py-2 ${isCurrent ? "text-violet-100" : ""}`}
+            {showUrlInput && (
+              <div className="mb-3 space-y-2 rounded-lg border border-violet-300/15 bg-black/20 p-3">
+                <p className="text-xs text-zinc-400">
+                  <Trans>Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)</Trans>
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      setUrlMode("track");
+                      setUrlResult(null);
+                    }}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "track"
+                        ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSelectSound();
-                        void setCurrentTrack(entry.id);
-                      }}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <span
-                        className={`truncate text-sm ${isCurrent ? "font-semibold text-violet-100" : "text-zinc-200"}`}
-                      >
-                        {isCurrent ? "▶ " : ""}
-                        {entry.name}
-                      </span>
-                    </button>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => {
-                          playSelectSound();
-                          void moveTrack(entry.id, "up");
-                        }}
-                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === queue.length - 1}
-                        onClick={() => {
-                          playSelectSound();
-                          void moveTrack(entry.id, "down");
-                        }}
-                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playSelectSound();
-                          void removeTrack(entry.id);
-                        }}
-                        className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+                    <Trans>Single Track</Trans>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      setUrlMode("playlist");
+                      setUrlResult(null);
+                    }}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "playlist"
+                        ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      }`}
+                  >
+                    <Trans>Playlist</Trans>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder={
+                      urlMode === "playlist"
+                        ? t`https://example.com/playlist-or-collection`
+                        : t`https://example.com/video-or-audio`
+                    }
+                    value={urlInput}
+                    onChange={(e) => {
+                      setUrlInput(e.target.value);
+                      setUrlError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        void handleAddFromUrl();
+                      }
+                    }}
+                    disabled={isAddingFromUrl}
+                    className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
+                        ? "border-rose-400/40 focus:border-rose-400/60"
+                        : "border-violet-300/30 focus:border-cyan-400/60"
+                      }`}
+                  />
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => void handleAddFromUrl()}
+                    disabled={isAddingFromUrl}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingFromUrl
+                        ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                        : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
+                      }`}
+                  >
+                    {isAddingFromUrl ? t`Downloading...` : t`Add`}
+                  </button>
+                </div>
+                {urlResult && (
+                  <p className="text-xs text-emerald-300">
+                    {urlResult.errors > 0
+                      ? t`Added ${urlResult.added} track${urlResult.added !== 1 ? "s" : ""} (${urlResult.errors} failed)`
+                      : t`Added ${urlResult.added} track${urlResult.added !== 1 ? "s" : ""}`}
+                  </p>
+                )}
+                {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+              </div>
             )}
+
+            <div className="divide-y divide-violet-300/10">
+              {queue.length === 0 ? (
+                <div className="py-3 text-sm text-zinc-400">
+                  <Trans>No music tracks configured.</Trans>
+                </div>
+              ) : (
+                queue.map((entry, index) => {
+                  const isCurrent = currentTrack?.id === entry.id;
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`flex flex-wrap items-center justify-between gap-2 py-2 ${isCurrent ? "text-violet-100" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSelectSound();
+                          void setCurrentTrack(entry.id);
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span
+                          className={`truncate text-sm ${isCurrent ? "font-semibold text-violet-100" : "text-zinc-200"}`}
+                        >
+                          {isCurrent ? "▶ " : ""}
+                          {entry.name}
+                        </span>
+                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => {
+                            playSelectSound();
+                            void moveTrack(entry.id, "up");
+                          }}
+                          className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === queue.length - 1}
+                          onClick={() => {
+                            playSelectSound();
+                            void moveTrack(entry.id, "down");
+                          }}
+                          className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSelectSound();
+                            void removeTrack(entry.id);
+                          }}
+                          className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
-      </div>
       </section>
       <ConfirmDialog
         isOpen={isClearConfirmOpen}
-        title="Clear music playlist?"
-        message="This will remove every track from the current music playlist."
-        confirmLabel="Clear Playlist"
-        cancelLabel="Keep Playlist"
+        title={t`Clear music playlist?`}
+        message={t`This will remove every track from the current music playlist.`}
+        confirmLabel={t`Clear Playlist`}
+        cancelLabel={t`Keep Playlist`}
         variant="warning"
         onConfirm={handleConfirmClearQueue}
         onCancel={handleCancelClearQueue}
@@ -3026,6 +3107,7 @@ function MusicSettingsCard() {
 }
 
 function MoaningSettingsCard() {
+  const { t } = useLingui();
   const {
     enabled,
     queue,
@@ -3077,13 +3159,13 @@ function MoaningSettingsCard() {
     if (isAddingFromUrl) return;
     const trimmed = urlInput.trim();
     if (!trimmed) {
-      setUrlError("Please enter a URL");
+      setUrlError(t`Please enter a URL`);
       return;
     }
     try {
       new URL(trimmed);
     } catch {
-      setUrlError("Invalid URL format");
+      setUrlError(t`Invalid URL format`);
       return;
     }
     setUrlError(null);
@@ -3103,7 +3185,7 @@ function MoaningSettingsCard() {
         setShowUrlInput(false);
       }
     } catch (error) {
-      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+      setUrlError(error instanceof Error ? error.message : t`Failed to add from URL`);
     } finally {
       setIsAddingFromUrl(false);
     }
@@ -3132,286 +3214,289 @@ function MoaningSettingsCard() {
         className="animate-entrance rounded-3xl border border-rose-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
         style={{ animationDelay: "0.1s" }}
       >
-      <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-rose-100">Moaning</h2>
-        <p className="mt-1 text-sm text-zinc-300">
-          Manage the gameplay moaning library used by perks and anti-perks. Add local audio files
-          or download them from supported URLs via yt-dlp.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rose-300/15 pb-4">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              aria-label="Toggle Enable Moaning"
-              role="switch"
-              aria-checked={enabled}
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void setEnabled(!enabled);
-              }}
-              className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-rose-300/80 bg-rose-500/50 shadow-[0_0_20px_rgba(251,113,133,0.35)]" : "border-zinc-600 bg-zinc-800"}`}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
-              />
-            </button>
-            <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
-              Moaning {enabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-400">Volume:</span>
-            <input
-              aria-label="Moaning volume"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={volumeDraft}
-              onChange={(event) => setVolumeDraft(Number(event.target.value))}
-              onMouseUp={() => void commitVolumeDraft()}
-              onTouchEnd={() => void commitVolumeDraft()}
-              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-rose-400"
-            />
-            <span className="w-8 text-zinc-300">{volumeDraft}%</span>
-          </label>
+        <div className="mb-4">
+          <h2 className="text-lg font-extrabold tracking-tight text-rose-100">
+            <Trans>Moaning</Trans>
+          </h2>
+          <p className="mt-1 text-sm text-zinc-300">
+            <Trans>
+              Manage the gameplay moaning library used by perks and anti-perks. Add local audio files
+              or download them from supported URLs via yt-dlp.
+            </Trans>
+          </p>
         </div>
 
-        <div className="border-t border-rose-300/15 pt-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-zinc-100">Library ({queue.length} files)</span>
-            <div className="flex gap-2">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rose-300/15 pb-4">
+            <div className="flex items-center gap-4">
               <button
                 type="button"
-                disabled={queue.length === 0}
+                aria-label={t`Toggle Enable Moaning`}
+                role="switch"
+                aria-checked={enabled}
                 onMouseEnter={playHoverSound}
                 onClick={() => {
                   playSelectSound();
-                  void previewTrack(queue[0]!.id);
+                  void setEnabled(!enabled);
                 }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  queue.length === 0
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/35"
-                }`}
+                className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-rose-300/80 bg-rose-500/50 shadow-[0_0_20px_rgba(251,113,133,0.35)]" : "border-zinc-600 bg-zinc-800"}`}
               >
-                Preview
+                <span
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
+                />
               </button>
-              <button
-                type="button"
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  stopPreview();
-                }}
-                className="rounded-lg border border-zinc-500 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-100 transition-all duration-200 hover:border-zinc-300"
-              >
-                Stop
-              </button>
-              <button
-                type="button"
-                disabled={isAddingTracks}
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  void addSelectedTracks();
-                }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  isAddingTracks
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
-                }`}
-              >
-                {isAddingTracks ? "Adding..." : "Add Files"}
-              </button>
-              <button
-                type="button"
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  setShowUrlInput((current) => !current);
-                  setUrlError(null);
-                }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  showUrlInput
-                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                    : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
-                }`}
-              >
-                {showUrlInput ? "Cancel" : "Add from URL"}
-              </button>
-              <button
-                type="button"
-                disabled={queue.length === 0}
-                onMouseEnter={playHoverSound}
-                onClick={handleRequestClearQueue}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  queue.length === 0
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-zinc-500 bg-zinc-800 text-zinc-100 hover:border-zinc-300"
-                }`}
-              >
-                Clear
-              </button>
+              <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
+                {enabled ? t`Moaning Enabled` : t`Moaning Disabled`}
+              </span>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-zinc-400">
+                <Trans>Volume:</Trans>
+              </span>
+              <input
+                aria-label={t`Moaning volume`}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={volumeDraft}
+                onChange={(event) => setVolumeDraft(Number(event.target.value))}
+                onMouseUp={() => void commitVolumeDraft()}
+                onTouchEnd={() => void commitVolumeDraft()}
+                className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-rose-400"
+              />
+              <span className="w-8 text-zinc-300">{volumeDraft}%</span>
+            </label>
           </div>
 
-          {showUrlInput && (
-            <div className="mb-3 space-y-2 rounded-lg border border-rose-300/15 bg-black/20 p-3">
-              <p className="text-xs text-zinc-400">
-                Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => {
-                    playSelectSound();
-                    setUrlMode("track");
-                    setUrlResult(null);
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                    urlMode === "track"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                >
-                  Single Track
-                </button>
-                <button
-                  type="button"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => {
-                    playSelectSound();
-                    setUrlMode("playlist");
-                    setUrlResult(null);
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                    urlMode === "playlist"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                >
-                  Playlist
-                </button>
-              </div>
+          <div className="border-t border-rose-300/15 pt-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-zinc-100">
+                {t`Library (${queue.length} files)`}
+              </span>
               <div className="flex gap-2">
-                <input
-                  type="url"
-                  placeholder={
-                    urlMode === "playlist"
-                      ? "https://example.com/playlist-or-collection"
-                      : "https://example.com/video-or-audio"
-                  }
-                  value={urlInput}
-                  onChange={(e) => {
-                    setUrlInput(e.target.value);
+                <button
+                  type="button"
+                  disabled={queue.length === 0}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    void previewTrack(queue[0]!.id);
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${queue.length === 0
+                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                      : "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/35"
+                    }`}
+                >
+                  <Trans>Preview</Trans>
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    stopPreview();
+                  }}
+                  className="rounded-lg border border-zinc-500 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-100 transition-all duration-200 hover:border-zinc-300"
+                >
+                  <Trans>Stop</Trans>
+                </button>
+                <button
+                  type="button"
+                  disabled={isAddingTracks}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    void addSelectedTracks();
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingTracks
+                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                      : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
+                    }`}
+                >
+                  {isAddingTracks ? t`Adding...` : t`Add Files`}
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setShowUrlInput((current) => !current);
                     setUrlError(null);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void handleAddFromUrl();
-                    }
-                  }}
-                  disabled={isAddingFromUrl}
-                  className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                    urlError
-                      ? "border-rose-400/40 focus:border-rose-400/60"
-                      : "border-rose-300/30 focus:border-cyan-400/60"
-                  }`}
-                />
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${showUrlInput
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-rose-300/60 bg-rose-500/25 text-rose-100 hover:border-rose-200/80 hover:bg-rose-500/40"
+                    }`}
+                >
+                  {showUrlInput ? t`Cancel` : t`Add from URL`}
+                </button>
                 <button
                   type="button"
+                  disabled={queue.length === 0}
                   onMouseEnter={playHoverSound}
-                  onClick={() => void handleAddFromUrl()}
-                  disabled={isAddingFromUrl}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                    isAddingFromUrl
+                  onClick={handleRequestClearQueue}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${queue.length === 0
                       ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                      : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
-                  }`}
+                      : "border-zinc-500 bg-zinc-800 text-zinc-100 hover:border-zinc-300"
+                    }`}
                 >
-                  {isAddingFromUrl ? "Downloading..." : "Add"}
+                  <Trans>Clear</Trans>
                 </button>
               </div>
-              {urlResult && (
-                <p className="text-xs text-emerald-300">
-                  Added {urlResult.added} file{urlResult.added !== 1 ? "s" : ""}
-                  {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
-                </p>
-              )}
-              {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
             </div>
-          )}
 
-          <div className="divide-y divide-rose-300/10">
-            {queue.length === 0 ? (
-              <div className="py-3 text-sm text-zinc-400">No moaning files configured.</div>
-            ) : (
-              queue.map((entry, index) => (
-                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{entry.name}</span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSelectSound();
-                        void previewTrack(entry.id);
-                      }}
-                      className="rounded px-2 py-0.5 text-xs text-cyan-300 hover:text-cyan-200"
-                    >
-                      ▶
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === 0}
-                      onClick={() => {
-                        playSelectSound();
-                        void moveTrack(entry.id, "up");
-                      }}
-                      className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === queue.length - 1}
-                      onClick={() => {
-                        playSelectSound();
-                        void moveTrack(entry.id, "down");
-                      }}
-                      className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSelectSound();
-                        void removeTrack(entry.id);
-                      }}
-                      className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
-                    >
-                      ✕
-                    </button>
-                  </div>
+            {showUrlInput && (
+              <div className="mb-3 space-y-2 rounded-lg border border-rose-300/15 bg-black/20 p-3">
+                <p className="text-xs text-zinc-400">
+                  <Trans>Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)</Trans>
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      setUrlMode("track");
+                      setUrlResult(null);
+                    }}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "track"
+                        ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      }`}
+                  >
+                    <Trans>Single Track</Trans>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      setUrlMode("playlist");
+                      setUrlResult(null);
+                    }}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "playlist"
+                        ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                        : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      }`}
+                  >
+                    <Trans>Playlist</Trans>
+                  </button>
                 </div>
-              ))
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder={
+                      urlMode === "playlist"
+                        ? t`https://example.com/playlist-or-collection`
+                        : t`https://example.com/video-or-audio`
+                    }
+                    value={urlInput}
+                    onChange={(e) => {
+                      setUrlInput(e.target.value);
+                      setUrlError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        void handleAddFromUrl();
+                      }
+                    }}
+                    disabled={isAddingFromUrl}
+                    className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
+                        ? "border-rose-400/40 focus:border-rose-400/60"
+                        : "border-rose-300/30 focus:border-cyan-400/60"
+                      }`}
+                  />
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => void handleAddFromUrl()}
+                    disabled={isAddingFromUrl}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingFromUrl
+                        ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                        : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
+                      }`}
+                  >
+                    {isAddingFromUrl ? t`Downloading...` : t`Add`}
+                  </button>
+                </div>
+                {urlResult && (
+                  <p className="text-xs text-emerald-300">
+                    {urlResult.errors > 0
+                      ? t`Added ${urlResult.added} file${urlResult.added !== 1 ? "s" : ""} (${urlResult.errors} failed)`
+                      : t`Added ${urlResult.added} file${urlResult.added !== 1 ? "s" : ""}`}
+                  </p>
+                )}
+                {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+              </div>
             )}
+
+            <div className="divide-y divide-rose-300/10">
+              {queue.length === 0 ? (
+                <div className="py-3 text-sm text-zinc-400">
+                  <Trans>No moaning files configured.</Trans>
+                </div>
+              ) : (
+                queue.map((entry, index) => (
+                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{entry.name}</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSelectSound();
+                          void previewTrack(entry.id);
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-cyan-300 hover:text-cyan-200"
+                      >
+                        ▶
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => {
+                          playSelectSound();
+                          void moveTrack(entry.id, "up");
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === queue.length - 1}
+                        onClick={() => {
+                          playSelectSound();
+                          void moveTrack(entry.id, "down");
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSelectSound();
+                          void removeTrack(entry.id);
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
-      </div>
       </section>
       <ConfirmDialog
         isOpen={isClearConfirmOpen}
-        title="Clear moaning playlist?"
-        message="This will remove every file from the current moaning playlist."
-        confirmLabel="Clear Playlist"
-        cancelLabel="Keep Playlist"
+        title={t`Clear moaning playlist?`}
+        message={t`This will remove every file from the current moaning playlist.`}
+        confirmLabel={t`Clear Playlist`}
+        cancelLabel={t`Keep Playlist`}
         variant="warning"
         onConfirm={handleConfirmClearQueue}
         onCancel={handleCancelClearQueue}
@@ -3429,15 +3514,19 @@ function DangerZoneCard({
   isPending: boolean;
   onOpenConfirm: () => void;
 }) {
+  const { t } = useLingui();
+
   return (
     <section
       className="animate-entrance rounded-3xl border border-rose-400/30 bg-rose-950/20 p-5 backdrop-blur-xl"
       style={{ animationDelay: "0.12s" }}
     >
       <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-rose-100">Danger Zone</h2>
+        <h2 className="text-lg font-extrabold tracking-tight text-rose-100">
+          <Trans>Danger Zone</Trans>
+        </h2>
         <p className="mt-1 text-sm text-rose-100/80">
-          Permanently remove saved data, such as rounds, playlists, or settings.
+          <Trans>Permanently remove saved data, such as rounds, playlists, or settings.</Trans>
         </p>
       </div>
 
@@ -3452,13 +3541,12 @@ function DangerZoneCard({
         disabled={isPending}
         onMouseEnter={playHoverSound}
         onClick={onOpenConfirm}
-        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-          isPending
+        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
             ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
             : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-        }`}
+          }`}
       >
-        {isPending ? "Clearing..." : "Manage & Clear Data"}
+        {isPending ? t`Clearing...` : t`Manage & Clear Data`}
       </button>
     </section>
   );
@@ -3487,35 +3575,36 @@ function SelectiveClearDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useLingui();
   if (!isOpen) return null;
 
   const categories = [
     {
       id: "rounds",
-      label: "Installed Rounds & Heroes",
-      description: "All downloaded/imported game content.",
+      label: t`Installed Rounds & Heroes`,
+      description: t`All downloaded/imported game content.`,
     },
-    { id: "playlists", label: "Playlists", description: "Your custom and imported playlists." },
+    { id: "playlists", label: t`Playlists`, description: t`Your custom and imported playlists.` },
     {
       id: "history",
-      label: "Run History",
-      description: "Records of your past games and sessions.",
+      label: t`Run History`,
+      description: t`Records of your past games and sessions.`,
     },
-    { id: "stats", label: "Global Stats", description: "Highscores and overall career progress." },
+    { id: "stats", label: t`Global Stats`, description: t`Highscores and overall career progress.` },
     {
       id: "cache",
-      label: "Multiplayer Cache",
-      description: "Downloaded match results and sync queue.",
+      label: t`Multiplayer Cache`,
+      description: t`Downloaded match results and sync queue.`,
     },
     {
       id: "videoCache",
-      label: "Video Cache",
-      description: "Downloaded website videos and generated playback transcodes.",
+      label: t`Video Cache`,
+      description: t`Downloaded website videos and generated playback transcodes.`,
     },
     {
       id: "settings",
-      label: "App Settings & Preference",
-      description: "Preferences, hardware keys, and window state.",
+      label: t`App Settings & Preference`,
+      description: t`Preferences, hardware keys, and window state.`,
     },
   ] as const;
 
@@ -3529,11 +3618,13 @@ function SelectiveClearDialog({
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-3xl border border-rose-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(244,63,94,0.28)]">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-rose-200/80">
-          Selective Maintenance
+          <Trans>Selective Maintenance</Trans>
         </p>
-        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">Clear Data</h2>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">
+          <Trans>Clear Data</Trans>
+        </h2>
         <p className="mt-2 text-sm text-zinc-400">
-          Choose which categories of information to wipe from this device.
+          <Trans>Choose which categories of information to wipe from this device.</Trans>
         </p>
 
         <div className="mt-6 space-y-3">
@@ -3543,11 +3634,10 @@ function SelectiveClearDialog({
               type="button"
               disabled={isPending}
               onClick={() => toggle(cat.id as keyof typeof selections)}
-              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${
-                selections[cat.id as keyof typeof selections]
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${selections[cat.id as keyof typeof selections]
                   ? "border-rose-400/40 bg-rose-500/10"
                   : "border-zinc-800 bg-black/20 hover:border-zinc-700"
-              }`}
+                }`}
             >
               <div
                 className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${selections[cat.id as keyof typeof selections] ? "border-rose-400 bg-rose-500 text-white" : "border-zinc-700 bg-zinc-900"}`}
@@ -3572,7 +3662,9 @@ function SelectiveClearDialog({
           ))}
         </div>
 
-        <p className="mt-5 text-sm font-semibold text-rose-200">Warning: This cannot be undone.</p>
+        <p className="mt-5 text-sm font-semibold text-rose-200">
+          <Trans>Warning: This cannot be undone.</Trans>
+        </p>
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
@@ -3580,26 +3672,24 @@ function SelectiveClearDialog({
             disabled={isPending}
             onMouseEnter={playHoverSound}
             onClick={onCancel}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isPending
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
                 ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
                 : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
-            }`}
+              }`}
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </button>
           <button
             type="button"
             disabled={isPending || !hasSelection}
             onMouseEnter={playHoverSound}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isPending || !hasSelection
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending || !hasSelection
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-            }`}
+              }`}
           >
-            {isPending ? "Clearing..." : "Confirm Deletion"}
+            {isPending ? t`Clearing...` : t`Confirm Deletion`}
           </button>
         </div>
       </div>
@@ -3622,22 +3712,26 @@ function CheatModeConfirmDialog({
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-3xl border border-amber-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(251,191,36,0.28)]">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-amber-200/80">
-          Experimental Feature
+          <Trans>Experimental Feature</Trans>
         </p>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-amber-50">
-          Enable Cheat Mode?
+          <Trans>Enable Cheat Mode?</Trans>
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
-          This will enable developer menu features in singleplayer sessions, giving you access to
-          debug controls and shortcuts.
+          <Trans>
+            This will enable developer menu features in singleplayer sessions, giving you access to
+            debug controls and shortcuts.
+          </Trans>
         </p>
 
         <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4">
-          <p className="text-sm font-semibold text-amber-100">Important consequences:</p>
+          <p className="text-sm font-semibold text-amber-100">
+            <Trans>Important consequences:</Trans>
+          </p>
           <ul className="mt-2 space-y-1 text-sm text-amber-200/90">
-            <li>Any highscore you achieve will be permanently marked with 🎭</li>
-            <li>Cheat mode has no effect in multiplayer</li>
-            <li>The mark on your highscores cannot be removed later</li>
+            <li><Trans>Any highscore you achieve will be permanently marked with 🎭</Trans></li>
+            <li><Trans>Cheat mode has no effect in multiplayer</Trans></li>
+            <li><Trans>The mark on your highscores cannot be removed later</Trans></li>
           </ul>
         </div>
 
@@ -3648,7 +3742,7 @@ function CheatModeConfirmDialog({
             onClick={onCancel}
             className="rounded-xl border border-zinc-600 bg-zinc-900/80 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all duration-200 hover:border-zinc-400 hover:text-zinc-100"
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </button>
           <button
             type="button"
@@ -3656,7 +3750,7 @@ function CheatModeConfirmDialog({
             onClick={onConfirm}
             className="rounded-xl border border-amber-300/70 bg-amber-500/25 px-4 py-2 text-sm font-semibold text-amber-100 transition-all duration-200 hover:border-amber-200/90 hover:bg-amber-500/40"
           >
-            I Understand, Enable
+            <Trans>I Understand, Enable</Trans>
           </button>
         </div>
       </div>
@@ -3673,35 +3767,46 @@ function SkipRoundsCheckConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useLingui();
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-3xl border border-amber-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(251,191,36,0.28)]">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-amber-200/80">
-          Experimental Feature
+          <Trans>Experimental Feature</Trans>
         </p>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-amber-50">
-          Skip Multiplayer Safeguards?
+          <Trans>Skip Multiplayer Safeguards?</Trans>
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
-          This will allow you to access multiplayer regardless of the general minimum round count
-          and any playlist-specific round requirement.
+          <Trans>
+            This will allow you to access multiplayer regardless of the general minimum round count
+            and any playlist-specific round requirement.
+          </Trans>
         </p>
 
         <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4">
           <p className="text-sm font-semibold text-amber-100">
-            These safeguards are not here to annoy you:
+            <Trans>These safeguards are not here to annoy you:</Trans>
           </p>
           <ul className="mt-2 space-y-1 text-sm text-amber-200/90">
             <li>
-              The global multiplayer minimum helps ensure everyone starts from a baseline good
-              experience
+              <Trans>
+                The global multiplayer minimum helps ensure everyone starts from a baseline good
+                experience
+              </Trans>
             </li>
-            <li>Large playlists can still require more installed rounds than the global minimum</li>
-            <li>You may encounter empty rounds, repeated content, or broken match flows</li>
             <li>
-              Disabling both checks may result in a bad user experience for you and other players
+              <Trans>
+                Large playlists can still require more installed rounds than the global minimum
+              </Trans>
+            </li>
+            <li><Trans>You may encounter empty rounds, repeated content, or broken match flows</Trans></li>
+            <li>
+              <Trans>
+                Disabling both checks may result in a bad user experience for you and other players
+              </Trans>
             </li>
           </ul>
         </div>
@@ -3713,7 +3818,7 @@ function SkipRoundsCheckConfirmDialog({
             onClick={onCancel}
             className="rounded-xl border border-zinc-600 bg-zinc-900/80 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all duration-200 hover:border-zinc-400 hover:text-zinc-100"
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </button>
           <button
             type="button"
@@ -3721,7 +3826,7 @@ function SkipRoundsCheckConfirmDialog({
             onClick={onConfirm}
             className="rounded-xl border border-amber-300/70 bg-amber-500/25 px-4 py-2 text-sm font-semibold text-amber-100 transition-all duration-200 hover:border-amber-200/90 hover:bg-amber-500/40"
           >
-            I Understand, Disable Safeguards
+            <Trans>I Understand, Disable Safeguards</Trans>
           </button>
         </div>
       </div>
@@ -3744,16 +3849,21 @@ function AutoScanFoldersCard({
   onAddFolders: () => void;
   onRemoveFolder: (folderPath: string) => void;
 }) {
+  const { t } = useLingui();
   return (
     <section
       className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
       style={{ animationDelay: "0.11s" }}
     >
       <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Library</h2>
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          <Trans>Library</Trans>
+        </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Added folders import immediately, including legacy video-folder fallback, and are
-          rescanned on startup.
+          <Trans>
+            Added folders import immediately, including legacy video-folder fallback, and are
+            rescanned on startup.
+          </Trans>
         </p>
       </div>
 
@@ -3762,11 +3872,10 @@ function AutoScanFoldersCard({
           {notices.map((notice) => (
             <div
               key={`${notice.folderPath}:${notice.message}`}
-              className={`rounded-xl border px-3 py-2 text-xs ${
-                notice.tone === "error"
+              className={`rounded-xl border px-3 py-2 text-xs ${notice.tone === "error"
                   ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
                   : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
-              }`}
+                }`}
             >
               <div className="truncate font-semibold">{notice.folderPath}</div>
               <div className="mt-1 text-zinc-200">{notice.message}</div>
@@ -3778,11 +3887,11 @@ function AutoScanFoldersCard({
       <div className="space-y-2">
         {isLoading ? (
           <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
-            Loading folders...
+            <Trans>Loading folders...</Trans>
           </div>
         ) : folders.length === 0 ? (
           <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
-            No auto-scan folders configured.
+            <Trans>No auto-scan folders configured.</Trans>
           </div>
         ) : (
           folders.map((folderPath) => (
@@ -3795,13 +3904,12 @@ function AutoScanFoldersCard({
                 type="button"
                 disabled={isPending}
                 onClick={() => onRemoveFolder(folderPath)}
-                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${
-                  isPending
+                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${isPending
                     ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                     : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                }`}
+                  }`}
               >
-                Remove
+                <Trans>Remove</Trans>
               </button>
             </div>
           ))
@@ -3813,13 +3921,12 @@ function AutoScanFoldersCard({
         onMouseEnter={playHoverSound}
         disabled={isPending}
         onClick={onAddFolders}
-        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-          isPending
+        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
             ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
             : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-        }`}
+          }`}
       >
-        {isPending ? "Updating..." : "Add Folder"}
+        {isPending ? t`Updating...` : t`Add Folder`}
       </button>
     </section>
   );
@@ -3864,6 +3971,7 @@ function getSelectableAuthModeValue(
 }
 
 function SourceIntegrationsCard() {
+  const { t } = useLingui();
   const sfwMode = useSfwMode();
   const [sources, setSources] = useState<ExternalSource[]>([]);
   const [drafts, setDrafts] = useState<Record<string, SourceDraft>>({});
@@ -3949,7 +4057,7 @@ function SourceIntegrationsCard() {
       setSyncStatus(status);
       await refresh();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Failed to sync sources.");
+      setStatusMessage(error instanceof Error ? error.message : t`Failed to sync sources.`);
     } finally {
       setIsSyncing(false);
     }
@@ -3980,7 +4088,7 @@ function SourceIntegrationsCard() {
       });
       await refresh();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Failed to create source.");
+      setStatusMessage(error instanceof Error ? error.message : t`Failed to create source.`);
     }
   };
 
@@ -4004,7 +4112,7 @@ function SourceIntegrationsCard() {
       });
       await refresh();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Failed to update source.");
+      setStatusMessage(error instanceof Error ? error.message : t`Failed to update source.`);
     } finally {
       setPendingSourceId(null);
     }
@@ -4017,7 +4125,7 @@ function SourceIntegrationsCard() {
       await integrations.deleteSource(sourceId);
       await refresh();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Failed to delete source.");
+      setStatusMessage(error instanceof Error ? error.message : t`Failed to delete source.`);
     } finally {
       setPendingSourceId(null);
     }
@@ -4028,9 +4136,9 @@ function SourceIntegrationsCard() {
     setStatusMessage(null);
     try {
       await integrations.testStashConnection(sourceId);
-      setStatusMessage("Stash connection succeeded.");
+      setStatusMessage(t`Stash connection succeeded.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Stash connection failed.");
+      setStatusMessage(error instanceof Error ? error.message : t`Stash connection failed.`);
     } finally {
       setPendingSourceId(null);
     }
@@ -4043,7 +4151,7 @@ function SourceIntegrationsCard() {
       const result = await integrations.searchStashTags({ sourceId, query, page: 1, perPage: 24 });
       setTagSearchResultsBySource((prev) => ({ ...prev, [sourceId]: result.tags }));
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Tag search failed.");
+      setStatusMessage(error instanceof Error ? error.message : t`Tag search failed.`);
     } finally {
       setTagSearchPendingBySource((prev) => ({ ...prev, [sourceId]: false }));
     }
@@ -4072,7 +4180,9 @@ function SourceIntegrationsCard() {
   if (isLoading) {
     return (
       <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
-        <p className="text-sm text-zinc-300">Loading external sources...</p>
+        <p className="text-sm text-zinc-300">
+          <Trans>Loading external sources...</Trans>
+        </p>
       </section>
     );
   }
@@ -4081,9 +4191,11 @@ function SourceIntegrationsCard() {
     <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Sources</h2>
+          <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+            <Trans>Sources</Trans>
+          </h2>
           <p className="mt-1 text-sm text-zinc-300">
-            Configure Stash instances, tags, and run sync.
+            <Trans>Configure Stash instances, tags, and run sync.</Trans>
           </p>
         </div>
         <button
@@ -4094,28 +4206,33 @@ function SourceIntegrationsCard() {
             playSelectSound();
             void syncNow();
           }}
-          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-            isSyncing
+          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isSyncing
               ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
               : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-          }`}
+            }`}
         >
-          {isSyncing ? "Syncing..." : "Sync Now"}
+          {isSyncing ? t`Syncing...` : t`Sync Now`}
         </button>
       </div>
 
       {syncStatus && (
         <div className="mb-4 rounded-xl border border-violet-300/25 bg-black/35 p-3 text-xs text-zinc-300">
-          <div>State: {syncStatus.state}</div>
           <div>
-            Sources: {syncStatus.stats.sourcesSynced}/{syncStatus.stats.sourcesSeen}
+            <Trans>State:</Trans> {syncStatus.state}
           </div>
-          <div>Scenes: {syncStatus.stats.scenesSeen}</div>
           <div>
-            Created/Updated/Linked: {syncStatus.stats.roundsCreated}/
+            <Trans>Sources:</Trans> {syncStatus.stats.sourcesSynced}/{syncStatus.stats.sourcesSeen}
+          </div>
+          <div>
+            <Trans>Scenes:</Trans> {syncStatus.stats.scenesSeen}
+          </div>
+          <div>
+            <Trans>Created/Updated/Linked:</Trans> {syncStatus.stats.roundsCreated}/
             {syncStatus.stats.roundsUpdated}/{syncStatus.stats.roundsLinked}
           </div>
-          <div>Resources Added: {syncStatus.stats.resourcesAdded}</div>
+          <div>
+            <Trans>Resources Added:</Trans> {syncStatus.stats.resourcesAdded}
+          </div>
         </div>
       )}
 
@@ -4126,15 +4243,19 @@ function SourceIntegrationsCard() {
       )}
 
       <div className="mb-6 rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-        <p className="mb-3 text-sm font-semibold text-zinc-100">Add Stash Source</p>
+        <p className="mb-3 text-sm font-semibold text-zinc-100">
+          <Trans>Add Stash Source</Trans>
+        </p>
         <div className="mb-3 rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively
-          supported.
+          <Trans>
+            Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively
+            supported.
+          </Trans>
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           <input
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-            placeholder="Source name"
+            placeholder={t`Source name`}
             value={newSourceDraft.name}
             onChange={(event) =>
               setNewSourceDraft((prev) => ({ ...prev, name: event.target.value }))
@@ -4142,7 +4263,7 @@ function SourceIntegrationsCard() {
           />
           <input
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-            placeholder="https://stash.example.com"
+            placeholder={t`https://stash.example.com`}
             value={newSourceDraft.baseUrl}
             onChange={(event) =>
               setNewSourceDraft((prev) => ({ ...prev, baseUrl: event.target.value }))
@@ -4151,8 +4272,8 @@ function SourceIntegrationsCard() {
           <GameDropdown
             value={newSourceDraft.authMode}
             options={[
-              { value: "none", label: "No Auth" },
-              { value: "apiKey", label: "API Key" },
+              { value: "none", label: t`No Auth` },
+              { value: "apiKey", label: t`API Key` },
             ]}
             onChange={(value) =>
               setNewSourceDraft((prev) => ({
@@ -4164,7 +4285,7 @@ function SourceIntegrationsCard() {
           {newSourceDraft.authMode === "apiKey" ? (
             <input
               className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-              placeholder="API key"
+              placeholder={t`API key`}
               value={newSourceDraft.apiKey}
               onChange={(event) =>
                 setNewSourceDraft((prev) => ({ ...prev, apiKey: event.target.value }))
@@ -4172,7 +4293,7 @@ function SourceIntegrationsCard() {
             />
           ) : (
             <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
-              This Stash source will connect without API keys.
+              <Trans>This Stash source will connect without API keys.</Trans>
             </div>
           )}
         </div>
@@ -4185,14 +4306,14 @@ function SourceIntegrationsCard() {
           }}
           className="mt-3 rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
         >
-          Add Source
+          <Trans>Add Source</Trans>
         </button>
       </div>
 
       <div className="space-y-4">
         {sources.length === 0 ? (
           <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
-            No sources configured yet.
+            <Trans>No sources configured yet.</Trans>
           </div>
         ) : (
           sources.map((source) => {
@@ -4220,16 +4341,16 @@ function SourceIntegrationsCard() {
                   <GameDropdown
                     value={getSelectableAuthModeValue(draft.authMode) as string}
                     options={[
-                      { value: "none", label: "No Auth" },
-                      { value: "apiKey", label: "API Key" },
+                      { value: "none", label: t`No Auth` },
+                      { value: "apiKey", label: t`API Key` },
                       ...(draft.authMode === "login"
                         ? [
-                            {
-                              value: LEGACY_LOGIN_AUTH_VALUE,
-                              label: "Legacy Login",
-                              disabled: true as const,
-                            },
-                          ]
+                          {
+                            value: LEGACY_LOGIN_AUTH_VALUE,
+                            label: t`Legacy Login`,
+                            disabled: true as const,
+                          },
+                        ]
                         : []),
                     ]}
                     onChange={(value) =>
@@ -4239,28 +4360,32 @@ function SourceIntegrationsCard() {
                   {draft.authMode === "apiKey" ? (
                     <input
                       className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                      placeholder="API key"
+                      placeholder={t`API key`}
                       value={draft.apiKey}
                       onChange={(event) => patchDraft(source.id, { apiKey: event.target.value })}
                     />
                   ) : draft.authMode === "login" ? (
                     <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-                      Legacy username/password login is no longer offered for Stash sources. Switch
-                      this source to No Auth or API Key.
+                      <Trans>
+                        Legacy username/password login is no longer offered for Stash sources.
+                        Switch this source to No Auth or API Key.
+                      </Trans>
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
-                      No credentials required for this Stash instance.
+                      <Trans>No credentials required for this Stash instance.</Trans>
                     </div>
                   )}
                 </div>
 
                 <div className="mb-3">
-                  <div className="mb-2 text-xs uppercase tracking-[0.2em] text-zinc-400">Tags</div>
+                  <div className="mb-2 text-xs uppercase tracking-[0.2em] text-zinc-400">
+                    <Trans>Tags</Trans>
+                  </div>
                   <div className="mb-2 flex gap-2">
                     <input
                       className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                      placeholder="Search tags"
+                      placeholder={t`Search tags`}
                       value={tagSearchQueryBySource[source.id] ?? ""}
                       onChange={(event) =>
                         setTagSearchQueryBySource((prev) => ({
@@ -4280,7 +4405,7 @@ function SourceIntegrationsCard() {
                       disabled={Boolean(tagSearchPendingBySource[source.id])}
                       className="rounded-xl border border-violet-300/60 bg-violet-500/25 px-3 py-2 text-xs font-semibold text-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Search
+                      <Trans>Search</Trans>
                     </button>
                   </div>
                   <div className="max-h-28 space-y-1 overflow-y-auto">
@@ -4308,18 +4433,18 @@ function SourceIntegrationsCard() {
                         <GameDropdown
                           value={entry.roundTypeFallback}
                           options={[
-                            { value: "Normal", label: "Normal" },
-                            { value: "Interjection", label: "Interjection" },
-                            { value: "Cum", label: abbreviateNsfwText("Cum", sfwMode) },
+                            { value: "Normal", label: t`Normal` },
+                            { value: "Interjection", label: t`Interjection` },
+                            { value: "Cum", label: abbreviateNsfwText(t`Cum`, sfwMode) },
                           ]}
                           onChange={(value) =>
                             patchDraft(source.id, {
                               tagSelections: draft.tagSelections.map((selection) =>
                                 selection.id === entry.id
                                   ? {
-                                      ...selection,
-                                      roundTypeFallback: value as "Normal" | "Interjection" | "Cum",
-                                    }
+                                    ...selection,
+                                    roundTypeFallback: value as "Normal" | "Interjection" | "Cum",
+                                  }
                                   : selection
                               ),
                             })
@@ -4337,7 +4462,7 @@ function SourceIntegrationsCard() {
                           }
                           className="rounded border border-rose-400/60 bg-rose-500/20 px-2 py-1 text-xs text-rose-100"
                         >
-                          Remove
+                          <Trans>Remove</Trans>
                         </button>
                       </div>
                     ))}
@@ -4351,7 +4476,7 @@ function SourceIntegrationsCard() {
                     onClick={() => void saveSource(source.id)}
                     className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-3 py-2 text-xs font-semibold text-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Save
+                    <Trans>Save</Trans>
                   </button>
                   <button
                     type="button"
@@ -4359,7 +4484,7 @@ function SourceIntegrationsCard() {
                     onClick={() => void testConnection(source.id)}
                     className="rounded-xl border border-cyan-300/60 bg-cyan-500/25 px-3 py-2 text-xs font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Test
+                    <Trans>Test</Trans>
                   </button>
                   <button
                     type="button"
@@ -4369,7 +4494,7 @@ function SourceIntegrationsCard() {
                     }
                     className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-3 py-2 text-xs font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {source.enabled ? "Disable" : "Enable"}
+                    {source.enabled ? t`Disable` : t`Enable`}
                   </button>
                   <button
                     type="button"
@@ -4377,7 +4502,7 @@ function SourceIntegrationsCard() {
                     onClick={() => void deleteSource(source.id)}
                     className="rounded-xl border border-rose-300/60 bg-rose-500/25 px-3 py-2 text-xs font-semibold text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Delete
+                    <Trans>Delete</Trans>
                   </button>
                 </div>
               </div>
@@ -4410,8 +4535,9 @@ function SettingsSectionCard({ section, loading }: { section: SettingsSection; l
 }
 
 function HelpShortcutsCard({ cheatModeEnabled }: { cheatModeEnabled: boolean }) {
+  const { t } = useLingui();
   const sfwMode = useSfwMode();
-  const shortcutGroups = getVisibleShortcutGroups(import.meta.env.PROD, cheatModeEnabled);
+  const shortcutGroups = getVisibleShortcutGroups(t, import.meta.env.PROD, cheatModeEnabled);
 
   return (
     <section
@@ -4420,10 +4546,10 @@ function HelpShortcutsCard({ cheatModeEnabled }: { cheatModeEnabled: boolean }) 
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Keyboard Shortcuts
+          <Trans>Keyboard Shortcuts</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Every shortcut currently wired into the app is listed here.
+          <Trans>Every shortcut currently wired into the app is listed here.</Trans>
         </p>
       </div>
 
@@ -4459,6 +4585,7 @@ function HelpShortcutsCard({ cheatModeEnabled }: { cheatModeEnabled: boolean }) 
 }
 
 function SecuritySettingsCard() {
+  const { t } = useLingui();
   const [trustedSites, setTrustedSites] = useState<Awaited<
     ReturnType<typeof security.listTrustedSites>
   > | null>(null);
@@ -4478,14 +4605,14 @@ function SecuritySettingsCard() {
       .catch((error) => {
         if (mounted) {
           setStatusMessage(
-            error instanceof Error ? error.message : "Failed to load trusted sites."
+            error instanceof Error ? error.message : t`Failed to load trusted sites.`
           );
         }
       });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [t]);
 
   const applyMutation = async (task: () => Promise<void>) => {
     setStatusMessage(null);
@@ -4493,7 +4620,7 @@ function SecuritySettingsCard() {
       await task();
       setTrustedSites(await security.listTrustedSites());
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Security settings update failed.");
+      setStatusMessage(error instanceof Error ? error.message : t`Security settings update failed.`);
     }
   };
 
@@ -4508,24 +4635,28 @@ function SecuritySettingsCard() {
     >
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-          Remote Import Trust
+          <Trans>Remote Import Trust</Trans>
         </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Sidecar imports automatically trust Stash source hosts, yt-dlp-supported domains, and the
-          user-trusted domains listed here. In{" "}
-          <span className="font-semibold text-zinc-100">Prompt</span> mode, unknown remote URLs can
-          be approved during manual import. In{" "}
-          <span className="font-semibold text-zinc-100">Block</span> mode, every non-whitelisted
-          remote URL is blocked automatically. In{" "}
-          <span className="font-semibold text-zinc-100">Paranoid</span> mode, only configured Stash
-          source URLs are allowed.
+          <Trans>
+            Sidecar imports automatically trust Stash source hosts, yt-dlp-supported domains, and
+            the user-trusted domains listed here. In{" "}
+            <span className="font-semibold text-zinc-100">Prompt</span> mode, unknown remote URLs
+            can be approved during manual import. In{" "}
+            <span className="font-semibold text-zinc-100">Block</span> mode, every non-whitelisted
+            remote URL is blocked automatically. In{" "}
+            <span className="font-semibold text-zinc-100">Paranoid</span> mode, only configured
+            Stash source URLs are allowed.
+          </Trans>
         </p>
       </div>
 
       <div className="space-y-0 divide-y divide-violet-300/15">
         <div className="pb-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-100">Security Mode</span>
+            <span className="text-sm font-semibold text-zinc-100">
+              <Trans>Security Mode</Trans>
+            </span>
             <div className="flex rounded-lg border border-violet-300/25 bg-black/35 p-0.5">
               {(["prompt", "block", "paranoid"] as const).map((mode) => {
                 const active = trustedSites?.securityMode === mode;
@@ -4533,11 +4664,10 @@ function SecuritySettingsCard() {
                   <button
                     key={mode}
                     type="button"
-                    className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                      active
+                    className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${active
                         ? "bg-violet-500/40 text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
                         : "text-zinc-400 hover:text-zinc-200"
-                    }`}
+                      }`}
                     onMouseEnter={playHoverSound}
                     onClick={() => {
                       playSelectSound();
@@ -4546,7 +4676,7 @@ function SecuritySettingsCard() {
                       });
                     }}
                   >
-                    {mode}
+                    {mode === "prompt" ? t`prompt` : mode === "block" ? t`block` : t`paranoid`}
                   </button>
                 );
               })}
@@ -4554,15 +4684,17 @@ function SecuritySettingsCard() {
           </div>
           <p className="mt-1.5 text-xs text-zinc-500">
             {trustedSites?.securityMode === "paranoid"
-              ? "Allowing only configured Stash source URLs and blocking yt-dlp and user-whitelisted domains."
+              ? t`Allowing only configured Stash source URLs and blocking yt-dlp and user-whitelisted domains.`
               : trustedSites?.securityMode === "block"
-                ? "Silently blocking every remote URL that is not already whitelisted."
-                : "Asking during manual sidecar imports before trusting unknown remote URLs."}
+                ? t`Silently blocking every remote URL that is not already whitelisted.`
+                : t`Asking during manual sidecar imports before trusting unknown remote URLs.`}
           </p>
           {trustedSites?.securityMode === "paranoid" ? (
             <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              Paranoid mode will impact the user experience significantly and should only be used if
-              you know exactly what you are doing.
+              <Trans>
+                Paranoid mode will impact the user experience significantly and should only be used
+                if you know exactly what you are doing.
+              </Trans>
             </div>
           ) : null}
         </div>
@@ -4572,7 +4704,7 @@ function SecuritySettingsCard() {
             <input
               value={draftDomain}
               onChange={(event) => setDraftDomain(event.target.value)}
-              placeholder="Add trusted base domain"
+              placeholder={t`Add trusted base domain`}
               className="min-w-0 flex-1 rounded-xl border border-violet-300/25 bg-black/35 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-violet-300/50"
             />
             <button
@@ -4587,14 +4719,14 @@ function SecuritySettingsCard() {
                 });
               }}
             >
-              Add Trusted Site
+              <Trans>Add Trusted Site</Trans>
             </button>
           </div>
 
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter domains"
+            placeholder={t`Filter domains`}
             className="mt-3 w-full rounded-xl border border-violet-300/25 bg-black/35 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-violet-300/50"
           />
         </div>
@@ -4608,14 +4740,16 @@ function SecuritySettingsCard() {
         ) : null}
 
         {!trustedSites ? (
-          <div className="py-4 text-sm text-zinc-400">Loading security settings...</div>
+          <div className="py-4 text-sm text-zinc-400">
+            <Trans>Loading security settings...</Trans>
+          </div>
         ) : (
           <>
             {trustedSites.builtInStashHosts.length > 0 && (
               <details className="group py-3" open>
                 <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
                   <span>
-                    Stash Hosts
+                    <Trans>Stash Hosts</Trans>
                     <span className="ml-2 text-xs font-normal text-zinc-500">
                       {trustedSites.builtInStashHosts.filter(includeEntry).length}
                     </span>
@@ -4647,7 +4781,7 @@ function SecuritySettingsCard() {
               >
                 <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
                   <span>
-                    yt-dlp Domains
+                    <Trans>yt-dlp Domains</Trans>
                     <span className="ml-2 text-xs font-normal text-zinc-500">
                       {trustedSites.builtInYtDlpDomains.filter(includeEntry).length}
                     </span>
@@ -4658,8 +4792,10 @@ function SecuritySettingsCard() {
                 </summary>
                 {normalizedFilter.length === 0 ? (
                   <p className="mt-2 text-xs text-zinc-500 pl-1">
-                    {trustedSites.builtInYtDlpDomains.length} domains — use the filter above to
-                    search.
+                    <Trans>
+                      {trustedSites.builtInYtDlpDomains.length} domains — use the filter above to
+                      search.
+                    </Trans>
                   </p>
                 ) : (
                   <div className="mt-2 max-h-48 space-y-1 overflow-y-auto pl-1">
@@ -4685,7 +4821,7 @@ function SecuritySettingsCard() {
             >
               <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
                 <span>
-                  User-Trusted Domains
+                  <Trans>User-Trusted Domains</Trans>
                   <span className="ml-2 text-xs font-normal text-zinc-500">
                     {trustedSites.userTrustedBaseDomains.filter(includeEntry).length}
                   </span>
@@ -4696,7 +4832,9 @@ function SecuritySettingsCard() {
               </summary>
               <div className="mt-2 space-y-1 pl-1">
                 {trustedSites.userTrustedBaseDomains.filter(includeEntry).length === 0 ? (
-                  <p className="text-xs text-zinc-500">No user-trusted domains yet.</p>
+                  <p className="text-xs text-zinc-500">
+                    <Trans>No user-trusted domains yet.</Trans>
+                  </p>
                 ) : (
                   trustedSites.userTrustedBaseDomains.filter(includeEntry).map((domain) => (
                     <div
@@ -4715,7 +4853,7 @@ function SecuritySettingsCard() {
                           });
                         }}
                       >
-                        Remove
+                        <Trans>Remove</Trans>
                       </button>
                     </div>
                   ))
@@ -4747,6 +4885,7 @@ function SettingRow({ setting, disabled }: { setting: SettingDefinition; disable
 }
 
 function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: boolean }) {
+  const { t } = useLingui();
   const [draft, setDraft] = useState(setting.value);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -4763,7 +4902,7 @@ function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: bo
     try {
       await setting.onChange(draft);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update setting.");
+      setError(err instanceof Error ? err.message : t`Failed to update setting.`);
     } finally {
       setIsPending(false);
     }
@@ -4791,7 +4930,7 @@ function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: bo
           onClick={() => void save()}
           type="button"
         >
-          Save
+          <Trans>Save</Trans>
         </button>
       </div>
       {error && (
@@ -4804,6 +4943,7 @@ function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: bo
 }
 
 function NumberRow({ setting, disabled }: { setting: NumberSetting; disabled: boolean }) {
+  const { t } = useLingui();
   const [draft, setDraft] = useState(`${setting.value}`);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -4820,13 +4960,13 @@ function NumberRow({ setting, disabled }: { setting: NumberSetting; disabled: bo
     try {
       const numeric = Number(draft);
       if (!Number.isFinite(numeric)) {
-        setError("Please enter a valid number.");
+        setError(t`Please enter a valid number.`);
         setDraft(`${setting.value}`);
         return;
       }
       await setting.onChange(numeric);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update setting.");
+      setError(err instanceof Error ? err.message : t`Failed to update setting.`);
     } finally {
       setIsPending(false);
     }
@@ -4863,7 +5003,7 @@ function NumberRow({ setting, disabled }: { setting: NumberSetting; disabled: bo
           onClick={() => void save()}
           type="button"
         >
-          Save
+          <Trans>Save</Trans>
         </button>
       </div>
       {error && (
@@ -4876,6 +5016,7 @@ function NumberRow({ setting, disabled }: { setting: NumberSetting; disabled: bo
 }
 
 function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: boolean }) {
+  const { t } = useLingui();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -4887,7 +5028,7 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
     try {
       await setting.onChange(!setting.value);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update setting.");
+      setError(err instanceof Error ? err.message : t`Failed to update setting.`);
     } finally {
       setIsPending(false);
     }
@@ -4908,7 +5049,7 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
 
         <button
           type="button"
-          aria-label={`Toggle ${setting.label}`}
+          aria-label={t`Toggle ${setting.label}`}
           role="switch"
           aria-checked={switchedOn}
           disabled={disabled || isPending}
@@ -4930,6 +5071,7 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
 }
 
 function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolean }) {
+  const { t } = useLingui();
   const [draft, setDraft] = useState(setting.value);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -4946,7 +5088,7 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
     try {
       await setting.onChange(draft);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update setting.");
+      setError(err instanceof Error ? err.message : t`Failed to update setting.`);
     } finally {
       setIsPending(false);
     }
@@ -4982,7 +5124,7 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
           onClick={() => void save()}
           type="button"
         >
-          Save
+          <Trans>Save</Trans>
         </button>
       </div>
       {error && (
@@ -4995,6 +5137,7 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
 }
 
 function CreditsCard() {
+  const { t } = useLingui();
   const sfwMode = useSfwMode();
   const playtesters = ["Kyral", "VladTheImplier", "Aodin", "woo"];
 
@@ -5004,18 +5147,20 @@ function CreditsCard() {
       style={{ animationDelay: "0.12s" }}
     >
       <div className="mb-5">
-        <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Credits & License</h2>
+        <h2 className="text-xl font-extrabold tracking-tight text-violet-100">
+          <Trans>Credits & License</Trans>
+        </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Special thanks to the community and creators who inspired this project.
+          <Trans>Special thanks to the community and creators who inspired this project.</Trans>
         </p>
       </div>
 
       <div className="mb-6 rounded-xl border border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-500/18 via-violet-500/14 to-black/45 p-4">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-fuchsia-200/80">
-          Playtesters
+          <Trans>Playtesters</Trans>
         </p>
         <p className="mt-1 text-sm text-fuchsia-50/90">
-          They helped improving and polishing the game.
+          <Trans>They helped improving and polishing the game.</Trans>
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {playtesters.map((playtester) => (
@@ -5032,24 +5177,28 @@ function CreditsCard() {
       <div className="divide-y divide-violet-300/10">
         <div className="py-3">
           <h3 className="font-semibold text-zinc-100">
-            {abbreviateNsfwText("anon fapland inventor", sfwMode)}
+            {abbreviateNsfwText(t`anon fapland inventor`, sfwMode)}
           </h3>
           <p className="text-xs text-zinc-400">
-            {abbreviateNsfwText("The person who came up with the original fap land idea.", sfwMode)}
+            {abbreviateNsfwText(t`The person who came up with the original fap land idea.`, sfwMode)}
           </p>
         </div>
         <div className="py-3">
           <h3 className="font-semibold text-zinc-100">FapLandPartyDev</h3>
-          <p className="text-xs text-zinc-400">Creator of the game.</p>
+          <p className="text-xs text-zinc-400">
+            <Trans>Creator of the game.</Trans>
+          </p>
         </div>
         <div className="py-3">
           <h3 className="font-semibold text-zinc-100">nakkub</h3>
-          <p className="text-xs text-zinc-400">Credit for the original Godot version.</p>
+          <p className="text-xs text-zinc-400">
+            <Trans>Credit for the original Godot version.</Trans>
+          </p>
         </div>
         <div className="py-3">
           <h3 className="font-semibold text-zinc-100">tomper</h3>
           <p className="text-xs text-zinc-400">
-            For{" "}
+            <Trans>For</Trans>{" "}
             <a
               href="https://discuss.eroscripts.com/t/fapland-handy-edition/260780"
               target="_blank"
@@ -5058,15 +5207,17 @@ function CreditsCard() {
               onMouseEnter={playHoverSound}
               onClick={playSelectSound}
             >
-              TheHandy version
+              <Trans>TheHandy version</Trans>
             </a>{" "}
-            that inspired this project.
+            <Trans>that inspired this project.</Trans>
           </p>
         </div>
         <div className="py-3">
-          <h3 className="font-semibold text-zinc-100">Source Code</h3>
+          <h3 className="font-semibold text-zinc-100">
+            <Trans>Source Code</Trans>
+          </h3>
           <p className="text-xs text-zinc-400">
-            Available on{" "}
+            <Trans>Available on</Trans>{" "}
             <a
               href="https://github.com/FapLandPartyDev/FapLand-Party-Edition"
               target="_blank"
@@ -5080,7 +5231,9 @@ function CreditsCard() {
           </p>
         </div>
         <div className="py-3">
-          <h3 className="font-semibold text-zinc-100">License</h3>
+          <h3 className="font-semibold text-zinc-100">
+            <Trans>License</Trans>
+          </h3>
           <p className="text-xs text-zinc-400">
             <span className="text-violet-100 font-bold">
               GNU Affero General Public License v3.0 (AGPL-3.0)

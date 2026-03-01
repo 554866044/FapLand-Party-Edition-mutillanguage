@@ -1,10 +1,13 @@
+// @i18n-enforced
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { openGlobalHandyOverlay } from "./globalHandyOverlayControls";
 import { openGlobalMusicOverlay } from "./globalMusicOverlayControls";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { useCommandPaletteGuard } from "../contexts/CommandPaletteGuardContext";
 import { useHandy } from "../contexts/HandyContext";
+import { i18n } from "../i18n";
 
 let _setOpenFromOutside: ((open: boolean) => void) | null = null;
 
@@ -22,137 +25,148 @@ type CommandItem = {
   keywords?: string[];
 };
 
-const NAVIGATION_COMMANDS: CommandItem[] = [
-  { id: "home", label: "Home", description: "Main menu", category: "Navigation", to: "/" },
-  {
-    id: "single-player",
-    label: "Single Player",
-    description: "Start a single-player game",
-    category: "Play",
-    to: "/single-player-setup",
-  },
-  {
-    id: "multiplayer",
-    label: "Multiplayer",
-    description: "Join or host a multiplayer lobby",
-    category: "Play",
-    to: "/multiplayer",
-  },
-  {
-    id: "rounds",
-    label: "Installed Rounds",
-    description: "Manage your round library",
-    category: "Workshop",
-    to: "/rounds",
-  },
-  {
-    id: "converter",
-    label: "Round Converter",
-    description: "Convert videos to playable rounds",
-    category: "Workshop",
-    to: "/converter",
-  },
-  {
-    id: "playlist-workshop",
-    label: "Playlist Workshop",
-    description: "Create and edit playlists",
-    category: "Workshop",
-    to: "/playlist-workshop",
-  },
-  {
-    id: "map-editor",
-    label: "Map Editor",
-    description: "Design board layouts",
-    category: "Workshop",
-    to: "/map-editor",
-  },
-  {
-    id: "highscores",
-    label: "Highscores",
-    description: "View score history",
-    category: "Navigation",
-    to: "/highscores",
-  },
-  {
-    id: "settings-general",
-    label: "Settings — General",
-    description: "Fullscreen, background videos",
-    category: "Settings",
-    to: "/settings?section=general",
-  },
-  {
-    id: "settings-gameplay",
-    label: "Settings — Gameplay",
-    description: "HUD, perks, cheat mode",
-    category: "Settings",
-    to: "/settings?section=gameplay",
-  },
-  {
-    id: "settings-audio",
-    label: "Settings — Audio",
-    description: "Music queue, volume",
-    category: "Settings",
-    to: "/settings?section=audio",
-  },
-  {
-    id: "settings-hardware",
-    label: "Settings — Hardware & Sync",
-    description: "TheHandy, funscripts",
-    category: "Settings",
-    to: "/settings?section=hardware",
-    keywords: ["handy", "funscript", "device"],
-  },
-  {
-    id: "settings-sources",
-    label: "Settings — Sources & Library",
-    description: "Stash, auto-scan folders",
-    category: "Settings",
-    to: "/settings?section=sources",
-    keywords: ["stash", "scan", "library"],
-  },
-  {
-    id: "settings-security",
-    label: "Settings — Security & Privacy",
-    description: "SFW mode, safe domains",
-    category: "Settings",
-    to: "/settings?section=security-privacy",
-    keywords: ["sfw", "safe", "domains"],
-  },
-  {
-    id: "settings-data",
-    label: "Settings — Data & Storage",
-    description: "Cache, clear data",
-    category: "Settings",
-    to: "/settings?section=app",
-    keywords: ["cache", "storage", "phash"],
-  },
-  {
-    id: "settings-advanced",
-    label: "Settings — Advanced",
-    description: "FFmpeg, yt-dlp",
-    category: "Settings",
-    to: "/settings?section=advanced",
-    keywords: ["ffmpeg", "ytdlp", "binary"],
-  },
-  {
-    id: "settings-experimental",
-    label: "Settings — Experimental",
-    description: "Controller support, web funscripts",
-    category: "Settings",
-    to: "/settings?section=experimental",
-    keywords: ["controller", "gamepad", "experimental"],
-  },
-  {
-    id: "settings-help",
-    label: "Settings — Help",
-    description: "Keyboard shortcut reference",
-    category: "Settings",
-    to: "/settings?section=help",
-    keywords: ["shortcuts", "keyboard", "hotkeys"],
-  },
-];
+function buildNavigationCommands(
+  msg: (id: string, message: string) => string
+): CommandItem[] {
+  return [
+    {
+      id: "home",
+      label: msg("command-palette.home", "Home"),
+      description: msg("command-palette.home.description", "Main menu"),
+      category: msg("command-palette.category.navigation", "Navigation"),
+      to: "/",
+    },
+    {
+      id: "single-player",
+      label: msg("command-palette.single-player", "Single Player"),
+      description: msg("command-palette.single-player.description", "Start a single-player game"),
+      category: msg("command-palette.category.play", "Play"),
+      to: "/single-player-setup",
+    },
+    {
+      id: "multiplayer",
+      label: msg("command-palette.multiplayer", "Multiplayer"),
+      description: msg("command-palette.multiplayer.description", "Join or host a multiplayer lobby"),
+      category: msg("command-palette.category.play", "Play"),
+      to: "/multiplayer",
+    },
+    {
+      id: "rounds",
+      label: msg("command-palette.rounds", "Installed Rounds"),
+      description: msg("command-palette.rounds.description", "Manage your round library"),
+      category: msg("command-palette.category.workshop", "Workshop"),
+      to: "/rounds",
+    },
+    {
+      id: "converter",
+      label: msg("command-palette.converter", "Round Converter"),
+      description: msg("command-palette.converter.description", "Convert videos to playable rounds"),
+      category: msg("command-palette.category.workshop", "Workshop"),
+      to: "/converter",
+    },
+    {
+      id: "playlist-workshop",
+      label: msg("command-palette.playlist-workshop", "Playlist Workshop"),
+      description: msg("command-palette.playlist-workshop.description", "Create and edit playlists"),
+      category: msg("command-palette.category.workshop", "Workshop"),
+      to: "/playlist-workshop",
+    },
+    {
+      id: "map-editor",
+      label: msg("command-palette.map-editor", "Map Editor"),
+      description: msg("command-palette.map-editor.description", "Design board layouts"),
+      category: msg("command-palette.category.workshop", "Workshop"),
+      to: "/map-editor",
+    },
+    {
+      id: "highscores",
+      label: msg("command-palette.highscores", "Highscores"),
+      description: msg("command-palette.highscores.description", "View score history"),
+      category: msg("command-palette.category.navigation", "Navigation"),
+      to: "/highscores",
+    },
+    {
+      id: "settings-general",
+      label: msg("command-palette.settings-general", "Settings - General"),
+      description: msg("command-palette.settings-general.description", "Fullscreen, background videos"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=general",
+    },
+    {
+      id: "settings-gameplay",
+      label: msg("command-palette.settings-gameplay", "Settings - Gameplay"),
+      description: msg("command-palette.settings-gameplay.description", "HUD, perks, cheat mode"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=gameplay",
+    },
+    {
+      id: "settings-audio",
+      label: msg("command-palette.settings-audio", "Settings - Audio"),
+      description: msg("command-palette.settings-audio.description", "Music queue, volume"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=audio",
+    },
+    {
+      id: "settings-hardware",
+      label: msg("command-palette.settings-hardware", "Settings - Hardware & Sync"),
+      description: msg("command-palette.settings-hardware.description", "TheHandy, funscripts"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=hardware",
+      keywords: ["handy", "funscript", "device"],
+    },
+    {
+      id: "settings-sources",
+      label: msg("command-palette.settings-sources", "Settings - Sources & Library"),
+      description: msg("command-palette.settings-sources.description", "Stash, auto-scan folders"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=sources",
+      keywords: ["stash", "scan", "library"],
+    },
+    {
+      id: "settings-security",
+      label: msg("command-palette.settings-security", "Settings - Security & Privacy"),
+      description: msg("command-palette.settings-security.description", "SFW mode, safe domains"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=security-privacy",
+      keywords: ["sfw", "safe", "domains"],
+    },
+    {
+      id: "settings-data",
+      label: msg("command-palette.settings-data", "Settings - Data & Storage"),
+      description: msg("command-palette.settings-data.description", "Cache, clear data"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=app",
+      keywords: ["cache", "storage", "phash"],
+    },
+    {
+      id: "settings-advanced",
+      label: msg("command-palette.settings-advanced", "Settings - Advanced"),
+      description: msg("command-palette.settings-advanced.description", "FFmpeg, yt-dlp"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=advanced",
+      keywords: ["ffmpeg", "ytdlp", "binary"],
+    },
+    {
+      id: "settings-experimental",
+      label: msg("command-palette.settings-experimental", "Settings - Experimental"),
+      description: msg("command-palette.settings-experimental.description", "Controller support, web funscripts"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=experimental",
+      keywords: ["controller", "gamepad", "experimental"],
+    },
+    {
+      id: "settings-help",
+      label: msg("command-palette.settings-help", "Settings - Help"),
+      description: msg("command-palette.settings-help.description", "Keyboard shortcut reference"),
+      category: msg("command-palette.category.settings", "Settings"),
+      to: "/settings?section=help",
+      keywords: ["shortcuts", "keyboard", "hotkeys"],
+    },
+  ];
+}
 
 export function CommandPalette() {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -162,6 +176,15 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const guard = useCommandPaletteGuard();
   const { manuallyStopped, toggleManualStop } = useHandy();
+  const translateMessage = useCallback((id: string, message: string) => {
+    if (!i18n.locale) return message;
+    try {
+      const translated = i18n._({ id, message });
+      return translated || message;
+    } catch {
+      return message;
+    }
+  }, []);
 
   useEffect(() => {
     _setOpenFromOutside = (value: boolean) => {
@@ -178,54 +201,78 @@ export function CommandPalette() {
 
   const commands = useMemo<CommandItem[]>(
     () => [
-      ...NAVIGATION_COMMANDS,
+      ...buildNavigationCommands(translateMessage),
       {
         id: "rounds-install-web",
-        label: "Install From Web",
-        description: "Open the website round installer",
-        category: "Workshop",
+        label: translateMessage("command-palette.rounds-install-web", "Install From Web"),
+        description: translateMessage(
+          "command-palette.rounds-install-web.description",
+          "Open the website round installer"
+        ),
+        category: translateMessage("command-palette.category.workshop", "Workshop"),
         action: () => navigate({ to: "/rounds", search: { open: "install-web" } }),
         keywords: ["rounds", "install", "web", "url", "website"],
       },
       {
         id: "rounds-install-folder",
-        label: "Install Rounds",
-        description: "Open the folder picker for round installs",
-        category: "Workshop",
+        label: translateMessage("command-palette.rounds-install-folder", "Install Rounds"),
+        description: translateMessage(
+          "command-palette.rounds-install-folder.description",
+          "Open the folder picker for round installs"
+        ),
+        category: translateMessage("command-palette.category.workshop", "Workshop"),
         action: () => navigate({ to: "/rounds", search: { open: "install-rounds" } }),
         keywords: ["rounds", "install", "folder", "import", "scan"],
       },
       {
         id: "music-menu",
-        label: "Music Menu",
-        description: "Open the global music overlay",
-        category: "Media",
+        label: translateMessage("command-palette.music-menu", "Music Menu"),
+        description: translateMessage(
+          "command-palette.music-menu.description",
+          "Open the global music overlay"
+        ),
+        category: translateMessage("command-palette.category.media", "Media"),
         action: openGlobalMusicOverlay,
         keywords: ["music", "player", "overlay", "queue"],
       },
       {
         id: "thehandy-menu",
-        label: "TheHandy Menu",
-        description: "Open the global TheHandy overlay",
-        category: "Hardware",
+        label: translateMessage("command-palette.thehandy-menu", "TheHandy Menu"),
+        description: translateMessage(
+          "command-palette.thehandy-menu.description",
+          "Open the global TheHandy overlay"
+        ),
+        category: translateMessage("command-palette.category.hardware", "Hardware"),
         action: openGlobalHandyOverlay,
         keywords: ["handy", "thehandy", "device", "sync", "overlay", "offset"],
       },
       {
         id: "thehandy-toggle",
-        label: manuallyStopped ? "Start TheHandy" : "Stop TheHandy",
-        description: "Toggle TheHandy manual stop state",
-        category: "Hardware",
+        label: manuallyStopped
+          ? translateMessage("command-palette.thehandy-start", "Start TheHandy")
+          : translateMessage("command-palette.thehandy-stop", "Stop TheHandy"),
+        description: translateMessage(
+          "command-palette.thehandy-toggle.description",
+          "Toggle TheHandy manual stop state"
+        ),
+        category: translateMessage("command-palette.category.hardware", "Hardware"),
         action: async () => {
           const result = await toggleManualStop();
-          if (result === "stopped") return "TheHandy stopped.";
-          if (result === "resumed") return "TheHandy resumed.";
-          return "No connected TheHandy to toggle.";
+          if (result === "stopped") {
+            return translateMessage("command-palette.thehandy-stopped", "TheHandy stopped.");
+          }
+          if (result === "resumed") {
+            return translateMessage("command-palette.thehandy-resumed", "TheHandy resumed.");
+          }
+          return translateMessage(
+            "command-palette.thehandy-unavailable",
+            "No connected TheHandy to toggle."
+          );
         },
         keywords: ["handy", "thehandy", "device", "sync", "start", "stop", "resume"],
       },
     ],
-    [manuallyStopped, navigate, toggleManualStop]
+    [manuallyStopped, navigate, toggleManualStop, translateMessage]
   );
 
   const filtered = useMemo(() => {
@@ -244,7 +291,7 @@ export function CommandPalette() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (guard.blocked) {
-          setToast(guard.reason ?? "You cannot use the command palette here.");
+          setToast(guard.reason ?? t`You cannot use the command palette here.`);
           return;
         }
         setOpen((prev) => !prev);
@@ -257,7 +304,7 @@ export function CommandPalette() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [guard.blocked, guard.reason, open]);
+  }, [guard.blocked, guard.reason, open, t]);
 
   const execute = useCallback(
     async (cmd: CommandItem) => {
@@ -329,7 +376,7 @@ export function CommandPalette() {
       onKeyDown={() => {}}
       role="button"
       tabIndex={-1}
-      aria-label="Close command palette"
+      aria-label={t`Close command palette`}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
@@ -355,7 +402,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             className="flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
-            placeholder="Search pages, settings, actions..."
+            placeholder={t`Search pages, settings, actions...`}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -368,7 +415,9 @@ export function CommandPalette() {
 
         <div ref={listRef} className="max-h-72 overflow-y-auto p-2">
           {filtered.length === 0 && (
-            <div className="px-3 py-6 text-center text-sm text-zinc-600">No results found.</div>
+            <div className="px-3 py-6 text-center text-sm text-zinc-600">
+              <Trans>No results found.</Trans>
+            </div>
           )}
           {filtered.map((cmd, index) => (
             <button
@@ -400,13 +449,13 @@ export function CommandPalette() {
 
         <div className="flex items-center gap-4 border-t border-violet-300/10 px-4 py-2 text-[10px] text-zinc-600">
           <span className="flex items-center gap-1">
-            <kbd className="converter-kbd">↑↓</kbd> navigate
+            <kbd className="converter-kbd">↑↓</kbd> <Trans>navigate</Trans>
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="converter-kbd">↵</kbd> open
+            <kbd className="converter-kbd">↵</kbd> <Trans>open</Trans>
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="converter-kbd">Esc</kbd> close
+            <kbd className="converter-kbd">Esc</kbd> <Trans>close</Trans>
           </span>
         </div>
       </div>

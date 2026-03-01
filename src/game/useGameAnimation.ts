@@ -149,6 +149,26 @@ export function useGameAnimation(
     }
   }, []);
 
+  const commitState = useCallback(
+    (nextState: GameState, options?: { syncPathChoice?: boolean }): GameState => {
+      stateRef.current = nextState;
+      setState(nextState);
+      if (options?.syncPathChoice !== false) {
+        syncPathChoiceRef(nextState);
+      }
+      return nextState;
+    },
+    [syncPathChoiceRef]
+  );
+
+  const applyTransition = useCallback(
+    (
+      transition: (state: GameState) => GameState,
+      options?: { syncPathChoice?: boolean }
+    ): GameState => commitState(transition(stateRef.current), options),
+    [commitState]
+  );
+
   const toPathIndices = useCallback((nextState: GameState): number[] => {
     if (nextState.lastTraversalPathNodeIds.length <= 1) return [];
     return nextState.lastTraversalPathNodeIds
@@ -225,15 +245,7 @@ export function useGameAnimation(
         antiPerkIndex: Math.floor(Math.random() * 20),
       };
 
-      setState((prev: GameState) => {
-        const next = completeRound(prev, summary, installedRounds, randoms);
-        return next;
-      });
-
-      // Maintain ref and sync path choice outside of setState
-      const nextRef = completeRound(stateRef.current, summary, installedRounds, randoms);
-      stateRef.current = nextRef;
-      syncPathChoiceRef(nextRef);
+      applyTransition((prev) => completeRound(prev, summary, installedRounds, randoms));
 
       const nextPhase: AnimPhase = { kind: "idle" };
       animPhaseRef.current = nextPhase;
@@ -241,18 +253,11 @@ export function useGameAnimation(
       turnTimerElapsedRef.current = 0;
       setNextAutoRollInSec(null);
     },
-    [installedRounds, syncPathChoiceRef]
+    [applyTransition, installedRounds]
   );
 
   const handleReportCum = useCallback(() => {
-    setState((prev: GameState) => {
-      const next = reportPlayerCum(prev);
-      return next;
-    });
-
-    const nextRef = reportPlayerCum(stateRef.current);
-    stateRef.current = nextRef;
-    syncPathChoiceRef(nextRef);
+    applyTransition((prev) => reportPlayerCum(prev));
 
     const nextPhase: AnimPhase = { kind: "idle" };
     animPhaseRef.current = nextPhase;
@@ -261,7 +266,7 @@ export function useGameAnimation(
     setPathChoiceRemainingMs(null);
     turnTimerElapsedRef.current = 0;
     pathChoiceElapsedRef.current = 0;
-  }, [syncPathChoiceRef]);
+  }, [applyTransition]);
 
   const handleSelectPathEdge = useCallback(
     (edgeId: string) => {
@@ -271,11 +276,9 @@ export function useGameAnimation(
         perkChoicesRolls: [Math.random(), Math.random(), Math.random()],
       };
 
-      setState((prev) => selectPathEdge(prev, edgeId, installedRounds, randoms));
-
-      const nextState = selectPathEdge(stateRef.current, edgeId, installedRounds, randoms);
-      stateRef.current = nextState;
-      syncPathChoiceRef(nextState);
+      const nextState = applyTransition((prev) =>
+        selectPathEdge(prev, edgeId, installedRounds, randoms)
+      );
       setPathChoiceRemainingMs(null);
       pathChoiceElapsedRef.current = 0;
 
@@ -305,7 +308,7 @@ export function useGameAnimation(
       animPhaseRef.current = nextAnim;
       setAnimPhase(nextAnim);
     },
-    [installedRounds, syncPathChoiceRef, toGateStepIndices, toPathIndices]
+    [applyTransition, installedRounds, toGateStepIndices, toPathIndices]
   );
 
   const handleResolvePathChoiceTimeout = useCallback(() => {
@@ -316,11 +319,9 @@ export function useGameAnimation(
       perkChoicesRolls: [Math.random(), Math.random(), Math.random()],
     };
 
-    setState((prev) => resolvePathChoiceTimeout(prev, installedRounds, randoms));
-
-    const nextState = resolvePathChoiceTimeout(stateRef.current, installedRounds, randoms);
-    stateRef.current = nextState;
-    syncPathChoiceRef(nextState);
+    const nextState = applyTransition((prev) =>
+      resolvePathChoiceTimeout(prev, installedRounds, randoms)
+    );
     setPathChoiceRemainingMs(null);
     pathChoiceElapsedRef.current = 0;
 
@@ -349,14 +350,10 @@ export function useGameAnimation(
         : { kind: "idle" };
     animPhaseRef.current = nextAnim;
     setAnimPhase(nextAnim);
-  }, [installedRounds, syncPathChoiceRef, toGateStepIndices, toPathIndices]);
+  }, [applyTransition, installedRounds, toGateStepIndices, toPathIndices]);
 
   const handleSelectPerk = useCallback((perkId: string, options?: { applyDirectly?: boolean }) => {
-    setState((prev) => selectPerk(prev, perkId, options));
-
-    const nextState = selectPerk(stateRef.current, perkId, options);
-    stateRef.current = nextState;
-    syncPathChoiceRef(nextState);
+    const nextState = applyTransition((prev) => selectPerk(prev, perkId, options));
     playPerkActionSound();
 
     const nextAnim: AnimPhase =
@@ -367,16 +364,10 @@ export function useGameAnimation(
         : { kind: "idle" };
     animPhaseRef.current = nextAnim;
     setAnimPhase(nextAnim);
-    turnTimerElapsedRef.current = 0;
-    setNextAutoRollInSec(null);
-  }, [syncPathChoiceRef]);
+  }, [applyTransition]);
 
   const handleSkipPerk = useCallback(() => {
-    setState((prev) => skipPerkSelection(prev));
-
-    const nextState = skipPerkSelection(stateRef.current);
-    stateRef.current = nextState;
-    syncPathChoiceRef(nextState);
+    const nextState = applyTransition((prev) => skipPerkSelection(prev));
     playPerkActionSound();
 
     const nextAnim: AnimPhase =
@@ -387,57 +378,51 @@ export function useGameAnimation(
         : { kind: "idle" };
     animPhaseRef.current = nextAnim;
     setAnimPhase(nextAnim);
-  }, [syncPathChoiceRef]);
+  }, [applyTransition]);
 
   const handleApplyExternalPerk = useCallback(
     (input: { targetPlayerId: string; perkId: string; sourceLabel?: string }) => {
-      setState((prev) => applyPerkByIdToPlayer(prev, input));
-      stateRef.current = applyPerkByIdToPlayer(stateRef.current, input);
+      applyTransition((prev) => applyPerkByIdToPlayer(prev, input));
       playPerkActionSound();
     },
-    []
+    [applyTransition]
   );
 
   const handleApplyInventoryItemToSelf = useCallback(
     (input: { playerId: string; itemId: string }) => {
-      setState((prev) => applyInventoryItemToSelf(prev, input));
-      stateRef.current = applyInventoryItemToSelf(stateRef.current, input);
+      applyTransition((prev) => applyInventoryItemToSelf(prev, input));
       playPerkActionSound();
     },
-    []
+    [applyTransition]
   );
 
   const handleConsumeInventoryItem = useCallback(
     (input: { playerId: string; itemId: string; reason?: string }) => {
-      setState((prev) => consumeInventoryItem(prev, input));
-      stateRef.current = consumeInventoryItem(stateRef.current, input);
+      applyTransition((prev) => consumeInventoryItem(prev, input));
     },
-    []
+    [applyTransition]
   );
 
   const handleAdjustPlayerMoney = useCallback(
     (input: { playerId: string; delta: number; reason?: string }) => {
-      setState((prev) => adjustPlayerMoney(prev, input));
-      stateRef.current = adjustPlayerMoney(stateRef.current, input);
+      applyTransition((prev) => adjustPlayerMoney(prev, input));
     },
-    []
+    [applyTransition]
   );
 
   const handleUseRoundControl = useCallback(
     (input: { playerId: string; control: "pause" | "skip" }) => {
-      setState((prev) => useRoundControl(prev, input));
-      stateRef.current = useRoundControl(stateRef.current, input);
+      applyTransition((prev) => useRoundControl(prev, input));
       playPerkActionSound();
     },
-    []
+    [applyTransition]
   );
 
   const handleConsumeAntiPerkById = useCallback(
     (input: { playerId: string; perkId: string; reason?: string }) => {
-      setState((prev) => consumeAntiPerkById(prev, input));
-      stateRef.current = consumeAntiPerkById(stateRef.current, input);
+      applyTransition((prev) => consumeAntiPerkById(prev, input));
     },
-    []
+    [applyTransition]
   );
 
   const tickAnim = useCallback(
@@ -454,10 +439,9 @@ export function useGameAnimation(
       );
 
       const canCountdownRun =
-        phase.kind === "idle" &&
+        (phase.kind === "idle" || phase.kind === "perkReveal") &&
         !s.activeRound &&
         !s.pendingPathChoice &&
-        !s.pendingPerkSelection &&
         !hasBoardSequenceAntiPerk &&
         s.sessionPhase !== "completed";
 
@@ -474,9 +458,7 @@ export function useGameAnimation(
           let nextState = s;
           if (s.pendingPerkSelection) {
             nextState = skipPerkSelection(s);
-            setState(nextState);
-            stateRef.current = nextState;
-            syncPathChoiceRef(nextState);
+            commitState(nextState);
           }
 
           if (
@@ -538,9 +520,7 @@ export function useGameAnimation(
           const path = toPathIndices(nextState);
           const gateStepIndices = toGateStepIndices(nextState);
 
-          setState(nextState);
-          stateRef.current = nextState;
-          syncPathChoiceRef(nextState);
+          commitState(nextState);
           playDiceResultSound();
 
           const next: AnimPhase = {
@@ -662,8 +642,7 @@ export function useGameAnimation(
         const newElapsed = phase.elapsed + dt;
         const remaining = Math.max(0, phase.duration - newElapsed);
         if (newElapsed >= phase.duration) {
-          setState((prev: GameState) => triggerQueuedRound(prev));
-          stateRef.current = triggerQueuedRound(stateRef.current);
+          applyTransition((prev) => triggerQueuedRound(prev));
           const next: AnimPhase = { kind: "idle" };
           animPhaseRef.current = next;
           setAnimPhase(next);
@@ -684,6 +663,13 @@ export function useGameAnimation(
       }
 
       if (phase.kind === "perkReveal") {
+        const currentS = stateRef.current;
+        if (!currentS.pendingPerkSelection) {
+          const next: AnimPhase = { kind: "idle" };
+          animPhaseRef.current = next;
+          setAnimPhase(next);
+          return next;
+        }
         const newElapsed = phase.elapsed + dt;
         if (newElapsed >= PERK_REVEAL_DURATION) {
           return phase;
@@ -702,7 +688,15 @@ export function useGameAnimation(
 
       return phase;
     },
-    [handleResolvePathChoiceTimeout, installedRounds, queueRollPhase, syncPathChoiceRef, toPathIndices]
+    [
+      applyTransition,
+      commitState,
+      handleResolvePathChoiceTimeout,
+      installedRounds,
+      queueRollPhase,
+      toPathIndices,
+      toGateStepIndices,
+    ]
   );
 
   return {

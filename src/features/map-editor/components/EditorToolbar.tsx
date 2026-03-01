@@ -1,4 +1,5 @@
 import React from "react";
+import { useLingui } from "@lingui/react/macro";
 import { playHoverSound, playSelectSound } from "../../../utils/audio";
 import { GameDropdown } from "../../../components/ui/GameDropdown";
 import type { MapEditorTool } from "../EditorState";
@@ -6,13 +7,12 @@ import type { GraphAlignmentStrategy } from "../graphAlignment";
 
 const TOOL_ITEMS: ReadonlyArray<{
   id: MapEditorTool;
-  label: string;
   shortcut: string;
   icon: string;
 }> = [
-  { id: "select", label: "Select", shortcut: "V", icon: "⊹" },
-  { id: "place", label: "Place", shortcut: "P", icon: "◆" },
-  { id: "connect", label: "Connect", shortcut: "C", icon: "⤳" },
+  { id: "select", shortcut: "V", icon: "⊹" },
+  { id: "place", shortcut: "P", icon: "◆" },
+  { id: "connect", shortcut: "C", icon: "⤳" },
 ];
 
 interface EditorToolbarProps {
@@ -60,17 +60,26 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
     onResetGraph,
     onSave,
     onTestMap,
-  }) => (
+  }) => {
+    const { t } = useLingui();
+    const toolLabels: Record<MapEditorTool, string> = {
+      select: t`Select`,
+      place: t`Place`,
+      connect: t`Connect`,
+    };
+
+    return (
     <div className="editor-toolbar relative z-10 flex flex-shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-black/40 px-2 py-1.5 backdrop-blur-sm">
       {/* ── Mode tools ─────────────────── */}
       <div className="flex items-center gap-1">
         {TOOL_ITEMS.map((item) => {
           const isActive = tool === item.id;
+          const label = toolLabels[item.id];
           return (
             <button
               key={item.id}
               type="button"
-              title={`${item.label} (${item.shortcut})`}
+              title={t`${label} (${item.shortcut})`}
               className={`editor-tool-button flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all ${
                 isActive
                   ? "is-active border-cyan-400/65 bg-cyan-500/18 text-cyan-100 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
@@ -84,7 +93,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
               data-controller-focus-id={`map-editor-toolbar-tool-${item.id}`}
             >
               <span className="text-sm leading-none">{item.icon}</span>
-              <span className="hidden sm:inline">{item.label}</span>
+              <span className="hidden sm:inline">{label}</span>
               <kbd className="hidden rounded bg-white/8 px-1 py-0.5 font-mono text-[10px] text-zinc-500 sm:inline">
                 {item.shortcut}
               </kbd>
@@ -98,44 +107,44 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
       {/* ── View actions ─────────────────── */}
       <div className="flex items-center gap-1">
         <ToolbarIconButton
-          label={showGrid ? "Hide Grid" : "Show Grid"}
+          label={showGrid ? t`Hide Grid` : t`Show Grid`}
           shortcut="G"
           icon={showGrid ? "▦" : "▢"}
           onClick={onToggleGrid}
         />
-        <ToolbarIconButton label="Reset View" shortcut="0" icon="⌖" onClick={onResetView} />
+        <ToolbarIconButton label={t`Reset View`} shortcut="0" icon="⌖" onClick={onResetView} />
       </div>
 
       <div className="mx-1.5 h-5 w-px bg-zinc-700/60" />
 
       {/* ── Edit actions ─────────────────── */}
       <div className="flex items-center gap-1">
-        <ToolbarIconButton label="Delete" shortcut="X" icon="✕" onClick={onDelete} />
+        <ToolbarIconButton label={t`Delete`} shortcut="X" icon="✕" onClick={onDelete} />
         <ToolbarIconButton
-          label="Undo"
+          label={t`Undo`}
           shortcut="⌘Z"
           icon="↶"
           onClick={onUndo}
           disabled={!canUndo}
         />
         <ToolbarIconButton
-          label="Redo"
+          label={t`Redo`}
           shortcut="⌘Y"
           icon="↷"
           onClick={onRedo}
           disabled={!canRedo}
         />
-        <ToolbarIconButton label="Reset Graph" icon="⟲" onClick={onResetGraph} />
+        <ToolbarIconButton label={t`Reset Graph`} icon="⟲" onClick={onResetGraph} />
         <div className="flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-xs text-zinc-400 hover:bg-white/5">
-          <span className="hidden sm:inline">Layout</span>
+          <span className="hidden sm:inline">{t`Layout`}</span>
           <GameDropdown
             value={alignmentStrategy}
             options={[
-              { value: "layeredHorizontal", label: "Layered →" },
-              { value: "layeredVertical", label: "Layered ↓" },
-              { value: "layeredUp", label: "Layered ↑" },
-              { value: "snake", label: "Snake" },
-              { value: "gridCleanup", label: "Grid tidy" },
+              { value: "layeredHorizontal", label: t`Layered ->` },
+              { value: "layeredVertical", label: t`Layered down` },
+              { value: "layeredUp", label: t`Layered up` },
+              { value: "snake", label: t`Snake` },
+              { value: "gridCleanup", label: t`Grid tidy` },
             ]}
             onHoverSfx={playHoverSound}
             onSelectSfx={playSelectSound}
@@ -145,7 +154,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
           />
         </div>
         <ToolbarIconButton
-          label="Apply Layout"
+          label={t`Apply Layout`}
           shortcut="L"
           icon="⇢"
           onClick={onRealignGraph}
@@ -165,7 +174,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
           disabled={savePending || testMapPending || !isDirty}
           data-controller-focus-id="map-editor-toolbar-save"
         >
-          {savePending ? "Saving…" : "Save"}
+          {savePending ? t`Saving...` : t`Save`}
         </button>
         <button
           type="button"
@@ -175,11 +184,12 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
           disabled={savePending || testMapPending}
           data-controller-focus-id="map-editor-toolbar-test-map"
         >
-          {testMapPending ? "Starting…" : "Test Map"}
+          {testMapPending ? t`Starting...` : t`Test Map`}
         </button>
       </div>
     </div>
-  )
+    );
+  }
 );
 
 EditorToolbar.displayName = "EditorToolbar";

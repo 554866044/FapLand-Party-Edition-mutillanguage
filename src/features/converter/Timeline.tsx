@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import React, { useEffect, useMemo, useState, type RefObject } from "react";
 import { useSfwMode } from "../../hooks/useSfwMode";
 import { playHoverSound } from "../../utils/audio";
@@ -6,325 +7,331 @@ import { DEFAULT_ZOOM_PX_PER_SEC, formatMs, type DragState, type SegmentDraft } 
 import type { FunscriptAction } from "../../game/media/playback";
 
 type TimelineProps = {
-    timelineScrollRef: RefObject<HTMLDivElement | null>;
-    dragStateRef: React.MutableRefObject<DragState | null>;
-    durationMs: number;
-    currentTimeMs: number;
-    markInMs: number | null;
-    markOutMs: number | null;
-    zoomPxPerSec: number;
-    timelineWidthPx: number;
-    sortedSegments: SegmentDraft[];
-    selectedSegmentId: string | null;
-    funscriptActions: FunscriptAction[];
-    onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
-    onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-    onSelectSegment: (id: string) => void;
-    onZoomChange: (next: number) => void;
+  timelineScrollRef: RefObject<HTMLDivElement | null>;
+  dragStateRef: React.MutableRefObject<DragState | null>;
+  durationMs: number;
+  currentTimeMs: number;
+  markInMs: number | null;
+  markOutMs: number | null;
+  zoomPxPerSec: number;
+  timelineWidthPx: number;
+  sortedSegments: SegmentDraft[];
+  selectedSegmentId: string | null;
+  funscriptActions: FunscriptAction[];
+  onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
+  onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onSelectSegment: (id: string) => void;
+  onZoomChange: (next: number) => void;
 };
 
 const WAVEFORM_HEIGHT = 40;
 const WAVEFORM_BUCKET_PX = 3;
 
 function buildWaveformPath(
-    actions: FunscriptAction[],
-    durationMs: number,
-    widthPx: number,
+  actions: FunscriptAction[],
+  durationMs: number,
+  widthPx: number
 ): string {
-    if (actions.length < 2 || durationMs <= 0 || widthPx <= 0) return "";
+  if (actions.length < 2 || durationMs <= 0 || widthPx <= 0) return "";
 
-    const bucketCount = Math.max(1, Math.floor(widthPx / WAVEFORM_BUCKET_PX));
-    const bucketMs = durationMs / bucketCount;
-    const peaks = new Float32Array(bucketCount);
+  const bucketCount = Math.max(1, Math.floor(widthPx / WAVEFORM_BUCKET_PX));
+  const bucketMs = durationMs / bucketCount;
+  const peaks = new Float32Array(bucketCount);
 
-    for (const action of actions) {
-        const bucket = Math.min(Math.floor(action.at / bucketMs), bucketCount - 1);
-        const normalizedPos = (action.pos ?? 0) / 100;
-        if (normalizedPos > peaks[bucket]!) {
-            peaks[bucket] = normalizedPos;
-        }
+  for (const action of actions) {
+    const bucket = Math.min(Math.floor(action.at / bucketMs), bucketCount - 1);
+    const normalizedPos = (action.pos ?? 0) / 100;
+    if (normalizedPos > peaks[bucket]!) {
+      peaks[bucket] = normalizedPos;
     }
+  }
 
-    const parts: string[] = [`M 0 ${WAVEFORM_HEIGHT}`];
-    for (let i = 0; i < bucketCount; i++) {
-        const x = (i / bucketCount) * widthPx;
-        const y = WAVEFORM_HEIGHT - peaks[i]! * WAVEFORM_HEIGHT;
-        parts.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
-    }
-    parts.push(`L ${widthPx} ${WAVEFORM_HEIGHT} Z`);
-    return parts.join(" ");
+  const parts: string[] = [`M 0 ${WAVEFORM_HEIGHT}`];
+  for (let i = 0; i < bucketCount; i++) {
+    const x = (i / bucketCount) * widthPx;
+    const y = WAVEFORM_HEIGHT - peaks[i]! * WAVEFORM_HEIGHT;
+    parts.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
+  }
+  parts.push(`L ${widthPx} ${WAVEFORM_HEIGHT} Z`);
+  return parts.join(" ");
 }
 
 export const Timeline: React.FC<TimelineProps> = React.memo(
-    ({
-        timelineScrollRef,
-        dragStateRef,
-        durationMs,
-        currentTimeMs,
-        markInMs,
-        markOutMs,
-        zoomPxPerSec,
-        timelineWidthPx,
-        sortedSegments,
-        selectedSegmentId,
-        funscriptActions,
-        onTimelineWheel,
-        onTimelinePointerDown,
-        onSelectSegment,
-        onZoomChange,
-    }) => {
-        const sfwMode = useSfwMode();
-        const waveformPath = useMemo(
-            () => buildWaveformPath(funscriptActions, durationMs, timelineWidthPx),
-            [funscriptActions, durationMs, timelineWidthPx],
-        );
-        const [zoomDraft, setZoomDraft] = useState(() => `${zoomPxPerSec}`);
+  ({
+    timelineScrollRef,
+    dragStateRef,
+    durationMs,
+    currentTimeMs,
+    markInMs,
+    markOutMs,
+    zoomPxPerSec,
+    timelineWidthPx,
+    sortedSegments,
+    selectedSegmentId,
+    funscriptActions,
+    onTimelineWheel,
+    onTimelinePointerDown,
+    onSelectSegment,
+    onZoomChange,
+  }) => {
+    const sfwMode = useSfwMode();
+    const waveformPath = useMemo(
+      () => buildWaveformPath(funscriptActions, durationMs, timelineWidthPx),
+      [funscriptActions, durationMs, timelineWidthPx]
+    );
+    const [zoomDraft, setZoomDraft] = useState(() => `${zoomPxPerSec}`);
 
-        useEffect(() => {
-            setZoomDraft(`${zoomPxPerSec}`);
-        }, [zoomPxPerSec]);
+    useEffect(() => {
+      setZoomDraft(`${zoomPxPerSec}`);
+    }, [zoomPxPerSec]);
 
-        const commitZoomDraft = () => {
-            const parsed = Number(zoomDraft.trim());
-            if (!Number.isFinite(parsed)) {
-                setZoomDraft(`${zoomPxPerSec}`);
-                return;
-            }
-            onZoomChange(parsed);
-        };
+    const commitZoomDraft = () => {
+      const parsed = Number(zoomDraft.trim());
+      if (!Number.isFinite(parsed)) {
+        setZoomDraft(`${zoomPxPerSec}`);
+        return;
+      }
+      onZoomChange(parsed);
+    };
 
-        const zoomPercent = Math.round((zoomPxPerSec / DEFAULT_ZOOM_PX_PER_SEC) * 100);
+    const zoomPercent = Math.round((zoomPxPerSec / DEFAULT_ZOOM_PX_PER_SEC) * 100);
 
-        return (
-            <>
-                {/* Zoom controls */}
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-lg font-bold text-violet-100">Preview + Timeline</h2>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => onZoomChange(zoomPxPerSec - 10)}
-                            className="converter-zoom-button"
-                        >
-                            −
-                        </button>
-                        <label className="flex items-center gap-2 rounded-full border border-violet-300/20 bg-black/35 px-3 py-1.5 text-xs text-zinc-300">
-                            <span className="uppercase tracking-[0.2em] text-zinc-400">Zoom</span>
-                            <input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                max={480}
-                                step={1}
-                                value={zoomDraft}
-                                onChange={(event) => setZoomDraft(event.currentTarget.value)}
-                                onBlur={commitZoomDraft}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                        event.preventDefault();
-                                        commitZoomDraft();
-                                        event.currentTarget.blur();
-                                    }
-                                    if (event.key === "Escape") {
-                                        event.preventDefault();
-                                        setZoomDraft(`${zoomPxPerSec}`);
-                                        event.currentTarget.blur();
-                                    }
-                                }}
-                                aria-label="Timeline zoom"
-                                className="w-16 border-0 bg-transparent text-right font-medium text-zinc-100 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                            <span className="text-zinc-500">px/s</span>
-                        </label>
-                        <span className="converter-zoom-badge">
-                            {zoomPercent}%
-                        </span>
-                        <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => onZoomChange(zoomPxPerSec + 10)}
-                            className="converter-zoom-button"
-                        >
-                            +
-                        </button>
-                    </div>
-                </div>
+    return (
+      <>
+        {/* Zoom controls */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-violet-100">
+            <Trans>Preview + Timeline</Trans>
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => onZoomChange(zoomPxPerSec - 10)}
+              className="converter-zoom-button"
+            >
+              −
+            </button>
+            <label className="flex items-center gap-2 rounded-full border border-violet-300/20 bg-black/35 px-3 py-1.5 text-xs text-zinc-300">
+              <span className="uppercase tracking-[0.2em] text-zinc-400">
+                <Trans>Zoom</Trans>
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={480}
+                step={1}
+                value={zoomDraft}
+                onChange={(event) => setZoomDraft(event.currentTarget.value)}
+                onBlur={commitZoomDraft}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitZoomDraft();
+                    event.currentTarget.blur();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setZoomDraft(`${zoomPxPerSec}`);
+                    event.currentTarget.blur();
+                  }
+                }}
+                aria-label="Timeline zoom"
+                className="w-16 border-0 bg-transparent text-right font-medium text-zinc-100 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="text-zinc-500">px/s</span>
+            </label>
+            <span className="converter-zoom-badge">{zoomPercent}%</span>
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => onZoomChange(zoomPxPerSec + 10)}
+              className="converter-zoom-button"
+            >
+              +
+            </button>
+          </div>
+        </div>
 
-                {/* Timeline strip */}
+        {/* Timeline strip */}
+        <div
+          ref={timelineScrollRef}
+          onWheel={onTimelineWheel}
+          className="mt-4 overflow-x-auto rounded-2xl border border-violet-300/20 bg-black/40 p-4"
+        >
+          <div
+            className="relative h-36"
+            style={{ width: `${timelineWidthPx}px` }}
+            onPointerDown={onTimelinePointerDown}
+          >
+            {/* Track bar */}
+            <div className="absolute left-0 right-0 top-16 h-4 rounded-full bg-zinc-800/90" />
+
+            {/* Waveform */}
+            {waveformPath && (
+              <svg
+                className="absolute left-0 top-[52px] opacity-25"
+                width={timelineWidthPx}
+                height={WAVEFORM_HEIGHT}
+                preserveAspectRatio="none"
+                style={{ pointerEvents: "none" }}
+              >
+                <path d={waveformPath} fill="rgba(139,92,246,0.5)" />
+              </svg>
+            )}
+
+            {durationMs > 0 && (
+              <>
+                {/* Playhead */}
                 <div
-                    ref={timelineScrollRef}
-                    onWheel={onTimelineWheel}
-                    className="mt-4 overflow-x-auto rounded-2xl border border-violet-300/20 bg-black/40 p-4"
+                  className="converter-playhead absolute top-5 w-[2px]"
+                  style={{
+                    left: `${(currentTimeMs / durationMs) * timelineWidthPx}px`,
+                    height: "95px",
+                  }}
+                />
+                {/* Mark IN */}
+                {markInMs !== null && (
+                  <div
+                    className="absolute top-10 h-24 w-[2px] bg-cyan-300/90"
+                    style={{ left: `${(markInMs / durationMs) * timelineWidthPx}px` }}
+                    title={`IN ${formatMs(markInMs)}`}
+                  />
+                )}
+                {/* Mark OUT */}
+                {markOutMs !== null && (
+                  <div
+                    className="absolute top-10 h-24 w-[2px] bg-indigo-300/90"
+                    style={{ left: `${(markOutMs / durationMs) * timelineWidthPx}px` }}
+                    title={`OUT ${formatMs(markOutMs)}`}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Segments */}
+            {sortedSegments.map((segment) => {
+              const left =
+                durationMs > 0 ? (segment.startTimeMs / durationMs) * timelineWidthPx : 0;
+              const width =
+                durationMs > 0
+                  ? ((segment.endTimeMs - segment.startTimeMs) / durationMs) * timelineWidthPx
+                  : 0;
+
+              const tone =
+                segment.type === "Interjection"
+                  ? "bg-amber-500/45 border-amber-300/70"
+                  : segment.type === "Cum"
+                    ? "bg-rose-500/45 border-rose-300/70"
+                    : "bg-emerald-500/45 border-emerald-300/70";
+
+              const selected = selectedSegmentId === segment.id;
+
+              return (
+                <button
+                  key={segment.id}
+                  type="button"
+                  onClick={() => onSelectSegment(segment.id)}
+                  onMouseEnter={playHoverSound}
+                  className={`converter-segment-enter absolute top-14 h-8 rounded-md border ${tone} transition-shadow duration-150 ${
+                    selected
+                      ? "ring-2 ring-white/80 shadow-[0_0_14px_rgba(255,255,255,0.15)]"
+                      : "hover:brightness-125"
+                  }`}
+                  style={{ left, width: Math.max(6, width) }}
+                  title={`${abbreviateNsfwText(segment.type, sfwMode)} • ${formatMs(segment.startTimeMs)}-${formatMs(segment.endTimeMs)}`}
                 >
-                    <div
-                        className="relative h-36"
-                        style={{ width: `${timelineWidthPx}px` }}
-                        onPointerDown={onTimelinePointerDown}
-                    >
-                        {/* Track bar */}
-                        <div className="absolute left-0 right-0 top-16 h-4 rounded-full bg-zinc-800/90" />
+                  {selected && (
+                    <>
+                      <span
+                        role="presentation"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          dragStateRef.current = {
+                            segmentId: segment.id,
+                            edge: "start",
+                            pointerX: event.clientX,
+                            currentPointerX: event.clientX,
+                            initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
+                            initialStartTimeMs: segment.startTimeMs,
+                            initialEndTimeMs: segment.endTimeMs,
+                          };
+                        }}
+                        className="absolute -left-1 top-0 h-8 w-2 cursor-ew-resize rounded bg-white/85"
+                      />
+                      <span
+                        role="presentation"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          dragStateRef.current = {
+                            segmentId: segment.id,
+                            edge: "end",
+                            pointerX: event.clientX,
+                            currentPointerX: event.clientX,
+                            initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
+                            initialStartTimeMs: segment.startTimeMs,
+                            initialEndTimeMs: segment.endTimeMs,
+                          };
+                        }}
+                        className="absolute -right-1 top-0 h-8 w-2 cursor-ew-resize rounded bg-white/85"
+                      />
+                    </>
+                  )}
+                </button>
+              );
+            })}
 
-                        {/* Waveform */}
-                        {waveformPath && (
-                            <svg
-                                className="absolute left-0 top-[52px] opacity-25"
-                                width={timelineWidthPx}
-                                height={WAVEFORM_HEIGHT}
-                                preserveAspectRatio="none"
-                                style={{ pointerEvents: "none" }}
-                            >
-                                <path d={waveformPath} fill="rgba(139,92,246,0.5)" />
-                            </svg>
-                        )}
-
-                        {durationMs > 0 && (
-                            <>
-                                {/* Playhead */}
-                                <div
-                                    className="converter-playhead absolute top-5 w-[2px]"
-                                    style={{
-                                        left: `${(currentTimeMs / durationMs) * timelineWidthPx}px`,
-                                        height: "95px",
-                                    }}
-                                />
-                                {/* Mark IN */}
-                                {markInMs !== null && (
-                                    <div
-                                        className="absolute top-10 h-24 w-[2px] bg-cyan-300/90"
-                                        style={{ left: `${(markInMs / durationMs) * timelineWidthPx}px` }}
-                                        title={`IN ${formatMs(markInMs)}`}
-                                    />
-                                )}
-                                {/* Mark OUT */}
-                                {markOutMs !== null && (
-                                    <div
-                                        className="absolute top-10 h-24 w-[2px] bg-indigo-300/90"
-                                        style={{ left: `${(markOutMs / durationMs) * timelineWidthPx}px` }}
-                                        title={`OUT ${formatMs(markOutMs)}`}
-                                    />
-                                )}
-                            </>
-                        )}
-
-                        {/* Segments */}
-                        {sortedSegments.map((segment) => {
-                            const left = durationMs > 0 ? (segment.startTimeMs / durationMs) * timelineWidthPx : 0;
-                            const width =
-                                durationMs > 0
-                                    ? ((segment.endTimeMs - segment.startTimeMs) / durationMs) * timelineWidthPx
-                                    : 0;
-
-                            const tone =
-                                segment.type === "Interjection"
-                                    ? "bg-amber-500/45 border-amber-300/70"
-                                    : segment.type === "Cum"
-                                        ? "bg-rose-500/45 border-rose-300/70"
-                                        : "bg-emerald-500/45 border-emerald-300/70";
-
-                            const selected = selectedSegmentId === segment.id;
-
-                            return (
-                                <button
-                                    key={segment.id}
-                                    type="button"
-                                    onClick={() => onSelectSegment(segment.id)}
-                                    onMouseEnter={playHoverSound}
-                                    className={`converter-segment-enter absolute top-14 h-8 rounded-md border ${tone} transition-shadow duration-150 ${selected ? "ring-2 ring-white/80 shadow-[0_0_14px_rgba(255,255,255,0.15)]" : "hover:brightness-125"
-                                        }`}
-                                    style={{ left, width: Math.max(6, width) }}
-                                    title={`${abbreviateNsfwText(segment.type, sfwMode)} • ${formatMs(segment.startTimeMs)}-${formatMs(segment.endTimeMs)}`}
-                                >
-                                    {selected && (
-                                        <>
-                                            <span
-                                                role="presentation"
-                                                onPointerDown={(event) => {
-                                                    event.preventDefault();
-                                                    dragStateRef.current = {
-                                                        segmentId: segment.id,
-                                                        edge: "start",
-                                                        pointerX: event.clientX,
-                                                        currentPointerX: event.clientX,
-                                                        initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
-                                                        initialStartTimeMs: segment.startTimeMs,
-                                                        initialEndTimeMs: segment.endTimeMs,
-                                                    };
-                                                }}
-                                                className="absolute -left-1 top-0 h-8 w-2 cursor-ew-resize rounded bg-white/85"
-                                            />
-                                            <span
-                                                role="presentation"
-                                                onPointerDown={(event) => {
-                                                    event.preventDefault();
-                                                    dragStateRef.current = {
-                                                        segmentId: segment.id,
-                                                        edge: "end",
-                                                        pointerX: event.clientX,
-                                                        currentPointerX: event.clientX,
-                                                        initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
-                                                        initialStartTimeMs: segment.startTimeMs,
-                                                        initialEndTimeMs: segment.endTimeMs,
-                                                    };
-                                                }}
-                                                className="absolute -right-1 top-0 h-8 w-2 cursor-ew-resize rounded bg-white/85"
-                                            />
-                                        </>
-                                    )}
-                                </button>
-                            );
-                        })}
-
-                        {/* Ruler */}
-                        {durationMs > 0 && (
-                            <div className="absolute left-0 right-0 top-[2px] flex justify-between text-[10px] text-zinc-400">
-                                {Array.from({ length: 11 }, (_, index) => {
-                                    const pointMs = Math.floor((durationMs * index) / 10);
-                                    return <span key={index}>{formatMs(pointMs)}</span>;
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </>
-        );
-    },
+            {/* Ruler */}
+            {durationMs > 0 && (
+              <div className="absolute left-0 right-0 top-[2px] flex justify-between text-[10px] text-zinc-400">
+                {Array.from({ length: 11 }, (_, index) => {
+                  const pointMs = Math.floor((durationMs * index) / 10);
+                  return <span key={index}>{formatMs(pointMs)}</span>;
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
 );
 
 Timeline.displayName = "Timeline";
 
 export function pickTimelineProps(state: {
-    timelineScrollRef: RefObject<HTMLDivElement | null>;
-    dragStateRef: React.MutableRefObject<DragState | null>;
-    durationMs: number;
-    currentTimeMs: number;
-    markInMs: number | null;
-    markOutMs: number | null;
-    zoomPxPerSec: number;
-    timelineWidthPx: number;
-    sortedSegments: SegmentDraft[];
-    selectedSegmentId: string | null;
-    funscriptActions: FunscriptAction[];
-    onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
-    onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-    setSelectedSegmentId: (id: string) => void;
-    setZoomWithSfx: (next: number) => void;
+  timelineScrollRef: RefObject<HTMLDivElement | null>;
+  dragStateRef: React.MutableRefObject<DragState | null>;
+  durationMs: number;
+  currentTimeMs: number;
+  markInMs: number | null;
+  markOutMs: number | null;
+  zoomPxPerSec: number;
+  timelineWidthPx: number;
+  sortedSegments: SegmentDraft[];
+  selectedSegmentId: string | null;
+  funscriptActions: FunscriptAction[];
+  onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
+  onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  setSelectedSegmentId: (id: string) => void;
+  setZoomWithSfx: (next: number) => void;
 }): TimelineProps {
-    return {
-        timelineScrollRef: state.timelineScrollRef,
-        dragStateRef: state.dragStateRef,
-        durationMs: state.durationMs,
-        currentTimeMs: state.currentTimeMs,
-        markInMs: state.markInMs,
-        markOutMs: state.markOutMs,
-        zoomPxPerSec: state.zoomPxPerSec,
-        timelineWidthPx: state.timelineWidthPx,
-        sortedSegments: state.sortedSegments,
-        selectedSegmentId: state.selectedSegmentId,
-        funscriptActions: state.funscriptActions,
-        onTimelineWheel: state.onTimelineWheel,
-        onTimelinePointerDown: state.onTimelinePointerDown,
-        onSelectSegment: state.setSelectedSegmentId,
-        onZoomChange: state.setZoomWithSfx,
-    };
+  return {
+    timelineScrollRef: state.timelineScrollRef,
+    dragStateRef: state.dragStateRef,
+    durationMs: state.durationMs,
+    currentTimeMs: state.currentTimeMs,
+    markInMs: state.markInMs,
+    markOutMs: state.markOutMs,
+    zoomPxPerSec: state.zoomPxPerSec,
+    timelineWidthPx: state.timelineWidthPx,
+    sortedSegments: state.sortedSegments,
+    selectedSegmentId: state.selectedSegmentId,
+    funscriptActions: state.funscriptActions,
+    onTimelineWheel: state.onTimelineWheel,
+    onTimelinePointerDown: state.onTimelinePointerDown,
+    onSelectSegment: state.setSelectedSegmentId,
+    onZoomChange: state.setZoomWithSfx,
+  };
 }

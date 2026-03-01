@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
@@ -23,7 +24,10 @@ import { trpc } from "../services/trpc";
 import { formatDurationLabel, getRoundDurationSec } from "../utils/duration";
 import { playHoverSound, playSelectSound, playPlaylistLaunchSound } from "../utils/audio";
 
-const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: StoredPlaylist | null): StoredPlaylist[] => {
+const withActivePlaylist = (
+  playlistsToShow: StoredPlaylist[],
+  activePlaylist: StoredPlaylist | null
+): StoredPlaylist[] => {
   if (!activePlaylist) return playlistsToShow;
   if (playlistsToShow.some((playlist) => playlist.id === activePlaylist.id)) {
     return playlistsToShow;
@@ -43,7 +47,10 @@ const estimatePlaylistDurationSec = (
 
     for (let fieldIndex = 1; fieldIndex <= config.boardConfig.totalIndices; fieldIndex += 1) {
       if (safeSet.has(fieldIndex)) continue;
-      const ref = explicitRefsByIndex[String(fieldIndex)] ?? config.boardConfig.normalRoundOrder[orderedCursor] ?? null;
+      const ref =
+        explicitRefsByIndex[String(fieldIndex)] ??
+        config.boardConfig.normalRoundOrder[orderedCursor] ??
+        null;
       if (!(String(fieldIndex) in explicitRefsByIndex)) {
         orderedCursor += 1;
       }
@@ -69,9 +76,7 @@ const SinglePlayerSetupSearchSchema = z.object({
   notice: z.string().optional(),
 });
 
-type LaunchState =
-  | { kind: "idle" }
-  | { kind: "animating"; startedAt: number };
+type LaunchState = { kind: "idle" } | { kind: "animating"; startedAt: number };
 
 export const Route = createFileRoute("/single-player-setup")({
   validateSearch: (search) => SinglePlayerSetupSearchSchema.parse(search),
@@ -94,23 +99,25 @@ export const Route = createFileRoute("/single-player-setup")({
 });
 
 function SinglePlayerSetupPage() {
+  const { t } = useLingui();
   const navigate = useNavigate();
   const search = SinglePlayerSetupSearchSchema.parse(Route.useSearch());
-  const { availablePlaylists, activePlaylist, installedRounds, savedRuns } = Route.useLoaderData() as {
-    availablePlaylists: StoredPlaylist[];
-    activePlaylist: StoredPlaylist | null;
-    installedRounds: InstalledRoundCatalogEntry[];
-    savedRuns: Awaited<ReturnType<typeof db.singlePlayerSaves.list>>;
-  };
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState(activePlaylist?.id ?? availablePlaylists[0]?.id ?? null);
+  const { availablePlaylists, activePlaylist, installedRounds, savedRuns } =
+    Route.useLoaderData() as {
+      availablePlaylists: StoredPlaylist[];
+      activePlaylist: StoredPlaylist | null;
+      installedRounds: InstalledRoundCatalogEntry[];
+      savedRuns: Awaited<ReturnType<typeof db.singlePlayerSaves.list>>;
+    };
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(
+    activePlaylist?.id ?? availablePlaylists[0]?.id ?? null
+  );
   const [pendingAction, setPendingAction] = useState<"start" | "workshop" | null>(null);
   const [notice, setNotice] = useState<string | null>(search.notice ?? null);
   const [launchState, setLaunchState] = useState<LaunchState>({ kind: "idle" });
   const [launchProgress, setLaunchProgress] = useState(0);
-  const [
-    playlistCacheOngoingRestrictionDisabled,
-    setPlaylistCacheOngoingRestrictionDisabled,
-  ] = useState(DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED);
+  const [playlistCacheOngoingRestrictionDisabled, setPlaylistCacheOngoingRestrictionDisabled] =
+    useState(DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED);
   const scopeRef = useRef<HTMLDivElement | null>(null);
   const goBack = () => {
     if (window.history.length > 1) {
@@ -121,13 +128,16 @@ function SinglePlayerSetupPage() {
   };
 
   const selectedPlaylist = useMemo(
-    () => availablePlaylists.find((playlist) => playlist.id === selectedPlaylistId) ?? activePlaylist ?? null,
-    [activePlaylist, availablePlaylists, selectedPlaylistId],
+    () =>
+      availablePlaylists.find((playlist) => playlist.id === selectedPlaylistId) ??
+      activePlaylist ??
+      null,
+    [activePlaylist, availablePlaylists, selectedPlaylistId]
   );
 
   const boardSummary = useMemo(
     () => (selectedPlaylist ? describePlaylistBoard(selectedPlaylist.config) : null),
-    [selectedPlaylist],
+    [selectedPlaylist]
   );
   const playlistCacheSummaryById = useMemo(
     () => buildPlaylistWebsiteCacheSummary(availablePlaylists, installedRounds),
@@ -138,22 +148,25 @@ function SinglePlayerSetupPage() {
     [savedRuns]
   );
   const selectedPlaylistDurationSec = useMemo(
-    () => (selectedPlaylist ? estimatePlaylistDurationSec(selectedPlaylist.config, installedRounds) : 0),
-    [installedRounds, selectedPlaylist],
+    () =>
+      selectedPlaylist ? estimatePlaylistDurationSec(selectedPlaylist.config, installedRounds) : 0,
+    [installedRounds, selectedPlaylist]
   );
   const selectedPlaylistCacheSummary = selectedPlaylist
-    ? playlistCacheSummaryById.get(selectedPlaylist.id) ?? {
+    ? (playlistCacheSummaryById.get(selectedPlaylist.id) ?? {
         hasPending: false,
         pendingRoundCount: 0,
         pendingRoundNames: [],
-      }
+      })
     : {
         hasPending: false,
         pendingRoundCount: 0,
         pendingRoundNames: [],
       };
   const isLaunchAnimating = launchState.kind === "animating";
-  const selectedSavedRun = selectedPlaylist ? savedRunByPlaylistId.get(selectedPlaylist.id) ?? null : null;
+  const selectedSavedRun = selectedPlaylist
+    ? (savedRunByPlaylistId.get(selectedPlaylist.id) ?? null)
+    : null;
   const hasResumeRun = Boolean(selectedSavedRun);
   const canStartSelectedPlaylist =
     !selectedPlaylistCacheSummary.hasPending || playlistCacheOngoingRestrictionDisabled;
@@ -226,14 +239,15 @@ function SinglePlayerSetupPage() {
     } catch (error) {
       console.error("Failed to start selected playlist", error);
       setLaunchState({ kind: "idle" });
-      setNotice("Failed to start selected playlist.");
+      setNotice(t`Failed to start selected playlist.`);
     } finally {
       setPendingAction(null);
     }
   };
 
   const handleResume = async () => {
-    if (pendingAction || !selectedPlaylist || !selectedSavedRun || !canStartSelectedPlaylist) return;
+    if (pendingAction || !selectedPlaylist || !selectedSavedRun || !canStartSelectedPlaylist)
+      return;
     setPendingAction("start");
     setNotice(null);
     try {
@@ -254,7 +268,7 @@ function SinglePlayerSetupPage() {
     } catch (error) {
       console.error("Failed to resume selected playlist", error);
       setLaunchState({ kind: "idle" });
-      setNotice("Failed to resume selected playlist.");
+      setNotice(t`Failed to resume selected playlist.`);
     } finally {
       setPendingAction(null);
     }
@@ -269,7 +283,7 @@ function SinglePlayerSetupPage() {
       await navigate({ to: "/playlist-workshop", search: { open: "active" } });
     } catch (error) {
       console.error("Failed to open playlist workshop", error);
-      setNotice("Failed to open playlist workshop.");
+      setNotice(t`Failed to open playlist workshop.`);
     } finally {
       setPendingAction(null);
     }
@@ -279,7 +293,9 @@ function SinglePlayerSetupPage() {
     id: "single-player-setup-route",
     scopeRef,
     priority: 10,
-    initialFocusId: selectedPlaylist ? `single-playlist-${selectedPlaylist.id}` : "single-open-workshop",
+    initialFocusId: selectedPlaylist
+      ? `single-playlist-${selectedPlaylist.id}`
+      : "single-open-workshop",
     onBack: () => {
       goBack();
       return true;
@@ -306,16 +322,16 @@ function SinglePlayerSetupPage() {
                 }}
                 className="rounded-xl border border-violet-300/55 bg-violet-500/20 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/35"
               >
-                Go Back
+                <Trans>Go Back</Trans>
               </button>
               <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.45em] text-purple-200/85">
-                Single Player
+                <Trans>Single Player</Trans>
               </p>
               <h1 className="mt-3 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 sm:text-5xl drop-shadow-[0_0_30px_rgba(139,92,246,0.4)]">
-                No Playlist Yet
+                <Trans>No Playlist Yet</Trans>
               </h1>
               <p className="mt-3 text-sm text-zinc-300/80">
-                Create a playlist or import one first, then start your run.
+                <Trans>Create a playlist or import one first, then start your run.</Trans>
               </p>
             </header>
 
@@ -324,11 +340,14 @@ function SinglePlayerSetupPage() {
               style={{ animationDelay: "0.12s" }}
             >
               <p className="text-sm text-zinc-200">
-                Open the playlist workshop to build a linear playlist, or use the map editor if you want a graph-based board.
+                <Trans>
+                  Open the playlist workshop to build a linear playlist, or use the map editor if
+                  you want a graph-based board.
+                </Trans>
               </p>
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
                 <MenuButton
-                  label="Open Playlist Workshop"
+                  label={t`Open Playlist Workshop`}
                   primary
                   onHover={playHoverSound}
                   onClick={() => {
@@ -339,7 +358,7 @@ function SinglePlayerSetupPage() {
                   controllerInitial
                 />
                 <MenuButton
-                  label="Open Map Editor"
+                  label={t`Open Map Editor`}
                   onHover={playHoverSound}
                   onClick={() => {
                     playSelectSound();
@@ -368,34 +387,39 @@ function SinglePlayerSetupPage() {
       />
 
       <div
-        className={`relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row ${isLaunchAnimating ? "pointer-events-none" : ""
-          }`}
+        className={`relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row ${
+          isLaunchAnimating ? "pointer-events-none" : ""
+        }`}
         style={{
           opacity: isLaunchAnimating ? 1 - launchProgress * 0.3 : 1,
-          filter: isLaunchAnimating ? `blur(${launchProgress * 8}px) saturate(${1 - launchProgress * 0.18}) brightness(${1 - launchProgress * 0.22})` : "none",
+          filter: isLaunchAnimating
+            ? `blur(${launchProgress * 8}px) saturate(${1 - launchProgress * 0.18}) brightness(${1 - launchProgress * 0.22})`
+            : "none",
           transform: isLaunchAnimating ? `scale(${1 + launchProgress * 0.03})` : "scale(1)",
         }}
       >
         <aside className="animate-entrance flex shrink-0 flex-col border-b border-purple-400/20 bg-zinc-950/70 backdrop-blur-xl lg:w-[24rem] lg:border-b-0 lg:border-r">
           <div className="border-b border-purple-400/15 px-4 py-4 sm:px-6 lg:px-5 lg:py-5">
             <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.42em] text-purple-200/75">
-              Single Player
+              <Trans>Single Player</Trans>
             </p>
             <h1 className="mt-2 text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-              Pick And Start
+              <Trans>Pick And Start</Trans>
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Choose a playlist on the left, review any cache warnings, then start your run.
+              <Trans>
+                Choose a playlist on the left, review any cache warnings, then start your run.
+              </Trans>
             </p>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 lg:px-3 lg:py-4">
             <div className="mb-3 flex items-center justify-between px-2">
               <h2 className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.28em] text-violet-300/80">
-                Playlists
+                <Trans>Playlists</Trans>
               </h2>
               <span className="rounded-full border border-zinc-700/70 bg-black/30 px-2 py-1 text-[10px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.16em] text-zinc-400">
-                {availablePlaylists.length} total
+                <Trans>{availablePlaylists.length} total</Trans>
               </span>
             </div>
 
@@ -404,7 +428,10 @@ function SinglePlayerSetupPage() {
                 const isSelected = playlist.id === selectedPlaylist.id;
                 const isActive = playlist.id === activePlaylist?.id;
                 const summary = describePlaylistBoard(playlist.config);
-                const estimatedDurationSec = estimatePlaylistDurationSec(playlist.config, installedRounds);
+                const estimatedDurationSec = estimatePlaylistDurationSec(
+                  playlist.config,
+                  installedRounds
+                );
                 const isLinear = summary.modeLabel === "Linear";
                 const cacheSummary = playlistCacheSummaryById.get(playlist.id);
                 const isCachePending = cacheSummary?.hasPending ?? false;
@@ -422,21 +449,26 @@ function SinglePlayerSetupPage() {
                       setSelectedPlaylistId(playlist.id);
                     }}
                     data-controller-focus-id={`single-playlist-${playlist.id}`}
-                    data-controller-initial={playlist.id === selectedPlaylist.id ? "true" : undefined}
+                    data-controller-initial={
+                      playlist.id === selectedPlaylist.id ? "true" : undefined
+                    }
                     className={`settings-sidebar-item min-w-0 text-left ${isSelected ? "is-active" : ""}`}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="truncate text-sm font-semibold text-zinc-100">{playlist.name}</span>
+                        <span className="truncate text-sm font-semibold text-zinc-100">
+                          {playlist.name}
+                        </span>
                         <div className="flex shrink-0 items-center gap-2">
                           {savedRun && (
                             <span className="rounded-full border border-cyan-300/45 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-100">
-                              {saveEmoji ? `${saveEmoji} ` : ""}Resume
+                              {saveEmoji ? `${saveEmoji} ` : ""}
+                              <Trans>Resume</Trans>
                             </span>
                           )}
                           {isCachePending && (
                             <span className="rounded-full border border-amber-300/45 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100">
-                              Caching ongoing
+                              <Trans>Caching ongoing</Trans>
                             </span>
                           )}
                           <span
@@ -452,22 +484,28 @@ function SinglePlayerSetupPage() {
                         </div>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.14em] text-zinc-400">
-                        <span>{summary.roundNodeCount} rounds</span>
+                        <span>
+                          <Trans>{summary.roundNodeCount} rounds</Trans>
+                        </span>
                         <span>•</span>
                         <span>{formatDurationLabel(estimatedDurationSec)}</span>
                         {isCachePending && (
                           <>
                             <span>•</span>
                             <span className="text-amber-200">
-                              {cacheSummary?.pendingRoundCount ?? 0} web round
-                              {(cacheSummary?.pendingRoundCount ?? 0) === 1 ? "" : "s"} caching
+                              <Trans>
+                                {cacheSummary?.pendingRoundCount ?? 0} web round
+                                {(cacheSummary?.pendingRoundCount ?? 0) === 1 ? "" : "s"} caching
+                              </Trans>
                             </span>
                           </>
                         )}
                         {isActive && (
                           <>
                             <span>•</span>
-                            <span className="text-emerald-200">Active</span>
+                            <span className="text-emerald-200">
+                              <Trans>Active</Trans>
+                            </span>
                           </>
                         )}
                       </div>
@@ -480,8 +518,8 @@ function SinglePlayerSetupPage() {
 
           <div className="border-t border-purple-400/15 px-4 py-4 sm:px-6 lg:px-4 lg:py-4">
             <MenuButton
-              label="← Back"
-              subLabel="Return to main menu"
+              label={t`← Back`}
+              subLabel={t`Return to main menu`}
               onHover={playHoverSound}
               onClick={() => {
                 playSelectSound();
@@ -501,57 +539,72 @@ function SinglePlayerSetupPage() {
               <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="max-w-2xl">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.38em] text-emerald-200/85">
-                    Ready To Play
+                    <Trans>Ready To Play</Trans>
                   </p>
                   <h2 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-100 via-white to-emerald-100 sm:text-4xl">
                     {selectedPlaylist.name}
                   </h2>
                   <p className="mt-2 text-sm text-zinc-300/85">
-                    {selectedPlaylist.description ?? "No description"}
+                    {selectedPlaylist.description ?? t`No description`}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.16em] text-zinc-300">
                     <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1.5">
-                      {boardSummary.modeLabel} board
+                      <Trans>{boardSummary.modeLabel} board</Trans>
                     </span>
                     <span className="rounded-full border border-zinc-700/70 bg-black/30 px-3 py-1.5">
-                      {Math.max(0, boardSummary.roundNodeCount)} rounds
+                      <Trans>{Math.max(0, boardSummary.roundNodeCount)} rounds</Trans>
                     </span>
                     <span className="rounded-full border border-zinc-700/70 bg-black/30 px-3 py-1.5">
-                      {boardSummary.safePointCount} safe points
+                      <Trans>{boardSummary.safePointCount} safe points</Trans>
                     </span>
                     <span className="rounded-full border border-zinc-700/70 bg-black/30 px-3 py-1.5">
-                      {formatDurationLabel(selectedPlaylistDurationSec)} estimated
+                      {formatDurationLabel(selectedPlaylistDurationSec)} <Trans>estimated</Trans>
                     </span>
                     <span className="rounded-full border border-zinc-700/70 bg-black/30 px-3 py-1.5">
                       v{selectedPlaylist.config.playlistVersion}
                     </span>
                     {selectedPlaylistCacheSummary.hasPending && (
                       <span className="rounded-full border border-amber-300/45 bg-amber-500/12 px-3 py-1.5 text-amber-100">
-                        Caching ongoing
+                        <Trans>Caching ongoing</Trans>
                       </span>
                     )}
                     {selectedSavedRun && (
                       <span className="rounded-full border border-cyan-300/45 bg-cyan-500/12 px-3 py-1.5 text-cyan-100">
-                        {getSaveModeEmoji(selectedSavedRun.saveMode)} Resume available
+                        <Trans>
+                          {getSaveModeEmoji(selectedSavedRun.saveMode)} Resume available
+                        </Trans>
                       </span>
                     )}
                   </div>
                   {selectedPlaylistCacheSummary.hasPending && (
                     <p className="mt-3 text-sm text-amber-100/85">
-                      {playlistCacheOngoingRestrictionDisabled
-                        ? `${selectedPlaylistCacheSummary.pendingRoundCount} required web round${selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are still caching in the background. Some rounds may not play, and the web version is used instead of the local cache.`
-                        : `${selectedPlaylistCacheSummary.pendingRoundCount} required web round${selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are still caching in the background. Playback unlocks automatically when caching finishes.`}
+                      {playlistCacheOngoingRestrictionDisabled ? (
+                        <Trans>
+                          {selectedPlaylistCacheSummary.pendingRoundCount} required web round
+                          {selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are
+                          still caching in the background. Some rounds may not play, and the web
+                          version is used instead of the local cache.
+                        </Trans>
+                      ) : (
+                        <Trans>
+                          {selectedPlaylistCacheSummary.pendingRoundCount} required web round
+                          {selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are
+                          still caching in the background. Playback unlocks automatically when
+                          caching finishes.
+                        </Trans>
+                      )}
                     </p>
                   )}
                   {selectedSavedRun && (
                     <p className="mt-3 text-sm text-cyan-100/85">
-                      {getSaveModeEmoji(selectedSavedRun.saveMode)} A saved run is available for this playlist.
-                      Resume continues the existing run. Starting fresh overwrites that save.
+                      <Trans>
+                        {getSaveModeEmoji(selectedSavedRun.saveMode)} A saved run is available for
+                        this playlist. Resume continues the existing run. Starting fresh overwrites
+                        that save.
+                      </Trans>
                     </p>
                   )}
-                  {notice && (
-                    <p className="mt-3 text-sm text-rose-200">{notice}</p>
-                  )}
+                  {notice && <p className="mt-3 text-sm text-rose-200">{notice}</p>}
                 </div>
 
                 <div className="w-full max-w-xl xl:min-w-[24rem]">
@@ -559,50 +612,50 @@ function SinglePlayerSetupPage() {
                     <div className="single-player-start-cta rounded-2xl border border-emerald-300/25 bg-emerald-500/8 p-2">
                       <div className="mb-2 flex items-center justify-between gap-3 px-2">
                         <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.24em] text-emerald-200/85">
-                          Primary Action
+                          <Trans>Primary Action</Trans>
                         </span>
                         <span className="rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2 py-1 text-[9px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.18em] text-emerald-100">
-                          {hasResumeRun ? "Resume Here" : "Start Here"}
+                          {hasResumeRun ? t`Resume Here` : t`Start Here`}
                         </span>
                       </div>
                       <MenuButton
                         label={
                           selectedPlaylistCacheSummary.hasPending &&
                           !playlistCacheOngoingRestrictionDisabled
-                            ? "Caching Ongoing"
+                            ? t`Caching Ongoing`
                             : selectedPlaylistCacheSummary.hasPending &&
                                 playlistCacheOngoingRestrictionDisabled
                               ? hasResumeRun
                                 ? pendingAction === "start"
-                                  ? "Resuming..."
-                                  : "Resume With Web Fallback"
+                                  ? t`Resuming...`
+                                  : t`Resume With Web Fallback`
                                 : pendingAction === "start"
-                                  ? "Starting..."
-                                  : "Start With Web Fallback"
-                            : hasResumeRun
-                              ? pendingAction === "start"
-                                ? "Resuming..."
-                                : "Resume Run"
-                            : pendingAction === "start"
-                              ? "Starting..."
-                              : "Start Selected Playlist"
+                                  ? t`Starting...`
+                                  : t`Start With Web Fallback`
+                              : hasResumeRun
+                                ? pendingAction === "start"
+                                  ? t`Resuming...`
+                                  : t`Resume Run`
+                                : pendingAction === "start"
+                                  ? t`Starting...`
+                                  : t`Start Selected Playlist`
                         }
                         subLabel={
                           selectedPlaylistCacheSummary.hasPending &&
                           !playlistCacheOngoingRestrictionDisabled
-                            ? "Wait until the required web rounds finish caching"
+                            ? t`Wait until the required web rounds finish caching`
                             : selectedPlaylistCacheSummary.hasPending &&
                                 playlistCacheOngoingRestrictionDisabled
-                              ? "Some rounds may not play; uncached rounds use the web version"
-                            : hasResumeRun
-                              ? "Continue the saved run for this playlist"
-                              : "Fastest path into a round"
+                              ? t`Some rounds may not play; uncached rounds use the web version`
+                              : hasResumeRun
+                                ? t`Continue the saved run for this playlist`
+                                : t`Fastest path into a round`
                         }
                         badge={
                           selectedPlaylistCacheSummary.hasPending
                             ? playlistCacheOngoingRestrictionDisabled
-                              ? "Warning"
-                              : "Blocked"
+                              ? t`Warning`
+                              : t`Blocked`
                             : undefined
                         }
                         statusTone={selectedPlaylistCacheSummary.hasPending ? "warning" : "default"}
@@ -618,8 +671,10 @@ function SinglePlayerSetupPage() {
                     </div>
                     {hasResumeRun && (
                       <MenuButton
-                        label={pendingAction === "start" ? "Starting..." : "Start Selected Playlist"}
-                        subLabel="Begin a fresh run and replace the saved one"
+                        label={
+                          pendingAction === "start" ? t`Starting...` : t`Start Selected Playlist`
+                        }
+                        subLabel={t`Begin a fresh run and replace the saved one`}
                         disabled={!canStartSelectedPlaylist}
                         onHover={playHoverSound}
                         onClick={() => {
@@ -630,8 +685,12 @@ function SinglePlayerSetupPage() {
                       />
                     )}
                     <MenuButton
-                      label={pendingAction === "workshop" ? "Opening Workshop..." : "Open Playlist Workshop"}
-                      subLabel="Edit this playlist before playing"
+                      label={
+                        pendingAction === "workshop"
+                          ? t`Opening Workshop...`
+                          : t`Open Playlist Workshop`
+                      }
+                      subLabel={t`Edit this playlist before playing`}
                       onHover={playHoverSound}
                       onClick={() => {
                         playSelectSound();
@@ -652,13 +711,18 @@ function SinglePlayerSetupPage() {
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.26em] text-zinc-400">
-                      Map Preview
+                      <Trans>Map Preview</Trans>
                     </p>
-                    <p className="mt-1 text-sm text-zinc-400">Verify the board and start.</p>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      <Trans>Verify the board and start.</Trans>
+                    </p>
                   </div>
                 </div>
                 <div className="playlist-preview-frame rounded-2xl border border-violet-300/20 bg-black/35 p-3">
-                  <PlaylistMapPreview config={selectedPlaylist.config} className="h-[210px] w-full sm:h-[240px]" />
+                  <PlaylistMapPreview
+                    config={selectedPlaylist.config}
+                    className="h-[210px] w-full sm:h-[240px]"
+                  />
                 </div>
               </div>
 
@@ -667,32 +731,51 @@ function SinglePlayerSetupPage() {
                 style={{ animationDelay: "0.18s" }}
               >
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.26em] text-zinc-400">
-                  Run Summary
+                  <Trans>Run Summary</Trans>
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-zinc-700/60 bg-black/30 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Nodes</p>
-                    <p className="mt-1 text-2xl font-black text-violet-100">{boardSummary.nodeCount}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                      <Trans>Nodes</Trans>
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-violet-100">
+                      {boardSummary.nodeCount}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-zinc-700/60 bg-black/30 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Edges</p>
-                    <p className="mt-1 text-2xl font-black text-violet-100">{boardSummary.edgeCount}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                      <Trans>Edges</Trans>
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-violet-100">
+                      {boardSummary.edgeCount}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-zinc-700/60 bg-black/30 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Rounds</p>
-                    <p className="mt-1 text-2xl font-black text-violet-100">{Math.max(0, boardSummary.roundNodeCount)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                      <Trans>Rounds</Trans>
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-violet-100">
+                      {Math.max(0, boardSummary.roundNodeCount)}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-zinc-700/60 bg-black/30 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Safe Points</p>
-                    <p className="mt-1 text-2xl font-black text-violet-100">{boardSummary.safePointCount}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                      <Trans>Safe Points</Trans>
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-violet-100">
+                      {boardSummary.safePointCount}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-4 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-4">
                   <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
-                    Quick Start
+                    <Trans>Quick Start</Trans>
                   </p>
                   <p className="mt-2 text-sm text-emerald-50">
-                    Start uses the selected playlist immediately and drops you straight into the run.
+                    <Trans>
+                      Start uses the selected playlist immediately and drops you straight into the
+                      run.
+                    </Trans>
                   </p>
                 </div>
               </div>

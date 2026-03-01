@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useMemo, useRef, useState } from "react";
 import { useControllerSurface } from "../controller";
 import type { InstalledRound, InstalledRoundCatalogEntry } from "../services/db";
@@ -49,6 +50,7 @@ export function PlaylistResolutionModal({
   onPrimaryAction,
   onSecondaryAction,
 }: PlaylistResolutionModalProps) {
+  const { t } = useLingui();
   const [overrides, setOverrides] = useState<Record<string, string | null | undefined>>(
     initialOverrides ?? {}
   );
@@ -86,8 +88,9 @@ export function PlaylistResolutionModal({
   );
 
   const issueCandidatesByKey = useMemo(() => {
-    return analysis.issues.reduce<Record<string, Array<InstalledRound | InstalledRoundCatalogEntry>>>(
-      (acc, issue) => {
+    return analysis.issues.reduce<
+      Record<string, Array<InstalledRound | InstalledRoundCatalogEntry>>
+    >((acc, issue) => {
       const query = (searchByKey[issue.key] ?? "").trim().toLowerCase();
       const sameTypeOnly = sameTypeOnlyByKey[issue.key] ?? true;
       const suggestionIds = new Set(issue.suggestions.map((entry) => entry.roundId));
@@ -96,11 +99,7 @@ export function PlaylistResolutionModal({
       );
       const suggestions = issue.suggestions
         .map((entry) => roundById.get(entry.roundId))
-        .filter(
-          (
-            round
-          ): round is InstalledRound | InstalledRoundCatalogEntry => Boolean(round)
-        );
+        .filter((round): round is InstalledRound | InstalledRoundCatalogEntry => Boolean(round));
       const filteredInstalled = installedRounds.filter((round) => {
         if (sameTypeOnly && issue.ref.type && (round.type ?? "Normal") !== issue.ref.type)
           return false;
@@ -128,9 +127,7 @@ export function PlaylistResolutionModal({
       });
       acc[issue.key] = combined.slice(0, 16);
       return acc;
-    },
-    {}
-    );
+    }, {});
   }, [analysis.issues, installedRounds, roundById, sameTypeOnlyByKey, searchByKey]);
 
   useControllerSurface({
@@ -303,7 +300,7 @@ export function PlaylistResolutionModal({
                                 setSearchByKey((prev) => ({ ...prev, [issue.key]: nextValue }));
                               }}
                               className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-4 py-2.5 text-sm text-zinc-100 outline-none focus:border-violet-300/70 focus:ring-2 focus:ring-violet-400/30"
-                              placeholder="Search by round, author, or type"
+                              placeholder={t`Search by round, author, or type`}
                               data-controller-focus-id={`playlist-resolution-search-${issue.key}`}
                             />
                           </label>

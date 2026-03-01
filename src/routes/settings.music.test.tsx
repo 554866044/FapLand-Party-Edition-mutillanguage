@@ -178,6 +178,7 @@ vi.mock("../services/trpc", () => ({
           if (key === "background.video.enabled") return true;
           if (key === "experimental.controllerSupportEnabled") return false;
           if (key === "experimental.installWebFunscriptUrlEnabled") return false;
+          if (key === "experimental.systemLanguageEnabled") return false;
           if (key === "experimental.playlistCacheOngoingRestrictionDisabled") return false;
           if (key === "round.video.progressBarAlwaysVisible") return false;
           return null;
@@ -375,6 +376,51 @@ describe("Settings music section", () => {
     await waitFor(() => {
       expect(setMutate).toHaveBeenCalledWith({
         key: "experimental.controllerSupportEnabled",
+        value: true,
+      });
+    });
+  });
+
+  it("shows language selection in general settings and system language in experimental settings", async () => {
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByText(
+        "Choose the language used for app labels, dialogs, and safe mode prompts. English stays the default unless the experimental system language option is enabled."
+      )
+    ).toBeDefined();
+    expect(screen.getByText("Language / Language")).toBeDefined();
+    expect(screen.queryByRole("switch", { name: "Toggle Use System Language" })).toBeNull();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("switch", {
+          name: "Toggle Use System Language",
+        })
+      ).toBeDefined();
+      expect(screen.queryByText("Language / Language")).toBeNull();
+    });
+  });
+
+  it("persists the experimental use system language toggle", async () => {
+    const setMutate = vi.mocked(trpc.store.set.mutate);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle Use System Language",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(setMutate).toHaveBeenCalledWith({
+        key: "experimental.systemLanguageEnabled",
         value: true,
       });
     });
