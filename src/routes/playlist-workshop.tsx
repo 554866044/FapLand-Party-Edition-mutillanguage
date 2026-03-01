@@ -1,7 +1,7 @@
 // @i18n-enforced
 import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as z from "zod";
 import {
@@ -95,6 +95,7 @@ const DEFAULT_SAFE_PRESET = [25, 50, 75];
 const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
 const AVAILABLE_ROUND_ROW_ESTIMATE_PX = 58;
+const AVAILABLE_ROUNDS_INITIAL_RECT_HEIGHT_PX = 352;
 const LARGE_AVAILABLE_LIST_THRESHOLD = 50;
 type NewPlaylistMode = "fully-random" | "progressive-random";
 type NormalRoundSort = "name-asc" | "name-desc" | "author" | "difficulty-asc";
@@ -103,16 +104,16 @@ type WorkshopInstalledRound = InstalledRound | InstalledRoundCatalogEntry;
 type RoundsPanePhase = "idle" | "loading-data" | "preparing-ui" | "ready";
 type ResolutionModalState =
   | {
-      context: "import";
-      title: string;
-      filePath: string;
-      analysis: PlaylistResolutionAnalysis;
-    }
+    context: "import";
+    title: string;
+    filePath: string;
+    analysis: PlaylistResolutionAnalysis;
+  }
   | {
-      context: "playlist";
-      title: string;
-      analysis: PlaylistResolutionAnalysis;
-    };
+    context: "playlist";
+    title: string;
+    analysis: PlaylistResolutionAnalysis;
+  };
 type ImportedPlaylistReview = {
   playlistId: string;
   analysis: PlaylistResolutionAnalysis;
@@ -599,9 +600,9 @@ function toLinearBoardConfig(
     totalIndices: Math.max(1, Math.min(500, Math.floor(setup.roundCount))),
     safePointIndices: setup.safePointsEnabled
       ? filterIndicesWithinTotal(
-          parseSafePointsInput(formatSafePointsInput(setup.safePointIndices)),
-          setup.roundCount
-        )
+        parseSafePointsInput(formatSafePointsInput(setup.safePointIndices)),
+        setup.roundCount
+      )
       : [],
     safePointRestMsByIndex: {},
     normalRoundRefsByIndex: {},
@@ -684,77 +685,77 @@ function getImportedUnresolvedSummary(count: number): string {
 
 function PlaylistWorkshopRoundRowSkeleton() {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-violet-300/15 bg-black/25 px-2 py-1.5">
-      <div className="h-10 w-16 shrink-0 animate-pulse rounded-lg bg-violet-300/15" />
+    <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-2 py-1.5">
+      <div className="h-10 w-16 shrink-0 animate-pulse rounded-lg bg-white/10" />
       <div className="min-w-0 flex-1">
-        <div className="h-4 w-32 animate-pulse rounded bg-violet-200/20" />
-        <div className="mt-2 h-3 w-24 animate-pulse rounded bg-zinc-300/10" />
+        <div className="h-4 w-32 animate-pulse rounded bg-white/20" />
+        <div className="mt-2 h-3 w-24 animate-pulse rounded bg-white/5" />
         <div className="mt-2 flex gap-1">
-          <div className="h-4 w-14 animate-pulse rounded bg-zinc-300/10" />
-          <div className="h-4 w-10 animate-pulse rounded bg-zinc-300/10" />
+          <div className="h-4 w-14 animate-pulse rounded bg-white/5" />
+          <div className="h-4 w-10 animate-pulse rounded bg-white/5" />
         </div>
       </div>
-      <div className="h-7 w-7 shrink-0 animate-pulse rounded-lg bg-violet-300/15" />
+      <div className="h-7 w-7 shrink-0 animate-pulse rounded-lg bg-white/10" />
     </div>
   );
 }
 
-function PlaylistWorkshopRoundsSkeleton() {
+function PlaylistWorkshopRoundsSkeleton({ subTab = "library" }: { subTab?: "library" | "queue" }) {
   return (
-    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-2">
-      <section className="flex max-h-[82vh] flex-col rounded-[1.75rem] border border-emerald-300/30 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_45%),linear-gradient(135deg,rgba(6,78,59,0.88),rgba(10,10,18,0.96))] p-5 shadow-[0_0_30px_rgba(16,185,129,0.12)]">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="h-5 w-32 animate-pulse rounded bg-emerald-200/20" />
-            <div className="mt-2 h-3 w-48 animate-pulse rounded bg-emerald-50/10" />
-          </div>
-          <div className="flex gap-2">
-            <div className="h-6 w-24 animate-pulse rounded-full bg-emerald-200/15" />
-            <div className="h-6 w-28 animate-pulse rounded-full bg-emerald-200/15" />
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div
-              key={`playlist-workshop-selected-action-skeleton:${index}`}
-              className="h-7 w-28 animate-pulse rounded-lg bg-emerald-200/15"
-            />
-          ))}
-        </div>
-        <div className="mt-3 flex flex-1 flex-col gap-1.5 overflow-hidden">
-          {Array.from({ length: 7 }, (_, index) => (
-            <PlaylistWorkshopRoundRowSkeleton
-              key={`playlist-workshop-selected-round-skeleton:${index}`}
-            />
-          ))}
-        </div>
-      </section>
+    <div>
+      {/* Skeleton for Tab Bar */}
+      <div className="mb-4 flex gap-1.5 rounded-[1.25rem] bg-black/40 p-1.5 border border-white/5 backdrop-blur-md">
+        <div className={`h-10 w-1/2 animate-pulse rounded-xl ${subTab === "library" ? "bg-white/10" : "bg-white/5"}`} />
+        <div className={`h-10 w-1/2 animate-pulse rounded-xl ${subTab === "queue" ? "bg-white/10" : "bg-white/5"}`} />
+      </div>
 
-      <section className="flex max-h-[82vh] flex-col rounded-[1.75rem] border border-violet-300/25 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_45%),linear-gradient(135deg,rgba(30,27,75,0.92),rgba(10,10,18,0.96))] p-5 shadow-[0_0_30px_rgba(139,92,246,0.12)]">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="h-5 w-32 animate-pulse rounded bg-violet-200/20" />
-            <div className="mt-2 h-3 w-52 animate-pulse rounded bg-violet-50/10" />
+      {subTab === "library" ? (
+        <section className="flex max-h-[75vh] flex-col">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="h-5 w-32 animate-pulse rounded bg-white/10" />
+              <div className="mt-2 h-3 w-52 animate-pulse rounded bg-white/5" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-6 w-20 animate-pulse rounded-full bg-white/10" />
+              <div className="h-6 w-20 animate-pulse rounded-full bg-white/10" />
+              <div className="h-6 w-24 animate-pulse rounded-full bg-white/10" />
+            </div>
           </div>
-          <div className="flex gap-2">
-            <div className="h-6 w-20 animate-pulse rounded-full bg-violet-200/15" />
-            <div className="h-6 w-20 animate-pulse rounded-full bg-violet-200/15" />
-            <div className="h-6 w-24 animate-pulse rounded-full bg-violet-200/15" />
+          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <div className="h-10 animate-pulse rounded-xl border border-white/5 bg-white/5" />
+            <div className="h-10 w-10 animate-pulse rounded-xl border border-white/5 bg-white/5" />
+            <div className="h-10 w-10 animate-pulse rounded-xl border border-white/5 bg-white/5" />
           </div>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-          <div className="h-10 animate-pulse rounded-xl border border-purple-300/20 bg-black/45" />
-          <div className="h-10 animate-pulse rounded-xl border border-zinc-700 bg-black/30" />
-          <div className="h-10 animate-pulse rounded-xl border border-zinc-700 bg-black/30" />
-        </div>
-        <div className="mt-3 flex flex-1 flex-col gap-1.5 overflow-hidden">
-          {Array.from({ length: 8 }, (_, index) => (
-            <PlaylistWorkshopRoundRowSkeleton
-              key={`playlist-workshop-available-round-skeleton:${index}`}
-            />
-          ))}
-        </div>
-      </section>
+          <div className="mt-4 flex flex-1 flex-col gap-1.5 overflow-hidden">
+            {Array.from({ length: 8 }, (_, index) => (
+              <PlaylistWorkshopRoundRowSkeleton
+                key={`playlist-workshop-available-round-skeleton:${index}`}
+              />
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="flex max-h-[75vh] flex-col">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="h-5 w-32 animate-pulse rounded bg-white/10" />
+              <div className="mt-2 h-3 w-48 animate-pulse rounded bg-white/5" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-6 w-24 animate-pulse rounded-full bg-white/10" />
+              <div className="h-6 w-28 animate-pulse rounded-full bg-white/10" />
+            </div>
+          </div>
+          <div className="mt-4 flex flex-1 flex-col gap-1.5 overflow-hidden">
+            {Array.from({ length: 7 }, (_, index) => (
+              <PlaylistWorkshopRoundRowSkeleton
+                key={`playlist-workshop-selected-round-skeleton:${index}`}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -848,8 +849,14 @@ function PlaylistWorkshopPage() {
     formatSafePointsInput(setup.safePointIndices)
   );
   const [activeSectionId, setActiveSectionId] = useState<WorkshopSectionId>("playlist");
+  const [roundsSubTab, setRoundsSubTab] = useState<"library" | "queue">("library");
   const availableRoundsScrollRef = useRef<HTMLDivElement | null>(null);
-  const [canVirtualizeAvailableRounds, setCanVirtualizeAvailableRounds] = useState(false);
+  const [availableRoundsScrollElement, setAvailableRoundsScrollElement] =
+    useState<HTMLDivElement | null>(null);
+  const setAvailableRoundsScrollNode = useCallback((node: HTMLDivElement | null) => {
+    availableRoundsScrollRef.current = node;
+    setAvailableRoundsScrollElement(node);
+  }, []);
   const showImportNotice = useCallback((message: string, tone: NoticeTone = "success") => {
     setImportNotice({ message, tone });
   }, []);
@@ -878,14 +885,14 @@ function PlaylistWorkshopPage() {
 
     const revealWhenReady = () => {
       if (roundsPaneRevealFrameRef.current !== null) {
-        window.cancelAnimationFrame(roundsPaneRevealFrameRef.current);
+        window.clearTimeout(roundsPaneRevealFrameRef.current);
       }
-      roundsPaneRevealFrameRef.current = window.requestAnimationFrame(() => {
+      roundsPaneRevealFrameRef.current = window.setTimeout(() => {
         roundsPaneRevealFrameRef.current = null;
         setRoundsPanePhase((current) =>
           current === "loading-data" || current === "preparing-ui" ? "ready" : current
         );
-      });
+      }, 50);
     };
 
     if (hasLoadedInstalledRoundsRef.current) {
@@ -893,7 +900,7 @@ function PlaylistWorkshopPage() {
       revealWhenReady();
       return () => {
         if (roundsPaneRevealFrameRef.current !== null) {
-          window.cancelAnimationFrame(roundsPaneRevealFrameRef.current);
+          window.clearTimeout(roundsPaneRevealFrameRef.current);
           roundsPaneRevealFrameRef.current = null;
         }
       };
@@ -1058,8 +1065,8 @@ function PlaylistWorkshopPage() {
       query.length === 0
         ? availableNormalRounds
         : availableNormalRounds.filter((round) =>
-            `${round.name} ${round.author ?? ""}`.toLowerCase().includes(query)
-          );
+          `${round.name} ${round.author ?? ""}`.toLowerCase().includes(query)
+        );
     const durationFiltered = filtered.filter((round) =>
       matchesDurationFilter(getRoundDurationSec(round), normalRoundDurationFilter)
     );
@@ -1080,35 +1087,36 @@ function PlaylistWorkshopPage() {
     });
   }, [availableNormalRounds, normalRoundDurationFilter, normalRoundSearch, normalRoundSort]);
 
-  useEffect(() => {
-    const scrollElement = availableRoundsScrollRef.current;
-    if (!scrollElement) {
-      setCanVirtualizeAvailableRounds(false);
-      return;
-    }
-
-    const updateVirtualization = () => {
-      setCanVirtualizeAvailableRounds(scrollElement.clientHeight > 0);
-    };
-
-    updateVirtualization();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(updateVirtualization);
-    observer.observe(scrollElement);
-    return () => observer.disconnect();
-  }, [activeSectionId]);
+  const shouldVirtualizeAvailableRounds =
+    visibleAvailableNormalRounds.length > LARGE_AVAILABLE_LIST_THRESHOLD;
+  const shouldRenderAvailableRoundsFallback =
+    visibleAvailableNormalRounds.length > 0 && !shouldVirtualizeAvailableRounds;
+  const shouldRenderAvailableRoundsVirtualizationPlaceholder =
+    shouldVirtualizeAvailableRounds && !availableRoundsScrollElement;
 
   const availableRoundsVirtualizer = useVirtualizer({
     count: visibleAvailableNormalRounds.length,
-    getScrollElement: () => availableRoundsScrollRef.current,
+    getScrollElement: () => availableRoundsScrollElement,
     estimateSize: () => AVAILABLE_ROUND_ROW_ESTIMATE_PX,
     getItemKey: (index) => visibleAvailableNormalRounds[index]?.id ?? index,
+    measureElement: (element) =>
+      element.getBoundingClientRect().height || AVAILABLE_ROUND_ROW_ESTIMATE_PX,
+    initialRect: { width: 1, height: AVAILABLE_ROUNDS_INITIAL_RECT_HEIGHT_PX },
+    initialOffset: 0,
+    observeElementRect: (instance, callback) =>
+      observeElementRect(instance, (rect) => {
+        callback(
+          rect.height > 0
+            ? rect
+            : {
+              ...rect,
+              width: rect.width > 0 ? rect.width : 1,
+              height: AVAILABLE_ROUNDS_INITIAL_RECT_HEIGHT_PX,
+            }
+        );
+      }),
     overscan: 8,
-    enabled: canVirtualizeAvailableRounds,
+    enabled: shouldVirtualizeAvailableRounds && Boolean(availableRoundsScrollElement),
   });
 
   useEffect(() => {
@@ -1117,27 +1125,20 @@ function PlaylistWorkshopPage() {
 
   const isRoundsCatalogSection = activeSectionId === "rounds" || activeSectionId === "cum-rounds";
   const shouldShowRoundsSkeleton = isRoundsCatalogSection && roundsPanePhase !== "ready";
-  const shouldRenderAvailableRoundsFallback =
-    !canVirtualizeAvailableRounds &&
-    visibleAvailableNormalRounds.length > 0 &&
-    visibleAvailableNormalRounds.length <= LARGE_AVAILABLE_LIST_THRESHOLD;
-  const shouldRenderAvailableRoundsVirtualizationPlaceholder =
-    !canVirtualizeAvailableRounds &&
-    visibleAvailableNormalRounds.length > LARGE_AVAILABLE_LIST_THRESHOLD;
 
   const activePreview: ActiveRound | null = useMemo(
     () =>
       activePreviewRound
         ? {
-            fieldId: "playlist-workshop-preview-field",
-            nodeId: "playlist-workshop-preview-node",
-            roundId: activePreviewRound.id,
-            roundName: activePreviewRound.name,
-            selectionKind: "fixed",
-            poolId: null,
-            phaseKind: "normal",
-            campaignIndex: 1,
-          }
+          fieldId: "playlist-workshop-preview-field",
+          nodeId: "playlist-workshop-preview-node",
+          roundId: activePreviewRound.id,
+          roundName: activePreviewRound.name,
+          selectionKind: "fixed",
+          poolId: null,
+          phaseKind: "normal",
+          campaignIndex: 1,
+        }
         : null,
     [activePreviewRound]
   );
@@ -1808,8 +1809,8 @@ function PlaylistWorkshopPage() {
       const sourceRounds =
         selectedRoundIds.length > 0
           ? selectedRoundIds
-              .map((roundId) => normalRounds.find((round) => round.id === roundId))
-              .filter((round): round is WorkshopInstalledRound => Boolean(round))
+            .map((roundId) => normalRounds.find((round) => round.id === roundId))
+            .filter((round): round is WorkshopInstalledRound => Boolean(round))
           : normalRounds;
 
       if (sourceRounds.length === 0) return prev;
@@ -1880,13 +1881,13 @@ function PlaylistWorkshopPage() {
 
       <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
         {/* ── Sidebar ── */}
-        <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-60 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
+        <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-white/5 bg-black/40 px-3 py-2 backdrop-blur-2xl lg:w-64 lg:flex-col lg:gap-1 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:bg-black/20 lg:p-6 lg:pb-8">
           {/* Title — only visible on lg+ */}
-          <div className="hidden lg:block lg:mb-5 lg:px-3">
-            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
+          <div className="hidden lg:block lg:mb-6 lg:px-1">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.65rem] uppercase tracking-[0.35em] text-zinc-500">
               <Trans>Creation & Workshop</Trans>
             </p>
-            <h1 className="text-gradient-safe mt-1.5 text-xl font-black tracking-tight">
+            <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(255,255,255,0.15)]">
               <Trans>Playlist Workshop</Trans>
             </h1>
           </div>
@@ -1985,7 +1986,7 @@ function PlaylistWorkshopPage() {
               {activeSectionId === "playlist" && (
                 <>
                   <div
-                    className={`relative rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl ${playlistMenuOpen || manageMenuOpen || transferMenuOpen ? "z-20" : "z-0"}`}
+                    className={`relative rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl ${playlistMenuOpen || manageMenuOpen || transferMenuOpen ? "z-20" : "z-0"}`}
                   >
                     <div className="space-y-4">
                       <div ref={playlistMenuRef} className="relative">
@@ -2033,11 +2034,10 @@ function PlaylistWorkshopPage() {
                                       setPlaylistMenuOpen(false);
                                     })();
                                   }}
-                                  className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${
-                                    selected
-                                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-                                      : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
-                                  }`}
+                                  className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${selected
+                                    ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
+                                    : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
+                                    }`}
                                 >
                                   <div className="truncate font-semibold">{playlist.name}</div>
                                   <div className="text-[10px] uppercase tracking-[0.15em] text-zinc-400">
@@ -2055,11 +2055,10 @@ function PlaylistWorkshopPage() {
                           <Trans>Playlist Version {activePlaylist.config.playlistVersion}</Trans>
                         </span>
                         <span
-                          className={`rounded-full border px-3 py-1 ${
-                            isLinearEditable
-                              ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
-                              : "border-rose-300/35 bg-rose-500/10 text-rose-100"
-                          }`}
+                          className={`rounded-full border px-3 py-1 ${isLinearEditable
+                            ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
+                            : "border-rose-300/35 bg-rose-500/10 text-rose-100"
+                            }`}
                         >
                           {isLinearEditable ? (
                             <Trans>Linear Board</Trans>
@@ -2093,7 +2092,7 @@ function PlaylistWorkshopPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                  <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                     <h3 className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-violet-200">
                       <Trans>Actions</Trans>
                     </h3>
@@ -2128,32 +2127,56 @@ function PlaylistWorkshopPage() {
                         </div>
                       </div>
                     )}
-                    <div className="mt-4 rounded-[1.75rem] border border-cyan-300/30 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_42%),linear-gradient(135deg,rgba(8,47,73,0.92),rgba(15,23,42,0.95))] p-5 shadow-[0_0_30px_rgba(34,211,238,0.12)]">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="max-w-2xl">
-                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.24em] text-cyan-100/85">
-                            <Trans>Shareable Pack</Trans>
-                          </p>
-                          <h4 className="mt-2 text-xl font-black tracking-tight text-white">
-                            <Trans>Export Pack</Trans>
-                          </h4>
-                          <p className="mt-2 text-sm leading-6 text-slate-200/90">
-                            <Trans>
-                              Bundle this playlist with its media into a shareable folder and choose
-                              compression before exporting.
-                            </Trans>
-                          </p>
+                    <div className="mt-6 mb-6 relative group">
+                      {/* Glorious backdrop glow */}
+                      <div className="absolute -inset-0.5 rounded-[1.75rem] bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-500 opacity-40 blur-[12px] transition duration-500 group-hover:opacity-75"></div>
+
+                      {/* Main container */}
+                      <div className="relative overflow-hidden rounded-[1.75rem] border border-white/20 bg-black/60 p-5 lg:px-6 lg:py-5 backdrop-blur-2xl shadow-[0_0_40px_rgba(34,211,238,0.12)]">
+                        {/* Shimmering highlights */}
+                        <div className="absolute top-0 right-0 -m-20 h-48 w-48 rounded-full bg-cyan-500/20 blur-3xl"></div>
+                        <div className="absolute bottom-0 left-0 -m-20 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl"></div>
+
+                        <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="max-w-2xl">
+                            <div className="flex items-center gap-2.5">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-tr from-cyan-400 to-blue-500 text-white shadow-[0_0_12px_rgba(34,211,238,0.4)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </span>
+                              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] sm:text-xs font-bold uppercase tracking-[0.25em] text-cyan-200 drop-shadow-sm">
+                                <Trans>Shareable Pack</Trans>
+                              </p>
+                            </div>
+                            <h4 className="mt-2 text-xl sm:text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-emerald-100 drop-shadow-sm">
+                              <Trans>Export Your Creation</Trans>
+                            </h4>
+                            <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">
+                              <Trans>
+                                Ready to share? Bundle this playlist along with all its associated media into a highly compressed, easily shareable format. Perfect for distribution.
+                              </Trans>
+                            </p>
+                          </div>
+
+                          <div className="relative flex shrink-0 lg:ml-5 mt-2 lg:mt-0">
+                            <div className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 opacity-75 blur-md transition duration-300 group-hover:opacity-100 animate-[pulse_3s_ease-in-out_infinite]"></div>
+                            <button
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => {
+                                playSelectSound();
+                                void handleExportPack();
+                              }}
+                              className="relative inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/20 bg-gradient-to-r from-cyan-600 to-emerald-600 px-6 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] text-white shadow-lg transition-all duration-300 hover:scale-[1.02] hover:from-cyan-500 hover:to-emerald-500 hover:shadow-[0_0_25px_rgba(52,211,238,0.35)]"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                              <Trans>Export Pack</Trans>
+                            </button>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onMouseEnter={playHoverSound}
-                          onClick={() => {
-                            void handleExportPack();
-                          }}
-                          className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-cyan-100/70 bg-cyan-300/18 px-5 py-3 font-[family-name:var(--font-jetbrains-mono)] text-sm font-semibold uppercase tracking-[0.2em] text-cyan-50 transition-all duration-200 hover:border-white hover:bg-cyan-300/28 hover:text-white"
-                        >
-                          <Trans>Export Pack</Trans>
-                        </button>
                       </div>
                     </div>
                     {activeResolutionActionLabel && activeResolutionReview && (
@@ -2219,7 +2242,7 @@ function PlaylistWorkshopPage() {
 
               {/* ── Session section ── */}
               {activeSectionId === "session" && (
-                <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
                     <div className="min-w-0 xl:col-span-4">
                       <NumberInput
@@ -2256,11 +2279,10 @@ function PlaylistWorkshopPage() {
                             })
                           );
                         }}
-                        className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold ${
-                          setup.safePointsEnabled
-                            ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
-                            : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                        }`}
+                        className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold ${setup.safePointsEnabled
+                          ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
+                          : "border-zinc-600 bg-zinc-800 text-zinc-300"
+                          }`}
                       >
                         {setup.safePointsEnabled ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
                       </button>
@@ -2327,11 +2349,10 @@ function PlaylistWorkshopPage() {
                             playSelectSound();
                             setSetup((prev) => ({ ...prev, saveMode: option.value }));
                           }}
-                          className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
-                            setup.saveMode === option.value
-                              ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100"
-                              : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                          }`}
+                          className={`rounded-xl border px-4 py-3 text-sm font-semibold ${setup.saveMode === option.value
+                            ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100"
+                            : "border-zinc-600 bg-zinc-800 text-zinc-300"
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -2352,13 +2373,58 @@ function PlaylistWorkshopPage() {
 
               {/* ── Rounds section ── */}
               {activeSectionId === "rounds" && (
-                <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                   {shouldShowRoundsSkeleton ? (
-                    <PlaylistWorkshopRoundsSkeleton />
+                    <PlaylistWorkshopRoundsSkeleton subTab={roundsSubTab} />
                   ) : (
-                    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-2">
-                      {/* Selected Rounds column */}
-                      <section className="flex max-h-[82vh] flex-col rounded-[1.75rem] border border-emerald-300/30 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_45%),linear-gradient(135deg,rgba(6,78,59,0.88),rgba(10,10,18,0.96))] p-5 shadow-[0_0_30px_rgba(16,185,129,0.12)]">
+                    <div className="flex flex-col">
+                      {/* Tab Bar */}
+                      <div className="mb-4 flex gap-1.5 rounded-[1.25rem] bg-black/40 p-1.5 border border-white/5 backdrop-blur-md">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSelectSound();
+                            setRoundsSubTab("library");
+                          }}
+                          onMouseEnter={playHoverSound}
+                          className={`relative flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-300 ${roundsSubTab === "library"
+                            ? "bg-violet-500/15 text-violet-200 border border-white/10 shadow-lg shadow-violet-500/5"
+                            : "text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent"
+                            }`}
+                        >
+                          <span className="relative z-10 flex items-center gap-2">
+                            <Trans>📚 Library</Trans>
+                            <span className={`flex h-5 items-center justify-center rounded-full px-2 text-[10px] tabular-nums transition-colors ${roundsSubTab === "library" ? "bg-violet-900/40 text-violet-300" : "bg-black/30 text-zinc-500"}`}>
+                              {availableNormalRounds.length}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSelectSound();
+                            setRoundsSubTab("queue");
+                          }}
+                          onMouseEnter={playHoverSound}
+                          className={`relative flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-300 ${roundsSubTab === "queue"
+                            ? "bg-emerald-500/15 text-emerald-200 border border-white/10 shadow-lg shadow-emerald-500/5"
+                            : "text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent"
+                            }`}
+                        >
+                          <span className="relative z-10 flex items-center gap-2">
+                            <Trans>🎯 Queue</Trans>
+                            <span className={`flex h-5 items-center justify-center rounded-full px-2 text-[10px] tabular-nums transition-colors ${roundsSubTab === "queue" ? "bg-emerald-900/40 text-emerald-300" : "bg-black/30 text-zinc-500"}`}>
+                              {setup.normalRoundOrder.length}
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Selected Rounds Tab Panel */}
+                      <section
+                        className={`flex max-h-[75vh] min-h-0 flex-col ${roundsSubTab !== "queue" ? "hidden" : ""
+                          }`}
+                      >
                         {/* Header */}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
@@ -2466,11 +2532,26 @@ function PlaylistWorkshopPage() {
                                 );
                               })}
                               {selectedNormalRounds.length === 0 && (
-                                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-emerald-300/20 px-4 py-8 text-sm text-emerald-50/50">
-                                  {normalRounds.length === 0 ? (
-                                    <Trans>No normal rounds installed.</Trans>
-                                  ) : (
-                                    <Trans>Add rounds from the library →</Trans>
+                                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-emerald-300/20 px-4 py-10 text-sm">
+                                  <div className="text-emerald-50/50 font-medium">
+                                    {normalRounds.length === 0 ? (
+                                      <Trans>No normal rounds installed.</Trans>
+                                    ) : (
+                                      <Trans>Your queue is empty.</Trans>
+                                    )}
+                                  </div>
+                                  {normalRounds.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        playSelectSound();
+                                        setRoundsSubTab("library");
+                                      }}
+                                      onMouseEnter={playHoverSound}
+                                      className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-5 py-2.5 font-bold text-emerald-100 transition-colors hover:bg-emerald-500/30 hover:border-emerald-300/50"
+                                    >
+                                      <Trans>Browse Library →</Trans>
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -2479,8 +2560,11 @@ function PlaylistWorkshopPage() {
                         </DndContext>
                       </section>
 
-                      {/* Available Rounds column */}
-                      <section className="flex max-h-[82vh] flex-col rounded-[1.75rem] border border-violet-300/25 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_45%),linear-gradient(135deg,rgba(30,27,75,0.92),rgba(10,10,18,0.96))] p-5 shadow-[0_0_30px_rgba(139,92,246,0.12)]">
+                      {/* Available Rounds Tab Panel */}
+                      <section
+                        className={`relative flex max-h-[75vh] min-h-0 flex-col ${roundsSubTab !== "library" ? "hidden" : ""
+                          }`}
+                      >
                         {/* Header */}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
@@ -2560,11 +2644,12 @@ function PlaylistWorkshopPage() {
 
                         {/* Scrollable round list */}
                         <div
-                          ref={availableRoundsScrollRef}
-                          className="mt-3 flex flex-1 flex-col overflow-y-auto pr-1"
+                          ref={setAvailableRoundsScrollNode}
+                          className="mt-3 flex min-h-[22rem] flex-1 flex-col overflow-y-auto pr-1"
                         >
                           {visibleAvailableNormalRounds.length > 0 &&
-                            canVirtualizeAvailableRounds && (
+                            shouldVirtualizeAvailableRounds &&
+                            availableRoundsScrollElement && (
                               <div
                                 className="relative"
                                 style={{ height: `${availableRoundsVirtualizer.getTotalSize()}px` }}
@@ -2704,17 +2789,52 @@ function PlaylistWorkshopPage() {
                             </div>
                           )}
                           {visibleAvailableNormalRounds.length === 0 && (
-                            <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-violet-300/20 px-4 py-8 text-sm text-violet-50/50">
-                              {normalRounds.length === 0 ? (
-                                <Trans>No normal rounds installed.</Trans>
-                              ) : availableNormalRounds.length === 0 ? (
-                                <Trans>All rounds are in the queue.</Trans>
-                              ) : (
-                                <Trans>No rounds match your search.</Trans>
+                            <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-violet-300/20 px-4 py-10 text-sm">
+                              <div className="text-violet-50/50 font-medium">
+                                {normalRounds.length === 0 ? (
+                                  <Trans>No normal rounds installed.</Trans>
+                                ) : availableNormalRounds.length === 0 ? (
+                                  <Trans>All rounds are in the queue.</Trans>
+                                ) : (
+                                  <Trans>No rounds match your search.</Trans>
+                                )}
+                              </div>
+                              {normalRounds.length > 0 && availableNormalRounds.length === 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    playSelectSound();
+                                    setRoundsSubTab("queue");
+                                  }}
+                                  onMouseEnter={playHoverSound}
+                                  className="rounded-xl border border-violet-400/30 bg-violet-500/20 px-5 py-2.5 font-bold text-violet-100 transition-colors hover:bg-violet-500/30 hover:border-violet-300/50"
+                                >
+                                  <Trans>View Queue →</Trans>
+                                </button>
                               )}
                             </div>
                           )}
                         </div>
+
+                        {/* Floating Queue Summary for Library Tab */}
+                        {setup.normalRoundOrder.length > 0 && (
+                          <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-400/20 bg-emerald-950/80 pl-4 pr-1 py-1 shadow-[0_4px_24px_rgba(16,185,129,0.25)] backdrop-blur-xl">
+                            <div className="text-sm font-semibold text-emerald-100 whitespace-nowrap">
+                              <Trans>🎯 {setup.normalRoundOrder.length} added to queue</Trans>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playSelectSound();
+                                setRoundsSubTab("queue");
+                              }}
+                              onMouseEnter={playHoverSound}
+                              className="rounded-full bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-200 transition-colors hover:bg-emerald-500/40 whitespace-nowrap"
+                            >
+                              <Trans>View Queue →</Trans>
+                            </button>
+                          </div>
+                        )}
                       </section>
                     </div>
                   )}
@@ -2723,7 +2843,7 @@ function PlaylistWorkshopPage() {
 
               {/* ── Cum Rounds section ── */}
               {activeSectionId === "cum-rounds" && (
-                <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                   {shouldShowRoundsSkeleton ? (
                     <PlaylistWorkshopRoundsSkeleton />
                   ) : (
@@ -2752,11 +2872,10 @@ function PlaylistWorkshopPage() {
                           return (
                             <div
                               key={round.id}
-                              className={`rounded-2xl border px-3 py-3 ${
-                                selected
-                                  ? "border-emerald-300/60 bg-emerald-500/12 text-emerald-100"
-                                  : "border-zinc-600 bg-black/35 text-zinc-200"
-                              }`}
+                              className={`rounded-2xl border px-3 py-3 ${selected
+                                ? "border-emerald-300/60 bg-emerald-500/12 text-emerald-100"
+                                : "border-zinc-600 bg-black/35 text-zinc-200"
+                                }`}
                             >
                               <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
                                 <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start">
@@ -2791,11 +2910,10 @@ function PlaylistWorkshopPage() {
                                     playSelectSound();
                                     toggleCumRound(round.id);
                                   }}
-                                  className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
-                                    selected
-                                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-                                      : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                                  }`}
+                                  className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${selected
+                                    ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
+                                    : "border-zinc-600 bg-zinc-800 text-zinc-300"
+                                    }`}
                                 >
                                   {selected ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
                                 </button>
@@ -2838,7 +2956,7 @@ function PlaylistWorkshopPage() {
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                    <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                       <div className="mb-2 space-y-2">
                         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-emerald-200">
                           <Trans>Perks</Trans>
@@ -2890,11 +3008,10 @@ function PlaylistWorkshopPage() {
                                 playSelectSound();
                                 togglePerk(perk.id);
                               }}
-                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${
-                                selected
-                                  ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-emerald-300/65 shadow-[0_0_20px_rgba(16,185,129,0.25)]`
-                                  : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
-                              }`}
+                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${selected
+                                ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-emerald-300/65 shadow-[0_0_20px_rgba(16,185,129,0.25)]`
+                                : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
+                                }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-2">
@@ -2914,11 +3031,10 @@ function PlaylistWorkshopPage() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
-                                      selected
-                                        ? "border-emerald-300/65 bg-emerald-500/25 text-emerald-50"
-                                        : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
-                                    }`}
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selected
+                                      ? "border-emerald-300/65 bg-emerald-500/25 text-emerald-50"
+                                      : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
+                                      }`}
                                   >
                                     {selected ? <Trans>Active</Trans> : <Trans>Inactive</Trans>}
                                   </span>
@@ -2939,7 +3055,7 @@ function PlaylistWorkshopPage() {
                         })}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+                    <div className="rounded-[1.75rem] border border-white/5 bg-black/20 p-6 backdrop-blur-2xl shadow-2xl">
                       <div className="mb-2 space-y-2">
                         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-rose-200">
                           <Trans>Anti-Perks</Trans>
@@ -2994,11 +3110,10 @@ function PlaylistWorkshopPage() {
                                 playSelectSound();
                                 toggleAntiPerk(perk.id);
                               }}
-                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${
-                                selected
-                                  ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-rose-300/65 shadow-[0_0_20px_rgba(251,113,133,0.25)]`
-                                  : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
-                              }`}
+                              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all ${selected
+                                ? `${rarityMeta.tailwind.setupSelected} ring-2 ring-rose-300/65 shadow-[0_0_20px_rgba(251,113,133,0.25)]`
+                                : `${rarityMeta.tailwind.setupIdle} border-dashed opacity-70`
+                                }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-2">
@@ -3018,11 +3133,10 @@ function PlaylistWorkshopPage() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
-                                      selected
-                                        ? "border-rose-300/65 bg-rose-500/25 text-rose-50"
-                                        : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
-                                    }`}
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selected
+                                      ? "border-rose-300/65 bg-rose-500/25 text-rose-50"
+                                      : "border-zinc-600 bg-zinc-800/85 text-zinc-300"
+                                      }`}
                                   >
                                     {selected ? <Trans>Active</Trans> : <Trans>Inactive</Trans>}
                                   </span>
@@ -3405,9 +3519,9 @@ function PlaylistWorkshopPage() {
                 setImportedPlaylistReview(
                   resolutionModalState.analysis.issues.length > 0
                     ? {
-                        playlistId: imported.playlist.id,
-                        analysis: resolutionModalState.analysis,
-                      }
+                      playlistId: imported.playlist.id,
+                      analysis: resolutionModalState.analysis,
+                    }
                     : null
                 );
                 showImportNotice(
@@ -3503,13 +3617,12 @@ function PlaylistWorkshopPage() {
       {importNotice && (
         <div className="fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 animate-entrance">
           <div
-            className={`rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${
-              importNotice.tone === "error"
-                ? "border-rose-300/40 bg-rose-950/85 text-rose-100 shadow-rose-500/20"
-                : importNotice.tone === "info"
-                  ? "border-cyan-300/40 bg-cyan-950/85 text-cyan-100 shadow-cyan-500/20"
-                  : "border-emerald-300/40 bg-emerald-950/85 text-emerald-100 shadow-emerald-500/20"
-            }`}
+            className={`rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${importNotice.tone === "error"
+              ? "border-rose-300/40 bg-rose-950/85 text-rose-100 shadow-rose-500/20"
+              : importNotice.tone === "info"
+                ? "border-cyan-300/40 bg-cyan-950/85 text-cyan-100 shadow-cyan-500/20"
+                : "border-emerald-300/40 bg-emerald-950/85 text-emerald-100 shadow-emerald-500/20"
+              }`}
           >
             {importNotice.message}
           </div>
@@ -3774,7 +3887,7 @@ function WorkshopRoundPreview({
               if (!video) return;
               const { startSec } = resolvePreviewWindow(video);
               video.currentTime = startSec;
-              void video.play().catch(() => {});
+              void video.play().catch(() => { });
             }}
             onTimeUpdate={() => {
               if (!isPreviewActive) return;
@@ -3788,7 +3901,7 @@ function WorkshopRoundPreview({
               if (endSec !== null && video.currentTime >= endSec - 0.04) {
                 video.currentTime = startSec;
                 if (video.paused) {
-                  void video.play().catch(() => {});
+                  void video.play().catch(() => { });
                 }
               }
             }}
@@ -3798,7 +3911,7 @@ function WorkshopRoundPreview({
               if (!video) return;
               const { startSec } = resolvePreviewWindow(video);
               video.currentTime = startSec;
-              void video.play().catch(() => {});
+              void video.play().catch(() => { });
             }}
           />
         </SfwGuard>
@@ -3840,13 +3953,12 @@ function HeaderAction({
       onClick={() => {
         void onClick();
       }}
-      className={`rounded-xl border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] ${
-        disabled
-          ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
-          : emphasis === "primary"
-            ? "border-emerald-300/45 bg-emerald-500/20 text-emerald-100 hover:border-emerald-200/80 hover:bg-emerald-500/35"
-            : "border-violet-300/45 bg-violet-500/20 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/35"
-      }`}
+      className={`rounded-xl border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] ${disabled
+        ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
+        : emphasis === "primary"
+          ? "border-emerald-300/45 bg-emerald-500/20 text-emerald-100 hover:border-emerald-200/80 hover:bg-emerald-500/35"
+          : "border-violet-300/45 bg-violet-500/20 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/35"
+        }`}
     >
       {label}
     </button>
@@ -3978,11 +4090,10 @@ function NewPlaylistDialog({
           <button
             type="button"
             onClick={() => setMode("fully-random")}
-            className={`rounded-xl border px-4 py-3 text-left text-sm ${
-              mode === "fully-random"
-                ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-                : "border-zinc-600 bg-black/35 text-zinc-200"
-            }`}
+            className={`rounded-xl border px-4 py-3 text-left text-sm ${mode === "fully-random"
+              ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
+              : "border-zinc-600 bg-black/35 text-zinc-200"
+              }`}
           >
             <div className="font-semibold">
               <Trans>Fully Random</Trans>
@@ -3994,11 +4105,10 @@ function NewPlaylistDialog({
           <button
             type="button"
             onClick={() => setMode("progressive-random")}
-            className={`rounded-xl border px-4 py-3 text-left text-sm ${
-              mode === "progressive-random"
-                ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
-                : "border-zinc-600 bg-black/35 text-zinc-200"
-            }`}
+            className={`rounded-xl border px-4 py-3 text-left text-sm ${mode === "progressive-random"
+              ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
+              : "border-zinc-600 bg-black/35 text-zinc-200"
+              }`}
           >
             <div className="font-semibold">
               <Trans>Progressive Random</Trans>
@@ -4089,11 +4199,10 @@ const ActionMenu = forwardRef<
               void item.onClick();
               onToggle();
             }}
-            className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${
-              item.tone === "danger"
-                ? "border-rose-300/45 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
-                : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
-            }`}
+            className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm last:mb-0 ${item.tone === "danger"
+              ? "border-rose-300/45 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
+              : "border-zinc-700 bg-black/40 text-zinc-200 hover:border-violet-300/60 hover:bg-violet-500/20"
+              }`}
           >
             {item.label}
           </button>
@@ -4133,9 +4242,8 @@ function NumberInput({
         <span className="mb-2 block text-xs leading-5 text-zinc-400">{description}</span>
       ) : null}
       <div
-        className={`flex items-center rounded-xl border bg-black/45 p-1 ${
-          disabled ? "border-zinc-700 opacity-50" : "border-purple-300/30"
-        }`}
+        className={`flex items-center rounded-xl border bg-black/45 p-1 ${disabled ? "border-zinc-700 opacity-50" : "border-purple-300/30"
+          }`}
       >
         <button
           type="button"

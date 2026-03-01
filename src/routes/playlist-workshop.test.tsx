@@ -792,7 +792,7 @@ describe("PlaylistWorkshopRoute", () => {
     expect(mocks.installedRoundsCache.getInstalledRoundCatalogCached).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a lightweight placeholder instead of the full available list before virtualization is ready", async () => {
+  it("renders large available round catalogs after virtualization is ready", async () => {
     const playlist = makeLinearPlaylist("linear-playlist", "Linear Playlist");
     const rounds = Array.from({ length: 75 }, (_, index) =>
       makeRound(`round-${index + 1}`, `Round ${index + 1}`)
@@ -812,8 +812,10 @@ describe("PlaylistWorkshopRoute", () => {
     clickSidebarSection("Rounds");
 
     await waitForRoundsReady();
-    expect(screen.getByLabelText("Preparing available rounds")).toBeDefined();
-    expect(screen.queryByRole("group", { name: "Available round Round 1" })).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Preparing available rounds")).toBeNull();
+      expect(screen.getByRole("group", { name: "Available round Round 1" })).toBeDefined();
+    });
   });
 
   it("renders small available round catalogs without the virtualization placeholder", async () => {
@@ -834,5 +836,52 @@ describe("PlaylistWorkshopRoute", () => {
 
     expect(screen.queryByLabelText("Preparing available rounds")).toBeNull();
     expect(screen.getByRole("group", { name: "Available round Round 1" })).toBeDefined();
+  });
+
+  it("renders exactly fifty available rounds without the virtualization placeholder", async () => {
+    const playlist = makeLinearPlaylist("linear-playlist", "Linear Playlist");
+    const rounds = Array.from({ length: 50 }, (_, index) =>
+      makeRound(`round-${index + 1}`, `Round ${index + 1}`)
+    );
+
+    mocks.loaderData = {
+      installedRounds: rounds,
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+    };
+    mocks.playlists.list.mockResolvedValue([playlist]);
+    mocks.playlists.getActive.mockResolvedValue(playlist);
+
+    await openLinearPlaylistAndSection("Linear Playlist", "Rounds");
+
+    expect(screen.queryByLabelText("Preparing available rounds")).toBeNull();
+    expect(screen.getByRole("group", { name: "Available round Round 1" })).toBeDefined();
+    expect(screen.getByRole("group", { name: "Available round Round 50" })).toBeDefined();
+  });
+
+  it("renders fifty-one available rounds through virtualization", async () => {
+    const playlist = makeLinearPlaylist("linear-playlist", "Linear Playlist");
+    const rounds = Array.from({ length: 51 }, (_, index) =>
+      makeRound(`round-${index + 1}`, `Round ${index + 1}`)
+    );
+
+    mocks.loaderData = {
+      installedRounds: rounds,
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+    };
+    mocks.playlists.list.mockResolvedValue([playlist]);
+    mocks.playlists.getActive.mockResolvedValue(playlist);
+
+    render(<Component />);
+
+    fireEvent.click(screen.getByRole("button", { name: /linear playlist.*open/i }));
+    clickSidebarSection("Rounds");
+
+    await waitForRoundsReady();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Preparing available rounds")).toBeNull();
+      expect(screen.getByRole("group", { name: "Available round Round 1" })).toBeDefined();
+    });
   });
 });
