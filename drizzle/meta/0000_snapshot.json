@@ -202,6 +202,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "installSourceKey": {
+          "name": "installSourceKey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "integer",
@@ -217,7 +224,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "Playlist_installSourceKey_unique": {
+          "name": "Playlist_installSourceKey_unique",
+          "columns": [
+            "installSourceKey"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

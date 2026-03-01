@@ -1,19 +1,29 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef } from "react";
+import { z } from "zod";
 import { GameScene } from "../components/game/GameScene";
 import { clearMapEditorTestSession, getMapEditorTestPlaylistId, setMapEditorTestSession } from "../features/map-editor/testSession";
 import { createInitialGameState } from "../game/engine";
 import type { GameConfig, GameState } from "../game/types";
 import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
+import {
+  ANTI_PERK_BEATBAR_ENABLED_KEY,
+  DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
+  DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+  ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
+  normalizeAntiPerkBeatbarEnabled,
+  normalizeRoundProgressBarAlwaysVisible,
+} from "../constants/roundVideoOverlaySettings";
 import { db, type InstalledRound } from "../services/db";
 import { playlists } from "../services/playlists";
 import { trpc } from "../services/trpc";
+import { isGameDevelopmentMode } from "../utils/devFeatures";
+import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
 const INTERMEDIARY_RETURN_PAUSE_KEY = "game.intermediary.returnPauseSec";
-const DEFAULT_INTERMEDIARY_LOADING_PROMPT = "animated gif webm";
-const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 10;
+const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
 const ECONOMY_STORE_KEYS = {
   startingMoney: "game.economy.startingMoney",
@@ -23,6 +33,11 @@ const ECONOMY_STORE_KEYS = {
   scorePerIntermediary: "game.economy.scorePerIntermediary",
   scorePerActiveAntiPerk: "game.economy.scorePerActiveAntiPerk",
 } as const;
+
+const GameSearchSchema = z.object({
+  playlistId: z.string().min(1).optional(),
+  launchNonce: z.coerce.number().int().nonnegative().optional(),
+});
 
 const getInitialHighscore = async (): Promise<number> => {
   try {
@@ -106,17 +121,47 @@ const getIntermediaryReturnPauseSec = async (): Promise<number> => {
   }
 };
 
+const getRoundProgressBarAlwaysVisible = async (): Promise<boolean> => {
+  try {
+    const stored = await trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY });
+    return normalizeRoundProgressBarAlwaysVisible(stored);
+  } catch (error) {
+    console.warn("Failed to read round progress bar visibility from store", error);
+    return DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE;
+  }
+};
+
+const getAntiPerkBeatbarEnabled = async (): Promise<boolean> => {
+  try {
+    const stored = await trpc.store.get.query({ key: ANTI_PERK_BEATBAR_ENABLED_KEY });
+    return normalizeAntiPerkBeatbarEnabled(stored);
+  } catch (error) {
+    console.warn("Failed to read anti-perk beatbar visibility from store", error);
+    return DEFAULT_ANTI_PERK_BEATBAR_ENABLED;
+  }
+};
+
 export const Route = createFileRoute("/game")({
-  loader: async () => {
-    const [installedRounds, initialHighscore, economyOverrides, intermediaryLoadingPrompt, intermediaryLoadingDurationSec, intermediaryReturnPauseSec, activePlaylist] = await Promise.all([
+  validateSearch: (search) => GameSearchSchema.parse(search),
+  loaderDeps: ({ search }) => ({
+    playlistId: search.playlistId ?? null,
+    launchNonce: search.launchNonce ?? null,
+  }),
+  loader: async ({ deps }) => {
+    const [installedRounds, initialHighscore, economyOverrides, intermediaryLoadingPrompt, intermediaryLoadingDurationSec, intermediaryReturnPauseSec, roundProgressBarAlwaysVisible, antiPerkBeatbarEnabled, activePlaylist] = await Promise.all([
       getInstalledRounds(),
       getInitialHighscore(),
       getEconomyOverrides(),
       getIntermediaryLoadingPrompt(),
       getIntermediaryLoadingDurationSec(),
       getIntermediaryReturnPauseSec(),
-      playlists.getActive(),
+      getRoundProgressBarAlwaysVisible(),
+      getAntiPerkBeatbarEnabled(),
+      deps.playlistId ? playlists.getById(deps.playlistId) : playlists.getActive(),
     ]);
+    if (!activePlaylist) {
+      throw new Error("No playlist available.");
+    }
     const playedByPool = await playlists.getDistinctPlayedByPool(activePlaylist.id);
     return {
       installedRounds,
@@ -125,6 +170,8 @@ export const Route = createFileRoute("/game")({
       intermediaryLoadingPrompt,
       intermediaryLoadingDurationSec,
       intermediaryReturnPauseSec,
+      roundProgressBarAlwaysVisible,
+      antiPerkBeatbarEnabled,
       activePlaylist,
       playedByPool,
     };
@@ -140,11 +187,14 @@ function GameRoute() {
     intermediaryLoadingPrompt,
     intermediaryLoadingDurationSec,
     intermediaryReturnPauseSec,
+    roundProgressBarAlwaysVisible,
+    antiPerkBeatbarEnabled,
     activePlaylist,
     playedByPool,
   } = Route.useLoaderData();
   const navigate = useNavigate();
   const hasNavigatedToResultRef = useRef(false);
+  const sessionStartedAtMsRef = useRef(Date.now());
   const mapEditorTestPlaylistIdRef = useRef<string | null>(getMapEditorTestPlaylistId());
   const isMapEditorTestRun = mapEditorTestPlaylistIdRef.current !== null;
 
@@ -201,12 +251,17 @@ function GameRoute() {
     if (!player) return;
     hasNavigatedToResultRef.current = true;
     const score = Math.max(0, Math.floor(player.score));
+    const survivedDurationSec = Math.max(
+      0,
+      Math.floor((Date.now() - sessionStartedAtMsRef.current) / 1000),
+    );
     const highscoreBefore = Math.max(0, Math.floor(initialHighscore));
     const highscoreAfter = Math.max(0, Math.floor(nextState.highscore));
 
     void db.singlePlayerHistory.recordRun({
       finishedAtIso: new Date().toISOString(),
       score,
+      survivedDurationSec,
       highscoreBefore,
       highscoreAfter,
       wasNewHighscore: score > highscoreBefore,
@@ -229,6 +284,7 @@ function GameRoute() {
       search: {
         score,
         highscore: highscoreAfter,
+        survivedDurationSec,
         reason: nextState.completionReason ?? "finished",
       },
       replace: true,
@@ -238,16 +294,20 @@ function GameRoute() {
   return (
     <GameScene
       initialState={initialState}
+      sessionStartedAtMs={sessionStartedAtMsRef.current}
       installedRounds={installedRounds}
       onGiveUp={handleBack}
       giveUpLabel={isMapEditorTestRun ? "Back to Editor" : "Give Up"}
       allowDebugRoundControls={isMapEditorTestRun}
+      showDevPerkMenu={isGameDevelopmentMode()}
       onHighscoreChange={handleHighscoreChange}
       onRoundPlayed={handleRoundPlayed}
       onStateChange={handleStateChange}
       intermediaryLoadingPrompt={intermediaryLoadingPrompt}
       intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
       intermediaryReturnPauseSec={intermediaryReturnPauseSec}
+      initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
+      initialShowAntiPerkBeatbar={antiPerkBeatbarEnabled}
     />
   );
 }

@@ -36,7 +36,7 @@ function buildConfig(boardConfig: unknown): Record<string, unknown> {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -186,6 +186,26 @@ describe("playlistSchema", () => {
     expect(envelope.config.boardConfig.mode).toBe("linear");
   });
 
+  it("builds linear playlists with an explicit terminal end node", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "linear",
+        totalIndices: 3,
+        safePointIndices: [],
+        safePointRestMsByIndex: {},
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [{ idHint: "round-1", name: "Round 1", type: "Normal" }],
+        cumRoundRefs: [],
+      }),
+    );
+
+    const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
+    expect(config.board.at(-1)?.id).toBe("end");
+    expect(config.board.at(-1)?.kind).toBe("end");
+    expect(config.runtimeGraph.edges.at(-1)?.toNodeId).toBe("end");
+    expect(config.singlePlayer.totalIndices).toBe(3);
+  });
+
   it("defaults cum bonus score when omitted", () => {
     const parsed = ZPlaylistConfig.parse({
       ...buildConfig({
@@ -206,7 +226,7 @@ describe("playlistSchema", () => {
       },
     });
 
-    expect(parsed.economy.scorePerCumRoundSuccess).toBe(120);
+    expect(parsed.economy.scorePerCumRoundSuccess).toBe(420);
   });
 
   it("converts graph cum round refs into runtime cum round ids", () => {
@@ -262,6 +282,107 @@ describe("playlistSchema", () => {
     expect(roundTripped.nodes.find((node) => node.id === "round-1")?.forceStop).toBe(true);
   });
 
+  it("parses and round-trips perk node force-stop and guaranteed gift settings", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "graph",
+        startNodeId: "start",
+        nodes: [
+          { id: "start", name: "Start", kind: "start" },
+          { id: "perk-1", name: "Perk 1", kind: "perk", forceStop: true, visualId: "loaded-dice", giftGuaranteedPerk: true },
+          { id: "end", name: "End", kind: "end" },
+        ],
+        edges: [
+          { id: "edge-a", fromNodeId: "start", toNodeId: "perk-1" },
+          { id: "edge-b", fromNodeId: "perk-1", toNodeId: "end" },
+        ],
+        randomRoundPools: [],
+        cumRoundRefs: [],
+        pathChoiceTimeoutMs: 6000,
+      }),
+    );
+
+    expect(parsed.boardConfig.mode).toBe("graph");
+    if (parsed.boardConfig.mode !== "graph") {
+      throw new Error("Expected graph board config");
+    }
+
+    const perkNode = parsed.boardConfig.nodes.find((node) => node.id === "perk-1");
+    expect(perkNode?.forceStop).toBe(true);
+    expect(perkNode?.giftGuaranteedPerk).toBe(true);
+
+    const editorConfig = toEditorGraphConfig(parsed.boardConfig);
+    const roundTripped = toGraphBoardConfig(editorConfig);
+    expect(roundTripped.nodes.find((node) => node.id === "perk-1")?.forceStop).toBe(true);
+    expect(roundTripped.nodes.find((node) => node.id === "perk-1")?.giftGuaranteedPerk).toBe(true);
+  });
+
+  it("parses and round-trips skippable round nodes", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "graph",
+        startNodeId: "start",
+        nodes: [
+          { id: "start", name: "Start", kind: "start" },
+          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, skippable: true },
+          { id: "end", name: "End", kind: "end" },
+        ],
+        edges: [
+          { id: "edge-a", fromNodeId: "start", toNodeId: "round-1" },
+          { id: "edge-b", fromNodeId: "round-1", toNodeId: "end" },
+        ],
+        randomRoundPools: [],
+        cumRoundRefs: [],
+        pathChoiceTimeoutMs: 6000,
+      }),
+    );
+
+    expect(parsed.boardConfig.mode).toBe("graph");
+    if (parsed.boardConfig.mode !== "graph") {
+      throw new Error("Expected graph board config");
+    }
+
+    expect(parsed.boardConfig.nodes.find((node) => node.id === "round-1")?.skippable).toBe(true);
+
+    const editorConfig = toEditorGraphConfig(parsed.boardConfig);
+    const roundTripped = toGraphBoardConfig(editorConfig);
+    expect(roundTripped.nodes.find((node) => node.id === "round-1")?.skippable).toBe(true);
+  });
+
+  it("parses and round-trips node color and size style hints", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "graph",
+        startNodeId: "start",
+        nodes: [
+          { id: "start", name: "Start", kind: "start", styleHint: { x: 10, y: 20, color: "#10b981", size: 1.8 } },
+          { id: "end", name: "End", kind: "end", styleHint: { x: 30, y: 40 } },
+        ],
+        edges: [{ id: "edge-a", fromNodeId: "start", toNodeId: "end" }],
+        randomRoundPools: [],
+        cumRoundRefs: [],
+        pathChoiceTimeoutMs: 6000,
+      }),
+    );
+
+    expect(parsed.boardConfig.mode).toBe("graph");
+    if (parsed.boardConfig.mode !== "graph") {
+      throw new Error("Expected graph board config");
+    }
+
+    const editorConfig = toEditorGraphConfig(parsed.boardConfig);
+    expect(editorConfig.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(editorConfig.nodes.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
+
+    const roundTripped = toGraphBoardConfig(editorConfig);
+    expect(roundTripped.nodes.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(roundTripped.nodes.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
+
+    const runtimeConfig = toGameConfigFromPlaylist(parsed, []);
+    expect(runtimeConfig.board.find((node) => node.id === "start")?.styleHint?.color).toBe("#10b981");
+    expect(runtimeConfig.board.find((node) => node.id === "start")?.styleHint?.size).toBe(1.8);
+  });
+
   it("copies forced-stop round nodes into runtime board fields", () => {
     const parsed = ZPlaylistConfig.parse(
       buildConfig({
@@ -284,5 +405,55 @@ describe("playlistSchema", () => {
 
     const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
     expect(config.board.find((field) => field.id === "round-1")?.forceStop).toBe(true);
+  });
+
+  it("copies perk node force-stop and guaranteed gift settings into runtime board fields", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "graph",
+        startNodeId: "start",
+        nodes: [
+          { id: "start", name: "Start", kind: "start" },
+          { id: "perk-1", name: "Perk 1", kind: "perk", forceStop: true, visualId: "loaded-dice", giftGuaranteedPerk: true },
+          { id: "end", name: "End", kind: "end" },
+        ],
+        edges: [
+          { id: "edge-a", fromNodeId: "start", toNodeId: "perk-1" },
+          { id: "edge-b", fromNodeId: "perk-1", toNodeId: "end" },
+        ],
+        randomRoundPools: [],
+        cumRoundRefs: [],
+        pathChoiceTimeoutMs: 6000,
+      }),
+    );
+
+    const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
+    const perkField = config.board.find((field) => field.id === "perk-1");
+    expect(perkField?.forceStop).toBe(true);
+    expect(perkField?.giftGuaranteedPerk).toBe(true);
+  });
+
+  it("copies skippable round nodes into runtime board fields", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "graph",
+        startNodeId: "start",
+        nodes: [
+          { id: "start", name: "Start", kind: "start" },
+          { id: "round-1", name: "Round 1", kind: "round", roundRef: { idHint: "round-1", name: "Round 1" }, skippable: true },
+          { id: "end", name: "End", kind: "end" },
+        ],
+        edges: [
+          { id: "edge-a", fromNodeId: "start", toNodeId: "round-1" },
+          { id: "edge-b", fromNodeId: "round-1", toNodeId: "end" },
+        ],
+        randomRoundPools: [],
+        cumRoundRefs: [],
+        pathChoiceTimeoutMs: 6000,
+      }),
+    );
+
+    const config = toGameConfigFromPlaylist(parsed, [makeRound("round-1", "Round 1")]);
+    expect(config.board.find((field) => field.id === "round-1")?.skippable).toBe(true);
   });
 });

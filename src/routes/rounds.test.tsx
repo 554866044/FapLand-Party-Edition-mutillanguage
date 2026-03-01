@@ -1,12 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstalledRound } from "../services/db";
+import type { StoredPlaylist } from "../services/playlists";
 
 const mocks = vi.hoisted(() => ({
   loaderData: {
     rounds: [] as InstalledRound[],
-    intermediaryLoadingPrompt: "animated gif webm",
-    intermediaryLoadingDurationSec: 10,
+    availablePlaylists: [] as StoredPlaylist[],
+    intermediaryLoadingPrompt: "animated gif webm score:>300",
+    intermediaryLoadingDurationSec: 5,
     intermediaryReturnPauseSec: 4,
   },
   navigate: vi.fn(),
@@ -20,7 +22,13 @@ const mocks = vi.hoisted(() => ({
       getDisabledIds: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      repairTemplate: vi.fn(),
+      retryTemplateLinking: vi.fn(),
       convertHeroGroupToRound: vi.fn(),
+    },
+    template: {
+      repairHero: vi.fn(),
+      retryLinking: vi.fn(),
     },
     install: {
       getScanStatus: vi.fn(),
@@ -35,6 +43,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   playlists: {
+    list: vi.fn(),
     create: vi.fn(),
     importFromFile: vi.fn(),
     setActive: vi.fn(),
@@ -86,7 +95,7 @@ vi.mock("../components/MenuButton", () => ({
 }));
 
 import { InstalledRoundsPage } from "./rounds";
-import { buildRoundRenderRows } from "./roundRows";
+import { buildRoundRenderRows, buildRoundRenderRowsWithOptions } from "./roundRows";
 
 function makeRound({
   id,
@@ -94,12 +103,14 @@ function makeRound({
   createdAt,
   hero,
   startTime,
+  template = false,
 }: {
   id: string;
   name: string;
   createdAt: string;
   hero?: { id?: string | null; name?: string | null } | null;
   startTime?: number | null;
+  template?: boolean;
 }): InstalledRound {
   const heroId = hero?.id ?? (hero?.name ? `hero-${hero.name}` : null);
   return {
@@ -124,24 +135,75 @@ function makeRound({
         sourceType: null,
       }
       : null,
-    resources: [
-      {
-        id: `res-${id}`,
-        roundId: id,
-        videoUri: null,
-        funscriptUri: null,
-        phash: null,
-        disabled: false,
-        createdAt,
-        updatedAt: createdAt,
-      },
-    ],
+    resources: template
+      ? []
+      : [
+        {
+          id: `res-${id}`,
+          roundId: id,
+          videoUri: null,
+          funscriptUri: null,
+          phash: null,
+          disabled: false,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
     installSourceKey: null,
     phash: null,
     heroSourceType: null,
     sourceType: null,
     updatedAt: createdAt,
   } as unknown as InstalledRound;
+}
+
+function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlaylist {
+  return {
+    id,
+    name,
+    description: null,
+    formatVersion: 1,
+    installSourceKey: null,
+    createdAt: new Date("2026-03-03T00:00:00.000Z"),
+    updatedAt: new Date("2026-03-03T00:00:00.000Z"),
+    config: {
+      playlistVersion: 1,
+      boardConfig: {
+        mode: "linear",
+        totalIndices: roundIds.length,
+        safePointIndices: [],
+        safePointRestMsByIndex: {},
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: roundIds.map((roundId) => ({ idHint: roundId, name: roundId, type: "Normal" as const })),
+        cumRoundRefs: [],
+      },
+      perkSelection: {
+        optionsPerPick: 3,
+        triggerChancePerCompletedRound: 0.35,
+      },
+      perkPool: {
+        enabledPerkIds: [],
+        enabledAntiPerkIds: [],
+      },
+      probabilityScaling: {
+        initialIntermediaryProbability: 0,
+        initialAntiPerkProbability: 0,
+        intermediaryIncreasePerRound: 0.02,
+        antiPerkIncreasePerRound: 0.015,
+        maxIntermediaryProbability: 0.85,
+        maxAntiPerkProbability: 0.75,
+      },
+      economy: {
+        startingMoney: 120,
+        moneyPerCompletedRound: 50,
+        startingScore: 0,
+        scorePerCompletedRound: 100,
+        scorePerIntermediary: 30,
+        scorePerActiveAntiPerk: 25,
+        scorePerCumRoundSuccess: 420,
+      },
+    },
+  };
 }
 
 beforeEach(() => {
@@ -154,13 +216,16 @@ beforeEach(() => {
       selectInstallImportFile: vi.fn(),
       selectPlaylistImportFile: vi.fn(),
       selectPlaylistExportPath: vi.fn(),
+      selectPlaylistExportDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
+      selectMusicFiles: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
     },
     window: {
       isFullscreen: vi.fn(),
       setFullscreen: vi.fn(),
       toggleFullscreen: vi.fn(),
+      close: vi.fn(),
     },
     updates: {
       subscribe: vi.fn(() => () => {}),
@@ -171,6 +236,7 @@ beforeEach(() => {
     },
   };
   mocks.loaderData.rounds = [];
+  mocks.loaderData.availablePlaylists = [];
   mocks.db.round.findInstalled.mockImplementation(async () => mocks.loaderData.rounds);
   mocks.db.round.getDisabledIds.mockResolvedValue([]);
   mocks.db.round.update.mockResolvedValue({});
@@ -191,6 +257,7 @@ beforeEach(() => {
       scannedFolders: 0,
       sidecarsSeen: 0,
       installed: 0,
+      playlistsImported: 0,
       updated: 0,
       skipped: 0,
       failed: 0,
@@ -207,6 +274,7 @@ beforeEach(() => {
       scannedFolders: 1,
       sidecarsSeen: 0,
       installed: 0,
+      playlistsImported: 0,
       updated: 0,
       skipped: 0,
       failed: 0,
@@ -224,6 +292,7 @@ beforeEach(() => {
         scannedFolders: 1,
         sidecarsSeen: 0,
         installed: 0,
+        playlistsImported: 0,
         updated: 0,
         skipped: 0,
         failed: 0,
@@ -248,6 +317,7 @@ beforeEach(() => {
         scannedFolders: 1,
         sidecarsSeen: 0,
         installed: 2,
+        playlistsImported: 0,
         updated: 0,
         skipped: 0,
         failed: 0,
@@ -275,6 +345,7 @@ beforeEach(() => {
         scannedFolders: 0,
         sidecarsSeen: 1,
         installed: 1,
+        playlistsImported: 0,
         updated: 0,
         skipped: 0,
         failed: 0,
@@ -284,6 +355,7 @@ beforeEach(() => {
     },
   });
   mocks.playlists.create.mockResolvedValue({ id: "playlist-1" });
+  mocks.playlists.list.mockImplementation(async () => mocks.loaderData.availablePlaylists);
   mocks.playlists.importFromFile.mockResolvedValue({
     playlist: { id: "playlist-2", name: "Imported Playlist" },
     report: {
@@ -300,20 +372,19 @@ beforeEach(() => {
   });
   mocks.playlists.setActive.mockResolvedValue({ id: "playlist-1" });
   mocks.db.install.exportDatabase.mockResolvedValue({
-    exportDir: "/tmp/f-land/export/2026-03-05T20-00-00.000Z",
+    exportDir: "/tmp/app-export/2026-03-20T12-00-00.000Z",
     heroFiles: 1,
-    roundFiles: 1,
-    exportedRounds: 2,
+    roundFiles: 2,
+    exportedRounds: 3,
     includeResourceUris: false,
   });
-  mocks.db.install.openExportFolder.mockResolvedValue({
-    path: "/tmp/f-land/export",
-  });
+  mocks.db.install.openExportFolder.mockResolvedValue({ path: "/tmp/app-export" });
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("buildRoundRenderRows", () => {
@@ -331,13 +402,72 @@ describe("buildRoundRenderRows", () => {
       expect(rows[0].rounds.map((round) => round.id)).toEqual(["a", "b"]);
     }
   });
+
+  it("groups hero rounds under their hero name", () => {
+    const rows = buildRoundRenderRows([
+      makeRound({ id: "a", name: "Alpha", createdAt: "2026-03-01T10:00:00.000Z", hero: { name: "Hero A" } }),
+      makeRound({ id: "b", name: "Beta", createdAt: "2026-03-01T11:00:00.000Z" }),
+      makeRound({ id: "c", name: "Gamma", createdAt: "2026-03-01T12:00:00.000Z", hero: { name: "Hero A" } }),
+    ]);
+
+    expect(rows).toEqual([
+      {
+        kind: "hero-group",
+        groupKey: expect.stringContaining("Hero A"),
+        heroName: "Hero A",
+        rounds: [
+          expect.objectContaining({ id: "a" }),
+          expect.objectContaining({ id: "c" }),
+        ],
+      },
+      {
+        kind: "standalone",
+        round: expect.objectContaining({ id: "b" }),
+      },
+    ]);
+  });
+
+  it("groups rounds under playlists and allows the same round in multiple playlist groups", () => {
+    const alpha = makeRound({ id: "alpha", name: "Alpha", createdAt: "2026-03-01T10:00:00.000Z" });
+    const beta = makeRound({ id: "beta", name: "Beta", createdAt: "2026-03-01T11:00:00.000Z" });
+    const rows = buildRoundRenderRowsWithOptions(
+      [alpha, beta],
+      {
+        mode: "playlist",
+        playlistsByRoundId: new Map([
+          ["alpha", [{ playlistId: "p-1", playlistName: "Playlist One" }, { playlistId: "p-2", playlistName: "Playlist Two" }]],
+          ["beta", [{ playlistId: "p-2", playlistName: "Playlist Two" }]],
+        ]),
+      },
+    );
+
+    expect(rows).toEqual([
+      {
+        kind: "playlist-group",
+        groupKey: "playlist:p-1",
+        playlistId: "p-1",
+        playlistName: "Playlist One",
+        rounds: [expect.objectContaining({ id: "alpha" })],
+      },
+      {
+        kind: "playlist-group",
+        groupKey: "playlist:p-2",
+        playlistId: "p-2",
+        playlistName: "Playlist Two",
+        rounds: [
+          expect.objectContaining({ id: "alpha" }),
+          expect.objectContaining({ id: "beta" }),
+        ],
+      },
+    ]);
+  });
 });
 
 describe("InstalledRoundsPage hero grouping", () => {
   it("shows a go back button in the header and falls back to home navigation", () => {
     render(<InstalledRoundsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
   });
@@ -402,6 +532,31 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
 
     expect(screen.getByText("No rounds match this filter")).toBeDefined();
+  });
+
+  it("switches to playlist grouping from the side menu and shows duplicate memberships", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "r1", name: "Round One", createdAt: "2026-03-03T12:00:00.000Z" }),
+      makeRound({ id: "r2", name: "Round Two", createdAt: "2026-03-03T11:00:00.000Z" }),
+    ];
+    mocks.loaderData.availablePlaylists = [
+      makePlaylist("playlist-1", "Playlist One", ["r1"]),
+      makePlaylist("playlist-2", "Playlist Two", ["r1", "r2"]),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
+
+    const playlistOneHeader = screen.getByRole("button", { name: "Playlist One (1 rounds)" });
+    const playlistTwoHeader = screen.getByRole("button", { name: "Playlist Two (2 rounds)" });
+
+    fireEvent.click(playlistOneHeader);
+    fireEvent.click(playlistTwoHeader);
+
+    const roundOneHeadings = await screen.findAllByRole("heading", { name: "Round One" });
+    expect(roundOneHeadings).toHaveLength(2);
+    expect(await screen.findByRole("heading", { name: "Round Two" })).toBeDefined();
   });
 
   it("shows convert button for rounds without hero and navigates to converter with prefill", () => {
@@ -575,64 +730,66 @@ describe("InstalledRoundsPage hero grouping", () => {
     confirmSpy.mockRestore();
   });
 
-  it("exports with default safe mode when URI inclusion is not confirmed", async () => {
+  it("exports with default safe mode when started from the internal dialog", async () => {
     mocks.loaderData.rounds = [
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
-    const confirmSpy = vi.spyOn(window, "confirm");
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
-    confirmSpy.mockReturnValue(false);
-
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    expect(screen.getByRole("dialog", { name: "Package your installed rounds." })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Safe Export" }));
 
     await waitFor(() => {
       expect(mocks.db.install.exportDatabase).toHaveBeenCalledWith(false);
     });
-
-    alertSpy.mockRestore();
-    confirmSpy.mockRestore();
+    expect(screen.getByText("/tmp/app-export/2026-03-20T12-00-00.000Z")).toBeTruthy();
+    expect(screen.getByText("Export complete.")).toBeTruthy();
   });
 
-  it("requires explicit warning confirmation when exporting with resource URIs", async () => {
+  it("requires explicit acknowledgement before advanced URI export", async () => {
     mocks.loaderData.rounds = [
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
-
-    const confirmSpy = vi.spyOn(window, "confirm");
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
-    confirmSpy.mockReturnValueOnce(true).mockReturnValueOnce(true);
+    mocks.db.install.exportDatabase.mockResolvedValue({
+      exportDir: "/tmp/app-export/2026-03-20T12-10-00.000Z",
+      heroFiles: 0,
+      roundFiles: 1,
+      exportedRounds: 1,
+      includeResourceUris: true,
+    });
 
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced Include resource URIs/i }));
+
+    const startButton = screen.getByRole("button", { name: "Start Advanced Export" });
+    expect((startButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByLabelText(/I understand this can leak or break resource paths/i));
+    expect((startButton as HTMLButtonElement).disabled).toBe(false);
+
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: "Start Advanced Export" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(startButton);
 
     await waitFor(() => {
       expect(mocks.db.install.exportDatabase).toHaveBeenCalledWith(true);
     });
-    expect(confirmSpy.mock.calls[1]?.[0]).toContain("remotely hosted");
-
-    alertSpy.mockRestore();
-    confirmSpy.mockRestore();
+    expect(screen.getByText("Resource URIs included: yes")).toBeTruthy();
   });
 
-  it("aborts URI export when warning is canceled", async () => {
-    mocks.loaderData.rounds = [
-      makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
-    ];
-
-    const confirmSpy = vi.spyOn(window, "confirm");
-    confirmSpy.mockReturnValueOnce(true).mockReturnValueOnce(false);
-
+  it("opens the install export folder from the export dialog", async () => {
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
+    fireEvent.click(screen.getByRole("button", { name: "Browse Export Library" }));
 
     await waitFor(() => {
-      expect(confirmSpy).toHaveBeenCalledTimes(2);
+      expect(mocks.db.install.openExportFolder).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.db.install.exportDatabase).not.toHaveBeenCalled();
-
-    confirmSpy.mockRestore();
   });
 
   it("opens the install export folder from the header action", async () => {
@@ -790,5 +947,28 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
+  });
+
+  it("shows template actions and repairs a template round from installed content", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "template-1", name: "Template Round", createdAt: "2026-03-03T00:00:00.000Z", template: true }),
+      makeRound({ id: "installed-1", name: "Installed Source", createdAt: "2026-03-02T00:00:00.000Z" }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getAllByText("Template").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Repair Template" }));
+    fireEvent.change(screen.getAllByRole("combobox").at(-1)!, {
+      target: { value: "installed-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Attach Source Media" }));
+
+    await waitFor(() => {
+      expect(mocks.db.round.repairTemplate).toHaveBeenCalledWith({
+        roundId: "template-1",
+        installedRoundId: "installed-1",
+      });
+    });
   });
 });

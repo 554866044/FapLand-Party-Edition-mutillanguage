@@ -57,7 +57,7 @@ function makeLinearConfig(): PlaylistConfig {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -113,7 +113,7 @@ function makeGraphConfig(): PlaylistConfig {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }

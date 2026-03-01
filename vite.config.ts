@@ -1,5 +1,5 @@
-import { version } from "./package.json";
 import { createObfuscationPlugin } from "./build/obfuscation";
+import { getBuildVersion } from "./build/version";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
@@ -63,8 +63,13 @@ const releaseTerserOptions = {
 
 // See: https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
+  const appVersion = getBuildVersion();
   const env = loadEnv(mode, process.cwd(), "");
   const buildProfile = env.FLAND_BUILD_PROFILE ?? process.env.FLAND_BUILD_PROFILE ?? "default";
+  const enableDevFeatures = readFlag(
+    env.FLAND_ENABLE_DEV_FEATURES ?? process.env.FLAND_ENABLE_DEV_FEATURES,
+    false
+  );
   const isReleaseBuild = buildProfile === "release";
   const isAnalyzeBuild = readFlag(
     env.FLAND_BUILD_ANALYZE ?? process.env.FLAND_BUILD_ANALYZE,
@@ -88,7 +93,11 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     define: {
-      "import.meta.env.VITE_APP_VERSION": JSON.stringify(version),
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
+      "process.env.FLAND_APP_VERSION": JSON.stringify(appVersion),
+      "import.meta.env.FLAND_ENABLE_DEV_FEATURES": JSON.stringify(
+        enableDevFeatures ? "true" : "false"
+      ),
       "import.meta.env.FLAND_UPDATE_REPOSITORY": JSON.stringify(
         env.FLAND_UPDATE_REPOSITORY ?? process.env.FLAND_UPDATE_REPOSITORY ?? ""
       ),

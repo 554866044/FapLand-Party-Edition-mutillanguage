@@ -31,10 +31,12 @@ CREATE TABLE `Playlist` (
 	`description` text,
 	`formatVersion` integer DEFAULT 1 NOT NULL,
 	`configJson` text NOT NULL,
+	`installSourceKey` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `Playlist_installSourceKey_unique` ON `Playlist` (`installSourceKey`);--> statement-breakpoint
 CREATE TABLE `PlaylistTrackPlay` (
 	`id` text PRIMARY KEY NOT NULL,
 	`playlistId` text NOT NULL,

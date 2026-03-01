@@ -5,12 +5,14 @@ interface EdgeInspectorPanelProps {
     selectedEdge: EditorEdge | null;
     allEdges: ReadonlyArray<EditorEdge>;
     onPatchEdge: (edgeId: string, patch: Partial<EditorEdge>) => void;
+    onDeleteEdge: (edgeId: string) => void;
 }
 
 export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(({
     selectedEdge,
     allEdges,
     onPatchEdge,
+    onDeleteEdge,
 }) => {
     if (!selectedEdge) {
         return (
@@ -93,6 +95,14 @@ export const EdgeInspectorPanel: React.FC<EdgeInspectorPanelProps> = React.memo(
                         : "⚠ No free fallback path — add another outgoing edge."}
                 </p>
             )}
+
+            <button
+                type="button"
+                className="w-full rounded-md border border-rose-500/40 bg-rose-500/8 px-2.5 py-2 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/15"
+                onClick={() => onDeleteEdge(selectedEdge.id)}
+            >
+                Delete Edge
+            </button>
         </div>
     );
 });

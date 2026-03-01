@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { completeRound, createInitialGameState, reportPlayerCum } from "./engine";
+import { completeRound, createInitialGameState, reportPlayerCum, rollTurn } from "./engine";
+import type { InstalledRound } from "../services/db";
 import type { GameConfig, GameState } from "./types";
 
 function makeConfig(): GameConfig {
@@ -47,9 +48,36 @@ function makeConfig(): GameConfig {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
+}
+
+function makeInstalledRound(id: string, name: string, type: "Normal" | "Cum" = "Cum"): InstalledRound {
+  return {
+    id,
+    name,
+    type,
+    author: "Tester",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    resourceCount: 1,
+    cueCount: 0,
+    hasScript: false,
+    hasVideo: true,
+    durationMs: 30_000,
+    installSource: null,
+    installSourceKey: null,
+    bpm: null,
+    difficulty: null,
+    tags: [],
+    resources: [],
+    hero: null,
+    description: null,
+    heroId: null,
+    startTime: null,
+    endTime: null,
+  } as InstalledRound;
 }
 
 function withActiveCumRound(state: GameState, score = 0): GameState {
@@ -125,5 +153,46 @@ describe("engine cum flow", () => {
     expect(next.players[next.currentPlayerIndex]?.score).toBe(40);
     expect(next.sessionPhase).toBe("completed");
     expect(next.completionReason).toBe("cum_instruction_failed");
+  });
+
+  it("completes after a successful cum round even if multiple rounds are selected", () => {
+    const config = makeConfig();
+    config.singlePlayer.cumRoundIds = ["cum-1", "cum-2"];
+    const initial = withActiveCumRound(createInitialGameState(config), 15);
+
+    const next = completeRound(initial, {
+      intermediaryCount: 0,
+      activeAntiPerkCount: 0,
+      cumOutcome: "came_as_told",
+    }, [makeInstalledRound("cum-1", "Cum Round 1"), makeInstalledRound("cum-2", "Cum Round 2")]);
+
+    expect(next.sessionPhase).toBe("completed");
+    expect(next.completionReason).toBe("finished");
+    expect(next.queuedRound).toBeNull();
+  });
+
+  it("falls back to a random installed cum round when none are selected", () => {
+    const config = makeConfig();
+    config.board = [
+      { id: "start", name: "Start", kind: "start" },
+      { id: "end", name: "End", kind: "end" },
+    ];
+    config.runtimeGraph = {
+      startNodeId: "start",
+      pathChoiceTimeoutMs: 6000,
+      edges: [{ id: "e1", fromNodeId: "start", toNodeId: "end", gateCost: 0, weight: 1 }],
+      edgesById: { e1: { id: "e1", fromNodeId: "start", toNodeId: "end", gateCost: 0, weight: 1 } },
+      outgoingEdgeIdsByNodeId: { start: ["e1"] },
+      randomRoundPoolsById: {},
+      nodeIndexById: { start: 0, end: 1 },
+    };
+    config.singlePlayer.cumRoundIds = [];
+
+    const state = rollTurn(createInitialGameState(config), [
+      makeInstalledRound("fallback-cum", "Fallback Cum"),
+    ], 1);
+
+    expect(state.sessionPhase).toBe("cum");
+    expect(state.queuedRound?.roundId).toBe("fallback-cum");
   });
 });

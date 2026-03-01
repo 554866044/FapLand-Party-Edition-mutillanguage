@@ -58,10 +58,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     const pendingInstalledLoadMessageRef = useRef<string | null>(null);
     const pendingInstalledSegmentsRef = useRef<SegmentDraft[] | null>(null);
 
-    const [sourceMode, setSourceMode] = useState<"local" | "installed">("local");
+    const [sourceMode, setSourceMode] = useState<"local" | "installed">("installed");
     const [videoUri, setVideoUri] = useState("");
     const [funscriptUri, setFunscriptUri] = useState<string | null>(null);
-    const [installedSourceOptions, setInstalledSourceOptions] = useState<InstalledSourceOption[]>([]);
+    const [allInstalledSourceOptions, setAllInstalledSourceOptions] = useState<InstalledSourceOption[]>([]);
     const [selectedInstalledId, setSelectedInstalledId] = useState("");
     const [heroOptions, setHeroOptions] = useState<HeroOption[]>([]);
     const [selectedHeroId, setSelectedHeroId] = useState("");
@@ -157,7 +157,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
                 ];
             })
             .sort((a, b) => a.label.localeCompare(b.label));
-        setInstalledSourceOptions(options);
+        setAllInstalledSourceOptions(options);
     }, []);
 
     const loadHeroes = useCallback(async () => {
@@ -803,8 +803,12 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     /* ─── Computed selections ──────────────────────────────────────── */
 
     const selectedInstalledOption = useMemo(
-        () => installedSourceOptions.find((option) => option.id === selectedInstalledId) ?? null,
-        [installedSourceOptions, selectedInstalledId],
+        () => allInstalledSourceOptions.find((option) => option.id === selectedInstalledId) ?? null,
+        [allInstalledSourceOptions, selectedInstalledId],
+    );
+    const installedSourceOptions = useMemo(
+        () => allInstalledSourceOptions.filter((option) => option.heroId === null),
+        [allInstalledSourceOptions],
     );
     const selectedHeroOption = useMemo(
         () => heroOptions.find((option) => option.id === selectedHeroId) ?? null,
@@ -844,7 +848,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
             return;
         }
 
-        const candidateSources = installedSourceOptions
+        const candidateSources = allInstalledSourceOptions
             .filter((option) => option.heroId === selectedHeroOption.id)
             .sort((a, b) => {
                 const createdAtDelta = a.createdAt.getTime() - b.createdAt.getTime();
@@ -873,7 +877,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
         setHeroDescription(selectedHeroOption.description ?? "");
         setError(null);
         playSelectSound();
-    }, [createDraftFromInstalledRound, installedSourceOptions, selectedHeroOption]);
+    }, [allInstalledSourceOptions, createDraftFromInstalledRound, selectedHeroOption]);
 
     /* ─── Preselect from search params ─────────────────────────────── */
 

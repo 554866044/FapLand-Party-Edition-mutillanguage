@@ -37,7 +37,7 @@ export function createSinglePlayerGameConfig(
     scorePerCompletedRound: 100,
     scorePerIntermediary: 30,
     scorePerActiveAntiPerk: 25,
-    scorePerCumRoundSuccess: 120,
+    scorePerCumRoundSuccess: 420,
   };
 
   const economy: GameConfig["economy"] = {
@@ -69,7 +69,7 @@ export function createSinglePlayerGameConfig(
     board,
     runtimeGraph: {
       startNodeId: "start",
-      pathChoiceTimeoutMs: 6000,
+      pathChoiceTimeoutMs: 12000,
       edges,
       edgesById,
       outgoingEdgeIdsByNodeId,

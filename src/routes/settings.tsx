@@ -2,6 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { DEFAULT_THEHANDY_APP_API_KEY } from "../constants/theHandy";
+import {
+  DEFAULT_MUSIC_LOOP_MODE,
+  DEFAULT_MUSIC_VOLUME,
+  type MusicLoopMode,
+} from "../constants/musicSettings";
+import { useHandy } from "../contexts/HandyContext";
+import { useGlobalMusic } from "../hooks/useGlobalMusic";
+import { useAppUpdate } from "../hooks/useAppUpdate";
 import { ensureBooruMediaCache } from "../services/booru";
 import { db } from "../services/db";
 import { integrations, type ExternalSource, type IntegrationSyncStatus, type StashTagResult } from "../services/integrations";
@@ -17,13 +26,154 @@ import {
   BACKGROUND_VIDEO_ENABLED_KEY,
   DEFAULT_BACKGROUND_VIDEO_ENABLED,
 } from "../constants/backgroundSettings";
+import {
+  AUTOFIX_BROKEN_FUNSCRIPTS_KEY,
+  DEFAULT_AUTOFIX_BROKEN_FUNSCRIPTS,
+  normalizeAutofixBrokenFunscripts,
+} from "../constants/funscriptSettings";
+import {
+  ANTI_PERK_BEATBAR_ENABLED_KEY,
+  DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
+  DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+  ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
+  normalizeAntiPerkBeatbarEnabled,
+  normalizeRoundProgressBarAlwaysVisible,
+} from "../constants/roundVideoOverlaySettings";
+import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
+import {
+  CONTROLLER_SUPPORT_ENABLED_EVENT,
+  CONTROLLER_SUPPORT_ENABLED_KEY,
+  DEFAULT_CONTROLLER_SUPPORT_ENABLED,
+  normalizeControllerSupportEnabled,
+} from "../constants/experimentalFeatures";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
 const INTERMEDIARY_RETURN_PAUSE_KEY = "game.intermediary.returnPauseSec";
-const DEFAULT_INTERMEDIARY_LOADING_PROMPT = "animated gif webm";
-const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 10;
+const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
+const ACTIVE_STASH_VERSION = "30.1";
+const LEGACY_LOGIN_AUTH_VALUE = "__legacy_login__";
+const HANDY_USER_PORTAL_URL = "https://user.handyfeeling.com";
+const SETTINGS_SECTION_IDS = ["general", "gameplay", "hardware", "experimental", "music", "sources", "app", "help", "credits"] as const;
+
+type ShortcutDefinition = {
+  keys: string;
+  description: string;
+};
+
+type ShortcutGroup = {
+  id: string;
+  title: string;
+  description: string;
+  shortcuts: ShortcutDefinition[];
+};
+
+const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  {
+    id: "global",
+    title: "Global",
+    description: "Available anywhere unless an input field is actively being edited.",
+    shortcuts: [
+      { keys: "Ctrl/Cmd+M", description: "Open or close the global music overlay." },
+      { keys: "Escape", description: "Close the global music overlay when it is open." },
+      { keys: "F11", description: "Toggle fullscreen for the app window." },
+      { keys: "Ctrl/Cmd+= or Ctrl/Cmd++", description: "Zoom the app window in." },
+      { keys: "Ctrl/Cmd+-", description: "Zoom the app window out." },
+      { keys: "Ctrl/Cmd+0 or Ctrl/Cmd+O", description: "Reset the app window zoom level to default." },
+    ],
+  },
+  {
+    id: "controller",
+    title: "Keyboard Controller Navigation",
+    description: "Keyboard mappings that mirror controller input when controller support surfaces are active.",
+    shortcuts: [
+      { keys: "Arrow Keys", description: "Move focus between controller-navigable controls." },
+      { keys: "Enter or Space", description: "Trigger the primary action on the focused control." },
+      { keys: "Escape or Backspace", description: "Trigger the secondary/back action." },
+      { keys: "Q", description: "Use the left bumper action." },
+      { keys: "E", description: "Use the right bumper action." },
+    ],
+  },
+  {
+    id: "game",
+    title: "Game Session",
+    description: "Used during active gameplay and round playback.",
+    shortcuts: [
+      { keys: "Space", description: "Roll the dice or trigger the main gameplay action." },
+      { keys: "C", description: "Open the cum confirmation flow." },
+      { keys: "Escape", description: "Open the in-game options menu." },
+      { keys: "Ctrl/Cmd+W", description: "Toggle TheHandy manual stop state." },
+      { keys: "R", description: "Resync TheHandy timing to the current round video." },
+    ],
+  },
+  {
+    id: "game-debug",
+    title: "Game Debug",
+    description: "Development-only shortcuts that are only active when round debug controls are enabled.",
+    shortcuts: [
+      { keys: "I", description: "Trigger a test intermediary immediately." },
+      { keys: "J", description: "End the current intermediary early and resume the main round." },
+      { keys: "K", description: "Finish the round and jump to the summary screen." },
+    ],
+  },
+  {
+    id: "converter",
+    title: "Converter",
+    description: "Used while trimming and classifying segments in the converter.",
+    shortcuts: [
+      { keys: "?", description: "Show or hide the converter shortcut overlay." },
+      { keys: "Space", description: "Play or pause the source video." },
+      { keys: "I", description: "Set the IN marker at the current time." },
+      { keys: "O", description: "Set the OUT marker at the current time." },
+      { keys: "Enter", description: "Create a segment from the current IN and OUT markers." },
+      { keys: "Delete or Backspace", description: "Remove the currently selected segment." },
+      { keys: "1 / 2 / 3", description: "Set the selected segment type to Normal, Interjection, or Cum." },
+      { keys: "Left / Right", description: "Seek backward or forward by 1 second." },
+      { keys: "Shift+Left / Shift+Right", description: "Seek backward or forward by 5 seconds." },
+      { keys: ", / .", description: "Nudge the selected segment earlier or later by 100 ms." },
+      { keys: "= / +", description: "Zoom the converter timeline in." },
+      { keys: "-", description: "Zoom the converter timeline out." },
+      { keys: "0", description: "Reset the converter timeline zoom." },
+      { keys: "R", description: "Jump to a random point in the source video." },
+    ],
+  },
+  {
+    id: "map-editor",
+    title: "Map Editor",
+    description: "Shortcuts for graph editing, layout, and viewport control.",
+    shortcuts: [
+      { keys: "Hold Space", description: "Temporarily enable panning." },
+      { keys: "Ctrl/Cmd+Z", description: "Undo the last graph edit." },
+      { keys: "Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y", description: "Redo the last undone graph edit." },
+      { keys: "Ctrl/Cmd+S", description: "Save the current playlist." },
+      { keys: "X", description: "Delete the current selection." },
+      { keys: "1-9", description: "Arm one of the first nine visible tile types for placement." },
+      { keys: "Escape", description: "Clear the current selection and cancel a pending connection." },
+      { keys: "V", description: "Switch to the Select tool." },
+      { keys: "P", description: "Switch to the Place tool." },
+      { keys: "C", description: "Switch to the Connect tool." },
+      { keys: "G", description: "Show or hide the editor grid." },
+      { keys: "L", description: "Apply the current graph layout strategy." },
+      { keys: "0", description: "Reset the editor camera to the default view." },
+    ],
+  },
+];
+
+export function getVisibleShortcutGroups(isProductionBuild = import.meta.env.PROD): ShortcutGroup[] {
+  if (isProductionBuild) {
+    return SHORTCUT_GROUPS.filter((group) => group.id !== "game-debug");
+  }
+
+  return SHORTCUT_GROUPS;
+}
+
+type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number];
+
+function normalizeSettingsSectionId(value: unknown): SettingsSectionId | undefined {
+  if (typeof value !== "string") return undefined;
+  return SETTINGS_SECTION_IDS.find((sectionId) => sectionId === value);
+}
 
 type ToggleSetting = {
   id: string;
@@ -68,18 +218,42 @@ type SelectSetting = {
 type SettingDefinition = ToggleSetting | TextSetting | NumberSetting | SelectSetting;
 
 type SettingsSection = {
-  id: string;
+  id: SettingsSectionId;
+  icon: string;
   title: string;
   description: string;
   settings: SettingDefinition[];
 };
 
+type FolderImportNotice = {
+  folderPath: string;
+  tone: "success" | "error";
+  message: string;
+};
+
+function toFolderImportMessage(result: Awaited<ReturnType<typeof db.install.addAutoScanFolderAndScan>>["result"]): FolderImportNotice["message"] {
+  const { status, legacyImport } = result;
+  const summary = `Installed ${status.stats.installed} rounds, imported ${status.stats.playlistsImported} playlists, updated ${status.stats.updated}, failed ${status.stats.failed}.`;
+  if (legacyImport) {
+    return `Imported immediately via legacy fallback. ${summary}`;
+  }
+  if (status.stats.sidecarsSeen > 0 || status.stats.installed > 0 || status.stats.playlistsImported > 0 || status.stats.updated > 0) {
+    return `Imported immediately. ${summary}`;
+  }
+  return `Folder saved for startup rescans. Nothing importable was found right now. ${summary}`;
+}
+
 export const Route = createFileRoute("/settings")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    section: normalizeSettingsSectionId(search.section),
+  }),
   component: SettingsPage,
 });
 
-function SettingsPage() {
+export function SettingsPage() {
+  const search = Route.useSearch();
   const navigate = useNavigate();
+  const appUpdate = useAppUpdate();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingFullscreen, setIsLoadingFullscreen] = useState(true);
   const [intermediaryLoadingPrompt, setIntermediaryLoadingPrompt] = useState(DEFAULT_INTERMEDIARY_LOADING_PROMPT);
@@ -87,27 +261,48 @@ function SettingsPage() {
   const [intermediaryReturnPauseSec, setIntermediaryReturnPauseSec] = useState(DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC);
   const [videoHashFfmpegSourcePreference, setVideoHashFfmpegSourcePreference] = useState<VideoHashFfmpegSourcePreference>("auto");
   const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(DEFAULT_BACKGROUND_VIDEO_ENABLED);
+  const [autofixBrokenFunscripts, setAutofixBrokenFunscripts] = useState(DEFAULT_AUTOFIX_BROKEN_FUNSCRIPTS);
+  const [roundProgressBarAlwaysVisible, setRoundProgressBarAlwaysVisible] = useState(DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE);
+  const [antiPerkBeatbarEnabled, setAntiPerkBeatbarEnabled] = useState(DEFAULT_ANTI_PERK_BEATBAR_ENABLED);
+  const [controllerSupportEnabled, setControllerSupportEnabled] = useState(DEFAULT_CONTROLLER_SUPPORT_ENABLED);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isLoadingVideoHashPreference, setIsLoadingVideoHashPreference] = useState(true);
   const [isLoadingBackgroundVideoEnabled, setIsLoadingBackgroundVideoEnabled] = useState(true);
+  const [isLoadingAutofixBrokenFunscripts, setIsLoadingAutofixBrokenFunscripts] = useState(true);
+  const [isLoadingRoundProgressBarAlwaysVisible, setIsLoadingRoundProgressBarAlwaysVisible] = useState(true);
+  const [isLoadingAntiPerkBeatbarEnabled, setIsLoadingAntiPerkBeatbarEnabled] = useState(true);
+  const [isLoadingControllerSupportEnabled, setIsLoadingControllerSupportEnabled] = useState(true);
   const [autoScanFolders, setAutoScanFolders] = useState<string[]>([]);
   const [isLoadingAutoScanFolders, setIsLoadingAutoScanFolders] = useState(true);
   const [isUpdatingAutoScanFolders, setIsUpdatingAutoScanFolders] = useState(false);
+  const [folderImportNotices, setFolderImportNotices] = useState<FolderImportNotice[]>([]);
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false);
   const [isClearingData, setIsClearingData] = useState(false);
   const [clearDataError, setClearDataError] = useState<string | null>(null);
+  const [clearSelections, setClearSelections] = useState({
+    rounds: true,
+    playlists: true,
+    stats: true,
+    history: true,
+    cache: true,
+    settings: true,
+  });
 
   useEffect(() => {
     let mounted = true;
     const loadSettings = async () => {
       try {
-        const [fullscreen, rawPrompt, rawDuration, rawReturnPause, rawVideoHashPreference, rawBackgroundVideoEnabled, folders] = await Promise.all([
+        const [fullscreen, rawPrompt, rawDuration, rawReturnPause, rawVideoHashPreference, rawBackgroundVideoEnabled, rawAutofixBrokenFunscripts, rawRoundProgressBarAlwaysVisible, rawAntiPerkBeatbarEnabled, rawControllerSupportEnabled, folders] = await Promise.all([
           window.electronAPI.window.isFullscreen(),
           trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
           trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
           trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
           trpc.store.get.query({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY }),
           trpc.store.get.query({ key: BACKGROUND_VIDEO_ENABLED_KEY }),
+          trpc.store.get.query({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY }),
+          trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
+          trpc.store.get.query({ key: ANTI_PERK_BEATBAR_ENABLED_KEY }),
+          trpc.store.get.query({ key: CONTROLLER_SUPPORT_ENABLED_KEY }),
           db.install.getAutoScanFolders(),
         ]);
 
@@ -130,6 +325,10 @@ function SettingsPage() {
           setBackgroundVideoEnabled(
             typeof rawBackgroundVideoEnabled === "boolean" ? rawBackgroundVideoEnabled : DEFAULT_BACKGROUND_VIDEO_ENABLED,
           );
+          setAutofixBrokenFunscripts(normalizeAutofixBrokenFunscripts(rawAutofixBrokenFunscripts));
+          setRoundProgressBarAlwaysVisible(normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible));
+          setAntiPerkBeatbarEnabled(normalizeAntiPerkBeatbarEnabled(rawAntiPerkBeatbarEnabled));
+          setControllerSupportEnabled(normalizeControllerSupportEnabled(rawControllerSupportEnabled));
           setAutoScanFolders(folders);
         }
       } catch (error) {
@@ -140,6 +339,10 @@ function SettingsPage() {
           setIsLoadingPrompt(false);
           setIsLoadingVideoHashPreference(false);
           setIsLoadingBackgroundVideoEnabled(false);
+          setIsLoadingAutofixBrokenFunscripts(false);
+          setIsLoadingRoundProgressBarAlwaysVisible(false);
+          setIsLoadingAntiPerkBeatbarEnabled(false);
+          setIsLoadingControllerSupportEnabled(false);
           setIsLoadingAutoScanFolders(false);
         }
       }
@@ -155,9 +358,10 @@ function SettingsPage() {
   const sections: SettingsSection[] = useMemo(
     () => [
       {
-        id: "display",
-        title: "Display",
-        description: "Window and rendering preferences.",
+        id: "general",
+        icon: "⚙",
+        title: "General",
+        description: "Window, display, and rendering preferences.",
         settings: [
           {
             id: "fullscreen",
@@ -203,16 +407,39 @@ function SettingsPage() {
       },
       {
         id: "gameplay",
+        icon: "🎮",
         title: "Gameplay",
-        description: "Intermediary loading and game session behavior.",
+        description: "In-game HUD, anti-perks, and intermediary session behavior.",
         settings: [
+          {
+            id: "anti-perk-beatbar-enabled",
+            type: "toggle",
+            label: "Show Anti-Perk Beatbar",
+            description: "Shows a synchronized manual beatbar and kick hits during jackhammer and milker anti-perk sequences.",
+            value: antiPerkBeatbarEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: ANTI_PERK_BEATBAR_ENABLED_KEY, value: next });
+              setAntiPerkBeatbarEnabled(next);
+            },
+          },
+          {
+            id: "round-progress-bar-always-visible",
+            type: "toggle",
+            label: "Pin Round Progress Bar",
+            description: "Keep the round playback progress bar visible even after the rest of the HUD fades out.",
+            value: roundProgressBarAlwaysVisible,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY, value: next });
+              setRoundProgressBarAlwaysVisible(next);
+            },
+          },
           {
             id: "intermediary-loading-prompt",
             type: "text",
             label: "Intermediary Loading Prompt",
             description: "Search prompt used for loading-screen media from rule34/booru sites.",
             value: intermediaryLoadingPrompt,
-            placeholder: "animated gif webm",
+            placeholder: DEFAULT_INTERMEDIARY_LOADING_PROMPT,
             onChange: async (next: string) => {
               const trimmed = next.trim();
               const value = trimmed.length > 0 ? trimmed : DEFAULT_INTERMEDIARY_LOADING_PROMPT;
@@ -252,38 +479,104 @@ function SettingsPage() {
         ],
       },
       {
+        id: "hardware",
+        icon: "🔗",
+        title: "Hardware & Sync",
+        description: "TheHandy hardware integration and funscript compatibility.",
+        settings: [
+          {
+            id: "autofix-broken-funscripts",
+            type: "toggle",
+            label: "Autofix Broken Funscripts",
+            description: "When enabled, funscripts with `range: 90` are normalized to `100` in memory so TheHandy playback keeps working.",
+            value: autofixBrokenFunscripts,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY, value: next });
+              setAutofixBrokenFunscripts(next);
+            },
+          },
+        ],
+      },
+      {
+        id: "music",
+        icon: "🎵",
+        title: "Music",
+        description: "Global background music queue and playback preferences.",
+        settings: [],
+      },
+      {
+        id: "experimental",
+        icon: "🧪",
+        title: "Experimental",
+        description: "Opt into unfinished features that may change or break between builds.",
+        settings: [
+          {
+            id: "controller-support-enabled",
+            type: "toggle",
+            label: "Controller Support",
+            description: "Experimental gamepad navigation and input support. Disabled by default until it is more stable.",
+            value: controllerSupportEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: CONTROLLER_SUPPORT_ENABLED_KEY, value: next });
+              setControllerSupportEnabled(next);
+              window.dispatchEvent(new CustomEvent<boolean>(CONTROLLER_SUPPORT_ENABLED_EVENT, { detail: next }));
+            },
+          },
+        ],
+      },
+      {
         id: "sources",
-        title: "Sources",
-        description: "External source integrations and sync controls.",
+        icon: "📂",
+        title: "Sources & Library",
+        description: "External source integrations, Stash sync, and local library folders.",
         settings: [],
       },
       {
         id: "app",
-        title: "App",
-        description: "Application-wide maintenance and destructive actions.",
+        icon: "🗄",
+        title: "Data & Storage",
+        description: "Application data maintenance and destructive actions.",
+        settings: [],
+      },
+      {
+        id: "help",
+        icon: "?",
+        title: "Help",
+        description: "Keyboard shortcut reference for the app, editor, and gameplay screens.",
         settings: [],
       },
       {
         id: "credits",
-        title: "Credits",
+        icon: "★",
+        title: "Credits / License",
         description: "Special thanks & inspiration.",
         settings: [],
       },
     ],
     [
       backgroundVideoEnabled,
+      antiPerkBeatbarEnabled,
+      autofixBrokenFunscripts,
       intermediaryLoadingDurationSec,
       intermediaryLoadingPrompt,
       intermediaryReturnPauseSec,
       isFullscreen,
+      roundProgressBarAlwaysVisible,
+      controllerSupportEnabled,
       videoHashFfmpegSourcePreference,
     ]
   );
-  const [activeSectionId, setActiveSectionId] = useState<string>(sections[0]?.id ?? "display");
+  const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(search.section ?? sections[0]?.id ?? "general");
+
+  useEffect(() => {
+    if (search.section && search.section !== activeSectionId) {
+      setActiveSectionId(search.section);
+    }
+  }, [activeSectionId, search.section]);
 
   useEffect(() => {
     if (!sections.some((section) => section.id === activeSectionId)) {
-      setActiveSectionId(sections[0]?.id ?? "display");
+      setActiveSectionId(sections[0]?.id ?? "general");
     }
   }, [sections, activeSectionId]);
 
@@ -292,15 +585,32 @@ function SettingsPage() {
   const addFolders = async () => {
     if (isUpdatingAutoScanFolders) return;
     setIsUpdatingAutoScanFolders(true);
+    setFolderImportNotices([]);
     try {
       const selected = await window.electronAPI.dialog.selectFolders();
       if (selected.length === 0) return;
 
       let latest = autoScanFolders;
+      const notices: FolderImportNotice[] = [];
       for (const folderPath of selected) {
-        latest = await db.install.addAutoScanFolder(folderPath);
+        try {
+          const added = await db.install.addAutoScanFolderAndScan(folderPath);
+          latest = added.folders;
+          notices.push({
+            folderPath,
+            tone: added.result.status.state === "error" ? "error" : "success",
+            message: toFolderImportMessage(added.result),
+          });
+        } catch (error) {
+          notices.push({
+            folderPath,
+            tone: "error",
+            message: error instanceof Error ? error.message : "Failed to add and import folder.",
+          });
+        }
       }
       setAutoScanFolders(latest);
+      setFolderImportNotices(notices);
     } catch (error) {
       console.error("Failed to add auto-scan folders", error);
     } finally {
@@ -321,19 +631,24 @@ function SettingsPage() {
     }
   };
 
-  const clearAllData = async () => {
+  const clearData = async () => {
     if (isClearingData) return;
 
     setIsClearingData(true);
     setClearDataError(null);
     try {
-      await db.install.clearAllData();
-      window.localStorage.clear();
-      window.sessionStorage.clear();
-      window.location.reload();
+      await trpc.db.clearAllData.mutate(clearSelections);
+      if (clearSelections.settings) {
+        window.localStorage.clear();
+        window.sessionStorage.clear();
+        window.location.reload();
+      } else {
+        setIsClearingData(false);
+        setIsClearDataDialogOpen(false);
+      }
     } catch (error) {
-      console.error("Failed to clear all data", error);
-      setClearDataError(error instanceof Error ? error.message : "Failed to clear all data.");
+      console.error("Failed to clear data", error);
+      setClearDataError(error instanceof Error ? error.message : "Failed to clear data.");
       setIsClearingData(false);
     }
   };
@@ -342,84 +657,43 @@ function SettingsPage() {
     <div className="relative min-h-screen overflow-hidden">
       <AnimatedBackground />
 
-      <div className="relative z-10 h-screen overflow-y-auto px-4 py-8 sm:px-8">
-        <main className="parallax-ui-none mx-auto flex w-full max-w-5xl flex-col gap-6">
-          <header className="animate-entrance rounded-3xl border border-purple-400/35 bg-zinc-950/60 p-6 backdrop-blur-xl shadow-[0_0_50px_rgba(139,92,246,0.28)]">
-            <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.45em] text-purple-200/85">
+      <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
+        {/* ── Sidebar (vertical on lg+, horizontal strip on small) ── */}
+        <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-60 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
+          {/* Title — only visible on lg+ */}
+          <div className="hidden lg:block lg:mb-5 lg:px-3">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
               System Config
             </p>
-            <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-              <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_30px_rgba(139,92,246,0.55)] sm:text-5xl">
-                Settings
-              </h1>
-            </div>
-          </header>
+            <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
+              Settings
+            </h1>
+          </div>
 
-          <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-3 backdrop-blur-xl sm:p-4">
-            <div className="flex flex-wrap gap-2">
-              {sections.map((section) => {
-                const active = section.id === activeSectionId;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onMouseEnter={playHoverSound}
-                    onFocus={playHoverSound}
-                    onClick={() => {
-                      playSelectSound();
-                      setActiveSectionId(section.id);
-                    }}
-                    className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] transition-all duration-200 ${active ? "border-violet-200/60 bg-violet-500/25 text-violet-100 shadow-[0_0_20px_rgba(139,92,246,0.4)]" : "border-zinc-700 bg-zinc-900/70 text-zinc-400 hover:border-violet-300/45 hover:text-zinc-200"}`}
-                  >
-                    {section.title}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          {sections.map((section) => {
+            const active = section.id === activeSectionId;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onMouseEnter={playHoverSound}
+                onFocus={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  setActiveSectionId(section.id);
+                }}
+                className={`settings-sidebar-item whitespace-nowrap ${active ? "is-active" : ""}`}
+              >
+                <span className="settings-sidebar-icon">{section.icon}</span>
+                <span>{section.title}</span>
+              </button>
+            );
+          })}
 
-          {activeSection && activeSection.id === "sources" ? (
-            <>
-              <SourceIntegrationsCard />
-              <AutoScanFoldersCard
-                folders={autoScanFolders}
-                isLoading={isLoadingAutoScanFolders}
-                isPending={isUpdatingAutoScanFolders}
-                onAddFolders={() => {
-                  playSelectSound();
-                  void addFolders();
-                }}
-                onRemoveFolder={(folderPath) => {
-                  playSelectSound();
-                  void removeFolder(folderPath);
-                }}
-              />
-            </>
-          ) : activeSection && activeSection.id === "app" ? (
-            <>
-              <SettingsSectionCard section={activeSection} loading={false} />
-              <DangerZoneCard
-                error={clearDataError}
-                isPending={isClearingData}
-                onOpenConfirm={() => {
-                  playSelectSound();
-                  setClearDataError(null);
-                  setIsClearDataDialogOpen(true);
-                }}
-              />
-            </>
-          ) : activeSection && activeSection.id === "credits" ? (
-            <CreditsCard />
-          ) : activeSection ? (
-            <SettingsSectionCard
-              section={activeSection}
-              loading={isLoadingFullscreen || isLoadingPrompt || isLoadingVideoHashPreference || isLoadingBackgroundVideoEnabled}
-            />
-          ) : null}
-
-          <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6">
+          {/* Back button — sidebar footer */}
+          <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
             <MenuButton
-              label="Back to Main Menu"
+              label="← Back"
               onHover={playHoverSound}
               onClick={() => {
                 playSelectSound();
@@ -427,16 +701,129 @@ function SettingsPage() {
               }}
             />
           </div>
-        </main>
+        </nav>
+
+        {/* ── Content area ── */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10 lg:py-8">
+          <main className="parallax-ui-none mx-auto flex w-full max-w-3xl flex-col gap-5">
+            {/* Section header */}
+            {activeSection && (
+              <header className="settings-panel-enter mb-1" key={`header-${activeSection.id}`}>
+                <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-3xl">
+                  {activeSection.title}
+                </h2>
+                <p className="mt-1.5 text-sm text-zinc-400">{activeSection.description}</p>
+              </header>
+            )}
+
+            {/* Section content */}
+            <div className="settings-panel-enter flex flex-col gap-5" key={`content-${activeSection?.id}`}>
+              {activeSection && activeSection.id === "sources" ? (
+                <>
+                  <SourceIntegrationsCard />
+                  <AutoScanFoldersCard
+                    folders={autoScanFolders}
+                    notices={folderImportNotices}
+                    isLoading={isLoadingAutoScanFolders}
+                    isPending={isUpdatingAutoScanFolders}
+                    onAddFolders={() => {
+                      playSelectSound();
+                      void addFolders();
+                    }}
+                    onRemoveFolder={(folderPath) => {
+                      playSelectSound();
+                      void removeFolder(folderPath);
+                    }}
+                  />
+                </>
+              ) : activeSection && activeSection.id === "general" ? (
+                <>
+                  <SettingsSectionCard
+                    section={activeSection}
+                    loading={
+                      isLoadingFullscreen
+                      || isLoadingPrompt
+                      || isLoadingVideoHashPreference
+                      || isLoadingBackgroundVideoEnabled
+                      || isLoadingAutofixBrokenFunscripts
+                      || isLoadingRoundProgressBarAlwaysVisible
+                      || isLoadingAntiPerkBeatbarEnabled
+                      || isLoadingControllerSupportEnabled
+                    }
+                  />
+                  <OnboardingCard />
+                </>
+              ) : activeSection && activeSection.id === "music" ? (
+                <MusicSettingsCard />
+              ) : activeSection && activeSection.id === "app" ? (
+                <>
+                  <AppUpdateCard appUpdate={appUpdate} />
+                  <SettingsSectionCard section={activeSection} loading={false} />
+                  <DangerZoneCard
+                    error={clearDataError}
+                    isPending={isClearingData}
+                    onOpenConfirm={() => {
+                      playSelectSound();
+                      setClearDataError(null);
+                      setIsClearDataDialogOpen(true);
+                    }}
+                  />
+                </>
+              ) : activeSection && activeSection.id === "help" ? (
+                <HelpShortcutsCard />
+              ) : activeSection && activeSection.id === "hardware" ? (
+                <HardwareSettingsCard
+                  section={activeSection}
+                  loading={
+                    isLoadingFullscreen
+                    || isLoadingPrompt
+                    || isLoadingVideoHashPreference
+                    || isLoadingBackgroundVideoEnabled
+                    || isLoadingAutofixBrokenFunscripts
+                    || isLoadingRoundProgressBarAlwaysVisible
+                    || isLoadingAntiPerkBeatbarEnabled
+                    || isLoadingControllerSupportEnabled
+                  }
+                />
+              ) : activeSection && activeSection.id === "credits" ? (
+                <CreditsCard />
+              ) : activeSection ? (
+                <SettingsSectionCard
+                  section={activeSection}
+                  loading={
+                    isLoadingFullscreen
+                    || isLoadingPrompt
+                    || isLoadingVideoHashPreference
+                    || isLoadingBackgroundVideoEnabled
+                    || isLoadingAutofixBrokenFunscripts
+                    || isLoadingRoundProgressBarAlwaysVisible
+                    || isLoadingAntiPerkBeatbarEnabled
+                    || isLoadingControllerSupportEnabled
+                  }
+                />
+              ) : null}
+            </div>
+
+            {/* Back button — visible only on small viewports */}
+            <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6 lg:hidden">
+              <MenuButton
+                label="Back to Main Menu"
+                onHover={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  navigate({ to: "/" });
+                }}
+              />
+            </div>
+          </main>
+        </div>
       </div>
 
-      <ConfirmDestructiveDialog
-        confirmLabel={isClearingData ? "Clearing..." : "Clear All Data"}
-        description="This deletes saved playlists, installed rounds/resources, scores, history, cached matches, source integrations, and stored settings."
+      <SelectiveClearDialog
         isOpen={isClearDataDialogOpen}
         isPending={isClearingData}
-        title="Clear all app data?"
-        warning="This cannot be undone."
+        selections={clearSelections}
+        onSelectionChange={(next) => setClearSelections(next)}
         onCancel={() => {
           if (isClearingData) return;
           playSelectSound();
@@ -444,10 +831,638 @@ function SettingsPage() {
         }}
         onConfirm={() => {
           playSelectSound();
-          void clearAllData();
+          void clearData();
         }}
       />
     </div>
+  );
+}
+
+function AppUpdateCard({
+  appUpdate,
+}: {
+  appUpdate: ReturnType<typeof useAppUpdate>;
+}) {
+  const statusTone = appUpdate.state.status === "update_available"
+    ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
+    : appUpdate.state.status === "up_to_date"
+      ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
+      : appUpdate.state.status === "error"
+        ? "border-rose-300/30 bg-rose-500/10 text-rose-100"
+        : "border-zinc-600/40 bg-black/35 text-zinc-200";
+  const statusLabel = appUpdate.state.status === "checking"
+    ? "Checking"
+    : appUpdate.state.status === "update_available"
+      ? "Update Available"
+      : appUpdate.state.status === "up_to_date"
+        ? "Up to Date"
+        : appUpdate.state.status === "error"
+          ? "Check Failed"
+          : "Not Checked Yet";
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.08s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Updates</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Check for new releases or open the latest available download for this build.
+        </p>
+      </div>
+
+      <div className={`rounded-2xl border p-4 ${statusTone}`} onMouseEnter={playHoverSound}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-current">{statusLabel}</p>
+            <p className="mt-1 text-sm text-current/80">{appUpdate.systemMessage}</p>
+            <div className="mt-3 space-y-1 text-xs font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.16em] text-current/80">
+              <div>Installed v{appUpdate.state.currentVersion}</div>
+              {appUpdate.state.latestVersion ? (
+                <div>Latest v{appUpdate.state.latestVersion}</div>
+              ) : null}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={appUpdate.isBusy}
+            onClick={() => {
+              playSelectSound();
+              void appUpdate.triggerPrimaryAction();
+            }}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${appUpdate.isBusy
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              }`}
+          >
+            {appUpdate.actionLabel}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OnboardingCard() {
+  const navigate = useNavigate();
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">First Start Workflow</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Run the guided introduction again if you want a refresher on play modes, content installs, editors, Handy setup, music, and booru search.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onMouseEnter={playHoverSound}
+        onClick={() => {
+          playSelectSound();
+          void navigate({ to: "/first-start", search: { returnTo: "settings" } });
+        }}
+        className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
+      >
+        Open First Start Workflow
+      </button>
+    </section>
+  );
+}
+
+function HardwareSettingsCard({ section, loading }: { section: SettingsSection; loading: boolean }) {
+  const {
+    connectionKey,
+    appApiKeyOverride,
+    isUsingDefaultAppApiKey,
+    connected,
+    synced,
+    syncError,
+    isConnecting,
+    error,
+    connect,
+    disconnect,
+    forceStop,
+  } = useHandy();
+  const [inputKey, setInputKey] = useState(connectionKey);
+  const [inputApiKeyOverride, setInputApiKeyOverride] = useState(appApiKeyOverride);
+  const [useCustomApiKey, setUseCustomApiKey] = useState(!isUsingDefaultAppApiKey);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setInputKey(connectionKey);
+      setInputApiKeyOverride(appApiKeyOverride);
+      setUseCustomApiKey(!isUsingDefaultAppApiKey);
+    });
+  }, [appApiKeyOverride, connectionKey, isUsingDefaultAppApiKey]);
+
+  const handleConnect = async () => {
+    if (connected) {
+      await disconnect();
+      return;
+    }
+
+    await connect(inputKey, "", useCustomApiKey ? inputApiKeyOverride : "");
+  };
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.08s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">{section.title}</h2>
+        <p className="mt-1 text-sm text-zinc-300">{section.description}</p>
+      </div>
+
+      <div className="space-y-3">
+        {section.settings.map((setting) => (
+          <SettingRow key={setting.id} setting={setting} disabled={loading} />
+        ))}
+
+        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${connected ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100" : "border-rose-300/35 bg-rose-500/10 text-rose-100"}`}>
+              {connected ? "Connected" : "Disconnected"}
+            </span>
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${synced ? "border-cyan-300/40 bg-cyan-500/15 text-cyan-100" : "border-zinc-500/40 bg-zinc-800/70 text-zinc-300"}`}>
+              {synced ? "Synced" : "Not Synced"}
+            </span>
+            {isConnecting ? (
+              <span className="rounded-full border border-amber-300/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100">
+                Connecting
+              </span>
+            ) : null}
+          </div>
+
+          <div className="space-y-4 text-left">
+            <div className="flex flex-col gap-2">
+              <label className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300" htmlFor="settings-handy-connection-key">
+                Connection Key / Channel Ref
+              </label>
+              <input
+                id="settings-handy-connection-key"
+                type="text"
+                value={inputKey}
+                onChange={(event) => setInputKey(event.target.value)}
+                placeholder="Device connection key"
+                disabled={connected || isConnecting}
+                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition-all focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+              />
+            </div>
+
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-200">
+              Only firmware version 4 and up is supported.
+            </div>
+
+            <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                    App Key
+                  </p>
+                  <p className="mt-1 text-sm text-cyan-50">
+                    {useCustomApiKey ? "Using your custom TheHandy app key." : "Using the built-in TheHandy app key automatically."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={connected || isConnecting}
+                  onClick={() => {
+                    setUseCustomApiKey((current) => {
+                      const next = !current;
+                      if (!next) {
+                        setInputApiKeyOverride("");
+                      }
+                      return next;
+                    });
+                  }}
+                  className="rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100 transition-colors hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {useCustomApiKey ? "Use Built-In" : "Use Custom"}
+                </button>
+              </div>
+
+              {useCustomApiKey ? (
+                <div className="mt-4 flex flex-col gap-2">
+                  <label className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300" htmlFor="settings-handy-api-key">
+                    Application ID
+                  </label>
+                  <input
+                    id="settings-handy-api-key"
+                    type="password"
+                    value={inputApiKeyOverride}
+                    onChange={(event) => setInputApiKeyOverride(event.target.value)}
+                    placeholder="Enter your Handy application ID"
+                    disabled={connected || isConnecting}
+                    className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition-all focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  />
+                  <a
+                    href={HANDY_USER_PORTAL_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex w-fit items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-cyan-100 transition-colors hover:bg-cyan-500/25"
+                  >
+                    Open Handy User Portal
+                  </a>
+                  <p className="ml-1 text-xs text-zinc-400">
+                    Do not use your access token here. Create or select an app at Handy and paste the application ID instead.
+                  </p>
+                  <p className="ml-1 text-xs text-zinc-400">
+                    Leave custom mode off unless you explicitly want to override the built-in app identity.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-zinc-400">
+                  Built-in key loaded. Override only if you need a different app identity.
+                </p>
+              )}
+            </div>
+
+            {DEFAULT_THEHANDY_APP_API_KEY.trim().length === 0 ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-300">
+                No bundled TheHandy app key is configured in this build. Enable custom mode and enter one manually.
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-red-400">
+                {error}
+              </div>
+            ) : null}
+
+            {syncError ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-300">
+                {syncError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  playSelectSound();
+                  void handleConnect();
+                }}
+                className="inline-flex rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
+              >
+                {connected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playSelectSound();
+                  void forceStop();
+                }}
+                className="inline-flex rounded-xl border border-zinc-500/60 bg-zinc-800/70 px-4 py-2 text-sm font-semibold text-zinc-100 transition-all duration-200 hover:border-zinc-300/80 hover:bg-zinc-700/80"
+              >
+                Force Stop
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MusicSettingsCard() {
+  const {
+    enabled,
+    queue,
+    currentTrack,
+    isPlaying,
+    isSuppressedByVideo,
+    volume,
+    shuffle,
+    loopMode,
+    setEnabled,
+    addTracks,
+    removeTrack,
+    moveTrack,
+    clearQueue,
+    play,
+    pause,
+    next,
+    previous,
+    setCurrentTrack,
+    setVolume,
+    setShuffle,
+    setLoopMode,
+  } = useGlobalMusic();
+  const [isAddingTracks, setIsAddingTracks] = useState(false);
+  const [volumeDraft, setVolumeDraft] = useState(() => Math.round(DEFAULT_MUSIC_VOLUME * 100));
+  const [loopDraft, setLoopDraft] = useState<MusicLoopMode>(DEFAULT_MUSIC_LOOP_MODE);
+
+  useEffect(() => {
+    setVolumeDraft(Math.round(volume * 100));
+  }, [volume]);
+
+  useEffect(() => {
+    setLoopDraft(loopMode);
+  }, [loopMode]);
+
+  const commitVolumeDraft = async () => {
+    await setVolume(volumeDraft / 100);
+  };
+
+  const addSelectedTracks = async () => {
+    if (isAddingTracks) return;
+    setIsAddingTracks(true);
+    try {
+      const filePaths = await window.electronAPI.dialog.selectMusicFiles();
+      if (filePaths.length === 0) return;
+      await addTracks(filePaths);
+    } catch (error) {
+      console.error("Failed to add music tracks", error);
+    } finally {
+      setIsAddingTracks(false);
+    }
+  };
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.08s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Music</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Build a global queue from local audio files. Music pauses for foreground video playback and resumes from the same spot.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+          <div>
+            <p className="font-semibold text-zinc-100">Enable Global Music</p>
+            <p className="text-sm text-zinc-400">Keep background music running across navigation when no foreground video is active.</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Toggle Enable Global Music"
+            role="switch"
+            aria-checked={enabled}
+            onMouseEnter={playHoverSound}
+            onClick={() => {
+              playSelectSound();
+              void setEnabled(!enabled);
+            }}
+            className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
+          >
+            <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-8" : "translate-x-0"}`} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-zinc-100">Playback</p>
+              <p className="text-sm text-zinc-400">
+                {currentTrack ? `Current track: ${currentTrack.name}` : "No track selected."}
+              </p>
+              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500">
+                {isSuppressedByVideo ? "Paused by foreground video" : isPlaying ? "Playing" : enabled ? "Ready" : "Disabled"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void previous();
+                }}
+                className="rounded-xl border border-zinc-600 bg-black/45 px-3 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-400"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  if (isPlaying) {
+                    pause();
+                    return;
+                  }
+                  void play();
+                }}
+                className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-3 py-2 text-sm font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              >
+                {isPlaying ? "Pause" : "Play"}
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void next();
+                }}
+                className="rounded-xl border border-zinc-600 bg-black/45 px-3 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-400"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-zinc-100">Queue</p>
+              <p className="text-sm text-zinc-400">Add local audio files and reorder them without changing the shuffle mode.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isAddingTracks}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void addSelectedTracks();
+                }}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isAddingTracks
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+                  }`}
+              >
+                {isAddingTracks ? "Adding..." : "Add Tracks"}
+              </button>
+              <button
+                type="button"
+                disabled={queue.length === 0}
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void clearQueue();
+                }}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${queue.length === 0
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                  }`}
+              >
+                Clear Queue
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {queue.length === 0 ? (
+              <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
+                No music tracks configured.
+              </div>
+            ) : (
+              queue.map((entry, index) => {
+                const isCurrent = currentTrack?.id === entry.id;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 ${isCurrent ? "border-violet-300/55 bg-violet-500/10" : "border-zinc-700 bg-black/30"}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSelectSound();
+                        void setCurrentTrack(entry.id);
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="truncate text-sm font-semibold text-zinc-100">{entry.name}</div>
+                      <div className="truncate text-xs text-zinc-500">{entry.filePath}</div>
+                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => {
+                          playSelectSound();
+                          void moveTrack(entry.id, "up");
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${index === 0
+                          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                          : "border-zinc-600 bg-black/45 text-zinc-100 hover:border-zinc-400"
+                          }`}
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === queue.length - 1}
+                        onClick={() => {
+                          playSelectSound();
+                          void moveTrack(entry.id, "down");
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${index === queue.length - 1
+                          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                          : "border-zinc-600 bg-black/45 text-zinc-100 hover:border-zinc-400"
+                          }`}
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSelectSound();
+                          void removeTrack(entry.id);
+                        }}
+                        className="rounded-lg border border-rose-300/60 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-rose-100 hover:bg-rose-500/35"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+            <div className="mb-3">
+              <p className="font-semibold text-zinc-100">Volume</p>
+              <p className="text-sm text-zinc-400">Current: {volumeDraft}%</p>
+            </div>
+            <input
+              aria-label="Music volume"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={volumeDraft}
+              onChange={(event) => setVolumeDraft(Number(event.target.value))}
+              onMouseUp={() => {
+                void commitVolumeDraft();
+              }}
+              onTouchEnd={() => {
+                void commitVolumeDraft();
+              }}
+              onKeyUp={() => {
+                void commitVolumeDraft();
+              }}
+              onBlur={() => {
+                void commitVolumeDraft();
+              }}
+              className="w-full accent-cyan-300"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+            <div className="mb-3">
+              <p className="font-semibold text-zinc-100">Shuffle</p>
+              <p className="text-sm text-zinc-400">Randomize which track advances next without reordering the visible queue.</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Toggle Shuffle"
+              role="switch"
+              aria-checked={shuffle}
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void setShuffle(!shuffle);
+              }}
+              className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${shuffle ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
+            >
+              <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${shuffle ? "translate-x-8" : "translate-x-0"}`} />
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+            <div className="mb-3">
+              <p className="font-semibold text-zinc-100">Loop Mode</p>
+              <p className="text-sm text-zinc-400">Control what happens when a track finishes.</p>
+            </div>
+            <select
+              value={loopDraft}
+              onChange={(event) => setLoopDraft(event.target.value as MusicLoopMode)}
+              className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75 focus:ring-2 focus:ring-violet-400/30"
+            >
+              <option value="queue">Loop Queue</option>
+              <option value="track">Loop Track</option>
+              <option value="off">Off</option>
+            </select>
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void setLoopMode(loopDraft);
+              }}
+              className="mt-3 rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            >
+              Save Loop Mode
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -468,7 +1483,7 @@ function DangerZoneCard({
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-rose-100">Danger Zone</h2>
         <p className="mt-1 text-sm text-rose-100/80">
-          Permanently remove all saved data from this app installation.
+          Permanently remove saved data, such as rounds, playlists, or settings.
         </p>
       </div>
 
@@ -488,42 +1503,88 @@ function DangerZoneCard({
           : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
           }`}
       >
-        {isPending ? "Clearing..." : "Clear All Data"}
+        {isPending ? "Clearing..." : "Manage & Clear Data"}
       </button>
     </section>
   );
 }
 
-function ConfirmDestructiveDialog({
-  confirmLabel,
-  description,
+function SelectiveClearDialog({
   isOpen,
   isPending,
-  title,
-  warning,
+  selections,
+  onSelectionChange,
   onCancel,
   onConfirm,
 }: {
-  confirmLabel: string;
-  description: string;
   isOpen: boolean;
   isPending: boolean;
-  title: string;
-  warning: string;
+  selections: {
+    rounds: boolean;
+    playlists: boolean;
+    stats: boolean;
+    history: boolean;
+    cache: boolean;
+    settings: boolean;
+  };
+  onSelectionChange: (next: typeof selections) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   if (!isOpen) return null;
 
+  const categories = [
+    { id: "rounds", label: "Installed Rounds & Heroes", description: "All downloaded/imported game content." },
+    { id: "playlists", label: "Playlists", description: "Your custom and imported playlists." },
+    { id: "history", label: "Run History", description: "Records of your past games and sessions." },
+    { id: "stats", label: "Global Stats", description: "Highscores and overall career progress." },
+    { id: "cache", label: "Multiplayer Cache", description: "Downloaded match results and sync queue." },
+    { id: "settings", label: "App Settings & Preference", description: "Preferences, hardware keys, and window state." },
+  ] as const;
+
+  const toggle = (id: keyof typeof selections) => {
+    onSelectionChange({ ...selections, [id]: !selections[id] });
+  };
+
+  const hasSelection = Object.values(selections).some(Boolean);
+
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-3xl border border-rose-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(244,63,94,0.28)]">
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-rose-200/80">
-          Warning
+          Selective Maintenance
         </p>
-        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">{title}</h2>
-        <p className="mt-3 text-sm text-zinc-300">{description}</p>
-        <p className="mt-2 text-sm font-semibold text-rose-200">{warning}</p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">Clear Data</h2>
+        <p className="mt-2 text-sm text-zinc-400">Choose which categories of information to wipe from this device.</p>
+
+        <div className="mt-6 space-y-3">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              disabled={isPending}
+              onClick={() => toggle(cat.id as keyof typeof selections)}
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${selections[cat.id as keyof typeof selections]
+                ? "border-rose-400/40 bg-rose-500/10"
+                : "border-zinc-800 bg-black/20 hover:border-zinc-700"
+                }`}
+            >
+              <div className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${selections[cat.id as keyof typeof selections] ? "border-rose-400 bg-rose-500 text-white" : "border-zinc-700 bg-zinc-900"}`}>
+                {selections[cat.id as keyof typeof selections] && (
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-bold text-zinc-100">{cat.label}</div>
+                <div className="text-xs text-zinc-500">{cat.description}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-5 text-sm font-semibold text-rose-200">Warning: This cannot be undone.</p>
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
@@ -540,15 +1601,15 @@ function ConfirmDestructiveDialog({
           </button>
           <button
             type="button"
-            disabled={isPending}
+            disabled={isPending || !hasSelection}
             onMouseEnter={playHoverSound}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending || !hasSelection
               ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
               : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
               }`}
           >
-            {confirmLabel}
+            {isPending ? "Clearing..." : "Confirm Deletion"}
           </button>
         </div>
       </div>
@@ -558,12 +1619,14 @@ function ConfirmDestructiveDialog({
 
 function AutoScanFoldersCard({
   folders,
+  notices,
   isLoading,
   isPending,
   onAddFolders,
   onRemoveFolder,
 }: {
   folders: string[];
+  notices: FolderImportNotice[];
   isLoading: boolean;
   isPending: boolean;
   onAddFolders: () => void;
@@ -577,9 +1640,26 @@ function AutoScanFoldersCard({
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Library</h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Folders that are automatically scanned for new .round and .hero sidecars on startup.
+          Added folders import immediately, including legacy video-folder fallback, and are rescanned on startup.
         </p>
       </div>
+
+      {notices.length > 0 ? (
+        <div className="mb-4 space-y-2">
+          {notices.map((notice) => (
+            <div
+              key={`${notice.folderPath}:${notice.message}`}
+              className={`rounded-xl border px-3 py-2 text-xs ${notice.tone === "error"
+                ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
+                : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
+                }`}
+            >
+              <div className="truncate font-semibold">{notice.folderPath}</div>
+              <div className="mt-1 text-zinc-200">{notice.message}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         {isLoading ? (
@@ -632,7 +1712,7 @@ function AutoScanFoldersCard({
 type SourceDraft = {
   name: string;
   baseUrl: string;
-  authMode: "apiKey" | "login";
+  authMode: "none" | "apiKey" | "login";
   apiKey: string;
   username: string;
   password: string;
@@ -657,6 +1737,10 @@ function toSourceDraft(source: ExternalSource): SourceDraft {
   };
 }
 
+function getSelectableAuthModeValue(authMode: SourceDraft["authMode"]): "none" | "apiKey" | typeof LEGACY_LOGIN_AUTH_VALUE {
+  return authMode === "login" ? LEGACY_LOGIN_AUTH_VALUE : authMode;
+}
+
 function SourceIntegrationsCard() {
   const [sources, setSources] = useState<ExternalSource[]>([]);
   const [drafts, setDrafts] = useState<Record<string, SourceDraft>>({});
@@ -671,7 +1755,7 @@ function SourceIntegrationsCard() {
   const [newSourceDraft, setNewSourceDraft] = useState<SourceDraft>({
     name: "",
     baseUrl: "",
-    authMode: "apiKey",
+    authMode: "none",
     apiKey: "",
     username: "",
     password: "",
@@ -757,7 +1841,7 @@ function SourceIntegrationsCard() {
       setNewSourceDraft({
         name: "",
         baseUrl: "",
-        authMode: "apiKey",
+        authMode: "none",
         apiKey: "",
         username: "",
         password: "",
@@ -902,6 +1986,9 @@ function SourceIntegrationsCard() {
 
       <div className="mb-6 rounded-2xl border border-violet-300/25 bg-black/35 p-4">
         <p className="mb-3 text-sm font-semibold text-zinc-100">Add Stash Source</p>
+        <div className="mb-3 rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively supported.
+        </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           <input
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
@@ -918,10 +2005,10 @@ function SourceIntegrationsCard() {
           <select
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
             value={newSourceDraft.authMode}
-            onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, authMode: event.target.value as "apiKey" | "login" }))}
+            onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, authMode: event.target.value as "none" | "apiKey" }))}
           >
+            <option value="none">No Auth</option>
             <option value="apiKey">API Key</option>
-            <option value="login">Login</option>
           </select>
           {newSourceDraft.authMode === "apiKey" ? (
             <input
@@ -931,20 +2018,8 @@ function SourceIntegrationsCard() {
               onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, apiKey: event.target.value }))}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                placeholder="Username"
-                value={newSourceDraft.username}
-                onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, username: event.target.value }))}
-              />
-              <input
-                className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                placeholder="Password"
-                type="password"
-                value={newSourceDraft.password}
-                onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, password: event.target.value }))}
-              />
+            <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
+              This Stash source will connect without API keys.
             </div>
           )}
         </div>
@@ -988,11 +2063,12 @@ function SourceIntegrationsCard() {
                 <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   <select
                     className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                    value={draft.authMode}
-                    onChange={(event) => patchDraft(source.id, { authMode: event.target.value as "apiKey" | "login" })}
+                    value={getSelectableAuthModeValue(draft.authMode)}
+                    onChange={(event) => patchDraft(source.id, { authMode: event.target.value as "none" | "apiKey" })}
                   >
+                    <option value="none">No Auth</option>
                     <option value="apiKey">API Key</option>
-                    <option value="login">Login</option>
+                    {draft.authMode === "login" ? <option value={LEGACY_LOGIN_AUTH_VALUE} disabled>Legacy Login</option> : null}
                   </select>
                   {draft.authMode === "apiKey" ? (
                     <input
@@ -1001,21 +2077,13 @@ function SourceIntegrationsCard() {
                       value={draft.apiKey}
                       onChange={(event) => patchDraft(source.id, { apiKey: event.target.value })}
                     />
+                  ) : draft.authMode === "login" ? (
+                    <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                      Legacy username/password login is no longer offered for Stash sources. Switch this source to No Auth or API Key.
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                        placeholder="Username"
-                        value={draft.username}
-                        onChange={(event) => patchDraft(source.id, { username: event.target.value })}
-                      />
-                      <input
-                        className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
-                        placeholder="Password"
-                        type="password"
-                        value={draft.password}
-                        onChange={(event) => patchDraft(source.id, { password: event.target.value })}
-                      />
+                    <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
+                      No credentials required for this Stash instance.
                     </div>
                   )}
                 </div>
@@ -1030,6 +2098,11 @@ function SourceIntegrationsCard() {
                       onChange={(event) =>
                         setTagSearchQueryBySource((prev) => ({ ...prev, [source.id]: event.target.value }))
                       }
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void searchTags(source.id);
+                      }}
                     />
                     <button
                       type="button"
@@ -1147,6 +2220,48 @@ function SettingsSectionCard({ section, loading }: { section: SettingsSection; l
       <div className="space-y-3">
         {section.settings.map((setting) => (
           <SettingRow key={setting.id} setting={setting} disabled={loading} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HelpShortcutsCard() {
+  const shortcutGroups = getVisibleShortcutGroups();
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.08s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Keyboard Shortcuts</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Every shortcut currently wired into the app is listed here, including game-only and development-only bindings.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {shortcutGroups.map((group) => (
+          <section key={group.id} className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-100">{group.title}</h3>
+              <p className="mt-1 text-sm text-zinc-400">{group.description}</p>
+            </div>
+            <div className="space-y-2">
+              {group.shortcuts.map((shortcut) => (
+                <div
+                  key={`${group.id}-${shortcut.keys}`}
+                  className="flex flex-col gap-2 rounded-xl border border-white/8 bg-black/25 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <kbd className="w-fit rounded-lg border border-violet-300/20 bg-violet-500/10 px-2.5 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-[0.16em] text-violet-100">
+                    {shortcut.keys}
+                  </kbd>
+                  <p className="text-sm text-zinc-300 sm:max-w-[70%]">{shortcut.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </section>
@@ -1316,10 +2431,10 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
         aria-checked={switchedOn}
         disabled={disabled || isPending}
         onClick={() => void handleToggle()}
-        className={`relative h-8 w-16 rounded-full border transition-all duration-200 ${switchedOn ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"} ${(disabled || isPending) ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+        className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${switchedOn ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"} ${(disabled || isPending) ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span
-          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-all duration-200 ${switchedOn ? "left-9" : "left-1"}`}
+          className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${switchedOn ? "translate-x-8" : "translate-x-0"}`}
         />
       </button>
     </div>
@@ -1382,53 +2497,126 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
 }
 
 function CreditsCard() {
+  const playtesters = ["Kyral", "VladTheImplier", "Aodin"];
+
   return (
-    <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.12s" }}>
-      <div className="mb-6">
-        <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Credits</h2>
-        <p className="mt-1 text-sm text-zinc-300">
-          Special thanks to the community and creators who inspired this project.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div
-          className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-          onMouseEnter={playHoverSound}
-        >
-          <h3 className="font-semibold text-zinc-100">FapLandPartyDev</h3>
-          <p className="mt-1 text-sm text-zinc-400">Creator of the game.</p>
-        </div>
-
-        <div
-          className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-          onMouseEnter={playHoverSound}
-        >
-          <h3 className="font-semibold text-zinc-100">nakkub</h3>
-          <p className="mt-1 text-sm text-zinc-400">Credit for the original Godot version.</p>
-        </div>
-
-        <div
-          className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-          onMouseEnter={playHoverSound}
-        >
-          <h3 className="font-semibold text-zinc-100">tomper</h3>
-          <p className="mt-1 text-sm text-zinc-400">
-            For{" "}
-            <a
-              href="https://discuss.eroscripts.com/t/fapland-handy-edition/260780"
-              target="_blank"
-              rel="noreferrer"
-              className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
-              onMouseEnter={playHoverSound}
-              onClick={playSelectSound}
-            >
-              TheHandy version
-            </a>{" "}
-            that inspired this project.
+    <div className="animate-entrance space-y-6" style={{ animationDelay: "0.12s" }}>
+      <section className="rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl transition-all duration-300 hover:border-purple-400/40">
+        <div className="mb-6">
+          <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Credits</h2>
+          <p className="mt-1 text-sm text-zinc-300">
+            Special thanks to the community and creators who inspired this project.
           </p>
         </div>
-      </div>
-    </section>
+
+        <div className="space-y-4">
+          <div
+            className="rounded-2xl border border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-500/18 via-violet-500/14 to-black/45 p-5 shadow-[0_0_28px_rgba(192,38,211,0.16)] transition-colors duration-200 hover:border-fuchsia-200/60"
+            onMouseEnter={playHoverSound}
+          >
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-fuchsia-200/80">Playtesters</p>
+            <h3 className="mt-2 text-lg font-extrabold tracking-tight text-white">Special thanks to our playtesters</h3>
+            <p className="mt-2 text-sm leading-6 text-fuchsia-50/90">They helped improving and polishing the game.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {playtesters.map((playtester) => (
+                <span
+                  key={playtester}
+                  className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm font-semibold text-white"
+                >
+                  {playtester}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">anon fapland inventor</h3>
+            <p className="mt-1 text-sm text-zinc-400">The person who came up with the original idea.</p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">FapLandPartyDev</h3>
+            <p className="mt-1 text-sm text-zinc-400">Creator of the game.</p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">nakkub</h3>
+            <p className="mt-1 text-sm text-zinc-400">Credit for the original Godot version.</p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">tomper</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              For{" "}
+              <a
+                href="https://discuss.eroscripts.com/t/fapland-handy-edition/260780"
+                target="_blank"
+                rel="noreferrer"
+                className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
+                onMouseEnter={playHoverSound}
+                onClick={playSelectSound}
+              >
+                TheHandy version
+              </a>{" "}
+              that inspired this project.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-violet-400/20 bg-zinc-950/45 p-5 backdrop-blur-xl transition-all duration-300 hover:border-violet-400/35">
+        <div className="mb-6">
+          <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Software & License</h2>
+          <p className="mt-1 text-sm text-zinc-300">
+            Open source information and legal licensing.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">Source Code</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Available on{" "}
+              <a
+                href="https://github.com/FapLandPartyDev/FapLand-Party-Edition"
+                target="_blank"
+                rel="noreferrer"
+                className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
+                onMouseEnter={playHoverSound}
+                onClick={playSelectSound}
+              >
+                GitHub
+              </a>
+            </p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+            onMouseEnter={playHoverSound}
+          >
+            <h3 className="font-semibold text-zinc-100">License</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              This project is licensed under the{" "}
+              <span className="text-violet-100 font-bold">GNU Affero General Public License v3.0 (AGPL-3.0)</span>.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

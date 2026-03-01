@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,7 +49,7 @@ const mocks = vi.hoisted(() => ({
               scorePerCompletedRound: 100,
               scorePerIntermediary: 30,
               scorePerActiveAntiPerk: 25,
-              scorePerCumRoundSuccess: 120,
+              scorePerCumRoundSuccess: 420,
             },
           },
           difficultyHintsByRefKey: {},
@@ -180,7 +181,7 @@ afterEach(() => {
 
 describe("MultiplayerLobbyRoute", () => {
   it("shows resolver UI and blocks ready while refs remain unresolved", async () => {
-    const Component = (Route as unknown as { component: () => JSX.Element }).component;
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
 
     await waitFor(() => {
@@ -199,7 +200,7 @@ describe("MultiplayerLobbyRoute", () => {
       }),
     );
 
-    const Component = (Route as unknown as { component: () => JSX.Element }).component;
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
 
     await waitFor(() => {

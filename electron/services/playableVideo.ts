@@ -2,10 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
+import { fromLocalMediaUri, isLocalMediaUri, toLocalMediaUri } from "./localMedia";
 
 export type ResolvePlayableVideoUriResult = {
   videoUri: string;
@@ -33,35 +33,12 @@ export function __resetPlayableVideoCachesForTests(): void {
   inFlightByCacheKey.clear();
 }
 
-function toAppMediaUri(filePath: string): string {
-  return `app://media/${encodeURIComponent(path.resolve(filePath))}`;
-}
-
 export function isLocalPlayableVideoUri(videoUri: string): boolean {
-  return videoUri.startsWith("app://media/") || videoUri.startsWith("file://");
+  return isLocalMediaUri(videoUri);
 }
 
 export function toLocalVideoPath(videoUri: string): string | null {
-  try {
-    const parsed = new URL(videoUri);
-
-    if (parsed.protocol === "app:" && parsed.hostname === "media") {
-      const decoded = decodeURIComponent(parsed.pathname.slice(1));
-      if (!decoded) return null;
-      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)) {
-        return path.normalize(decoded.slice(1));
-      }
-      return path.normalize(decoded);
-    }
-
-    if (parsed.protocol === "file:") {
-      return path.normalize(fileURLToPath(parsed));
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+  return fromLocalMediaUri(videoUri);
 }
 
 function resolveCacheRootPath(): string {
@@ -236,7 +213,7 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
 
     if (await fileExists(outputPath)) {
       const cachedResult = {
-        videoUri: toAppMediaUri(outputPath),
+        videoUri: toLocalMediaUri(outputPath),
         transcoded: true,
         cacheHit: true,
       } satisfies ResolvePlayableVideoUriResult;
@@ -263,7 +240,7 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
       }
 
       return {
-        videoUri: toAppMediaUri(outputPath),
+        videoUri: toLocalMediaUri(outputPath),
         transcoded: true,
         cacheHit: false,
       } satisfies ResolvePlayableVideoUriResult;

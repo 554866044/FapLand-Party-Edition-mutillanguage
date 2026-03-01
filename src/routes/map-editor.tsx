@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
+import { PlaylistPackExportDialog } from "../components/PlaylistPackExportDialog";
+import { PlaylistExportOverlay } from "../components/PlaylistExportOverlay";
 import { PlaylistResolutionModal } from "../components/PlaylistResolutionModal";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
 import {
@@ -17,7 +19,7 @@ import { loadTileCatalog, type TileCatalog, type TileCatalogCategory, type TileC
 import { clearMapEditorTestSession, getMapEditorTestPlaylistId, setMapEditorTestSession } from "../features/map-editor/testSession";
 import { validateGraphConfig } from "../features/map-editor/validateGraphConfig";
 import { db, type InstalledRound } from "../services/db";
-import { playlists, type StoredPlaylist } from "../services/playlists";
+import { playlists, type PlaylistExportPackageStatus, type StoredPlaylist } from "../services/playlists";
 import {
   playHoverSound,
   playMapConnectNodesSound,
@@ -37,6 +39,7 @@ import { GraphSettingsPanel } from "../features/map-editor/components/GraphSetti
 import { ValidationPanel } from "../features/map-editor/components/ValidationPanel";
 import { EditorStatusBar } from "../features/map-editor/components/EditorStatusBar";
 import { realignGraph, type GraphAlignmentStrategy } from "../features/map-editor/graphAlignment";
+import { useControllerSurface } from "../controller";
 
 const DEFAULT_TILE_CATALOG: TileCatalog = {
   version: 1,
@@ -75,6 +78,10 @@ const INSPECTOR_TABS: ReadonlyArray<{ id: InspectorTab; label: string }> = [
   { id: "validation", label: "Checks" },
 ];
 
+function toManualMappingRecord(overrides: Record<string, string | null | undefined>): Record<string, string | null> {
+  return Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined)) as Record<string, string | null>;
+}
+
 const getInstalledRounds = async (): Promise<InstalledRound[]> => {
   try {
     return await db.round.findInstalled();
@@ -84,7 +91,8 @@ const getInstalledRounds = async (): Promise<InstalledRound[]> => {
   }
 };
 
-const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: StoredPlaylist): StoredPlaylist[] => {
+const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: StoredPlaylist | null): StoredPlaylist[] => {
+  if (!activePlaylist) return playlistsToShow;
   if (playlistsToShow.some((playlist) => playlist.id === activePlaylist.id)) {
     return playlistsToShow;
   }
@@ -120,11 +128,11 @@ const toEditorConfigFromPlaylist = (playlist: StoredPlaylist): EditorGraphConfig
 
 export const Route = createFileRoute("/map-editor")({
   loader: async () => {
-    const [installedRounds, availablePlaylists, activePlaylist] = await Promise.all([
+    const [installedRounds, availablePlaylists] = await Promise.all([
       getInstalledRounds(),
       playlists.list(),
-      playlists.getActive(),
     ]);
+    const activePlaylist = availablePlaylists.length > 0 ? await playlists.getActive() : null;
     return {
       installedRounds,
       availablePlaylists: withActivePlaylist(availablePlaylists, activePlaylist),
@@ -171,7 +179,7 @@ const makeStartingConfig = (): EditorGraphConfig => ({
   ],
   randomRoundPools: [],
   cumRoundRefs: [],
-  pathChoiceTimeoutMs: 6000,
+  pathChoiceTimeoutMs: 12000,
   perkSelection: {
     optionsPerPick: 3,
     triggerChancePerCompletedRound: 0.35,
@@ -181,8 +189,8 @@ const makeStartingConfig = (): EditorGraphConfig => ({
     enabledAntiPerkIds: [],
   },
   probabilityScaling: {
-    initialIntermediaryProbability: 0,
-    initialAntiPerkProbability: 0,
+    initialIntermediaryProbability: 0.1,
+    initialAntiPerkProbability: 0.1,
     intermediaryIncreasePerRound: 0.02,
     antiPerkIncreasePerRound: 0.015,
     maxIntermediaryProbability: 0.85,
@@ -220,10 +228,10 @@ export function MapEditorRoute() {
   } = Route.useLoaderData() as {
     installedRounds: InstalledRound[];
     availablePlaylists: StoredPlaylist[];
-    activePlaylist: StoredPlaylist;
+    activePlaylist: StoredPlaylist | null;
   };
   const [playlistList, setPlaylistList] = useState<StoredPlaylist[]>(availablePlaylists);
-  const [activePlaylistId, setActivePlaylistId] = useState(activePlaylist.id);
+  const [activePlaylistId, setActivePlaylistId] = useState(activePlaylist?.id ?? "");
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [createPlaylistPending, setCreatePlaylistPending] = useState(false);
@@ -231,6 +239,10 @@ export function MapEditorRoute() {
   const [savePending, setSavePending] = useState(false);
   const [testMapPending, setTestMapPending] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<PlaylistExportPackageStatus | null>(null);
+  const [showPackExportDialog, setShowPackExportDialog] = useState(false);
+  const [showExportOverlay, setShowExportOverlay] = useState(false);
+  const [isAbortingExport, setIsAbortingExport] = useState(false);
   const [resolutionModalState, setResolutionModalState] = useState<ResolutionModalState | null>(null);
   const [importedPlaylistReview, setImportedPlaylistReview] = useState<ImportedPlaylistReview | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -257,6 +269,7 @@ export function MapEditorRoute() {
 
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("node");
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const editorScopeRef = useRef<HTMLDivElement | null>(null);
 
   const undoManagerRef = useRef(new UndoManager<EditorGraphConfig>(makeStartingConfig(), {
     isEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right),
@@ -323,6 +336,34 @@ export function MapEditorRoute() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const pollExportStatus = async () => {
+      try {
+        const status = await playlists.getExportPackageStatus();
+        if (!mounted) return;
+        setExportStatus(status);
+        if (status.state !== "running" && !savePending) {
+          setShowExportOverlay(false);
+          setIsAbortingExport(false);
+        }
+      } catch (error) {
+        console.error("Failed to poll playlist export status in map editor", error);
+      }
+    };
+
+    void pollExportStatus();
+    const interval = window.setInterval(() => {
+      void pollExportStatus();
+    }, 500);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [savePending]);
 
   useEffect(() => {
     let mounted = true;
@@ -395,12 +436,10 @@ export function MapEditorRoute() {
 
   const refreshPlaylistPickerData = useCallback(async () => {
     try {
-      const [available, active] = await Promise.all([
-        playlists.list(),
-        playlists.getActive(),
-      ]);
+      const available = await playlists.list();
+      const active = available.length > 0 ? await playlists.getActive() : null;
       setPlaylistList(withActivePlaylist(available, active));
-      setActivePlaylistId(active.id);
+      setActivePlaylistId(active?.id ?? "");
     } catch (error) {
       console.error("Failed to refresh map editor playlists", error);
     }
@@ -723,6 +762,30 @@ export function MapEditorRoute() {
       flashTouchedEdge(removedEdgeId);
     }
   }, [flashTouchedEdge, updateGraphConfig]);
+
+  const deleteEdgeById = useCallback((edgeId: string) => {
+    let removed = false;
+    const changed = updateGraphConfig((previous) => {
+      const nextEdges = previous.edges.filter((edge) => edge.id !== edgeId);
+      removed = nextEdges.length !== previous.edges.length;
+      if (!removed) return previous;
+      return {
+        ...previous,
+        edges: nextEdges,
+      };
+    });
+
+    if (!changed || !removed) {
+      playMapInvalidActionSound();
+      return;
+    }
+
+    playMapDisconnectNodesSound();
+    flashTouchedEdge(edgeId);
+    if (selection.selectedEdgeId === edgeId) {
+      commitSelection(EMPTY_EDITOR_SELECTION);
+    }
+  }, [commitSelection, flashTouchedEdge, selection.selectedEdgeId, updateGraphConfig]);
 
   const moveNodes = useCallback((nodeIds: string[], deltaWorldX: number, deltaWorldY: number) => {
     if (nodeIds.length === 0) return;
@@ -1063,6 +1126,73 @@ export function MapEditorRoute() {
     }
   }, [importPending, isDirty, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
 
+  const handleExportPlaylistPackage = useCallback(async () => {
+    if (!selectedPlaylist) return;
+    if (importPending || savePending || testMapPending) return;
+
+    playSelectSound();
+    setShowPackExportDialog(true);
+  }, [importPending, savePending, selectedPlaylist, testMapPending]);
+
+  const handleStartPlaylistPackageExport = useCallback(async (input: {
+    compressionMode: "copy" | "av1";
+    compressionStrength: number;
+  }): Promise<boolean> => {
+    if (!selectedPlaylist) return false;
+    if (importPending || savePending || testMapPending) return false;
+
+    setSavePending(true);
+    setSaveNotice(null);
+    try {
+      const directoryPath = await window.electronAPI.dialog.selectPlaylistExportDirectory(selectedPlaylist.name);
+      if (!directoryPath) return false;
+
+      const playlistToExport = isDirty
+        ? await persistEditedPlaylist(selectedPlaylist)
+        : selectedPlaylist;
+      if (!playlistToExport) return false;
+
+      setShowExportOverlay(true);
+      void (async () => {
+        try {
+          const result = await playlists.exportPackage({
+            playlistId: playlistToExport.id,
+            directoryPath,
+            compressionMode: input.compressionMode,
+            compressionStrength: input.compressionStrength,
+          });
+          setSaveNotice(`Exported "${playlistToExport.name}" pack to ${result.exportDir}.`);
+        } catch (error) {
+          console.error("Failed to export playlist package from map editor", error);
+          setSaveNotice(error instanceof Error ? error.message : "Failed to export playlist package.");
+          setShowExportOverlay(false);
+          playMapInvalidActionSound();
+        } finally {
+          setSavePending(false);
+        }
+      })();
+
+      return true;
+    } catch (error) {
+      console.error("Failed to export playlist package from map editor", error);
+      setSaveNotice(error instanceof Error ? error.message : "Failed to export playlist package.");
+      playMapInvalidActionSound();
+      return false;
+    }
+  }, [importPending, isDirty, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
+
+  const handleAbortPlaylistExport = useCallback(async () => {
+    setIsAbortingExport(true);
+    try {
+      const status = await playlists.abortExportPackage();
+      setExportStatus(status);
+    } catch (error) {
+      console.error("Failed to abort playlist export from map editor", error);
+      setSaveNotice(error instanceof Error ? error.message : "Failed to abort playlist export.");
+      setIsAbortingExport(false);
+    }
+  }, []);
+
   const handleSavePlaylist = useCallback(async () => {
     if (!selectedPlaylist) return;
     if (importPending || savePending || testMapPending) return;
@@ -1089,7 +1219,13 @@ export function MapEditorRoute() {
       setActivePlaylistId(updated.id);
       setMapEditorTestSession(updated.id);
       playSelectSound();
-      await navigate({ to: "/game" });
+      await navigate({
+        to: "/game",
+        search: {
+          playlistId: updated.id,
+          launchNonce: Date.now(),
+        },
+      });
     } catch (error) {
       console.error("Failed to start map test", error);
       setSaveNotice(error instanceof Error ? error.message : "Failed to start map test.");
@@ -1255,6 +1391,18 @@ export function MapEditorRoute() {
     navigate({ to: "/" });
   }, [navigate]);
 
+  useControllerSurface({
+    id: "map-editor-main-route",
+    scopeRef: editorScopeRef,
+    priority: 20,
+    enabled: Boolean(selectedPlaylist),
+    initialFocusId: "map-editor-import",
+    onBack: () => {
+      navigateBack();
+      return true;
+    },
+  });
+
   /* ──────────────────────── Playlist picker view ──────────── */
 
   if (!selectedPlaylist) {
@@ -1274,11 +1422,10 @@ export function MapEditorRoute() {
       />
     );
   }
-
   /* ──────────────────────── Main editor view ──────────── */
 
   return (
-    <div className="relative h-screen overflow-hidden">
+    <div ref={editorScopeRef} className="relative h-screen overflow-hidden">
       <AnimatedBackground videoUris={[]} />
       <main className="relative z-10 flex h-full w-full flex-col">
         {/* ── Header bar ─────────────────── */}
@@ -1299,6 +1446,8 @@ export function MapEditorRoute() {
               onMouseEnter={playHoverSound}
               onClick={() => { void handleImportPlaylist(); }}
               disabled={importPending || savePending || testMapPending}
+              data-controller-focus-id="map-editor-import"
+              data-controller-initial="true"
             >
               {importPending ? "Importing..." : "Import"}
             </button>
@@ -1308,8 +1457,19 @@ export function MapEditorRoute() {
               onMouseEnter={playHoverSound}
               onClick={() => { void handleExportPlaylist(); }}
               disabled={importPending || savePending || testMapPending}
+              data-controller-focus-id="map-editor-export-fplay"
             >
-              {savePending ? "Working..." : "Export"}
+              {savePending ? "Working..." : "Export Fplay"}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-cyan-500/45 bg-cyan-500/12 px-3 py-1.5 text-xs font-medium text-cyan-100 transition-colors hover:border-cyan-400/60 hover:bg-cyan-500/20 disabled:opacity-40"
+              onMouseEnter={playHoverSound}
+              onClick={() => { void handleExportPlaylistPackage(); }}
+              disabled={importPending || savePending || testMapPending}
+              data-controller-focus-id="map-editor-export-pack"
+            >
+              {savePending ? "Working..." : "Export Pack"}
             </button>
             {selectedResolutionActionLabel && selectedResolutionReview && (
               <button
@@ -1323,6 +1483,7 @@ export function MapEditorRoute() {
                     analysis: selectedResolutionReview,
                   });
                 }}
+                data-controller-focus-id="map-editor-resolve"
               >
                 {selectedResolutionActionLabel}
               </button>
@@ -1332,6 +1493,7 @@ export function MapEditorRoute() {
               className="rounded-lg border border-zinc-700/50 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500/50 hover:text-zinc-200"
               onMouseEnter={playHoverSound}
               onClick={handleOpenPlaylistPicker}
+              data-controller-focus-id="map-editor-switch"
             >
               Switch
             </button>
@@ -1340,6 +1502,8 @@ export function MapEditorRoute() {
               className="rounded-lg border border-zinc-700/50 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500/50 hover:text-zinc-200"
               onMouseEnter={playHoverSound}
               onClick={navigateBack}
+              data-controller-focus-id="map-editor-exit"
+              data-controller-back="true"
             >
               Exit
             </button>
@@ -1366,16 +1530,18 @@ export function MapEditorRoute() {
         {/* ── 3-column editor layout ─────────────────── */}
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* ── Left: Tile sidebar ─────────────────── */}
-          <TileSidebar
-            categoryTabs={categoryTabs}
-            activeCategory={activeCategory}
-            tileSearch={tileSearch}
-            filteredTiles={filteredTiles}
-            activePlacementKind={activePlacementKind}
-            onCategoryChange={setActiveCategory}
-            onSearchChange={setTileSearch}
-            onArmTile={armTile}
-          />
+          <div data-controller-skip="true">
+            <TileSidebar
+              categoryTabs={categoryTabs}
+              activeCategory={activeCategory}
+              tileSearch={tileSearch}
+              filteredTiles={filteredTiles}
+              activePlacementKind={activePlacementKind}
+              onCategoryChange={setActiveCategory}
+              onSearchChange={setTileSearch}
+              onArmTile={armTile}
+            />
+          </div>
 
           {/* ── Center: Toolbar + Canvas + Status bar ─────────────────── */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1404,7 +1570,7 @@ export function MapEditorRoute() {
               />
             </div>
 
-            <div className="min-h-0 flex-1 bg-black/20">
+            <div className="min-h-0 flex-1 bg-black/20" data-controller-skip="true">
               <EditorCanvas
                 config={config}
                 selection={selection}
@@ -1451,7 +1617,10 @@ export function MapEditorRoute() {
           </div>
 
           {/* ── Right: Collapsible inspector ─────────────────── */}
-          <div className={`editor-inspector flex flex-shrink-0 flex-col border-l border-white/6 bg-black/30 transition-all duration-200 ${inspectorCollapsed ? "w-10" : "w-72"}`}>
+          <div
+            data-controller-skip="true"
+            className={`editor-inspector flex flex-shrink-0 flex-col border-l border-white/6 bg-black/30 transition-all duration-200 ${inspectorCollapsed ? "w-10" : "w-72"}`}
+          >
             {/* ── Collapse toggle ─────────────────── */}
             <button
               type="button"
@@ -1510,6 +1679,7 @@ export function MapEditorRoute() {
                       selectedEdge={selectedEdge}
                       allEdges={config.edges}
                       onPatchEdge={patchEdge}
+                      onDeleteEdge={deleteEdgeById}
                     />
                   )}
                   {inspectorTab === "settings" && (
@@ -1560,7 +1730,7 @@ export function MapEditorRoute() {
               if (resolutionModalState.context === "import") {
                 const imported = await playlists.importFromFile({
                   filePath: resolutionModalState.filePath,
-                  manualMappingByRefKey: overrides,
+                  manualMappingByRefKey: toManualMappingRecord(overrides),
                 });
                 updatePlaylistListEntry(imported.playlist);
                 setActivePlaylistId(imported.playlist.id);
@@ -1605,7 +1775,7 @@ export function MapEditorRoute() {
               if (resolutionModalState.context !== "import") return;
               const imported = await playlists.importFromFile({
                 filePath: resolutionModalState.filePath,
-                manualMappingByRefKey: overrides,
+                manualMappingByRefKey: toManualMappingRecord(overrides),
               });
               updatePlaylistListEntry(imported.playlist);
               setActivePlaylistId(imported.playlist.id);
@@ -1618,6 +1788,23 @@ export function MapEditorRoute() {
               setResolutionModalState(null);
             })();
           }}
+        />
+      )}
+      {showExportOverlay && (
+        <PlaylistExportOverlay
+          status={exportStatus}
+          aborting={isAbortingExport}
+          onAbort={() => { void handleAbortPlaylistExport(); }}
+        />
+      )}
+      {showPackExportDialog && selectedPlaylist && (
+        <PlaylistPackExportDialog
+          playlistId={selectedPlaylist.id}
+          playlistName={selectedPlaylist.name}
+          onClose={() => {
+            setShowPackExportDialog(false);
+          }}
+          onSubmit={handleStartPlaylistPackageExport}
         />
       )}
     </div>

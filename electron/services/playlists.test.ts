@@ -197,3 +197,32 @@ describe("playlist import analysis and finalize", () => {
     expect(result.playlist.config.boardConfig.normalRoundOrder[1]?.idHint).toBe("round-suggested");
   });
 });
+
+describe("getActivePlaylist", () => {
+  let store: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = {
+      get: vi.fn(() => null),
+      set: vi.fn(),
+    };
+    getStoreMock.mockReturnValue(store);
+    getDbMock.mockReturnValue({
+      query: {
+        playlist: {
+          findFirst: vi.fn(async () => null),
+        },
+      },
+    });
+  });
+
+  it("returns null instead of creating a default playlist when none exist", async () => {
+    const { getActivePlaylist } = await import("./playlists");
+
+    const result = await getActivePlaylist();
+
+    expect(result).toBeNull();
+    expect(store.set).toHaveBeenCalledWith("game.playlist.activeId", null);
+  });
+});

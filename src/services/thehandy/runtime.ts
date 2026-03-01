@@ -1,4 +1,4 @@
-import { hspAdd, hspFlush, hspPause, hspPlay, hspResume, hspSetup, hspStop, isConnected, issueToken, setHspPaybackRate, setHspTime, setMode } from "./index";
+import { getDeviceInfo, hspAdd, hspFlush, hspPause, hspPlay, hspResume, hspSetup, hspStop, isConnected, issueToken, setHspPaybackRate, setHspTime, setMode } from "./index";
 import type { FunscriptAction } from "../../game/media/playback";
 
 export type HandyAuthBundle = {
@@ -87,6 +87,27 @@ function clampMaxBufferPoints(value: unknown): number {
   return DEFAULT_HSP_MAX_POINTS;
 }
 
+export function resolveInitialPreloadTargetMs(
+  points: Array<{ t: number; x: number }>,
+  seededPointIndex: number,
+  startTimeMs: number,
+): number {
+  const normalizedStartTimeMs = Math.max(0, Math.floor(startTimeMs));
+  const seededPointTimeMs = points[seededPointIndex]?.t ?? 0;
+  let targetTimeMs = Math.max(normalizedStartTimeMs, seededPointTimeMs) + HSP_INITIAL_PREFETCH_MS;
+
+  for (let index = seededPointIndex + 1; index < points.length; index += 1) {
+    const point = points[index];
+    if (!point) continue;
+    if (point.t > normalizedStartTimeMs) {
+      targetTimeMs = Math.max(targetTimeMs, point.t);
+      break;
+    }
+  }
+
+  return targetTimeMs;
+}
+
 export async function issueHandySession(auth: HandyAuthBundle): Promise<HandySession> {
   const connectionRef = requireConnectionRef(auth.connectionKey);
   const appCredential = requireAppCredential(auth.appApiKey);
@@ -142,11 +163,11 @@ export async function issueHandySession(auth: HandyAuthBundle): Promise<HandySes
   };
 }
 
-export async function verifyHandyV3Connection(auth: HandyAuthBundle): Promise<{ connected: boolean }> {
+export async function verifyHandyV3Connection(auth: HandyAuthBundle): Promise<{ connected: boolean; firmwareVersion: string | null }> {
   const connectionRef = requireConnectionRef(auth.connectionKey);
   const appCredential = requireAppCredential(auth.appApiKey);
   const session = await issueHandySession(auth);
-  const response = unwrapPayload(
+  const connectionResponse = unwrapPayload(
     await isConnected({
       auth: createAuthResolver(appCredential, session.clientToken),
       responseStyle: "data",
@@ -160,7 +181,33 @@ export async function verifyHandyV3Connection(auth: HandyAuthBundle): Promise<{ 
     }),
   );
 
-  return { connected: Boolean(response?.result?.connected) };
+  const connected = Boolean(connectionResponse?.result?.connected);
+  if (!connected) {
+    return {
+      connected: false,
+      firmwareVersion: null,
+    };
+  }
+
+  const infoResponse = unwrapPayload(
+    await getDeviceInfo({
+      auth: createAuthResolver(appCredential, session.clientToken),
+      responseStyle: "data",
+      requestValidator: undefined,
+      responseValidator: undefined,
+      headers: {
+        "X-Connection-Key": connectionRef,
+      },
+      query: {
+        timeout: 5000,
+      },
+    }),
+  );
+
+  return {
+    connected,
+    firmwareVersion: infoResponse?.result?.fw_version ?? null,
+  };
 }
 
 async function prepareHspMode(auth: HandyAuthBundle, session: HandySession): Promise<void> {
@@ -315,8 +362,9 @@ async function preloadScript(
   session.tailPointStreamIndex = 0;
   session.uploadedUntilMs = points[nextIdx]?.t ?? 0;
 
-  // Seed the device buffer starting from the skipped time
-  const initialTargetMs = Math.max(skipToMs, session.uploadedUntilMs) + HSP_INITIAL_PREFETCH_MS;
+  // Seed enough data for startup to include the first point after the requested
+  // start time, even when the script begins inside a long interpolation gap.
+  const initialTargetMs = resolveInitialPreloadTargetMs(points, nextIdx, skipToMs);
   const initialBudget = Math.max(HSP_CHUNK_SIZE, Math.floor(Math.min(300, session.maxBufferPoints * 0.25)));
   await appendPointsUpToTime(auth, session, initialTargetMs, initialBudget);
 

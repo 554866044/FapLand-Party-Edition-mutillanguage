@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef } from "react";
+import { useControllerSurface } from "../../../controller";
 import { AnimatedBackground } from "../../../components/AnimatedBackground";
 import { playHoverSound } from "../../../utils/audio";
 import type { StoredPlaylist } from "../../../services/playlists";
@@ -29,8 +30,22 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
     onImportPlaylist,
     onOpenPlaylist,
     onNavigateBack,
-}) => (
-    <div className="relative h-screen overflow-hidden">
+}) => {
+    const scopeRef = useRef<HTMLDivElement | null>(null);
+
+    useControllerSurface({
+        id: "map-editor-playlist-picker",
+        scopeRef,
+        priority: 20,
+        initialFocusId: playlistList[0] ? `map-editor-picker-${playlistList[0].id}` : "map-editor-picker-name",
+        onBack: () => {
+            onNavigateBack();
+            return true;
+        },
+    });
+
+    return (
+    <div ref={scopeRef} className="relative h-screen overflow-hidden">
         <AnimatedBackground videoUris={[]} />
         <main className="relative z-10 flex h-full w-full flex-col px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5">
             <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col rounded-2xl border border-violet-300/25 bg-black/35 p-4 backdrop-blur-lg">
@@ -47,6 +62,8 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                         className="rounded-xl border border-zinc-600/70 bg-zinc-900/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-200 transition-colors hover:border-zinc-300/70 hover:text-white"
                         onMouseEnter={playHoverSound}
                         onClick={onNavigateBack}
+                        data-controller-focus-id="map-editor-picker-back"
+                        data-controller-back="true"
                     >
                         Back
                     </button>
@@ -69,6 +86,8 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                     className="w-full rounded-lg border border-zinc-700/70 bg-zinc-900/60 px-3 py-2 text-left hover:border-cyan-400/60"
                                     onMouseEnter={playHoverSound}
                                     onClick={() => onOpenPlaylist(playlist)}
+                                    data-controller-focus-id={`map-editor-picker-${playlist.id}`}
+                                    data-controller-initial={playlist.id === activePlaylistId ? "true" : undefined}
                                 >
                                     <div className="flex items-center justify-between gap-3">
                                         <p className="text-sm font-semibold text-zinc-100">{playlist.name}</p>
@@ -97,6 +116,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                 value={newPlaylistName}
                                 onChange={(event) => onNewPlaylistNameChange(event.target.value)}
                                 className="mt-1 w-full rounded border border-zinc-600/60 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100"
+                                data-controller-focus-id="map-editor-picker-name"
                             />
                         </label>
                         <button
@@ -105,6 +125,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                             onMouseEnter={playHoverSound}
                             onClick={onCreatePlaylist}
                             disabled={createPlaylistPending}
+                            data-controller-focus-id="map-editor-picker-create"
                         >
                             {createPlaylistPending ? "Creating..." : "Create Playlist"}
                         </button>
@@ -114,6 +135,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                             onMouseEnter={playHoverSound}
                             onClick={onImportPlaylist}
                             disabled={importPending}
+                            data-controller-focus-id="map-editor-picker-import"
                         >
                             {importPending ? "Importing..." : "Import .fplay"}
                         </button>
@@ -122,6 +144,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
             </div>
         </main>
     </div>
-));
+    );
+});
 
 PlaylistPickerView.displayName = "PlaylistPickerView";

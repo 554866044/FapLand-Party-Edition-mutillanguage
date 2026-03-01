@@ -1,8 +1,9 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 
 interface MenuButtonProps {
     label: string;
     onClick?: () => void;
+    disabled?: boolean;
     onHover?: () => void;
     primary?: boolean;
     experimental?: boolean;
@@ -10,6 +11,9 @@ interface MenuButtonProps {
     subLabel?: string;
     statusTone?: "default" | "success" | "warning" | "danger";
     selected?: boolean;
+    controllerFocusId?: string;
+    controllerInitial?: boolean;
+    controllerBack?: boolean;
 }
 
 const toneClasses: Record<NonNullable<MenuButtonProps["statusTone"]>, string> = {
@@ -19,13 +23,30 @@ const toneClasses: Record<NonNullable<MenuButtonProps["statusTone"]>, string> = 
     danger: "border-rose-400/50 bg-rose-400/15 text-rose-100",
 };
 
-export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClick, onHover, primary = false, experimental = false, badge, subLabel, statusTone = "default", selected = false }) => {
+export const MenuButton: React.FC<MenuButtonProps> = React.memo(({
+    label,
+    onClick,
+    disabled = false,
+    onHover,
+    primary = false,
+    experimental = false,
+    badge,
+    subLabel,
+    statusTone = "default",
+    selected = false,
+    controllerFocusId,
+    controllerInitial = false,
+    controllerBack = false,
+}) => {
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const [isFocused, setIsFocused] = useState(false);
+    const isActive = selected || isFocused;
 
     // Ripple effect on click
     const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
         const btn = buttonRef.current;
         if (!btn) return;
+        if (disabled) return;
 
         const ripple = document.createElement('span');
         const rect = btn.getBoundingClientRect();
@@ -46,7 +67,7 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
         setTimeout(() => ripple.remove(), 700);
 
         onClick?.();
-    }, [onClick]);
+    }, [disabled, onClick]);
 
     return (
         <button
@@ -54,6 +75,12 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
             type="button"
             onClick={handleClick}
             onMouseEnter={onHover}
+            disabled={disabled}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            data-controller-focus-id={controllerFocusId}
+            data-controller-initial={controllerInitial ? "true" : undefined}
+            data-controller-back={controllerBack ? "true" : undefined}
             style={{ '--glow': primary ? 'rgba(139,92,246,0.7)' : 'rgba(255,255,255,0.15)' } as React.CSSProperties}
             className={[
                 'relative overflow-hidden w-full',
@@ -61,12 +88,12 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
                 'rounded-xl px-10 py-4',
                 'transition-all duration-200 ease-out',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/60',
-                'cursor-pointer group',
-                selected
+                disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer group',
+                isActive
                     ? primary
                         ? 'scale-[1.03] -translate-y-0.5 shadow-[0_0_40px_rgba(139,92,246,0.65),0_0_80px_rgba(139,92,246,0.2)]'
                         : 'scale-[1.02] -translate-y-0.5 shadow-[0_0_20px_rgba(255,255,255,0.12)]'
-                    : 'hover:scale-[1.01]',
+                    : disabled ? '' : 'hover:scale-[1.01]',
             ].join(' ')}
         >
             {/* Background layer */}
@@ -74,10 +101,10 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
                 className={[
                     'absolute inset-0 rounded-xl transition-all duration-200',
                     primary
-                        ? selected
+                        ? isActive
                             ? 'bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500'
                             : 'bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80'
-                        : selected
+                        : isActive
                             ? 'bg-zinc-800/80'
                             : 'bg-zinc-900/60',
                 ].join(' ')}
@@ -88,10 +115,10 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
                 className={[
                     'absolute inset-0 rounded-xl border transition-all duration-300',
                     primary
-                        ? selected
+                        ? isActive
                             ? 'border-violet-400/60'
                             : 'border-purple-600/40'
-                        : selected
+                        : isActive
                             ? 'border-zinc-500/50'
                             : 'border-zinc-700/30',
                 ].join(' ')}
@@ -101,12 +128,12 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
             <div className={[
                 'absolute inset-x-0 top-0 h-[1px] transition-opacity duration-300',
                 primary
-                    ? selected ? 'bg-gradient-to-r from-transparent via-violet-300/60 to-transparent opacity-100' : 'opacity-40 bg-gradient-to-r from-transparent via-purple-400/40 to-transparent'
-                    : selected ? 'bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-100' : 'opacity-0',
+                    ? isActive ? 'bg-gradient-to-r from-transparent via-violet-300/60 to-transparent opacity-100' : 'opacity-40 bg-gradient-to-r from-transparent via-purple-400/40 to-transparent'
+                    : isActive ? 'bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-100' : 'opacity-0',
             ].join(' ')} />
 
             {/* Glow bloom behind */}
-            {selected && (
+            {isActive && (
                 <div className={[
                     'absolute inset-0 -z-10 rounded-xl blur-xl opacity-60 transition-opacity duration-300',
                     primary ? 'bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600' : 'bg-zinc-700',
@@ -121,15 +148,15 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
                 {/* Left accent mark for selected */}
                 <span className={[
                     'text-xs transition-all duration-200',
-                    selected ? 'opacity-100 w-3' : 'opacity-0 w-0',
+                    isActive ? 'opacity-100 w-3' : 'opacity-0 w-0',
                     primary ? 'text-violet-200' : 'text-zinc-400',
                 ].join(' ')}>▶</span>
 
                 <span className={[
                     'transition-colors duration-200 flex items-center gap-3',
                     primary
-                        ? selected ? 'text-white' : 'text-violet-100'
-                        : selected ? 'text-white' : 'text-zinc-400',
+                        ? isActive ? 'text-white' : 'text-violet-100'
+                        : isActive ? 'text-white' : 'text-zinc-400',
                 ].join(' ')}>
                     <span className="flex flex-col items-start gap-1">
                         <span className="flex items-center gap-3">
@@ -155,7 +182,7 @@ export const MenuButton: React.FC<MenuButtonProps> = React.memo(({ label, onClic
                 </span>
 
                 {primary && (
-                    <span className={`text-sm transition-all duration-300 ${selected ? 'opacity-100 translate-x-0.5' : 'opacity-50 translate-x-0'} ${primary ? 'text-violet-200' : 'text-zinc-500'}`}>
+                    <span className={`text-sm transition-all duration-300 ${isActive ? 'opacity-100 translate-x-0.5' : 'opacity-50 translate-x-0'} ${primary ? 'text-violet-200' : 'text-zinc-500'}`}>
                         →
                     </span>
                 )}

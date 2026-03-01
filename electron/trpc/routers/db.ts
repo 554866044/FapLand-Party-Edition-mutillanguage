@@ -7,17 +7,22 @@ import { getDb } from "../../services/db";
 import { exportInstalledDatabase } from "../../services/installExport";
 import { getDisabledRoundIdSet, resolveResourceUris } from "../../services/integrations";
 import { getStore } from "../../services/store";
+import { resolveVideoDurationMsForUri } from "../../services/videoDuration";
 import {
     addAutoScanFolder,
+    addAutoScanFolderAndScan,
     getAutoScanFolders,
     getInstallScanStatus,
     importInstallSidecarFile,
+    repairTemplateHero,
+    repairTemplateRound,
     importLegacyFolderWithPlan,
     inspectInstallFolder,
     removeAutoScanFolder,
     requestInstallScanAbort,
     scanInstallFolderOnceWithLegacySupport,
     scanInstallSources,
+    retryTemplateLinking,
 } from "../../services/installer";
 import { publicProcedure, router } from "../trpc";
 import { eq, desc, asc, inArray } from "drizzle-orm";
@@ -39,6 +44,19 @@ const ZRoundType = z.enum(["Normal", "Interjection", "Cum"]);
 function getInstallExportBaseDir(): string {
     const exportBaseDir = app.isPackaged ? app.getPath("userData") : app.getAppPath();
     return path.join(exportBaseDir, "export");
+}
+
+async function hydrateResourceDurationMs(
+    db: ReturnType<typeof getDb>,
+    resources: Array<{ id: string; videoUri: string; durationMs: number | null }>,
+): Promise<void> {
+    await Promise.all(resources.map(async (entry) => {
+        if (typeof entry.durationMs === "number" && entry.durationMs > 0) return;
+        const durationMs = await resolveVideoDurationMsForUri(entry.videoUri);
+        if (durationMs === null) return;
+        entry.durationMs = durationMs;
+        await db.update(resource).set({ durationMs }).where(eq(resource.id, entry.id));
+    }));
 }
 
 export const dbRouter = router({
@@ -66,6 +84,7 @@ export const dbRouter = router({
         .input(z.object({
             finishedAtIso: z.string().min(1).optional(),
             score: z.number().int().min(0),
+            survivedDurationSec: z.number().int().min(0).optional().nullable(),
             highscoreBefore: z.number().int().min(0),
             highscoreAfter: z.number().int().min(0),
             wasNewHighscore: z.boolean(),
@@ -81,6 +100,7 @@ export const dbRouter = router({
             const [created] = await db.insert(singlePlayerRunHistory).values({
                 finishedAt: input.finishedAtIso ? new Date(input.finishedAtIso) : new Date(),
                 score: input.score,
+                survivedDurationSec: input.survivedDurationSec ?? null,
                 highscoreBefore: input.highscoreBefore,
                 highscoreAfter: input.highscoreAfter,
                 wasNewHighscore: input.wasNewHighscore,
@@ -347,6 +367,7 @@ export const dbRouter = router({
             });
 
             if (!firstResource) return null;
+            await hydrateResourceDurationMs(db, [firstResource]);
             return {
                 ...firstResource,
                 ...resolveResourceUris({
@@ -370,6 +391,7 @@ export const dbRouter = router({
             limit: 5,
         });
 
+        await hydrateResourceDurationMs(db, resources);
         return resources.map((r) => ({
             ...r,
             ...resolveResourceUris({
@@ -380,10 +402,14 @@ export const dbRouter = router({
     }),
 
     getInstalledRounds: publicProcedure
-        .input(z.object({ includeDisabled: z.boolean().optional() }).optional())
+        .input(z.object({
+            includeDisabled: z.boolean().optional(),
+            includeTemplates: z.boolean().optional(),
+        }).optional())
         .query(async ({ input }) => {
             const db = getDb();
             const includeDisabled = input?.includeDisabled ?? false;
+            const includeTemplates = input?.includeTemplates ?? false;
             const disabledRoundIds = getDisabledRoundIdSet();
 
             const rounds = await db.query.round.findMany({
@@ -397,13 +423,16 @@ export const dbRouter = router({
             });
 
             const filteredRounds = rounds.filter((r) => {
+                const isTemplate = r.resources.length === 0;
+                if (!includeTemplates && isTemplate) return false;
                 if (!includeDisabled) {
                     if (disabledRoundIds.has(r.id)) return false;
-                    if (r.resources.length === 0) return false;
+                    if (!includeTemplates && r.resources.length === 0) return false;
                 }
                 return true;
             });
 
+            await hydrateResourceDurationMs(db, filteredRounds.flatMap((entry) => entry.resources));
             return filteredRounds.map((r) => ({
                 ...r,
                 resources: r.resources.map((res) => ({
@@ -490,6 +519,61 @@ export const dbRouter = router({
             }
         }),
 
+    retryTemplateLinking: publicProcedure
+        .input(z.object({
+            roundId: z.string().min(1).optional(),
+            heroId: z.string().min(1).optional(),
+        }).optional())
+        .mutation(async ({ input }) => {
+            try {
+                return await retryTemplateLinking({
+                    roundId: input?.roundId,
+                    heroId: input?.heroId,
+                });
+            } catch (error) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: error instanceof Error ? error.message : "Failed to retry template linking.",
+                });
+            }
+        }),
+
+    repairTemplateRound: publicProcedure
+        .input(z.object({
+            roundId: z.string().min(1),
+            installedRoundId: z.string().min(1),
+        }))
+        .mutation(async ({ input }) => {
+            try {
+                return await repairTemplateRound(input.roundId, input.installedRoundId);
+            } catch (error) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: error instanceof Error ? error.message : "Failed to repair template round.",
+                });
+            }
+        }),
+
+    repairTemplateHero: publicProcedure
+        .input(z.object({
+            heroId: z.string().min(1),
+            sourceHeroId: z.string().min(1),
+            assignments: z.array(z.object({
+                roundId: z.string().min(1),
+                installedRoundId: z.string().min(1),
+            })).optional(),
+        }))
+        .mutation(async ({ input }) => {
+            try {
+                return await repairTemplateHero(input.heroId, input.sourceHeroId, input.assignments);
+            } catch (error) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: error instanceof Error ? error.message : "Failed to repair template hero.",
+                });
+            }
+        }),
+
     importLegacyFolderWithPlan: publicProcedure
         .input(z.object({
             folderPath: z.string().min(1),
@@ -529,6 +613,19 @@ export const dbRouter = router({
             }
         }),
 
+    addAutoScanFolderAndScan: publicProcedure
+        .input(z.object({ folderPath: z.string().min(1) }))
+        .mutation(async ({ input }) => {
+            try {
+                return await addAutoScanFolderAndScan(input.folderPath);
+            } catch (error) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: error instanceof Error ? error.message : "Failed to add and import auto-scan folder.",
+                });
+            }
+        }),
+
     removeAutoScanFolder: publicProcedure
         .input(z.object({ folderPath: z.string().min(1) }))
         .mutation(({ input }) => {
@@ -563,24 +660,53 @@ export const dbRouter = router({
         return { path: exportBaseDir };
     }),
 
-    clearAllData: publicProcedure.mutation(async () => {
-        const db = getDb();
+    clearAllData: publicProcedure
+        .input(z.object({
+            rounds: z.boolean().optional(),
+            playlists: z.boolean().optional(),
+            stats: z.boolean().optional(),
+            history: z.boolean().optional(),
+            cache: z.boolean().optional(),
+            settings: z.boolean().optional(),
+        }).optional())
+        .mutation(async ({ input }) => {
+            const db = getDb();
+            const {
+                rounds = true,
+                playlists = true,
+                stats = true,
+                history = true,
+                cache = true,
+                settings = true,
+            } = input ?? {};
 
-        await db.transaction(async (tx) => {
-            await tx.delete(playlistTrackPlay);
-            await tx.delete(resource);
-            await tx.delete(round);
-            await tx.delete(hero);
-            await tx.delete(playlist);
-            await tx.delete(singlePlayerRunHistory);
-            await tx.delete(multiplayerMatchCache);
-            await tx.delete(resultSyncQueue);
-            await tx.delete(gameProfile);
-        });
+            await db.transaction(async (tx) => {
+                if (cache) {
+                    await tx.delete(multiplayerMatchCache);
+                    await tx.delete(resultSyncQueue);
+                }
+                if (history) {
+                    await tx.delete(singlePlayerRunHistory);
+                }
+                if (playlists) {
+                    await tx.delete(playlistTrackPlay);
+                    await tx.delete(playlist);
+                }
+                if (rounds) {
+                    await tx.delete(resource);
+                    await tx.delete(round);
+                    await tx.delete(hero);
+                }
+                if (stats) {
+                    await tx.delete(gameProfile);
+                }
+            });
 
-        getStore().clear();
-        return { cleared: true };
-    }),
+            if (settings) {
+                getStore().clear();
+            }
+            return { cleared: true };
+        }),
 
     convertHeroGroupToRound: publicProcedure
         .input(

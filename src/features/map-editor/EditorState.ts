@@ -18,8 +18,7 @@ export type EditorNodeKind =
   | "safePoint"
   | "round"
   | "randomRound"
-  | "perk"
-  | "event";
+  | "perk";
 
 export interface EditorStyleHint {
   x?: number;
@@ -37,9 +36,11 @@ export interface EditorNode {
   kind: EditorNodeKind;
   roundRef?: PortableRoundRef;
   forceStop?: boolean;
+  skippable?: boolean;
   randomPoolId?: string;
   checkpointRestMs?: number;
   visualId?: string;
+  giftGuaranteedPerk?: boolean;
   styleHint?: EditorStyleHint;
 }
 
@@ -159,7 +160,6 @@ export const sanitizeNodeKind = (kind: string | undefined): EditorNodeKind => {
     || kind === "round"
     || kind === "randomRound"
     || kind === "perk"
-    || kind === "event"
   ) {
     return kind;
   }
@@ -174,9 +174,11 @@ export const toEditorGraphConfig = (input: GraphBoardConfig): EditorGraphConfig 
     kind: sanitizeNodeKind(node.kind),
     roundRef: node.roundRef ? { ...node.roundRef } : undefined,
     forceStop: node.forceStop,
+    skippable: node.skippable,
     randomPoolId: node.randomPoolId,
     checkpointRestMs: typeof node.checkpointRestMs === "number" ? node.checkpointRestMs : undefined,
     visualId: node.visualId,
+    giftGuaranteedPerk: node.giftGuaranteedPerk,
     styleHint: {
       x: toFiniteNumber(node.styleHint?.x) ?? index * 220,
       y: toFiniteNumber(node.styleHint?.y) ?? 0,
@@ -219,15 +221,15 @@ export const toEditorGraphConfig = (input: GraphBoardConfig): EditorGraphConfig 
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
       maxAntiPerkProbability: 0.75,
     },
     economy: {
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 };
@@ -300,6 +302,16 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
     });
   }
 
+  const finalNode = nodes[nodes.length - 1];
+  const finalX = toFiniteNumber(finalNode?.styleHint?.x) ?? 160;
+  const finalY = toFiniteNumber(finalNode?.styleHint?.y) ?? 360;
+  nodes.push({
+    id: "end",
+    name: "End",
+    kind: "end",
+    styleHint: buildDefaultNodeStyleHint({ x: finalX + DEFAULT_LAYOUT_SPACING_X, y: finalY }),
+  });
+
   const edges = nodes.slice(0, -1).map((node, index) => ({
     id: `edge-${node.id}-${nodes[index + 1]?.id ?? "end"}`,
     fromNodeId: node.id,
@@ -315,7 +327,7 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
     edges,
     randomRoundPools: [],
     cumRoundRefs: config.cumRoundRefs.map((ref) => ({ ...ref })),
-    pathChoiceTimeoutMs: 6000,
+    pathChoiceTimeoutMs: 12000,
     perkSelection: {
       optionsPerPick: 3,
       triggerChancePerCompletedRound: 0.35,
@@ -325,15 +337,15 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
       maxAntiPerkProbability: 0.75,
     },
     economy: {
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 };
@@ -346,10 +358,12 @@ export const toGraphBoardConfig = (input: EditorGraphConfig): GraphBoardConfig =
     name: node.name,
     kind: sanitizeNodeKind(node.kind),
     roundRef: node.roundRef ? { ...node.roundRef } : undefined,
-    forceStop: node.kind === "round" ? node.forceStop : undefined,
+    forceStop: node.kind === "round" || node.kind === "perk" ? node.forceStop : undefined,
+    skippable: node.kind === "round" ? node.skippable : undefined,
     randomPoolId: node.randomPoolId,
     checkpointRestMs: typeof node.checkpointRestMs === "number" ? Math.max(0, Math.floor(node.checkpointRestMs)) : undefined,
     visualId: node.visualId,
+    giftGuaranteedPerk: node.kind === "perk" ? node.giftGuaranteedPerk : undefined,
     styleHint: normalizeStyleHint(node.styleHint),
   })),
   edges: input.edges.map((edge) => ({

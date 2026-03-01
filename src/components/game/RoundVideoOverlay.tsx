@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useControllerSurface } from "../../controller";
 import type { ActiveRound, CompletedRoundSummary, CumRoundOutcome, PlayerState } from "../../game/types";
 import type { InstalledRound } from "../../services/db";
 import {
@@ -7,6 +8,7 @@ import {
   isVideoMedia,
   type BooruMediaItem,
 } from "../../services/booru";
+import { useForegroundVideoRegistration } from "../../hooks/useForegroundVideoRegistration";
 import { usePlayableVideoFallback } from "../../hooks/usePlayableVideoFallback";
 import { useHandy } from "../../contexts/HandyContext";
 import {
@@ -30,11 +32,26 @@ import {
 } from "../../services/thehandy/runtime";
 import {
   playDiceResultSound,
+  playAntiPerkBeatSound,
   playHoverSound,
   playPerkActionSound,
   playRoundStartSound,
   playSelectSound,
 } from "../../utils/audio";
+import {
+  DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
+  DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+} from "../../constants/roundVideoOverlaySettings";
+import { formatDurationLabel } from "../../utils/duration";
+import { isGameDevelopmentMode } from "../../utils/devFeatures";
+import {
+  extractBeatbarMotionEvents,
+  getAntiPerkSequenceDefinition,
+  type AntiPerkSequenceDefinition,
+  type AntiPerkSequenceId,
+  type BeatbarMotionEvent,
+  type BeatHit,
+} from "./antiPerkSequences";
 
 type RoundVideoOverlayProps = {
   activeRound: ActiveRound | null;
@@ -47,8 +64,9 @@ type RoundVideoOverlayProps = {
     onUseSkip: () => void;
   };
   intermediaryProbability: number;
-  boardSequence?: "milker" | "jackhammer" | "no-rest" | null;
-  onCompleteBoardSequence?: (perkId: "milker" | "jackhammer" | "no-rest") => void;
+  boardSequence?: "milker" | "jackhammer" | null;
+  idleBoardSequence?: "no-rest" | null;
+  onCompleteBoardSequence?: (perkId: "milker" | "jackhammer") => void;
   allowAutomaticIntermediaries?: boolean;
   showCloseButton?: boolean;
   onClose?: () => void;
@@ -66,6 +84,10 @@ type RoundVideoOverlayProps = {
     position: number | null;
   }) => void;
   onUiVisibilityChange?: (visible: boolean) => void;
+  onPreviewStateChange?: (state: { active: boolean; loading: boolean }) => void;
+  initialShowProgressBarAlways?: boolean;
+  initialShowAntiPerkBeatbar?: boolean;
+  lastLogMessage?: string;
 };
 
 type LoadingMediaItem = BooruMediaItem | {
@@ -92,6 +114,16 @@ type TransitionPlan = {
 
 type HandySyncState = "disconnected" | "missing-key" | "connecting" | "synced" | "error";
 
+type ActiveAntiPerkSequenceUi = {
+  id: AntiPerkSequenceId;
+  definition: AntiPerkSequenceDefinition;
+  durationMs: number;
+  startedAtMs: number;
+  actions: FunscriptAction[];
+  beatHits: BeatHit[];
+  beatbarEvents: BeatbarMotionEvent[];
+};
+
 const INITIAL_UI_SHOW_MS = 5000;
 const UI_SHOW_AFTER_MOUSEMOVE_MS = 2200;
 const LOADING_MEDIA_ROTATE_MS = 2400;
@@ -103,6 +135,112 @@ const HANDY_SYNC_STALE_MS = 2_000;
 const MAIN_WINDOW_SEEK_EPSILON_SEC = 0.05;
 const MAIN_WINDOW_END_TOLERANCE_SEC = 0.04;
 const MANUAL_PAUSE_DURATION_MS = 15_000;
+const ANTI_PERK_BEATBAR_LEAD_MS = 1_800;
+const ANTI_PERK_BEATBAR_TRAIL_MS = 300;
+const BOARD_VIDEO_VOLUME = 1;
+
+function teardownVideoElement(video: HTMLVideoElement | null) {
+  if (!video) return;
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+}
+
+function getBeatbarImpactTimes(events: BeatbarMotionEvent[]): number[] {
+  return events
+    .filter((event) => event.kind === "downstroke")
+    .map((event) => event.at);
+}
+
+function AntiPerkBeatbar({
+  actions,
+  beatbarEvents,
+  beatHits,
+  elapsedMs,
+  showBeatbar,
+  showBall,
+  style,
+}: {
+  actions: FunscriptAction[];
+  beatbarEvents: BeatbarMotionEvent[];
+  beatHits: BeatHit[];
+  elapsedMs: number;
+  showBeatbar: boolean;
+  showBall: boolean;
+  style: "jackhammer" | "milker" | "neutral";
+}) {
+  const noteColor = style === "jackhammer" ? "rgba(251,113,133,0.98)" : "rgba(34,211,238,0.98)";
+  const glowColor = style === "jackhammer" ? "rgba(251,113,133,0.52)" : "rgba(34,211,238,0.46)";
+  const activeIndex = beatHits.findIndex((hit) => elapsedMs < hit.at);
+  const hitPulse = activeIndex >= 0 && activeIndex < beatHits.length
+    ? Math.max(0, 1 - Math.abs(beatHits[activeIndex]!.at - elapsedMs) / 110)
+    : 0;
+  const currentPosition = actions.length > 0
+    ? getFunscriptPositionAtMs({ actions }, elapsedMs) ?? 50
+    : 50;
+  const visibleEvents = beatbarEvents.filter(
+    (event) => event.at >= elapsedMs - ANTI_PERK_BEATBAR_TRAIL_MS && event.at <= elapsedMs + ANTI_PERK_BEATBAR_LEAD_MS,
+  );
+  const positionToPercent = (pos: number) => 88 - pos * 0.76;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 bottom-[12%] z-[62] mx-auto w-[min(92vw,960px)] px-4"
+      data-testid="anti-perk-beatbar"
+    >
+      <div
+        className="relative h-24 overflow-hidden"
+      >
+        <div
+          className="absolute bottom-[12%] left-1/2 top-[12%] w-[4px] -translate-x-1/2 rounded-full"
+          style={{
+            background: noteColor,
+            boxShadow: `0 0 ${24 + hitPulse * 20}px ${glowColor}`,
+            opacity: 0.88 + hitPulse * 0.12,
+          }}
+        />
+        {showBeatbar && visibleEvents.map((event) => {
+          if (event.kind === "vibration") return null;
+
+          const relativeMs = event.at - elapsedMs;
+          const normalized = (relativeMs + ANTI_PERK_BEATBAR_TRAIL_MS) / (ANTI_PERK_BEATBAR_LEAD_MS + ANTI_PERK_BEATBAR_TRAIL_MS);
+          const left = normalized * 100;
+          const proximity = 1 - Math.min(1, Math.abs(relativeMs) / (ANTI_PERK_BEATBAR_LEAD_MS + ANTI_PERK_BEATBAR_TRAIL_MS));
+
+          return (
+            <div
+              key={`${event.at}-${event.toPos}-downstroke`}
+              className="absolute -translate-x-1/2 rounded-full"
+              data-testid="anti-perk-beat-note"
+              style={{
+                left: `${left}%`,
+                top: "12%",
+                bottom: "12%",
+                width: `${style === "jackhammer" ? 9 : 11 + event.strength * 2}px`,
+                background: `linear-gradient(180deg, rgba(255,255,255,0.88), ${noteColor} 28%, rgba(255,255,255,0.28) 100%)`,
+                boxShadow: `0 0 ${12 + proximity * 16}px ${glowColor}`,
+                opacity: 0.4 + proximity * 0.52,
+              }}
+            />
+          );
+        })}
+        {showBall && (
+          <div
+            className="absolute left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40"
+            data-testid="anti-perk-position-ball"
+            style={{
+              top: `${positionToPercent(currentPosition)}%`,
+              background: noteColor,
+              boxShadow: `0 0 ${14 + hitPulse * 18}px ${glowColor}`,
+              transform: `translate(-50%, -50%) scale(${1 + hitPulse * 0.24})`,
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 function applyTimelineIntensityCap(
   timeline: Awaited<ReturnType<typeof loadFunscriptTimeline>>,
@@ -120,40 +258,6 @@ function applyTimelineIntensityCap(
   };
 }
 
-function randomRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-function createGeneratedSequenceActions(
-  durationMs: number,
-  mode: "milker" | "jackhammer" | "no-rest",
-): FunscriptAction[] {
-  const clampedDurationMs = Math.max(2000, durationMs);
-  const aggressive = mode === "jackhammer";
-  const gentle = mode === "no-rest";
-  const minStepMs = gentle ? 180 : aggressive ? 85 : 110;
-  const maxStepMs = gentle ? 280 : aggressive ? 145 : 220;
-  const minPos = gentle ? 35 : aggressive ? 22 : 28;
-  const maxPos = gentle ? 65 : aggressive ? 78 : 72;
-  const baseAmp = gentle ? 8 : aggressive ? 22 : 16;
-  const extraAmp = gentle ? 8 : aggressive ? 26 : 20;
-
-  const actions: FunscriptAction[] = [{ at: 0, pos: 50 }];
-  let timeMs = 0;
-
-  while (timeMs < clampedDurationMs) {
-    timeMs = Math.min(clampedDurationMs, Math.floor(timeMs + randomRange(minStepMs, maxStepMs)));
-    const intensity = Math.max(0, Math.min(1, timeMs / clampedDurationMs));
-    const center = 50 + randomRange(-10, 10) * intensity;
-    const amplitude = baseAmp + extraAmp * intensity;
-    const rawPos = center + randomRange(-amplitude, amplitude);
-    const pos = Math.max(minPos, Math.min(maxPos, rawPos));
-    actions.push({ at: timeMs, pos });
-  }
-
-  return actions;
-}
-
 export function RoundVideoOverlay({
   activeRound,
   installedRounds,
@@ -161,6 +265,7 @@ export function RoundVideoOverlay({
   roundControl,
   intermediaryProbability,
   boardSequence = null,
+  idleBoardSequence = null,
   onCompleteBoardSequence,
   allowAutomaticIntermediaries = true,
   showCloseButton = false,
@@ -176,16 +281,26 @@ export function RoundVideoOverlay({
   extraModifiers = [],
   onFunscriptFrame,
   onUiVisibilityChange,
+  onPreviewStateChange,
+  initialShowProgressBarAlways = DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+  initialShowAntiPerkBeatbar = DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
+  lastLogMessage,
 }: RoundVideoOverlayProps) {
-  const { connectionKey, appApiKey, connected: handyConnected, setSyncStatus } = useHandy();
-  const isDevelopmentMode =
-    import.meta.env.DEV ||
-    import.meta.env.MODE === "development" ||
-    import.meta.env.VITE_GAME_ENV === "development";
+  const {
+    connectionKey,
+    appApiKey,
+    connected: handyConnected,
+    manuallyStopped: handyManuallyStopped,
+    setSyncStatus,
+    toggleManualStop,
+  } = useHandy();
+  const isDevelopmentMode = isGameDevelopmentMode();
   const canUseDebugRoundControls = isDevelopmentMode || allowDebugRoundControls;
 
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const intermediaryVideoRef = useRef<HTMLVideoElement>(null);
+  const foregroundMainVideo = useForegroundVideoRegistration(`game-main:${activeRound?.roundId ?? "none"}:${activeRound?.fieldId ?? "none"}`);
+  const foregroundIntermediaryVideo = useForegroundVideoRegistration(`game-intermediary:${activeRound?.roundId ?? "none"}:${activeRound?.fieldId ?? "none"}`);
   const initializedRoundKeyRef = useRef<string | null>(null);
   const forceHandySyncMsRef = useRef<number | null>(null);
   const allowPauseRef = useRef(false);
@@ -201,6 +316,11 @@ export function RoundVideoOverlay({
   const uiHideTimerRef = useRef<number | null>(null);
   const manualPauseTimerRef = useRef<number | null>(null);
   const generatedSequenceTimerRef = useRef<number | null>(null);
+  const generatedSequenceSyncTokenRef = useRef(0);
+  const activeGeneratedSequenceRef = useRef<AntiPerkSequenceId | null>(null);
+  const onCompleteBoardSequenceRef = useRef(onCompleteBoardSequence);
+  const antiPerkBeatAnimationFrameRef = useRef<number | null>(null);
+  const lastPlayedBeatIndexRef = useRef(-1);
   const lastMouseMoveAtRef = useRef(0);
 
   const lastPlaybackRateLabelRef = useRef("1.00");
@@ -220,6 +340,8 @@ export function RoundVideoOverlay({
   const [activeVideoUri, setActiveVideoUri] = useState<string | null>(null);
   const [status, setStatus] = useState("Preparing playback...");
   const [playbackRateLabel, setPlaybackRateLabel] = useState("1.00");
+  const [playbackTimeLabel, setPlaybackTimeLabel] = useState("0:00 / 0:00");
+  const [playbackProgress, setPlaybackProgress] = useState(0);
   const [funscriptCount, setFunscriptCount] = useState(0);
   const [funscriptPosition, setFunscriptPosition] = useState<number | null>(null);
   const [randomIntermediaryQueue, setRandomIntermediaryQueue] = useState<IntermediaryTrigger[]>([]);
@@ -228,8 +350,15 @@ export function RoundVideoOverlay({
   const [loadingMedia, setLoadingMedia] = useState<LoadingMediaItem[]>([]);
   const [loadingMediaIndex, setLoadingMediaIndex] = useState(0);
   const [isUiVisible, setIsUiVisible] = useState(true);
+  const [showProgressBarAlways, setShowProgressBarAlways] = useState(initialShowProgressBarAlways);
+  const [showAntiPerkBeatbar, setShowAntiPerkBeatbar] = useState(initialShowAntiPerkBeatbar);
   const [isRemoteVideoLoading, setIsRemoteVideoLoading] = useState(false);
   const [pendingCumRoundSummary, setPendingCumRoundSummary] = useState<CompletedRoundSummary | null>(null);
+  const [activeAntiPerkSequence, setActiveAntiPerkSequence] = useState<ActiveAntiPerkSequenceUi | null>(null);
+  const [antiPerkBeatElapsedMs, setAntiPerkBeatElapsedMs] = useState(0);
+  const [antiPerkAlert, setAntiPerkAlert] = useState<{ text: string; startTime: number } | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const cumOutcomeRef = useRef<HTMLDivElement | null>(null);
 
   const [timeline, setTimeline] = useState<Awaited<ReturnType<typeof loadFunscriptTimeline>>>(null);
   const [timelineUri, setTimelineUri] = useState<string | null>(null);
@@ -237,6 +366,10 @@ export function RoundVideoOverlay({
   const [handySyncState, setHandySyncState] = useState<HandySyncState>("disconnected");
   const [handySyncError, setHandySyncError] = useState<string | null>(null);
   const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
+
+  useEffect(() => {
+    onCompleteBoardSequenceRef.current = onCompleteBoardSequence;
+  }, [onCompleteBoardSequence]);
 
   const resolvedRound = useMemo(() => {
     if (!activeRound) return null;
@@ -355,6 +488,7 @@ export function RoundVideoOverlay({
   const shouldUseHandySync =
     hasUsableActiveTimeline &&
     handyConnected &&
+    !handyManuallyStopped &&
     (connectionKey.trim().length > 0 && appApiKey.trim().length > 0);
   const isWaitingForHandyStart =
     shouldUseHandySync &&
@@ -365,6 +499,11 @@ export function RoundVideoOverlay({
       : handySyncState === "connecting"
         ? "Aligning timeline with TheHandy before playback starts."
         : "Preparing TheHandy synchronization.";
+  const isOnlyNoRest = useMemo(
+    () => idleBoardSequence === "no-rest" && !activeRound && !boardSequence,
+    [idleBoardSequence, activeRound, boardSequence],
+  );
+
   const fallbackLoadingMedia = useMemo<LoadingMediaItem[]>(
     () =>
       intermediaryResourcePool.slice(0, 24).map((resource, index) => ({
@@ -406,10 +545,21 @@ export function RoundVideoOverlay({
   }, []);
 
   const clearGeneratedSequenceTimer = useCallback(() => {
+    generatedSequenceSyncTokenRef.current += 1;
     if (generatedSequenceTimerRef.current !== null) {
       window.clearInterval(generatedSequenceTimerRef.current);
       generatedSequenceTimerRef.current = null;
     }
+  }, []);
+
+  const clearAntiPerkBeatUi = useCallback(() => {
+    if (antiPerkBeatAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(antiPerkBeatAnimationFrameRef.current);
+      antiPerkBeatAnimationFrameRef.current = null;
+    }
+    lastPlayedBeatIndexRef.current = -1;
+    setActiveAntiPerkSequence(null);
+    setAntiPerkBeatElapsedMs(0);
   }, []);
 
   useEffect(() => {
@@ -520,9 +670,29 @@ export function RoundVideoOverlay({
     return initPromise;
   }, [appApiKey, connectionKey, handyConnected, resetHandySync]);
 
+  const createActiveAntiPerkSequenceUi = useCallback((sequenceId: AntiPerkSequenceId): ActiveAntiPerkSequenceUi => {
+    const definition = getAntiPerkSequenceDefinition(sequenceId);
+    const durationMs = definition.durationSec * 1000;
+    const actions = definition.createActions(durationMs);
+    const beatHits = definition.extractBeatHits(actions);
+    const startedAtMs = performance.now();
+    return {
+      id: sequenceId,
+      definition,
+      durationMs,
+      startedAtMs,
+      actions,
+      beatHits,
+      beatbarEvents: extractBeatbarMotionEvents(actions),
+    };
+  }, []);
+
   const startGeneratedSequenceSync = useCallback((input: {
-    mode: "milker" | "jackhammer" | "no-rest";
+    sequenceId: AntiPerkSequenceId;
     durationMs: number;
+    actions: FunscriptAction[];
+    startedAtMs: number;
+    loop?: boolean;
   }) => {
     clearGeneratedSequenceTimer();
     if (!handyConnected) return;
@@ -530,50 +700,85 @@ export function RoundVideoOverlay({
     const connKey = connectionKey.trim();
     if (!appKey || !connKey) return null;
 
-    const actions = createGeneratedSequenceActions(input.durationMs, input.mode);
-    const sourceId = `anti-${input.mode}-${Date.now()}`;
-    const startedAt = performance.now();
+    const syncToken = generatedSequenceSyncTokenRef.current;
+    const sourceId = `anti-${input.sequenceId}-${Date.now()}`;
+    let preloadStarted = false;
+    let syncInFlight = false;
+    let queuedElapsedMs: number | null = null;
 
-    const tick = () => {
-      const elapsedMs = Math.max(0, Math.min(input.durationMs, Math.floor(performance.now() - startedAt)));
+    const runSync = (elapsedMs: number) => {
+      if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+      if (syncInFlight) {
+        queuedElapsedMs = elapsedMs;
+        return;
+      }
 
+      syncInFlight = true;
       void (async () => {
         try {
           const session = await ensureHandySession();
-          if (!session) return;
-          await preloadHspScript(
-            { connectionKey: connKey, appApiKey: appKey },
-            session,
-            sourceId,
-            actions,
-            0,
-          );
+          if (!session || generatedSequenceSyncTokenRef.current !== syncToken) return;
+          if (!preloadStarted) {
+            preloadStarted = true;
+            await preloadHspScript(
+              { connectionKey: connKey, appApiKey: appKey },
+              session,
+              sourceId,
+              input.actions,
+              0,
+            );
+            if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+          }
           await sendHspSync(
             { connectionKey: connKey, appApiKey: appKey },
             session,
             elapsedMs,
             1,
             sourceId,
-            actions,
+            input.actions,
           );
+          if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+          const syncedAt = Date.now();
+          handyLastPushAtRef.current = syncedAt;
+          handyLastSuccessAtRef.current = syncedAt;
+          handyLastPushPosRef.current = getFunscriptPositionAtMs({ actions: input.actions }, elapsedMs);
           setHandySyncState("synced");
           setHandySyncError(null);
+          setSyncStatus({ synced: true, error: null });
         } catch (error) {
+          if (generatedSequenceSyncTokenRef.current !== syncToken) return;
           const message = error instanceof Error ? error.message : "Generated sequence sync failed.";
           setHandySyncState("error");
           setHandySyncError(message);
+          setSyncStatus({ synced: false, error: message });
+        } finally {
+          syncInFlight = false;
+          if (generatedSequenceSyncTokenRef.current === syncToken && queuedElapsedMs !== null) {
+            const nextElapsedMs = queuedElapsedMs;
+            queuedElapsedMs = null;
+            runSync(nextElapsedMs);
+          }
         }
       })();
     };
 
+    const tick = () => {
+      const rawElapsedMs = Math.max(0, Math.floor(performance.now() - input.startedAtMs));
+      const elapsedMs = input.loop
+        ? (input.durationMs > 0 ? rawElapsedMs % input.durationMs : 0)
+        : Math.max(0, Math.min(input.durationMs, rawElapsedMs));
+      runSync(elapsedMs);
+    };
+
     tick();
-    generatedSequenceTimerRef.current = window.setInterval(tick, 120);
+    generatedSequenceTimerRef.current = window.setInterval(tick, HANDY_PUSH_INTERVAL_MS);
   }, [
     appApiKey,
     clearGeneratedSequenceTimer,
     connectionKey,
     ensureHandySession,
     handyConnected,
+    setSyncStatus,
   ]);
 
   const applySegmentSwitch = useCallback((plan: TransitionPlan) => {
@@ -896,8 +1101,9 @@ export function RoundVideoOverlay({
       clearUiHideTimer();
       clearManualPauseTimer();
       clearGeneratedSequenceTimer();
+      clearAntiPerkBeatUi();
     };
-  }, [clearCountdownTimer, clearGeneratedSequenceTimer, clearLoadingMediaTimers, clearManualPauseTimer, clearUiHideTimer]);
+  }, [clearAntiPerkBeatUi, clearCountdownTimer, clearGeneratedSequenceTimer, clearLoadingMediaTimers, clearManualPauseTimer, clearUiHideTimer]);
 
   useEffect(() => {
     if (!activeRound) {
@@ -918,23 +1124,95 @@ export function RoundVideoOverlay({
   }, [isUiVisible, onUiVisibilityChange]);
 
   useEffect(() => {
+    setShowProgressBarAlways(initialShowProgressBarAlways);
+  }, [initialShowProgressBarAlways]);
+
+  useEffect(() => {
+    setShowAntiPerkBeatbar(initialShowAntiPerkBeatbar);
+  }, [initialShowAntiPerkBeatbar]);
+
+  useEffect(() => {
+    if (!activeAntiPerkSequence) {
+      setAntiPerkBeatElapsedMs(0);
+      return;
+    }
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const elapsedMs = Math.max(0, Math.min(
+        activeAntiPerkSequence.durationMs,
+        Math.floor(performance.now() - activeAntiPerkSequence.startedAtMs),
+      ));
+      setAntiPerkBeatElapsedMs(elapsedMs);
+      if (elapsedMs >= activeAntiPerkSequence.durationMs) {
+        antiPerkBeatAnimationFrameRef.current = null;
+        return;
+      }
+      antiPerkBeatAnimationFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    lastPlayedBeatIndexRef.current = -1;
+    antiPerkBeatAnimationFrameRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      if (antiPerkBeatAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(antiPerkBeatAnimationFrameRef.current);
+        antiPerkBeatAnimationFrameRef.current = null;
+      }
+    };
+  }, [activeAntiPerkSequence]);
+
+  useEffect(() => {
+    if (!activeAntiPerkSequence) return;
+    if (handyConnected) return;
+    if (!showAntiPerkBeatbar) return;
+    const impactTimes = getBeatbarImpactTimes(activeAntiPerkSequence.beatbarEvents);
+    if (impactTimes.length === 0) return;
+
+    let nextIndex = lastPlayedBeatIndexRef.current + 1;
+    while (nextIndex < impactTimes.length && impactTimes[nextIndex]! <= antiPerkBeatElapsedMs) {
+      playAntiPerkBeatSound();
+      lastPlayedBeatIndexRef.current = nextIndex;
+      nextIndex += 1;
+    }
+  }, [activeAntiPerkSequence, antiPerkBeatElapsedMs, handyConnected, showAntiPerkBeatbar]);
+
+  useEffect(() => {
+    if (!activeAntiPerkSequence) return;
+    if (loadingCountdown === null) return;
+    if (generatedSequenceTimerRef.current !== null) return;
+
+    startGeneratedSequenceSync({
+      sequenceId: activeAntiPerkSequence.id,
+      durationMs: activeAntiPerkSequence.durationMs,
+      actions: activeAntiPerkSequence.actions,
+      startedAtMs: activeAntiPerkSequence.startedAtMs,
+    });
+  }, [
+    activeAntiPerkSequence,
+    appApiKey,
+    connectionKey,
+    handyConnected,
+    loadingCountdown,
+    startGeneratedSequenceSync,
+  ]);
+
+  useEffect(() => {
     if (!boardSequence) return;
     if (activeRound) return;
+    if (activeGeneratedSequenceRef.current === boardSequence) return;
 
     clearCountdownTimer();
     clearLoadingMediaTimers();
     clearGeneratedSequenceTimer();
+    clearAntiPerkBeatUi();
+    activeGeneratedSequenceRef.current = boardSequence;
+    const sequence = createActiveAntiPerkSequenceUi(boardSequence);
+    const durationSec = sequence.definition.durationSec;
 
-    const durationSec = boardSequence === "milker" ? 30 : boardSequence === "jackhammer" ? 15 : 10;
-    const durationMs = durationSec * 1000;
-    const label =
-      boardSequence === "milker"
-        ? "MILKER SEQUENCE"
-        : boardSequence === "jackhammer"
-          ? "JACKHAMMER SEQUENCE"
-          : "NO REST FILLER";
-
-    setLoadingLabel(label);
+    setActiveAntiPerkSequence(sequence);
+    setLoadingLabel(sequence.definition.label);
     setLoadingCountdown(durationSec);
     setStatus("Running anti-perk sequence...");
     setActiveVideoUri(null);
@@ -964,7 +1242,12 @@ export function RoundVideoOverlay({
       setLoadingMedia(nextMedia);
     });
 
-    startGeneratedSequenceSync({ mode: boardSequence, durationMs });
+    startGeneratedSequenceSync({
+      sequenceId: boardSequence,
+      durationMs: sequence.durationMs,
+      actions: sequence.actions,
+      startedAtMs: sequence.startedAtMs,
+    });
 
     countdownTimerRef.current = window.setInterval(() => {
       setLoadingCountdown((prev) => {
@@ -973,13 +1256,15 @@ export function RoundVideoOverlay({
           clearCountdownTimer();
           clearLoadingMediaTimers();
           clearGeneratedSequenceTimer();
+          activeGeneratedSequenceRef.current = null;
+          clearAntiPerkBeatUi();
           setLoadingCountdown(null);
           setLoadingLabel("");
           setLoadingMedia([]);
           setLoadingMediaIndex(0);
           setStatus("Board sequence completed.");
           void pauseHandyIfNeeded();
-          onCompleteBoardSequence?.(boardSequence);
+          onCompleteBoardSequenceRef.current?.(boardSequence);
           return null;
         }
         return prev - 1;
@@ -994,20 +1279,88 @@ export function RoundVideoOverlay({
       clearCountdownTimer();
       clearLoadingMediaTimers();
       clearGeneratedSequenceTimer();
+      clearAntiPerkBeatUi();
       void pauseHandyIfNeeded();
     };
   }, [
     activeRound,
     boardSequence,
     booruSearchPrompt,
+    clearAntiPerkBeatUi,
     clearCountdownTimer,
     clearGeneratedSequenceTimer,
     clearLoadingMediaTimers,
+    createActiveAntiPerkSequenceUi,
     fallbackLoadingMedia,
-    onCompleteBoardSequence,
     pauseHandyIfNeeded,
     startGeneratedSequenceSync,
   ]);
+
+  useEffect(() => {
+    if (!idleBoardSequence) return;
+    if (activeRound) return;
+    if (boardSequence) return;
+    if (activeGeneratedSequenceRef.current === idleBoardSequence) return;
+
+    clearCountdownTimer();
+    clearLoadingMediaTimers();
+    clearGeneratedSequenceTimer();
+    clearAntiPerkBeatUi();
+    activeGeneratedSequenceRef.current = idleBoardSequence;
+    const sequence = createActiveAntiPerkSequenceUi(idleBoardSequence);
+
+    setActiveVideoUri(null);
+    setLoadingCountdown(null);
+    setLoadingLabel("");
+    setLoadingMedia([]);
+    setLoadingMediaIndex(0);
+    setSegment({ kind: "main" });
+    setFunscriptPosition(null);
+
+    startGeneratedSequenceSync({
+      sequenceId: idleBoardSequence,
+      durationMs: sequence.durationMs,
+      actions: sequence.actions,
+      startedAtMs: sequence.startedAtMs,
+      loop: true,
+    });
+
+    return () => {
+      clearCountdownTimer();
+      clearLoadingMediaTimers();
+      clearGeneratedSequenceTimer();
+      if (activeGeneratedSequenceRef.current === idleBoardSequence) {
+        activeGeneratedSequenceRef.current = null;
+      }
+      clearAntiPerkBeatUi();
+      void pauseHandyIfNeeded();
+    };
+  }, [
+    activeRound,
+    boardSequence,
+    clearAntiPerkBeatUi,
+    clearCountdownTimer,
+    clearGeneratedSequenceTimer,
+    clearLoadingMediaTimers,
+    createActiveAntiPerkSequenceUi,
+    idleBoardSequence,
+    pauseHandyIfNeeded,
+    startGeneratedSequenceSync,
+  ]);
+
+  useEffect(() => {
+    if (!lastLogMessage) return;
+    if (!lastLogMessage.includes("applied anti-perk:")) return;
+
+    const alertText = lastLogMessage.replace(/.*applied anti-perk:/, "ANTI-PERK APPLIED:");
+    setAntiPerkAlert({ text: alertText, startTime: Date.now() });
+
+    const timer = setTimeout(() => {
+      setAntiPerkAlert(null);
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, [lastLogMessage]);
 
   useEffect(() => {
     if (!activeRound) return;
@@ -1034,7 +1387,7 @@ export function RoundVideoOverlay({
   }, [activeRound, fullIntermediaryQueue, resolvedMainResource?.funscriptUri]);
 
   useEffect(() => {
-    if ((!activeRound || !resolvedMainResource) && !boardSequence) {
+    if ((!activeRound || !resolvedMainResource) && !boardSequence && !idleBoardSequence) {
       initializedRoundKeyRef.current = null;
       firedTriggersRef.current = new Set<string>();
       finishRequestedRef.current = false;
@@ -1042,6 +1395,7 @@ export function RoundVideoOverlay({
       forceHandySyncMsRef.current = null;
       clearCountdownTimer();
       clearLoadingMediaTimers();
+      clearAntiPerkBeatUi();
       setRandomIntermediaryQueue([]);
       setSegment({ kind: "main" });
       setActiveVideoUri(null);
@@ -1050,6 +1404,9 @@ export function RoundVideoOverlay({
       setLoadingLabel("");
       setLoadingMedia([]);
       setLoadingMediaIndex(0);
+      activeGeneratedSequenceRef.current = null;
+      foregroundMainVideo.markPlaying(false);
+      foregroundIntermediaryVideo.markPlaying(false);
       void stopHandyIfNeeded();
       setPendingCumRoundSummary(null);
       return;
@@ -1118,6 +1475,8 @@ export function RoundVideoOverlay({
     intermediaryResourcePool,
     resolvedMainResource,
     boardSequence,
+    idleBoardSequence,
+    clearAntiPerkBeatUi,
     clearCountdownTimer,
     clearLoadingMediaTimers,
     stopHandyIfNeeded,
@@ -1137,14 +1496,11 @@ export function RoundVideoOverlay({
 
     const triggerId = `anti-seq-${sequenceType}-${activeRound.fieldId}`;
     if (firedTriggersRef.current.has(triggerId)) return;
+    if (activeGeneratedSequenceRef.current === sequenceType) return;
     firedTriggersRef.current.add(triggerId);
-
-    const durationSec = sequenceType === "milker" ? 30 : 15;
-    const durationMs = durationSec * 1000;
-    const label = sequenceType === "milker" ? "MILKER SEQUENCE" : "JACKHAMMER SEQUENCE";
-    const statusWhileCountdown = sequenceType === "milker"
-      ? "Milker anti-perk active..."
-      : "Jackhammer anti-perk active...";
+    activeGeneratedSequenceRef.current = sequenceType;
+    clearAntiPerkBeatUi();
+    const sequence = createActiveAntiPerkSequenceUi(sequenceType);
     const resumeAtSec = Math.max(0, mainVideoRef.current?.currentTime ?? 0);
 
     const video = mainVideoRef.current;
@@ -1153,11 +1509,17 @@ export function RoundVideoOverlay({
       video.pause();
     }
 
-    startGeneratedSequenceSync({ mode: sequenceType, durationMs });
+    setActiveAntiPerkSequence(sequence);
+    startGeneratedSequenceSync({
+      sequenceId: sequenceType,
+      durationMs: sequence.durationMs,
+      actions: sequence.actions,
+      startedAtMs: sequence.startedAtMs,
+    });
     runSegmentTransition({
-      label,
-      countdownSec: durationSec,
-      statusWhileCountdown,
+      label: sequence.definition.label,
+      countdownSec: sequence.definition.durationSec,
+      statusWhileCountdown: sequence.definition.statusWhileCountdown,
       sound: "intermediary",
       plan: {
         nextSegment: { kind: "main" },
@@ -1167,16 +1529,19 @@ export function RoundVideoOverlay({
       },
       onComplete: () => {
         clearGeneratedSequenceTimer();
+        activeGeneratedSequenceRef.current = null;
+        clearAntiPerkBeatUi();
         void pauseHandyIfNeeded();
-        onCompleteBoardSequence?.(sequenceType);
+        onCompleteBoardSequenceRef.current?.(sequenceType);
       },
     });
   }, [
     activeRound,
+    clearAntiPerkBeatUi,
     clearGeneratedSequenceTimer,
     currentPlayer,
+    createActiveAntiPerkSequenceUi,
     isIntermediaryScreenActive,
-    onCompleteBoardSequence,
     pauseHandyIfNeeded,
     resolvedMainResource,
     runSegmentTransition,
@@ -1289,6 +1654,13 @@ export function RoundVideoOverlay({
               ? Math.max(0, video.duration - startSec)
               : 0;
         const elapsedInWindowSec = Math.max(0, mainCurrentTimeSec - startSec);
+        const nextTimeLabel = `${formatDurationLabel(elapsedInWindowSec)} / ${formatDurationLabel(boundedDurationSec)}`;
+        setPlaybackTimeLabel((current) => (current === nextTimeLabel ? current : nextTimeLabel));
+        const nextProgress =
+          boundedDurationSec > 0
+            ? Math.max(0, Math.min(1, elapsedInWindowSec / boundedDurationSec))
+            : 0;
+        setPlaybackProgress((current) => (Math.abs(current - nextProgress) < 0.002 ? current : nextProgress));
 
         const rate = computePlaybackRate(sessionModifiers, {
           elapsedSessionSec: (performance.now() - sessionStartedAtRef.current) / 1000,
@@ -1306,13 +1678,8 @@ export function RoundVideoOverlay({
           setPlaybackRateLabel(nextLabel);
         }
 
-        const progress =
-          boundedDurationSec > 0
-            ? Math.max(0, Math.min(1, elapsedInWindowSec / boundedDurationSec))
-            : 0;
-
         const nextTrigger = fullIntermediaryQueue.find(
-          (trigger) => !firedTriggersRef.current.has(trigger.id) && progress >= trigger.atProgress,
+          (trigger) => !firedTriggersRef.current.has(trigger.id) && nextProgress >= trigger.atProgress,
         );
 
         if (nextTrigger) {
@@ -1322,6 +1689,13 @@ export function RoundVideoOverlay({
           startIntermediary(nextTrigger, resumeAtSec, "Intermediary clip spawned.");
         }
       } else {
+        const nextTimeLabel = `${formatDurationLabel(video.currentTime)} / ${formatDurationLabel(video.duration)}`;
+        setPlaybackTimeLabel((current) => (current === nextTimeLabel ? current : nextTimeLabel));
+        const nextProgress =
+          Number.isFinite(video.duration) && video.duration > 0
+            ? Math.max(0, Math.min(1, video.currentTime / video.duration))
+            : 0;
+        setPlaybackProgress((current) => (Math.abs(current - nextProgress) < 0.002 ? current : nextProgress));
         if (Math.abs(video.playbackRate - 1) > 0.01) {
           video.playbackRate = 1;
         }
@@ -1355,6 +1729,11 @@ export function RoundVideoOverlay({
   ]);
 
   useEffect(() => {
+    setPlaybackTimeLabel("0:00 / 0:00");
+    setPlaybackProgress(0);
+  }, [activeRound?.roundId, activeRound?.phaseKind, segment.kind]);
+
+  useEffect(() => {
     if (!handyConnected) {
       resetHandySync("disconnected", null);
       return;
@@ -1369,8 +1748,18 @@ export function RoundVideoOverlay({
   }, [appApiKey, handyConnected, resetHandySync, setSyncStatus]);
 
   useEffect(() => {
+    if (!handyManuallyStopped) return;
+    setHandySyncState("disconnected");
+    setHandySyncError(null);
+    setSyncStatus({ synced: false, error: null });
+    setStatus("TheHandy stopped manually.");
+    void stopHandyIfNeeded();
+  }, [handyManuallyStopped, setSyncStatus, stopHandyIfNeeded]);
+
+  useEffect(() => {
     if (!activeRound) return;
     if (!isIntermediaryScreenActive) return;
+    if (activeAntiPerkSequence) return;
 
     const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
     if (video && !video.paused) {
@@ -1385,7 +1774,7 @@ export function RoundVideoOverlay({
     // Use pause instead of stop to keep the HSP buffer alive so the
     // Handy can resume instantly when returning to the main segment.
     void pauseHandyIfNeeded();
-  }, [activeRound, handyConnected, isIntermediaryScreenActive, pauseHandyIfNeeded, segment.kind, setSyncStatus]);
+  }, [activeAntiPerkSequence, activeRound, handyConnected, isIntermediaryScreenActive, pauseHandyIfNeeded, segment.kind, setSyncStatus]);
 
   // Preload the main funscript into TheHandy during the "RETURNING TO MAIN"
   // countdown so the device is immediately ready when playback resumes.
@@ -1634,6 +2023,24 @@ export function RoundVideoOverlay({
   }, [showUiTemporarily]);
 
   const canUseRoundControls = Boolean(activeRound && activeRound.phaseKind === "normal" && roundControl);
+  const showRemoteLoadingIndicator =
+    isRemoteVideoUri && isRemoteVideoLoading && !isIntermediaryScreenActive && !isWaitingForHandyStart;
+
+  useEffect(() => {
+    onPreviewStateChange?.({
+      active: Boolean(activeRound),
+      loading: Boolean(
+        activeRound &&
+        (loadingCountdown !== null || showRemoteLoadingIndicator || isWaitingForHandyStart),
+      ),
+    });
+  }, [
+    activeRound,
+    isWaitingForHandyStart,
+    loadingCountdown,
+    onPreviewStateChange,
+    showRemoteLoadingIndicator,
+  ]);
 
   const handleUsePauseControl = useCallback(() => {
     if (!canUseRoundControls || !roundControl) return;
@@ -1672,12 +2079,74 @@ export function RoundVideoOverlay({
     finishWithSummary();
   }, [canUseRoundControls, finishWithSummary, roundControl]);
 
+  useControllerSurface({
+    id: "round-video-overlay",
+    scopeRef: pendingCumRoundSummary ? cumOutcomeRef : overlayRef,
+    priority: pendingCumRoundSummary ? 120 : 90,
+    enabled: Boolean(activeRound),
+    initialFocusId: pendingCumRoundSummary
+      ? "round-cum-outcome-came"
+      : (handyConnected ? "round-overlay-handy-toggle" : "round-overlay-progress-bar"),
+    onBack: pendingCumRoundSummary
+      ? undefined
+      : onClose
+        ? () => {
+          void stopHandyIfNeeded();
+          onClose();
+          return true;
+        }
+        : onOpenOptions
+          ? () => {
+            onOpenOptions();
+            return true;
+          }
+          : undefined,
+  });
+
+  useEffect(() => {
+    return () => {
+      teardownVideoElement(mainVideoRef.current);
+      teardownVideoElement(intermediaryVideoRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeRound || boardSequence || idleBoardSequence) return;
+    teardownVideoElement(mainVideoRef.current);
+    teardownVideoElement(intermediaryVideoRef.current);
+  }, [activeRound, boardSequence, idleBoardSequence]);
+
+  useEffect(() => {
+    for (const video of [mainVideoRef.current, intermediaryVideoRef.current]) {
+      if (!video) continue;
+      video.muted = false;
+      video.defaultMuted = false;
+      video.volume = BOARD_VIDEO_VOLUME;
+    }
+  }, [activeVideoUri, segment.kind]);
+
   if (!activeRound && !boardSequence) return null;
 
   if (!activeRound && boardSequence) {
+    const isBoardSequenceActive =
+      loadingCountdown !== null ||
+      activeAntiPerkSequence?.id === boardSequence ||
+      activeGeneratedSequenceRef.current === boardSequence;
+    if (!isBoardSequenceActive) return null;
+
     const hasLoadingMedia = loadingMedia.length > 0;
     const activeLoadingMediaIndex = hasLoadingMedia ? loadingMediaIndex % loadingMedia.length : -1;
     const activeLoadingMedia = hasLoadingMedia ? loadingMedia[activeLoadingMediaIndex] : null;
+    const shouldShowManualBeatbar =
+      showAntiPerkBeatbar &&
+      !handyConnected &&
+      Boolean(activeAntiPerkSequence?.definition.supportsBeatbar) &&
+      loadingCountdown !== null;
+    const shouldShowHandyPositionBall =
+      handyConnected &&
+      Boolean(activeAntiPerkSequence?.definition.supportsBeatbar) &&
+      loadingCountdown !== null;
+    const shouldRenderStandaloneBeatbar = shouldShowManualBeatbar || shouldShowHandyPositionBall;
     return (
       <div className="fixed inset-0 z-50 bg-black">
         <div className="absolute inset-0">
@@ -1705,11 +2174,29 @@ export function RoundVideoOverlay({
           )}
         </div>
         <div className="absolute inset-0 bg-black/45" />
-        <div className="relative z-10 flex h-full items-center justify-center p-6">
-          <div className="rounded-2xl border border-fuchsia-300/45 bg-zinc-950/85 p-6 text-center text-fuchsia-100 shadow-2xl backdrop-blur">
-            <div className="text-[11px] uppercase tracking-[0.28em] text-fuchsia-200/80">{loadingLabel || "Anti-perk sequence"}</div>
-            <div className="mt-3 text-4xl font-black">{loadingCountdown ?? 0}</div>
-            <div className="mt-3 text-sm text-zinc-100">{status}</div>
+        {shouldRenderStandaloneBeatbar && activeAntiPerkSequence && (
+          <AntiPerkBeatbar
+            actions={activeAntiPerkSequence.actions}
+            beatbarEvents={activeAntiPerkSequence.beatbarEvents}
+            beatHits={activeAntiPerkSequence.beatHits}
+            elapsedMs={antiPerkBeatElapsedMs}
+            showBeatbar={shouldShowManualBeatbar}
+            showBall={shouldShowHandyPositionBall}
+            style={activeAntiPerkSequence.definition.beatbarStyle}
+          />
+        )}
+        <div className="absolute bottom-5 left-5 z-10 flex w-[min(20rem,calc(100%-2.5rem))] flex-col items-start gap-3 text-left sm:bottom-6 sm:left-6">
+          <div
+            className="rounded-xl border border-fuchsia-200/20 bg-[#0c0814]/66 px-4 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-fuchsia-100/78 shadow-[0_10px_28px_rgba(0,0,0,0.28)] backdrop-blur-md"
+            data-testid="anti-perk-sequence-card"
+          >
+            {loadingLabel || "Anti-perk sequence"}
+          </div>
+          <div className="pl-1 text-5xl font-black leading-none text-white/88 sm:text-6xl">
+            {loadingCountdown ?? 0}
+          </div>
+          <div className="max-w-[18rem] rounded-xl border border-white/10 bg-black/24 px-3 py-2 text-sm text-zinc-100/78 backdrop-blur-sm">
+            {status}
           </div>
         </div>
       </div>
@@ -1758,11 +2245,20 @@ export function RoundVideoOverlay({
           : "border-cyan-300/45 bg-cyan-500/20 text-cyan-100";
 
   const canResyncHandy = shouldUseHandySync && !isIntermediaryScreenActive;
-  const showRemoteLoadingIndicator =
-    isRemoteVideoUri && isRemoteVideoLoading && !isIntermediaryScreenActive && !isWaitingForHandyStart;
   const hasLoadingMedia = loadingMedia.length > 0;
   const activeLoadingMediaIndex = hasLoadingMedia ? loadingMediaIndex % loadingMedia.length : -1;
   const activeLoadingMedia = hasLoadingMedia ? loadingMedia[activeLoadingMediaIndex] : null;
+  const shouldShowManualBeatbar =
+    showAntiPerkBeatbar &&
+    !handyConnected &&
+    Boolean(activeAntiPerkSequence?.definition.supportsBeatbar) &&
+    loadingCountdown !== null;
+  const shouldShowHandyPositionBall =
+    handyConnected &&
+    Boolean(activeAntiPerkSequence?.definition.supportsBeatbar) &&
+    loadingCountdown !== null;
+  const shouldRenderAntiPerkBeatbar = shouldShowManualBeatbar || shouldShowHandyPositionBall;
+  const shouldShowPlaybackTimer = isUiVisible && loadingCountdown === null;
   const handleLoadingMediaError = () => {
     if (!activeLoadingMedia || activeLoadingMediaIndex < 0) return;
     const previewUrl = activeLoadingMedia.previewUrl ?? null;
@@ -1777,7 +2273,8 @@ export function RoundVideoOverlay({
 
   return (
     <div
-      className={`fixed inset-0 z-50 bg-black ${isUiVisible ? "" : "cursor-none"}`}
+      ref={overlayRef}
+      className={`fixed inset-0 z-50 ${isOnlyNoRest ? "bg-black/0 pointer-events-none" : "bg-black"} ${isUiVisible ? "" : "cursor-none"}`}
       onMouseMove={handleOverlayMouseMove}
     >
       <style>
@@ -1823,9 +2320,20 @@ export function RoundVideoOverlay({
             0%, 100% { transform: translate(0, 0) scale(1); }
             50% { transform: translate(10%, -15%) scale(1.2); }
           }
+          @keyframes antiPerkAlertSlide {
+            0% { transform: translateY(-20px) scale(0.95); opacity: 0; filter: blur(8px); }
+            15% { transform: translateY(0) scale(1.05); opacity: 1; filter: blur(0); }
+            25% { transform: translateY(0) scale(1.0); }
+            85% { transform: translateY(0) scale(1.0); opacity: 1; filter: blur(0); }
+            100% { transform: translateY(-15px) scale(0.98); opacity: 0; filter: blur(12px); }
+          }
+          @keyframes antiPerkAlertPulse {
+            0%, 100% { box-shadow: 0 0 25px rgba(244,63,94,0.35); border-color: rgba(251,113,133,0.5); }
+            50% { box-shadow: 0 0 45px rgba(244,63,94,0.65); border-color: rgba(251,113,133,0.95); }
+          }
         `}
       </style>
-      <div className="relative h-full w-full overflow-hidden bg-black">
+      <div className={`relative h-full w-full overflow-hidden ${isOnlyNoRest ? "bg-transparent" : "bg-black"}`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-24 bg-gradient-to-b from-black/70 via-black/25 to-transparent" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-36 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
 
@@ -1833,6 +2341,35 @@ export function RoundVideoOverlay({
           <span>{resolvedRound?.name ?? activeRound?.roundName ?? "Round"}</span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span>{status}</span>
+            <button
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
+                ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
+                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                }`}
+              disabled={!handyConnected}
+              onClick={() => {
+                playSelectSound();
+                if (handyManuallyStopped) {
+                  void toggleManualStop().then(() => {
+                    setStatus("TheHandy resumed.");
+                  });
+                  return;
+                }
+                void stopHandyIfNeeded()
+                  .catch(() => undefined)
+                  .finally(() => {
+                    void toggleManualStop().then(() => {
+                      setStatus("TheHandy stopped manually.");
+                    });
+                  });
+              }}
+              onMouseEnter={() => playHoverSound()}
+              type="button"
+              data-controller-focus-id="round-overlay-handy-toggle"
+              data-controller-initial="true"
+            >
+              {handyManuallyStopped ? "Resume Handy" : "Force Stop"}
+            </button>
             <button
               className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
                 ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
@@ -1845,6 +2382,7 @@ export function RoundVideoOverlay({
               }}
               onMouseEnter={() => playHoverSound()}
               type="button"
+              data-controller-focus-id="round-overlay-resync"
             >
               Resync (R)
             </button>
@@ -1862,6 +2400,7 @@ export function RoundVideoOverlay({
                   }}
                   onMouseEnter={() => playHoverSound()}
                   type="button"
+                  data-controller-focus-id="round-overlay-pause"
                 >
                   Pause {roundControl?.pauseCharges ?? 0}
                 </button>
@@ -1877,6 +2416,7 @@ export function RoundVideoOverlay({
                   }}
                   onMouseEnter={() => playHoverSound()}
                   type="button"
+                  data-controller-focus-id="round-overlay-skip"
                 >
                   Skip {roundControl?.skipCharges ?? 0}
                 </button>
@@ -1891,10 +2431,26 @@ export function RoundVideoOverlay({
                 }}
                 onMouseEnter={() => playHoverSound()}
                 type="button"
+                data-controller-focus-id="round-overlay-options"
               >
                 Options
               </button>
             )}
+            <button
+              className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
+                ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
+                }`}
+              onClick={() => {
+                playSelectSound();
+                setShowProgressBarAlways((current) => !current);
+              }}
+              onMouseEnter={() => playHoverSound()}
+              type="button"
+              data-controller-focus-id="round-overlay-progress-bar"
+            >
+              Bar {showProgressBarAlways ? "Pinned" : "Auto"}
+            </button>
             {onRequestCum && (
               <button
                 className="pointer-events-auto rounded-md border border-rose-300/70 bg-rose-500/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-50 transition-colors hover:bg-rose-500/40"
@@ -1904,6 +2460,7 @@ export function RoundVideoOverlay({
                 }}
                 onMouseEnter={() => playHoverSound()}
                 type="button"
+                data-controller-focus-id="round-overlay-cum"
               >
                 Cum (C)
               </button>
@@ -1918,6 +2475,8 @@ export function RoundVideoOverlay({
                 }}
                 onMouseEnter={() => playHoverSound()}
                 type="button"
+                data-controller-focus-id="round-overlay-close"
+                data-controller-back="true"
               >
                 Close
               </button>
@@ -1966,7 +2525,7 @@ export function RoundVideoOverlay({
           </div>
         </div>
 
-        <div className="relative h-full w-full bg-[#060410]">
+        <div className={`relative h-full w-full ${isOnlyNoRest ? "bg-transparent" : "bg-[#060410]"}`}>
           {resolvedMainResource && (
             <video
               ref={mainVideoRef}
@@ -1981,6 +2540,9 @@ export function RoundVideoOverlay({
               onContextMenu={(event) => event.preventDefault()}
               onError={() => {
                 void handleVideoError(resolvedMainResource.videoUri);
+              }}
+              onEmptied={() => {
+                foregroundMainVideo.handlePause();
               }}
               onLoadStart={() => {
                 if (segment.kind !== "main") return;
@@ -2030,6 +2592,7 @@ export function RoundVideoOverlay({
               }}
               onPlaying={() => {
                 if (segment.kind !== "main") return;
+                foregroundMainVideo.handlePlay();
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
               }}
               onLoadedData={() => {
@@ -2038,6 +2601,7 @@ export function RoundVideoOverlay({
               }}
               onPause={() => {
                 if (segment.kind !== "main") return;
+                foregroundMainVideo.handlePause();
                 if (allowPauseRef.current) {
                   allowPauseRef.current = false;
                   return;
@@ -2050,6 +2614,7 @@ export function RoundVideoOverlay({
               }}
               onEnded={() => {
                 if (segment.kind !== "main") return;
+                foregroundMainVideo.handleEnded();
                 finishWithSummary();
               }}
             >
@@ -2070,6 +2635,9 @@ export function RoundVideoOverlay({
               onContextMenu={(event) => event.preventDefault()}
               onError={() => {
                 void handleVideoError(segment.trigger.resource.videoUri);
+              }}
+              onEmptied={() => {
+                foregroundIntermediaryVideo.handlePause();
               }}
               onLoadStart={() => {
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
@@ -2092,12 +2660,14 @@ export function RoundVideoOverlay({
                 tryPlayVideo();
               }}
               onPlaying={() => {
+                foregroundIntermediaryVideo.handlePlay();
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
               }}
               onLoadedData={() => {
                 if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
               }}
               onPause={() => {
+                foregroundIntermediaryVideo.handlePause();
                 if (allowPauseRef.current) {
                   allowPauseRef.current = false;
                   return;
@@ -2109,6 +2679,7 @@ export function RoundVideoOverlay({
                 tryPlayVideo();
               }}
               onEnded={() => {
+                foregroundIntermediaryVideo.handleEnded();
                 endIntermediaryAndResume();
               }}
             >
@@ -2123,6 +2694,13 @@ export function RoundVideoOverlay({
               </div>
             </div>
           )}
+
+          <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-[35] h-1 overflow-hidden bg-white/8 transition-opacity duration-250 ${showProgressBarAlways || isUiVisible ? "opacity-100" : "opacity-0"}`}>
+            <div
+              className="h-full bg-violet-400/90 shadow-[0_0_8px_rgba(167,139,250,0.75),0_0_16px_rgba(139,92,246,0.4)] transition-[width] duration-150 ease-out"
+              style={{ width: `${playbackProgress * 100}%` }}
+            />
+          </div>
 
           {isWaitingForHandyStart && (
             <div className="pointer-events-none absolute inset-0 z-50 overflow-hidden">
@@ -2224,18 +2802,32 @@ export function RoundVideoOverlay({
                 </>
               )}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(190,24,93,0.18),rgba(8,5,18,0.72))]" />
-              <div className="absolute left-1/2 top-1/2 flex w-full max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-4 px-5 text-center">
-                <div className="rounded-2xl border border-fuchsia-200/65 bg-[#12071f]/88 px-6 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-fuchsia-100 shadow-[0_0_34px_rgba(217,70,239,0.65)]">
+              {shouldRenderAntiPerkBeatbar && activeAntiPerkSequence && (
+                <AntiPerkBeatbar
+                  actions={activeAntiPerkSequence.actions}
+                  beatbarEvents={activeAntiPerkSequence.beatbarEvents}
+                  beatHits={activeAntiPerkSequence.beatHits}
+                  elapsedMs={antiPerkBeatElapsedMs}
+                  showBeatbar={shouldShowManualBeatbar}
+                  showBall={shouldShowHandyPositionBall}
+                  style={activeAntiPerkSequence.definition.beatbarStyle}
+                />
+              )}
+              <div className="absolute bottom-5 left-5 z-10 flex w-[min(22rem,calc(100%-2.5rem))] flex-col items-start gap-3 text-left sm:bottom-6 sm:left-6">
+                <div
+                  className="rounded-xl border border-fuchsia-200/20 bg-[#0c0814]/66 px-4 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-fuchsia-100/78 shadow-[0_10px_28px_rgba(0,0,0,0.28)] backdrop-blur-md"
+                  data-testid="anti-perk-sequence-card"
+                >
                   {loadingLabel}
                 </div>
-                <div className="text-7xl font-black text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.7)]">
+                <div className="pl-1 text-5xl font-black leading-none text-white/88 sm:text-6xl">
                   {loadingCountdown}
                 </div>
-                <div className="rounded-xl border border-fuchsia-200/45 bg-[#0d0618]/85 px-4 py-2 text-xs tracking-wide text-fuchsia-100">
+                <div className="max-w-[20rem] rounded-xl border border-white/10 bg-black/24 px-3 py-2 text-xs tracking-wide text-zinc-100/78 backdrop-blur-sm">
                   Prompt: {booruSearchPrompt}
                 </div>
                 {activeLoadingMedia && (
-                  <div className="text-[11px] uppercase tracking-[0.22em] text-fuchsia-200/80">
+                  <div className="pl-1 text-[10px] uppercase tracking-[0.2em] text-fuchsia-100/52">
                     Source: {activeLoadingMedia.source}
                   </div>
                 )}
@@ -2245,7 +2837,10 @@ export function RoundVideoOverlay({
 
           {pendingCumRoundSummary && (
             <div className="absolute inset-0 z-[90] flex items-center justify-center bg-black/80 px-4">
-              <div className="w-full max-w-xl rounded-2xl border border-cyan-300/45 bg-[linear-gradient(145deg,rgba(6,15,38,0.96),rgba(17,8,36,0.96))] p-6 text-zinc-100 shadow-[0_0_55px_rgba(56,189,248,0.25)] backdrop-blur-xl">
+              <div
+                ref={cumOutcomeRef}
+                className="w-full max-w-xl rounded-2xl border border-cyan-300/45 bg-[linear-gradient(145deg,rgba(6,15,38,0.96),rgba(17,8,36,0.96))] p-6 text-zinc-100 shadow-[0_0_55px_rgba(56,189,248,0.25)] backdrop-blur-xl"
+              >
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.28em] text-cyan-200/85">
                   Cum Round Check
                 </p>
@@ -2260,6 +2855,8 @@ export function RoundVideoOverlay({
                     type="button"
                     className="rounded-lg border border-emerald-300/60 bg-emerald-500/20 px-4 py-3 text-left text-sm font-semibold text-emerald-100 hover:bg-emerald-500/35"
                     onClick={() => resolveCumRoundOutcome("came_as_told")}
+                    data-controller-focus-id="round-cum-outcome-came"
+                    data-controller-initial="true"
                   >
                     Came as told
                   </button>
@@ -2267,6 +2864,7 @@ export function RoundVideoOverlay({
                     type="button"
                     className="rounded-lg border border-cyan-300/60 bg-cyan-500/20 px-4 py-3 text-left text-sm font-semibold text-cyan-100 hover:bg-cyan-500/35"
                     onClick={() => resolveCumRoundOutcome("did_not_cum")}
+                    data-controller-focus-id="round-cum-outcome-no-cum"
                   >
                     Did not cum
                   </button>
@@ -2274,6 +2872,7 @@ export function RoundVideoOverlay({
                     type="button"
                     className="rounded-lg border border-rose-300/65 bg-rose-500/20 px-4 py-3 text-left text-sm font-semibold text-rose-100 hover:bg-rose-500/35"
                     onClick={() => resolveCumRoundOutcome("failed_instruction")}
+                    data-controller-focus-id="round-cum-outcome-failed"
                   >
                     Failed instruction
                   </button>
@@ -2291,13 +2890,47 @@ export function RoundVideoOverlay({
             </div>
           )}
 
-          <div className={`pointer-events-none absolute bottom-3 left-3 z-30 rounded-md border border-fuchsia-200/25 bg-black/45 px-3 py-2 text-xs text-fuchsia-100 backdrop-blur transition-opacity duration-250 ${isUiVisible ? "opacity-100" : "opacity-0"}`}>
-            <div>Segment: {segment.kind === "main" ? "Main" : "Intermediary"}</div>
-            <div>Playback: {playbackRateLabel}x</div>
-            <div>Funscript actions: {funscriptCount}</div>
-            <div>Current script position: {funscriptPosition ?? "-"}</div>
-            <div>Intermediary queue: {fullIntermediaryQueue.length}</div>
+          <div
+            className={`pointer-events-none absolute bottom-3 left-3 z-30 rounded-full border border-fuchsia-200/25 bg-black/45 px-3 py-1.5 text-xs font-semibold text-fuchsia-100 backdrop-blur transition-opacity duration-250 ${shouldShowPlaybackTimer ? "opacity-100" : "opacity-0"}`}
+            data-testid="round-playback-timer"
+          >
+            {playbackTimeLabel}
           </div>
+
+          {canUseDebugRoundControls && (
+            <div className={`pointer-events-none absolute bottom-14 left-3 z-30 rounded-md border border-fuchsia-200/25 bg-black/45 px-3 py-2 text-xs text-fuchsia-100 backdrop-blur transition-opacity duration-250 ${isUiVisible ? "opacity-100" : "opacity-0"}`}>
+              <div>Segment: {segment.kind === "main" ? "Main" : "Intermediary"}</div>
+              <div>Duration: {playbackTimeLabel}</div>
+              <div>Playback: {playbackRateLabel}x</div>
+              <div>Funscript actions: {funscriptCount}</div>
+              <div>
+                Current script position: {typeof funscriptPosition === "number" ? Math.trunc(funscriptPosition) : "-"}
+              </div>
+              {isDevelopmentMode && <div>Intermediary queue: {fullIntermediaryQueue.length}</div>}
+            </div>
+          )}
+
+          {antiPerkAlert && (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-[100] flex justify-center px-4">
+              <div
+                className="flex w-full max-w-sm flex-col items-center gap-1.5 rounded-2xl border-2 border-rose-400/60 bg-black/85 px-6 py-4 backdrop-blur-2xl sm:max-w-max sm:px-8 sm:py-5"
+                style={{
+                  animation: "antiPerkAlertSlide 4.5s cubic-bezier(0.19, 1, 0.22, 1) forwards, antiPerkAlertPulse 1.8s ease-in-out infinite",
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-rose-200/90 [text-shadow:0_0_15px_rgba(251,113,133,0.4)]">
+                    System Warning
+                  </span>
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
+                </div>
+                <div className="bg-gradient-to-b from-white via-rose-50 to-rose-200 bg-clip-text text-center text-lg font-black tracking-tight text-transparent sm:text-2xl">
+                  {antiPerkAlert.text}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

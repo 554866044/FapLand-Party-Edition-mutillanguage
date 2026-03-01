@@ -12,12 +12,14 @@ import {
   selectPathEdge,
   skipPerkSelection,
   selectPerk,
+  shouldAutoStartQueuedRound,
   triggerQueuedRound,
   useRoundControl,
 } from "./engine";
 import {
   playDiceResultSound,
   playDiceRollStartSound,
+  playGatePassSound,
   playPerkActionSound,
   playRoundStartSound,
   playTokenLandingSound,
@@ -35,11 +37,13 @@ export type AnimPhase =
     value: number;
     playerIndex: number;
     path: number[];
+    gateStepIndices: number[];
   }
   | {
     kind: "movingToken";
     playerIndex: number;
     path: number[];
+    gateStepIndices: number[];
     stepIndex: number;
     stepElapsed: number;
   }
@@ -130,6 +134,20 @@ export function useGameAnimation(
       .map((nodeId) => nextState.config.runtimeGraph.nodeIndexById[nodeId] ?? 0);
   }, []);
 
+  const toGateStepIndices = useCallback((nextState: GameState): number[] => {
+    const pathNodeIds = nextState.lastTraversalPathNodeIds;
+    if (pathNodeIds.length <= 1) return [];
+
+    return pathNodeIds.slice(0, -1).flatMap((fromNodeId, index) => {
+      const toNodeId = pathNodeIds[index + 1];
+      if (!toNodeId) return [];
+      const edge = nextState.config.runtimeGraph.edges.find(
+        (candidate) => candidate.fromNodeId === fromNodeId && candidate.toNodeId === toNodeId,
+      );
+      return edge && edge.gateCost > 0 ? [index] : [];
+    });
+  }, []);
+
   const queueRollPhase = useCallback((diceMin = 1, diceMax = 6): AnimPhase => {
     const clampedMin = Math.max(1, Math.floor(diceMin));
     const clampedMax = Math.max(clampedMin, Math.floor(diceMax));
@@ -147,10 +165,11 @@ export function useGameAnimation(
   const handleRoll = useCallback(() => {
     const s = stateRef.current;
     if (s.sessionPhase !== "normal") return;
-    if (s.pendingPerkSelection || s.pendingPathChoice || s.queuedRound || s.activeRound) return;
+    if (s.pendingPerkSelection || s.pendingPathChoice || s.activeRound) return;
+    if (s.queuedRound && !s.queuedRound.skippable) return;
     const currentPlayer = s.players[s.currentPlayerIndex];
     const hasBoardSequenceAntiPerk = Boolean(
-      currentPlayer && ["milker", "jackhammer", "no-rest"].some((id) => currentPlayer.antiPerks.includes(id)),
+      currentPlayer && ["milker", "jackhammer"].some((id) => currentPlayer.antiPerks.includes(id)),
     );
     if (hasBoardSequenceAntiPerk) return;
     if (animPhaseRef.current.kind !== "idle") return;
@@ -205,12 +224,14 @@ export function useGameAnimation(
     pathChoiceElapsedRef.current = 0;
 
     const path = toPathIndices(nextState);
+    const gateStepIndices = toGateStepIndices(nextState);
     if (path.length > 0) {
       playTokenStepSound();
       const next: AnimPhase = {
         kind: "movingToken",
         playerIndex: nextState.currentPlayerIndex,
         path,
+        gateStepIndices,
         stepIndex: 0,
         stepElapsed: 0,
       };
@@ -220,12 +241,12 @@ export function useGameAnimation(
     }
 
     const next: AnimPhase =
-      nextState.queuedRound && !nextState.pendingPerkSelection && !nextState.activeRound
+      shouldAutoStartQueuedRound(nextState) && !nextState.pendingPerkSelection && !nextState.activeRound
         ? { kind: "roundCountdown", elapsed: 0, remaining: ROUND_COUNTDOWN_DURATION }
         : { kind: "idle" };
     animPhaseRef.current = next;
     setAnimPhase(next);
-  }, [installedRounds, toPathIndices]);
+  }, [installedRounds, toGateStepIndices, toPathIndices]);
 
   const handleResolvePathChoiceTimeout = useCallback(() => {
     const current = stateRef.current;
@@ -238,12 +259,14 @@ export function useGameAnimation(
     pathChoiceElapsedRef.current = 0;
 
     const path = toPathIndices(nextState);
+    const gateStepIndices = toGateStepIndices(nextState);
     if (path.length > 0) {
       playTokenStepSound();
       const next: AnimPhase = {
         kind: "movingToken",
         playerIndex: nextState.currentPlayerIndex,
         path,
+        gateStepIndices,
         stepIndex: 0,
         stepElapsed: 0,
       };
@@ -253,12 +276,12 @@ export function useGameAnimation(
     }
 
     const next: AnimPhase =
-      nextState.queuedRound && !nextState.pendingPerkSelection && !nextState.activeRound
+      shouldAutoStartQueuedRound(nextState) && !nextState.pendingPerkSelection && !nextState.activeRound
         ? { kind: "roundCountdown", elapsed: 0, remaining: ROUND_COUNTDOWN_DURATION }
         : { kind: "idle" };
     animPhaseRef.current = next;
     setAnimPhase(next);
-  }, [installedRounds, toPathIndices]);
+  }, [installedRounds, toGateStepIndices, toPathIndices]);
 
   const handleSelectPerk = useCallback((perkId: string, options?: { applyDirectly?: boolean }) => {
     const current = stateRef.current;
@@ -268,7 +291,7 @@ export function useGameAnimation(
     playPerkActionSound();
 
     const next: AnimPhase =
-      nextState.queuedRound && !nextState.pendingPerkSelection && !nextState.activeRound
+      shouldAutoStartQueuedRound(nextState) && !nextState.pendingPerkSelection && !nextState.activeRound
         ? { kind: "roundCountdown", elapsed: 0, remaining: ROUND_COUNTDOWN_DURATION }
         : { kind: "idle" };
     animPhaseRef.current = next;
@@ -287,7 +310,7 @@ export function useGameAnimation(
     playPerkActionSound();
 
     const next: AnimPhase =
-      nextState.queuedRound && !nextState.pendingPerkSelection && !nextState.activeRound
+      shouldAutoStartQueuedRound(nextState) && !nextState.pendingPerkSelection && !nextState.activeRound
         ? { kind: "roundCountdown", elapsed: 0, remaining: ROUND_COUNTDOWN_DURATION }
         : { kind: "idle" };
     animPhaseRef.current = next;
@@ -364,7 +387,7 @@ export function useGameAnimation(
       !s.pendingPathChoice &&
       !s.pendingPerkSelection &&
       currentPlayer &&
-      ["milker", "jackhammer", "no-rest"].some((id) => currentPlayer.antiPerks.includes(id)),
+      ["milker", "jackhammer"].some((id) => currentPlayer.antiPerks.includes(id)),
     );
 
     const canCountdownRun =
@@ -391,7 +414,7 @@ export function useGameAnimation(
           setState(nextState);
         }
 
-        if (nextState.queuedRound && !nextState.pendingPerkSelection && !nextState.activeRound) {
+        if (shouldAutoStartQueuedRound(nextState) && !nextState.pendingPerkSelection && !nextState.activeRound) {
           playRoundStartSound();
           const next: AnimPhase = { kind: "roundCountdown", elapsed: 0, remaining: ROUND_COUNTDOWN_DURATION };
           animPhaseRef.current = next;
@@ -440,6 +463,7 @@ export function useGameAnimation(
         const nextState = rollTurn(s, installedRounds, phase.finalValue);
         const roll = nextState.lastRoll ?? phase.finalValue;
         const path = toPathIndices(nextState);
+        const gateStepIndices = toGateStepIndices(nextState);
 
         stateRef.current = nextState;
         setState(nextState);
@@ -451,6 +475,7 @@ export function useGameAnimation(
           value: roll,
           playerIndex: s.currentPlayerIndex,
           path,
+          gateStepIndices,
         };
         animPhaseRef.current = next;
         setAnimPhase(next);
@@ -477,6 +502,7 @@ export function useGameAnimation(
             kind: "movingToken",
             playerIndex: phase.playerIndex,
             path: phase.path,
+            gateStepIndices: phase.gateStepIndices,
             stepIndex: 0,
             stepElapsed: 0,
           };
@@ -500,6 +526,9 @@ export function useGameAnimation(
       const newStepElapsed = phase.stepElapsed + dt;
 
       if (newStepElapsed >= STEP_DURATION) {
+        if (phase.gateStepIndices.includes(phase.stepIndex)) {
+          playGatePassSound();
+        }
         const nextStepIndex = phase.stepIndex + 1;
 
         if (nextStepIndex >= phase.path.length) {

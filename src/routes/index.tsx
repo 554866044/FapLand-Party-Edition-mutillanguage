@@ -1,12 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { useControllerSurface } from "../controller";
 import { useHandy } from "../contexts/HandyContext";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { useMenuNavigation, type MenuOption } from "../hooks/useMenuNavigation";
 import { db, type InstallScanStatus } from "../services/db";
 import { parseStandingsJson } from "../services/multiplayer/results";
+import { trpc } from "../services/trpc";
+
+const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 
 const getVideos = async (): Promise<string[]> => {
   try {
@@ -104,92 +108,97 @@ function Home() {
   const { videos, overallHighscore } = Route.useLoaderData();
   const navigate = useNavigate();
   const [scanStatus, setScanStatus] = useState<InstallScanStatus | null>(null);
-  const { connected, isConnecting, error, connectionKey, appApiKey } = useHandy();
+  const { connected, isConnecting, error, connectionKey } = useHandy();
   const appUpdate = useAppUpdate();
+  const scopeRef = useRef<HTMLDivElement | null>(null);
 
   const options: MenuOption[] = useMemo(
-    () => [
-      {
-        id: "play",
-        label: "Play",
-        primary: true,
-        submenu: [
-          {
-            id: "singleplayer",
-            label: "Single Player",
-            primary: true,
-            action: () => navigate({ to: "/single-player-setup" }),
-          },
-          {
-            id: "multiplayer",
-            label: "Multiplayer",
-            experimental: true,
-            action: () => navigate({ to: "/multiplayer" }),
-          },
-        ],
-      },
-      {
-        id: "creation",
-        label: "Creation & Workshop",
-        submenu: [
-          {
-            id: "installedrounds",
-            label: "Installed Rounds",
-            action: () => navigate({ to: "/rounds" }),
-          },
-          {
-            id: "converter",
-            label: "Round Converter",
-            action: () => navigate({ to: "/converter" }),
-          },
-          {
-            id: "playlist-workshop",
-            label: "Playlist Workshop",
-            action: () => navigate({ to: "/playlist-workshop" }),
-          },
-          {
-            id: "map-editor",
-            label: "Map Editor",
-            experimental: true,
-            action: () => navigate({ to: "/map-editor" }),
-          },
-        ],
-      },
-      {
-        id: "highscores",
-        label: "Highscores",
-        action: () => navigate({ to: "/highscores" }),
-      },
-      {
-        id: "settings",
-        label: "Settings",
-        action: () => navigate({ to: "/settings" }),
-      },
-      {
-        id: "hardware",
-        label: "Hardware / Connection",
-        submenu: [
-          {
-            id: "connecthandy",
-            label: "Connect TheHandy",
-            action: () => navigate({ to: "/connect" }),
-          },
-        ],
-      },
-      {
-        id: "update",
-        label: appUpdate.actionLabel,
-        primary: appUpdate.state.status === "update_available",
-        badge: appUpdate.menuBadge,
-        subLabel: appUpdate.state.latestVersion
-          ? `Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
-          : `Installed v${appUpdate.state.currentVersion}`,
-        statusTone: appUpdate.menuTone,
-        action: () => {
-          void appUpdate.triggerPrimaryAction();
+    () => {
+      const nextOptions: MenuOption[] = [
+        {
+          id: "play",
+          label: "Play",
+          primary: true,
+          submenu: [
+            {
+              id: "singleplayer",
+              label: "Single Player",
+              primary: true,
+              action: () => navigate({ to: "/single-player-setup" }),
+            },
+            {
+              id: "multiplayer",
+              label: "Multiplayer",
+              experimental: true,
+              action: () => navigate({ to: "/multiplayer" }),
+            },
+          ],
         },
-      },
-    ],
+        {
+          id: "creation",
+          label: "Creation & Workshop",
+          submenu: [
+            {
+              id: "installedrounds",
+              label: "Installed Rounds",
+              action: () => navigate({ to: "/rounds" }),
+            },
+            {
+              id: "converter",
+              label: "Round Converter",
+              action: () => navigate({ to: "/converter" }),
+            },
+            {
+              id: "playlist-workshop",
+              label: "Playlist Workshop",
+              action: () => navigate({ to: "/playlist-workshop" }),
+            },
+            {
+              id: "map-editor",
+              label: "Map Editor",
+              experimental: true,
+              action: () => navigate({ to: "/map-editor" }),
+            },
+          ],
+        },
+        {
+          id: "highscores",
+          label: "Highscores",
+          action: () => navigate({ to: "/highscores" }),
+        },
+        {
+          id: "settings",
+          label: "Settings",
+          action: () => navigate({ to: "/settings" }),
+        },
+      ];
+
+      if (appUpdate.state.status === "update_available") {
+        nextOptions.push({
+          id: "update",
+          label: appUpdate.actionLabel,
+          primary: true,
+          badge: appUpdate.menuBadge,
+          subLabel: appUpdate.state.latestVersion
+            ? `Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
+            : `Installed v${appUpdate.state.currentVersion}`,
+          statusTone: appUpdate.menuTone,
+          action: () => {
+            void appUpdate.triggerPrimaryAction();
+          },
+        });
+      }
+
+      nextOptions.push({
+        id: "close",
+        label: "Close",
+        action: () => {
+          void window.electronAPI.window.close();
+        },
+      });
+
+      return nextOptions;
+    },
     [appUpdate, navigate]
   );
 
@@ -205,15 +214,14 @@ function Home() {
 
   const handyLabel = !connectionKey.trim()
     ? "No Connection Key"
-    : !appApiKey.trim()
-      ? "No API Key"
-      : isConnecting
-        ? "Connecting"
-        : connected
-          ? "Connected"
-          : error
-            ? "Connection Error"
-            : "Disconnected";
+    : isConnecting
+      ? "Connecting"
+      : connected
+        ? "Connected"
+        : error
+          ? "Connection Error"
+          : "Disconnected";
+  const handyWarning = !connected && error ? error : null;
 
   const handyTone = connected
     ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
@@ -250,6 +258,20 @@ function Home() {
         : appUpdate.state.status === "error"
           ? "Retry Needed"
           : "Idle";
+
+  useEffect(() => {
+    let cancelled = false;
+    void trpc.store.get.query({ key: FIRST_START_COMPLETED_KEY }).then((value) => {
+      if (cancelled || value === true) return;
+      void navigate({ to: "/first-start", search: { returnTo: "menu" } });
+    }).catch((loadError) => {
+      console.error("Failed to read first-start workflow state", loadError);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   useEffect(() => {
     let mounted = true;
@@ -289,8 +311,19 @@ function Home() {
     return list;
   }, [currentOptions, depth, goBack]);
 
+  useControllerSurface({
+    id: "home-route",
+    scopeRef,
+    priority: 10,
+    initialFocusId: renderOptions[0] ? `home-option-${renderOptions[0].id}` : undefined,
+    onBack: depth > 0 ? () => {
+      goBack();
+      return true;
+    } : undefined,
+  });
+
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center select-none overflow-hidden">
+    <div ref={scopeRef} className="relative min-h-screen flex flex-col items-center justify-center select-none overflow-hidden">
       <AnimatedBackground videoUris={videos} />
 
       <HighscoreDisplay score={overallHighscore} />
@@ -367,6 +400,9 @@ function Home() {
                   selected={selectedIndex === index}
                   onHover={() => handleMouseEnter(index)}
                   onClick={() => handleClick(index)}
+                  controllerFocusId={`home-option-${opt.id}`}
+                  controllerInitial={index === 0}
+                  controllerBack={opt.id === "back"}
                 />
               </div>
             ))}
@@ -382,10 +418,24 @@ function Home() {
           <p className="mb-3 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-zinc-200/75">
             System
           </p>
+          <div className="mb-3 rounded-lg border border-zinc-500/60 bg-zinc-700/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] text-zinc-100">
+            Program Version
+            <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90">
+              v{import.meta.env.VITE_APP_VERSION}-alpha
+            </div>
+            <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90">
+              Early Access
+            </div>
+          </div>
           <div
             className={`mb-3 rounded-lg border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] ${handyTone}`}
           >
             TheHandy {handyLabel}
+            {handyWarning && (
+              <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90 normal-case">
+                {handyWarning}
+              </div>
+            )}
           </div>
           <div
             className={`rounded-lg border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] ${scanTone}`}
@@ -397,7 +447,7 @@ function Home() {
                   {scanStatus.stats.sidecarsSeen} scanned
                 </div>
                 <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90">
-                  {scanStatus.stats.installed + scanStatus.stats.updated} rounds processed
+                  {scanStatus.stats.installed} rounds, {scanStatus.stats.playlistsImported} playlists
                 </div>
               </>
             )}
@@ -421,20 +471,13 @@ function Home() {
         </div>
       </aside>
 
-      {/* ── Footer ── */}
-      <footer
-        className="absolute bottom-6 font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-600 z-10 tracking-widest animate-entrance-fade"
-        style={{ animationDelay: "1.2s", animationDuration: "1.5s" }}
-      >
-        v{import.meta.env.VITE_APP_VERSION}-alpha &nbsp;•&nbsp; Early Access
-      </footer>
-
       <button
         type="button"
         onClick={() => {
           void handleFullscreenToggle();
         }}
         className="absolute left-6 bottom-6 z-10 rounded-lg border border-zinc-600/70 bg-zinc-950/70 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:border-violet-300/60 hover:text-violet-100"
+        data-controller-focus-id="home-fullscreen"
       >
         Fullscreen F11
       </button>

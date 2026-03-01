@@ -1,4 +1,9 @@
 let audioCtx: AudioContext | null = null;
+const activeSamplePlayers = new Set<HTMLAudioElement>();
+const decodedSampleCache = new Map<string, Promise<AudioBuffer | null>>();
+let activeWebAudioNodes = 0;
+let audioSuspendTimer: number | null = null;
+const AUDIO_IDLE_SUSPEND_DELAY_MS = 1500;
 
 const SOUND_ASSETS = {
     hover: "/sounds/ui-hover.wav",
@@ -7,7 +12,9 @@ const SOUND_ASSETS = {
     diceResult: "/sounds/dice-result.wav",
     tokenStep: "/sounds/token-step.wav",
     tokenLand: "/sounds/token-land.wav",
+    gatePass: "/sounds/gate-pass.wav",
     roundStart: "/sounds/round-start.wav",
+    playlistLaunch: "/sounds/playlist-launch.wav",
     perkAction: "/sounds/perk-action.wav",
     roundReward: "/sounds/round-reward.wav",
     converterMarkIn: "/sounds/converter/mark-in.wav",
@@ -19,7 +26,7 @@ const SOUND_ASSETS = {
     converterValidationError: "/sounds/converter/validation-error.wav",
     converterSaveSuccess: "/sounds/converter/save-success.wav",
     mapEditorPlaceNode: "/sounds/map-editor/place-node.wav",
-    mapEditorDeleteNode: "/sounds/ui-hover.wav",
+    mapEditorDeleteNode: "/sounds/map-editor/delete-node.wav",
     mapEditorConnectNodes: "/sounds/map-editor/connect-nodes.wav",
     mapEditorDisconnectNodes: "/sounds/map-editor/disconnect-nodes.wav",
     mapEditorInvalidAction: "/sounds/map-editor/invalid-action.wav",
@@ -52,6 +59,53 @@ const initAudio = () => {
     }
 };
 
+const clearAudioSuspendTimer = () => {
+    if (audioSuspendTimer !== null && typeof window !== "undefined") {
+        window.clearTimeout(audioSuspendTimer);
+        audioSuspendTimer = null;
+    }
+};
+
+const retainAudioNode = () => {
+    activeWebAudioNodes += 1;
+    clearAudioSuspendTimer();
+};
+
+const releaseAudioNode = () => {
+    activeWebAudioNodes = Math.max(0, activeWebAudioNodes - 1);
+    if (activeWebAudioNodes !== 0 || !audioCtx || typeof window === "undefined") return;
+    clearAudioSuspendTimer();
+    audioSuspendTimer = window.setTimeout(() => {
+        audioSuspendTimer = null;
+        if (!audioCtx || activeWebAudioNodes !== 0) return;
+        if (audioCtx.state === "running") {
+            audioCtx.suspend().catch(() => { });
+        }
+    }, AUDIO_IDLE_SUSPEND_DELAY_MS);
+};
+
+const loadDecodedSample = async (src: string): Promise<AudioBuffer | null> => {
+    initAudio();
+    if (!audioCtx || typeof fetch === "undefined") return null;
+
+    const cacheKey = resolveAssetUrl(src);
+    const cached = decodedSampleCache.get(cacheKey);
+    if (cached) return cached;
+
+    const pending = fetch(cacheKey)
+        .then(async (response) => {
+            if (!response.ok) return null;
+            const data = await response.arrayBuffer();
+            const context = audioCtx;
+            if (!context) return null;
+            return await context.decodeAudioData(data.slice(0));
+        })
+        .catch(() => null);
+
+    decodedSampleCache.set(cacheKey, pending);
+    return pending;
+};
+
 type OscType = OscillatorType;
 
 const playTone = (
@@ -66,6 +120,7 @@ const playTone = (
 
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
+    retainAudioNode();
 
     osc.type = type;
     osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
@@ -76,6 +131,11 @@ const playTone = (
 
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
+    osc.onended = () => {
+        osc.disconnect();
+        gainNode.disconnect();
+        releaseAudioNode();
+    };
 
     osc.start();
     osc.stop(audioCtx.currentTime + durationSec);
@@ -87,22 +147,65 @@ const playSample = (
     playbackRate = 1,
     onFail?: () => void,
 ) => {
-    if (typeof Audio === "undefined") {
-        onFail?.();
-        return;
-    }
-    try {
-        const audio = new Audio(resolveAssetUrl(src));
-        audio.preload = "auto";
-        audio.volume = volume;
-        audio.playbackRate = playbackRate;
-        audio.currentTime = 0;
-        void audio.play().catch(() => {
+    void loadDecodedSample(src).then((buffer) => {
+        if (!audioCtx || !buffer) {
+            if (typeof Audio === "undefined") {
+                onFail?.();
+                return;
+            }
+
+            try {
+                const audio = new Audio(resolveAssetUrl(src));
+                const cleanup = () => {
+                    activeSamplePlayers.delete(audio);
+                    audio.pause();
+                    audio.removeAttribute("src");
+                    audio.load();
+                };
+
+                activeSamplePlayers.add(audio);
+                audio.preload = "auto";
+                audio.volume = volume;
+                audio.playbackRate = playbackRate;
+                audio.currentTime = 0;
+                audio.addEventListener("ended", cleanup, { once: true });
+                audio.addEventListener("error", cleanup, { once: true });
+                void audio.play().catch(() => {
+                    cleanup();
+                    onFail?.();
+                });
+                return;
+            } catch {
+                onFail?.();
+                return;
+            }
+        }
+
+        const source = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain();
+        retainAudioNode();
+
+        source.buffer = buffer;
+        source.playbackRate.setValueAtTime(playbackRate, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.onended = () => {
+            source.disconnect();
+            gainNode.disconnect();
+            releaseAudioNode();
+        };
+
+        try {
+            source.start();
+        } catch {
+            source.disconnect();
+            gainNode.disconnect();
+            releaseAudioNode();
             onFail?.();
-        });
-    } catch {
-        onFail?.();
-    }
+        }
+    });
 };
 
 const varyRate = (base: number, spread: number) => base + (Math.random() * 2 - 1) * spread;
@@ -143,10 +246,20 @@ export const playTokenLandingSound = () => {
     });
 };
 
+export const playGatePassSound = () => {
+    playSample(SOUND_ASSETS.gatePass, 0.33, varyRate(1.0, 0.025), () => {
+        playTone("triangle", 720, 980, 0.08, 0.045);
+    });
+};
+
 export const playRoundStartSound = () => {
     playSample(SOUND_ASSETS.roundStart, 0.46, varyRate(1.0, 0.03), () => {
         playTone("sawtooth", 320, 640, 0.16, 0.06);
     });
+};
+
+export const playPlaylistLaunchSound = () => {
+    playSample(SOUND_ASSETS.playlistLaunch, 0.7, varyRate(1.0, 0.03), playRoundStartSound);
 };
 
 export const playPerkActionSound = () => {
@@ -167,6 +280,55 @@ export const playRoundRewardTickSound = () => {
     playSample(SOUND_ASSETS.select, 0.2, varyRate(1.22, 0.04), () => {
         playTone("square", 840, 980, 0.06, 0.035);
     });
+};
+
+export const playAntiPerkBeatSound = () => {
+    initAudio();
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime;
+    const bodyOsc = audioCtx.createOscillator();
+    const transientOsc = audioCtx.createOscillator();
+    const bodyGain = audioCtx.createGain();
+    const transientGain = audioCtx.createGain();
+    retainAudioNode();
+    retainAudioNode();
+
+    bodyOsc.type = "sine";
+    bodyOsc.frequency.setValueAtTime(120, now);
+    bodyOsc.frequency.exponentialRampToValueAtTime(46, now + 0.09);
+
+    bodyGain.gain.setValueAtTime(0.0001, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.18, now + 0.008);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+    transientOsc.type = "triangle";
+    transientOsc.frequency.setValueAtTime(950, now);
+    transientOsc.frequency.exponentialRampToValueAtTime(220, now + 0.028);
+
+    transientGain.gain.setValueAtTime(0.0001, now);
+    transientGain.gain.exponentialRampToValueAtTime(0.045, now + 0.002);
+    transientGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
+
+    bodyOsc.connect(bodyGain);
+    transientOsc.connect(transientGain);
+    bodyGain.connect(audioCtx.destination);
+    transientGain.connect(audioCtx.destination);
+    bodyOsc.onended = () => {
+        bodyOsc.disconnect();
+        bodyGain.disconnect();
+        releaseAudioNode();
+    };
+    transientOsc.onended = () => {
+        transientOsc.disconnect();
+        transientGain.disconnect();
+        releaseAudioNode();
+    };
+
+    bodyOsc.start(now);
+    transientOsc.start(now);
+    bodyOsc.stop(now + 0.12);
+    transientOsc.stop(now + 0.03);
 };
 
 export const playConverterMarkInSound = () => {

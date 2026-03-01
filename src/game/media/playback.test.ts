@@ -1,7 +1,25 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../services/trpc", () => ({
+  trpc: {
+    store: {
+      get: {
+        query: vi.fn(),
+      },
+    },
+  },
+}));
+
+import { trpc } from "../../services/trpc";
 import { loadFunscriptTimeline } from "./playback";
 
+const getStoreQueryMock = vi.mocked(trpc.store.get.query);
+
 describe("loadFunscriptTimeline", () => {
+  beforeEach(() => {
+    getStoreQueryMock.mockResolvedValue(null);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -72,6 +90,45 @@ describe("loadFunscriptTimeline", () => {
     expect(timeline).not.toBeNull();
     expect(timeline?.actions).toEqual([
       { at: 0, pos: 0 },
+      { at: 100, pos: 50 },
+    ]);
+  });
+
+  it("autofixes broken range 90 scripts to 100 by default", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          range: 90,
+          actions: [{ at: 0, pos: 90 }, { at: 100, pos: 45 }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const timeline = await loadFunscriptTimeline("https://cdn.example.com/range-90-autofixed.funscript");
+    expect(timeline).not.toBeNull();
+    expect(timeline?.actions).toEqual([
+      { at: 0, pos: 90 },
+      { at: 100, pos: 45 },
+    ]);
+  });
+
+  it("preserves raw range 90 scaling when autofix is disabled", async () => {
+    getStoreQueryMock.mockResolvedValue(false);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          range: 90,
+          actions: [{ at: 0, pos: 90 }, { at: 100, pos: 45 }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const timeline = await loadFunscriptTimeline("https://cdn.example.com/range-90-raw.funscript");
+    expect(timeline).not.toBeNull();
+    expect(timeline?.actions).toEqual([
+      { at: 0, pos: 100 },
       { at: 100, pos: 50 },
     ]);
   });

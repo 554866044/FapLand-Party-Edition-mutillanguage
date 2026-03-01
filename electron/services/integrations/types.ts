@@ -5,8 +5,8 @@ export const INTEGRATIONS_SYNC_STATUS_KEY = "integrations.sync.status";
 export const INTEGRATIONS_DISABLED_ROUND_IDS_KEY = "integrations.disabledRoundIds";
 
 export type ExternalSourceKind = "stash";
-export type StashAuthMode = "apiKey" | "login";
-export type MediaPurpose = "video" | "funscript";
+export type StashAuthMode = "none" | "apiKey" | "login";
+export type MediaPurpose = "video" | "funscript" | "image";
 
 export type StashTagSelection = {
   id: string;
@@ -64,8 +64,10 @@ export type NormalizedSceneImportItem = {
   author: string | null;
   description: string | null;
   phash: string | null;
+  previewImageUri: string | null;
   videoUri: string;
   funscriptUri: string | null;
+  durationMs: number | null;
 };
 
 export type SceneIngestResult = {

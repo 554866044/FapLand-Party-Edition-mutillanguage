@@ -25,6 +25,13 @@ function ConverterPage() {
   const navigate = useNavigate();
   const { sourceRoundId, heroName } = Route.useSearch();
   const state = useConverterState({ sourceRoundId, heroName });
+  const goBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    void navigate({ to: "/" });
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -33,7 +40,13 @@ function ConverterPage() {
       <div className="relative z-10 h-screen overflow-y-auto px-4 py-8 sm:px-8">
         <main className="parallax-ui-none mx-auto flex w-full max-w-7xl flex-col gap-6 pb-6">
           {/* Header */}
-          <ConverterHeader {...pickConverterHeaderProps(state)} />
+          <ConverterHeader
+            {...pickConverterHeaderProps(state)}
+            onGoBack={() => {
+              playSelectSound();
+              goBack();
+            }}
+          />
 
           {/* Source + Hero setup */}
           <section className="animate-entrance converter-panel-glass rounded-3xl p-4 sm:p-6">

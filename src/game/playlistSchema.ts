@@ -68,9 +68,11 @@ export const ZGraphNode = z
     kind: ZGraphNodeKind,
     roundRef: ZPortableRoundRef.optional(),
     forceStop: z.boolean().optional(),
+    skippable: z.boolean().optional(),
     randomPoolId: z.string().trim().min(1).optional(),
     checkpointRestMs: z.number().int().min(0).optional(),
     visualId: z.string().trim().min(1).optional(),
+    giftGuaranteedPerk: z.boolean().optional(),
     styleHint: z
       .object({
         x: z.number().finite().optional(),
@@ -120,7 +122,7 @@ export const ZGraphBoardConfig = z
     edges: z.array(ZGraphEdge).default([]),
     randomRoundPools: z.array(ZRoundPool).default([]),
     cumRoundRefs: z.array(ZPortableRoundRef).default([]),
-    pathChoiceTimeoutMs: z.number().int().min(1000).max(30000).default(6000),
+    pathChoiceTimeoutMs: z.number().int().min(1000).max(30000).default(12000),
   })
   .strict()
   .superRefine((value, context) => {
@@ -155,10 +157,18 @@ export const ZGraphBoardConfig = z
         });
       }
 
-      if (node.kind !== "round" && typeof node.forceStop === "boolean") {
+      if (node.kind !== "round" && node.kind !== "perk" && typeof node.forceStop === "boolean") {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Only round nodes may define forceStop (${node.id})`,
+          message: `Only round and perk nodes may define forceStop (${node.id})`,
+          path: ["nodes"],
+        });
+      }
+
+      if (node.kind !== "round" && typeof node.skippable === "boolean") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Only round nodes may define skippable (${node.id})`,
           path: ["nodes"],
         });
       }
@@ -167,6 +177,14 @@ export const ZGraphBoardConfig = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Only safePoint nodes may define checkpointRestMs (${node.id})`,
+          path: ["nodes"],
+        });
+      }
+
+      if (node.kind !== "perk" && typeof node.giftGuaranteedPerk === "boolean") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Only perk nodes may define giftGuaranteedPerk (${node.id})`,
           path: ["nodes"],
         });
       }
@@ -298,8 +316,8 @@ export const ZPlaylistConfig = z
       .strict(),
     probabilityScaling: z
       .object({
-        initialIntermediaryProbability: z.number().min(0).max(1).default(0),
-        initialAntiPerkProbability: z.number().min(0).max(1).default(0),
+        initialIntermediaryProbability: z.number().min(0).max(1).default(0.1),
+        initialAntiPerkProbability: z.number().min(0).max(1).default(0.1),
         intermediaryIncreasePerRound: z.number().min(0).max(1).default(0.02),
         antiPerkIncreasePerRound: z.number().min(0).max(1).default(0.015),
         maxIntermediaryProbability: z.number().min(0).max(1).default(0.85),
@@ -314,7 +332,7 @@ export const ZPlaylistConfig = z
         scorePerCompletedRound: z.number().int().min(0).default(100),
         scorePerIntermediary: z.number().int().min(0).default(30),
         scorePerActiveAntiPerk: z.number().int().min(0).default(25),
-        scorePerCumRoundSuccess: z.number().int().min(0).default(120),
+        scorePerCumRoundSuccess: z.number().int().min(0).default(420),
       })
       .strict(),
   })

@@ -41,7 +41,7 @@ const updateListeners = new Set<(state: AppUpdateState) => void>();
 
 let currentState: AppUpdateState = {
     status: "idle",
-    currentVersion: normalizeVersion(app.getVersion()),
+    currentVersion: normalizeVersion(process.env.FLAND_APP_VERSION ?? app.getVersion()),
     latestVersion: null,
     checkedAtIso: null,
     releasePageUrl: "",
@@ -65,7 +65,7 @@ function setState(next: Partial<AppUpdateState>): AppUpdateState {
     currentState = {
         ...currentState,
         ...next,
-        currentVersion: normalizeVersion(app.getVersion()),
+        currentVersion: normalizeVersion(process.env.FLAND_APP_VERSION ?? app.getVersion()),
         releasePageUrl: releaseConfig?.releasePageUrl ?? "",
         canAutoUpdate: false,
     };
@@ -77,8 +77,12 @@ function normalizeVersion(input: string): string {
     return input.trim().replace(/^v/i, "");
 }
 
+function getComparableVersion(input: string): string {
+    return normalizeVersion(input).split("+", 1)[0] ?? "";
+}
+
 function versionToTuple(input: string): number[] {
-    return normalizeVersion(input)
+    return getComparableVersion(input)
         .split(/[^0-9]+/)
         .filter((part) => part.length > 0)
         .map((part) => Number.parseInt(part, 10))
@@ -167,7 +171,7 @@ async function fetchLatestRelease(): Promise<GitHubLatestReleaseResponse> {
     const response = await fetch(releaseConfig.apiUrl, {
         headers: {
             Accept: "application/vnd.github+json",
-            "User-Agent": `f-land/${app.getVersion()}`,
+            "User-Agent": `f-land/${process.env.FLAND_APP_VERSION ?? app.getVersion()}`,
         },
     });
 
@@ -224,7 +228,10 @@ export async function checkForAppUpdates(force = false): Promise<AppUpdateState>
             const releasePageUrl = asTrimmedString(release.html_url) ?? releaseConfig.releasePageUrl;
             const downloadUrl = resolveReleaseAssetUrl(release.assets) ?? releasePageUrl;
             const checkedAtIso = new Date().toISOString();
-            const updateAvailable = compareVersions(latestVersion, app.getVersion()) > 0;
+            const updateAvailable = compareVersions(
+                latestVersion,
+                process.env.FLAND_APP_VERSION ?? app.getVersion(),
+            ) > 0;
 
             return setState({
                 status: updateAvailable ? "update_available" : "up_to_date",

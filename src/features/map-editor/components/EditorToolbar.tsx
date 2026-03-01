@@ -73,6 +73,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(({
                             playSelectSound();
                             onSetTool(item.id);
                         }}
+                        data-controller-focus-id={`map-editor-toolbar-tool-${item.id}`}
                     >
                         <span className="text-sm leading-none">{item.icon}</span>
                         <span className="hidden sm:inline">{item.label}</span>
@@ -114,6 +115,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(({
                         playSelectSound();
                         onAlignmentStrategyChange(event.target.value as GraphAlignmentStrategy);
                     }}
+                    data-controller-focus-id="map-editor-toolbar-layout"
                 >
                     <option value="layeredHorizontal">Layered →</option>
                     <option value="layeredVertical">Layered ↓</option>
@@ -135,6 +137,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(({
                 onMouseEnter={playHoverSound}
                 onClick={onSave}
                 disabled={savePending || testMapPending || !isDirty}
+                data-controller-focus-id="map-editor-toolbar-save"
             >
                 {savePending ? "Saving…" : "Save"}
             </button>
@@ -144,6 +147,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(({
                 onMouseEnter={playHoverSound}
                 onClick={onTestMap}
                 disabled={savePending || testMapPending}
+                data-controller-focus-id="map-editor-toolbar-test-map"
             >
                 {testMapPending ? "Starting…" : "Test Map"}
             </button>
@@ -175,6 +179,7 @@ const ToolbarIconButton: React.FC<ToolbarIconButtonProps> = React.memo(({ label,
             playSelectSound();
             onClick();
         }}
+        data-controller-focus-id={`map-editor-toolbar-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
     >
         <span className="text-sm leading-none">{icon}</span>
     </button>

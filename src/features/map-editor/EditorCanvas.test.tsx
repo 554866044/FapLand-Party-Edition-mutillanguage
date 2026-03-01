@@ -42,7 +42,7 @@ const baseConfig: EditorGraphConfig = {
     maxIntermediaryProbability: 0.85,
     maxAntiPerkProbability: 0.75,
   },
-  economy: { scorePerCumRoundSuccess: 120 },
+  economy: { scorePerCumRoundSuccess: 420 },
 };
 
 const selection: EditorSelectionState = {
@@ -91,5 +91,90 @@ describe("EditorCanvas", () => {
     expect(edgeLine?.getAttribute("x2")).toBe("400");
     expect(edgeLine?.getAttribute("y2")).toBe("140");
     expect(edgeLine?.getAttribute("marker-end")).toMatch(/^url\(#.+-editor-edge-arrow\)$/);
+  });
+
+  it("applies custom node color overrides", () => {
+    const config: EditorGraphConfig = {
+      ...baseConfig,
+      nodes: baseConfig.nodes.map((node) => (
+        node.id === "start"
+          ? { ...node, styleHint: { ...node.styleHint, color: "#10b981" } }
+          : node
+      )),
+    };
+
+    const { container } = render(
+      <EditorCanvas
+        config={config}
+        selection={selection}
+        connectFromNodeId={null}
+        tool="select"
+        activePlacementKind={null}
+        viewport={viewport}
+        showGrid={false}
+        spacePanActive={false}
+        onViewportChange={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSetConnectFrom={vi.fn()}
+        onMoveNodes={vi.fn()}
+        onCreateEdge={vi.fn()}
+        onDeleteEdgeBetween={vi.fn()}
+        onDeleteSelection={vi.fn()}
+        onPlaceNodeAtWorld={vi.fn()}
+      />,
+    );
+
+    const borderRect = container.querySelector<SVGRectElement>('[data-node-id="start"] .editor-node-border');
+    const secondaryLabel = container.querySelectorAll<SVGTextElement>('[data-node-id="start"] text')[1];
+    expect(borderRect?.getAttribute("stroke")).toBe("#10b981");
+    expect(secondaryLabel?.getAttribute("fill")).toBe("#10b981");
+  });
+
+  it("scales node geometry and edge trimming from styleHint.size", () => {
+    const config: EditorGraphConfig = {
+      ...baseConfig,
+      nodes: [
+        {
+          ...baseConfig.nodes[0]!,
+          styleHint: { ...baseConfig.nodes[0]!.styleHint, size: 1.5 },
+        },
+        {
+          ...baseConfig.nodes[1]!,
+          styleHint: { ...baseConfig.nodes[1]!.styleHint, x: 520 },
+        },
+      ],
+    };
+
+    const { container } = render(
+      <EditorCanvas
+        config={config}
+        selection={selection}
+        connectFromNodeId={null}
+        tool="select"
+        activePlacementKind={null}
+        viewport={viewport}
+        showGrid={false}
+        spacePanActive={false}
+        onViewportChange={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSetConnectFrom={vi.fn()}
+        onMoveNodes={vi.fn()}
+        onCreateEdge={vi.fn()}
+        onDeleteEdgeBetween={vi.fn()}
+        onDeleteSelection={vi.fn()}
+        onPlaceNodeAtWorld={vi.fn()}
+      />,
+    );
+
+    const borderRect = container.querySelector<SVGRectElement>('[data-node-id="start"] .editor-node-border');
+    const edgeLine = container.querySelector<SVGLineElement>('[data-edge-id="edge-1"] .editor-edge-line');
+
+    expect(borderRect?.getAttribute("width")).toBe("300");
+    expect(borderRect?.getAttribute("height")).toBe("120");
+    expect(edgeLine).not.toBeNull();
+    expect(Number(edgeLine?.getAttribute("x1"))).toBe(400);
+    expect(Number(edgeLine?.getAttribute("x2"))).toBe(520);
+    expect(Number(edgeLine?.getAttribute("y1"))).toBeGreaterThan(140);
+    expect(Number(edgeLine?.getAttribute("y2"))).toBeGreaterThan(140);
   });
 });

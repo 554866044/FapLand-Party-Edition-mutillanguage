@@ -16,6 +16,12 @@ import {
   setActivePlaylist,
   updatePlaylist,
 } from "../../services/playlists";
+import { exportPlaylistPackage as exportPlaylistPackageBundle } from "../../services/playlistExportPackage";
+import {
+  analyzePlaylistExportPackage,
+  getPlaylistExportPackageStatus,
+  requestPlaylistExportPackageAbort,
+} from "../../services/playlistExportPackage";
 import { publicProcedure, router } from "../trpc";
 
 export const playlistRouter = router({
@@ -121,6 +127,49 @@ export const playlistRouter = router({
         });
       }
     }),
+
+  exportPackage: publicProcedure
+    .input(z.object({
+      playlistId: z.string().min(1),
+      directoryPath: z.string().min(1),
+      compressionMode: z.enum(["copy", "av1"]).optional(),
+      compressionStrength: z.number().finite().min(0).max(100).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        return await exportPlaylistPackageBundle(input);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Failed to export playlist package.",
+        });
+      }
+    }),
+
+  analyzeExportPackage: publicProcedure
+    .input(z.object({
+      playlistId: z.string().min(1),
+      compressionMode: z.enum(["copy", "av1"]).optional(),
+      compressionStrength: z.number().finite().min(0).max(100).optional(),
+    }))
+    .query(async ({ input }) => {
+      try {
+        return await analyzePlaylistExportPackage(input);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Failed to analyze playlist export package.",
+        });
+      }
+    }),
+
+  getExportPackageStatus: publicProcedure.query(() => {
+    return getPlaylistExportPackageStatus();
+  }),
+
+  abortExportPackage: publicProcedure.mutation(() => {
+    return requestPlaylistExportPackageAbort();
+  }),
 
   recordRoundPlay: publicProcedure
     .input(

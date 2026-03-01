@@ -11,6 +11,8 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      "dist-electron",
+      "release",
       "src-tauri",
       "node_modules",
       ".output",

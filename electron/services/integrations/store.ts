@@ -28,7 +28,7 @@ const ZSource = z
     name: z.string().trim().min(1),
     enabled: z.boolean(),
     baseUrl: z.string().trim().min(1),
-    authMode: z.enum(["apiKey", "login"]),
+    authMode: z.enum(["none", "apiKey", "login"]),
     apiKey: z.string().trim().min(1).nullable(),
     username: z.string().trim().min(1).nullable(),
     password: z.string().trim().min(1).nullable(),

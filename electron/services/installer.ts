@@ -3,7 +3,6 @@ import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { isVideoExtension } from "../../src/constants/videoFormats";
 import { type PortableRoundRef } from "../../src/game/playlistSchema";
@@ -13,6 +12,12 @@ import { approveDialogPath, assertApprovedDialogPath } from "./dialogPathApprova
 import { getDb } from "./db";
 import { eq, asc, isNotNull } from "drizzle-orm";
 import { hero, round, resource } from "./db/schema";
+import {
+    fromLocalMediaUri,
+    isPackageRelativeMediaPath,
+    resolveSidecarMediaPath,
+    toLocalMediaUri,
+} from "./localMedia";
 export type RoundType = "Normal" | "Interjection" | "Cum";
 type TransactionClient = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 import {
@@ -24,11 +29,13 @@ import {
 } from "./phash";
 import { getStore } from "./store";
 import { syncExternalSources } from "./integrations";
+import { importPlaylistFromFile } from "./playlists";
 import { generateRoundPreviewImageDataUri } from "./roundPreview";
+import { resolveVideoDurationMsForLocalPath } from "./videoDuration";
 
 const AUTO_SCAN_FOLDERS_KEY = "install.autoScanFolders";
 const MAX_TRACKED_ERRORS = 50;
-const SIDECAR_EXTENSIONS = new Set([".round", ".hero"]);
+const SIDECAR_EXTENSIONS = new Set([".round", ".hero", ".fplay"]);
 
 export function isSupportedVideoFileExtension(extension: string): boolean {
     return isVideoExtension(extension);
@@ -38,6 +45,7 @@ type PreparedResource = {
     videoUri: string;
     funscriptUri: string | null;
     phash: string | null;
+    durationMs: number | null;
 };
 
 type PreparedRoundResources = {
@@ -84,11 +92,37 @@ type ExistingHeroCacheEntry = {
 type ExistingRoundCacheEntry = {
     id: string;
     previewImage: string | null;
+    heroId?: string | null;
+    name?: string | null;
+    phash?: string | null;
 };
 
 type SimilarPhashCandidate = {
+    roundId?: string | null;
     videoUri: string;
+    funscriptUri?: string | null;
+    durationMs?: number | null;
     phash: string;
+};
+
+type ExistingTemplateRoundCandidate = {
+    id: string;
+    heroId: string | null;
+    name: string;
+    phash: string | null;
+    installSourceKey: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type ExistingHeroGroupRound = {
+    id: string;
+    name: string;
+    heroId: string | null;
+    phash: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    resources: PreparedResource[];
 };
 
 type PreparedRoundWrite = {
@@ -96,22 +130,26 @@ type PreparedRoundWrite = {
     round: SidecarRoundData;
     resources: PreparedResource[];
     previewImage: string | null;
+    unresolved: boolean;
 };
 
-type PreparedInstallEntry = {
-    heroInput: HeroMetadataInput | null;
-    writes: PreparedRoundWrite[];
-};
+type PreparedInstallEntry =
+    | { kind: "hero_round"; heroInput: HeroMetadataInput | null; writes: PreparedRoundWrite[] }
+    | { kind: "playlist"; filePath: string };
 
 type InstallSessionContext = {
     db: ReturnType<typeof getDb>;
     heroByName: Map<string, ExistingHeroCacheEntry>;
     roundByInstallSourceKey: Map<string, ExistingRoundCacheEntry>;
     exactVideoUriByPhash: Map<string, string>;
+    exactResourceByPhash: Map<string, PreparedResource>;
     similarPhashCandidates: SimilarPhashCandidate[];
+    templateRounds: ExistingTemplateRoundCandidate[];
+    heroById: Map<string, ExistingHeroCacheEntry & { name: string }>;
     hashCache: Map<string, Promise<string>>;
     previewCache: Map<string, Promise<string | null>>;
     normalizedRangeCache: Map<string, Promise<VideoRangeResolution>>;
+    durationCache: Map<string, Promise<number | null>>;
     prepConcurrency: number;
 };
 
@@ -133,6 +171,7 @@ export type InstallScanStats = {
     scannedFolders: number;
     sidecarsSeen: number;
     installed: number;
+    playlistsImported: number;
     updated: number;
     skipped: number;
     failed: number;
@@ -210,6 +249,11 @@ export type InstallFolderScanResult = {
     legacyImport?: LegacyInstallImport;
 };
 
+export type AddAutoScanFolderAndScanResult = {
+    folders: string[];
+    result: InstallFolderScanResult;
+};
+
 let activeScanPromise: Promise<InstallScanStatus> | null = null;
 let activeManualFolderImport = false;
 let abortRequested = false;
@@ -228,10 +272,15 @@ function emptyStats(): InstallScanStats {
         scannedFolders: 0,
         sidecarsSeen: 0,
         installed: 0,
+        playlistsImported: 0,
         updated: 0,
         skipped: 0,
         failed: 0,
     };
+}
+
+function formatImportStatsSummary(stats: InstallScanStats): string {
+    return `Installed: ${stats.installed}, Playlists imported: ${stats.playlistsImported}, Updated: ${stats.updated}, Failed: ${stats.failed}.`;
 }
 
 function cloneStatus(status: InstallScanStatus): InstallScanStatus {
@@ -248,7 +297,7 @@ function getPreparationConcurrency(): number {
 
 async function createInstallSessionContext(): Promise<InstallSessionContext> {
     const db = getDb();
-    const [heroes, existingRounds, existingResources] = await Promise.all([
+    const [heroes, existingRounds, existingResources, existingTemplateRounds] = await Promise.all([
         db.query.hero.findMany({
             columns: {
                 id: true,
@@ -264,22 +313,50 @@ async function createInstallSessionContext(): Promise<InstallSessionContext> {
                 id: true,
                 installSourceKey: true,
                 previewImage: true,
+                heroId: true,
+                name: true,
+                phash: true,
             },
         }),
         db.query.resource.findMany({
             where: isNotNull(resource.phash),
             orderBy: [asc(resource.createdAt)],
             columns: {
+                roundId: true,
                 videoUri: true,
+                funscriptUri: true,
                 phash: true,
+                durationMs: true,
+            },
+        }),
+        db.query.round.findMany({
+            with: {
+                resources: true,
+            },
+            columns: {
+                id: true,
+                heroId: true,
+                name: true,
+                phash: true,
+                installSourceKey: true,
+                createdAt: true,
+                updatedAt: true,
             },
         }),
     ]);
 
     const heroByName = new Map<string, ExistingHeroCacheEntry>();
+    const heroById = new Map<string, ExistingHeroCacheEntry & { name: string }>();
     for (const entry of heroes) {
         heroByName.set(entry.name, {
             id: entry.id,
+            author: entry.author,
+            description: entry.description,
+            phash: entry.phash,
+        });
+        heroById.set(entry.id, {
+            id: entry.id,
+            name: entry.name,
             author: entry.author,
             description: entry.description,
             phash: entry.phash,
@@ -293,10 +370,14 @@ async function createInstallSessionContext(): Promise<InstallSessionContext> {
         roundByInstallSourceKey.set(installSourceKey, {
             id: entry.id,
             previewImage: entry.previewImage,
+            heroId: entry.heroId,
+            name: entry.name,
+            phash: entry.phash,
         });
     }
 
     const exactVideoUriByPhash = new Map<string, string>();
+    const exactResourceByPhash = new Map<string, PreparedResource>();
     const similarPhashCandidates: SimilarPhashCandidate[] = [];
     for (const entry of existingResources) {
         const normalizedPhash = normalizeText(entry.phash);
@@ -305,25 +386,52 @@ async function createInstallSessionContext(): Promise<InstallSessionContext> {
         if (!exactVideoUriByPhash.has(normalizedPhash)) {
             exactVideoUriByPhash.set(normalizedPhash, entry.videoUri);
         }
+        if (!exactResourceByPhash.has(normalizedPhash)) {
+            exactResourceByPhash.set(normalizedPhash, {
+                videoUri: entry.videoUri,
+                funscriptUri: entry.funscriptUri,
+                phash: normalizedPhash,
+                durationMs: entry.durationMs,
+            });
+        }
 
         const normalizedForSimilarity = normalizePhashForSimilarity(normalizedPhash);
         if (normalizedForSimilarity) {
             similarPhashCandidates.push({
+                roundId: entry.roundId,
                 videoUri: entry.videoUri,
+                funscriptUri: entry.funscriptUri,
+                durationMs: entry.durationMs,
                 phash: normalizedForSimilarity,
             });
         }
     }
 
+    const templateRounds = existingTemplateRounds
+        .filter((entry) => entry.resources.length === 0)
+        .map((entry) => ({
+            id: entry.id,
+            heroId: entry.heroId,
+            name: entry.name,
+            phash: entry.phash,
+            installSourceKey: entry.installSourceKey,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+        }));
+
     return {
         db,
         heroByName,
+        heroById,
         roundByInstallSourceKey,
         exactVideoUriByPhash,
+        exactResourceByPhash,
         similarPhashCandidates,
+        templateRounds,
         hashCache: new Map(),
         previewCache: new Map(),
         normalizedRangeCache: new Map(),
+        durationCache: new Map(),
         prepConcurrency: getPreparationConcurrency(),
     };
 }
@@ -393,32 +501,6 @@ function normalizeText(value: string | null | undefined): string | null {
     return trimmed.length > 0 ? trimmed : null;
 }
 
-function toAppMediaUri(filePath: string): string {
-    return `app://media/${encodeURIComponent(path.resolve(filePath))}`;
-}
-
-function fromAppUriToPath(uri: string): string | null {
-    try {
-        const parsed = new URL(uri);
-        if (parsed.protocol === "app:" && parsed.hostname === "media") {
-            const decoded = decodeURIComponent(parsed.pathname.slice(1));
-            if (!decoded) return null;
-            if (process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)) {
-                return path.normalize(decoded.slice(1));
-            }
-            return path.normalize(decoded);
-        }
-
-        if (parsed.protocol === "file:") {
-            return fileURLToPath(parsed);
-        }
-
-        return null;
-    } catch {
-        return null;
-    }
-}
-
 function normalizeScanFolder(input: string): string {
     const resolved = path.resolve(input.trim());
     return path.normalize(resolved);
@@ -447,6 +529,15 @@ async function isDirectory(folderPath: string): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+async function resolveApprovedInstallFolder(folderPath: string): Promise<string> {
+    const normalizedFolder = assertApprovedDialogPath("installFolder", folderPath);
+    if (!(await isDirectory(normalizedFolder))) {
+        throw new Error("Folder does not exist or is not a directory.");
+    }
+
+    return normalizedFolder;
 }
 
 async function isFile(filePath: string): Promise<boolean> {
@@ -685,7 +776,7 @@ async function computePreviewImage(
     startTimeMs?: number | null,
     endTimeMs?: number | null,
 ): Promise<string | null> {
-    const localVideoPath = fromAppUriToPath(videoUri);
+    const localVideoPath = fromLocalMediaUri(videoUri);
     let cacheKey = `${videoUri}#raw:${toOptionalMs(startTimeMs) ?? ""}-${toOptionalMs(endTimeMs) ?? ""}`;
 
     if (localVideoPath) {
@@ -700,6 +791,16 @@ async function computePreviewImage(
             startTimeMs,
             endTimeMs,
         });
+    });
+}
+
+async function resolveLocalVideoDurationMs(
+    context: InstallSessionContext,
+    localVideoPath: string | null,
+): Promise<number | null> {
+    if (!localVideoPath) return null;
+    return rememberPromise(context.durationCache, localVideoPath, async () => {
+        return resolveVideoDurationMsForLocalPath(localVideoPath);
     });
 }
 
@@ -724,6 +825,14 @@ function normalizeRoundData(input: InstallRound): SidecarRoundData {
     };
 }
 
+function resolveSidecarResourceUri(resourceUri: string, sidecarPath: string): string {
+    const trimmed = resourceUri.trim();
+    if (isPackageRelativeMediaPath(trimmed)) {
+        return toLocalMediaUri(resolveSidecarMediaPath(sidecarPath, trimmed));
+    }
+    return trimmed;
+}
+
 async function prepareRoundResources(
     context: InstallSessionContext,
     sidecarPath: string,
@@ -741,10 +850,15 @@ async function prepareRoundResources(
     if (round.resources.length > 0) {
         for (const resource of round.resources) {
             throwIfAbortRequested();
+            const videoUri = resolveSidecarResourceUri(resource.videoUri, sidecarPath);
+            const normalizedFunscriptUri = normalizeText(resource.funscriptUri);
+            const funscriptUri = normalizedFunscriptUri
+                ? resolveSidecarResourceUri(normalizedFunscriptUri, sidecarPath)
+                : null;
             resources.push({
-                videoUri: resource.videoUri,
-                funscriptUri: normalizeText(resource.funscriptUri),
-                localVideoPath: fromAppUriToPath(resource.videoUri),
+                videoUri,
+                funscriptUri,
+                localVideoPath: fromLocalMediaUri(videoUri),
             });
         }
     } else if (allowLocalFallback) {
@@ -752,21 +866,29 @@ async function prepareRoundResources(
         const basePath = sidecarPath.replace(/\.(round|hero)$/i, "");
         const localVideoPath = await findSiblingVideo(basePath);
         if (!localVideoPath) {
-            throw new Error("No resource defined and no same-basename local video file found.");
+            return {
+                resources: [],
+                computedRoundPhash: explicitRoundPhash,
+                previewImage: null,
+            };
         }
 
         const funscriptPath = `${basePath}.funscript`;
         const localFunscriptExists = await fileExists(funscriptPath);
 
         resources.push({
-            videoUri: toAppMediaUri(localVideoPath),
-            funscriptUri: localFunscriptExists ? toAppMediaUri(funscriptPath) : null,
+            videoUri: toLocalMediaUri(localVideoPath),
+            funscriptUri: localFunscriptExists ? toLocalMediaUri(funscriptPath) : null,
             localVideoPath,
         });
     }
 
     if (resources.length === 0) {
-        throw new Error("Round has no resources.");
+        return {
+            resources: [],
+            computedRoundPhash: explicitRoundPhash,
+            previewImage: null,
+        };
     }
 
     const previewSourceResource = resources[0];
@@ -788,6 +910,7 @@ async function prepareRoundResources(
                 videoUri: resource.videoUri,
                 funscriptUri: resource.funscriptUri,
                 phash: resolvedPhash,
+                durationMs: await resolveLocalVideoDurationMs(context, resource.localVideoPath),
             } satisfies PreparedResource;
         })),
         previewSourceResource
@@ -835,6 +958,13 @@ async function ensureHeroWithMissingMetadata(
             description: normalizedDescription,
             phash: normalizedPhash,
         });
+        context.heroById.set(created.id, {
+            id: created.id,
+            name: heroInput.name,
+            author: normalizedAuthor,
+            description: normalizedDescription,
+            phash: normalizedPhash,
+        });
         return created.id;
     }
 
@@ -857,6 +987,13 @@ async function ensureHeroWithMissingMetadata(
             description: updateData.description ?? existing.description,
             phash: updateData.phash ?? existing.phash,
         });
+        context.heroById.set(existing.id, {
+            id: existing.id,
+            name: heroInput.name,
+            author: updateData.author ?? existing.author,
+            description: updateData.description ?? existing.description,
+            phash: updateData.phash ?? existing.phash,
+        });
     }
 
     return existing.id;
@@ -866,6 +1003,8 @@ function rememberCanonicalResource(
     context: InstallSessionContext,
     videoUri: string,
     phash: string | null,
+    funscriptUri: string | null = null,
+    durationMs: number | null = null,
 ): void {
     const normalizedPhash = normalizeText(phash);
     if (!normalizedPhash) return;
@@ -873,11 +1012,22 @@ function rememberCanonicalResource(
     if (!context.exactVideoUriByPhash.has(normalizedPhash)) {
         context.exactVideoUriByPhash.set(normalizedPhash, videoUri);
     }
+    if (!context.exactResourceByPhash.has(normalizedPhash)) {
+        context.exactResourceByPhash.set(normalizedPhash, {
+            videoUri,
+            funscriptUri,
+            phash: normalizedPhash,
+            durationMs,
+        });
+    }
 
     const normalizedForSimilarity = normalizePhashForSimilarity(normalizedPhash);
     if (normalizedForSimilarity) {
         context.similarPhashCandidates.push({
+            roundId: null,
             videoUri,
+            funscriptUri,
+            durationMs,
             phash: normalizedForSimilarity,
         });
     }
@@ -928,6 +1078,9 @@ async function upsertRoundWithResources(
     context.roundByInstallSourceKey.set(params.installSourceKey, {
         id: roundId,
         previewImage,
+        heroId: params.heroId,
+        name: params.round.name,
+        phash: params.round.phash,
     });
 
     const dedupedResources: PreparedResource[] = [];
@@ -957,6 +1110,7 @@ async function upsertRoundWithResources(
             videoUri: canonicalVideoUri,
             funscriptUri: res.funscriptUri,
             phash: res.phash,
+            durationMs: res.durationMs,
         });
     }
 
@@ -968,11 +1122,25 @@ async function upsertRoundWithResources(
             videoUri: r.videoUri,
             funscriptUri: r.funscriptUri,
             phash: r.phash,
+            durationMs: r.durationMs,
         })));
 
         for (const entry of dedupedResources) {
-            rememberCanonicalResource(context, entry.videoUri, entry.phash);
+            rememberCanonicalResource(context, entry.videoUri, entry.phash, entry.funscriptUri, entry.durationMs);
         }
+    }
+
+    context.templateRounds = context.templateRounds.filter((entry) => entry.id !== roundId);
+    if (dedupedResources.length === 0) {
+        context.templateRounds.push({
+            id: roundId,
+            heroId: params.heroId,
+            name: params.round.name,
+            phash: params.round.phash,
+            installSourceKey: params.installSourceKey,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
     }
 
     return { updated: Boolean(existingRound), roundId };
@@ -995,6 +1163,7 @@ async function prepareRoundWrite(
             : { ...normalizedRound, phash: prepared.computedRoundPhash },
         resources: prepared.resources,
         previewImage: prepared.previewImage,
+        unresolved: prepared.resources.length === 0,
     };
 }
 
@@ -1012,6 +1181,7 @@ async function prepareRoundSidecar(
     }
 
     return {
+        kind: "hero_round",
         heroInput: parsed.data.hero ?? null,
         writes: [
             await prepareRoundWrite(
@@ -1039,6 +1209,7 @@ async function prepareHeroSidecar(
     }
 
     return {
+        kind: "hero_round",
         heroInput: parsed.data,
         writes: await Promise.all(
             parsed.data.rounds.map(async (entry, index) => {
@@ -1052,6 +1223,19 @@ async function prepareHeroSidecar(
                 );
             }),
         ),
+    };
+}
+
+
+async function preparePlaylistSidecar(
+    _context: InstallSessionContext,
+    sidecarPath: string,
+): Promise<PreparedInstallEntry> {
+    throwIfAbortRequested();
+    updateRunningScanMessage(`Preparing playlist ${path.basename(sidecarPath)}...`);
+    return {
+        kind: "playlist",
+        filePath: sidecarPath,
     };
 }
 
@@ -1069,7 +1253,12 @@ async function prepareSidecar(
         return await prepareHeroSidecar(context, sidecarPath);
     }
 
+    if (ext === ".fplay") {
+        return await preparePlaylistSidecar(context, sidecarPath);
+    }
+
     return {
+        kind: "hero_round",
         heroInput: null,
         writes: [],
     };
@@ -1078,7 +1267,21 @@ async function prepareSidecar(
 async function persistPreparedEntry(
     context: InstallSessionContext,
     entry: PreparedInstallEntry,
-): Promise<{ installed: number; updated: number; roundIds: string[] }> {
+): Promise<{ installed: number; playlistsImported: number; updated: number; roundIds: string[] }> {
+    if (entry.kind === "playlist") {
+        approveDialogPath("playlistImportFile", entry.filePath);
+        await importPlaylistFromFile({
+            filePath: entry.filePath,
+            installSourceKey: path.resolve(entry.filePath),
+        });
+        return {
+            installed: 0,
+            playlistsImported: 1,
+            updated: 0,
+            roundIds: [],
+        };
+    }
+
     return await context.db.transaction(async (tx) => {
         let heroId: string | null = null;
         if (entry.heroInput) {
@@ -1107,8 +1310,404 @@ async function persistPreparedEntry(
             }
         }
 
-        return { installed, updated, roundIds };
+        return { installed, playlistsImported: 0, updated, roundIds };
     });
+}
+
+function stripInstallSourceFragment(installSourceKey: string | null | undefined): string | null {
+    const normalized = normalizeText(installSourceKey);
+    if (!normalized) return null;
+    return normalized.replace(/#\d+$/u, "");
+}
+
+type ReconciliationRoundRow = {
+    id: string;
+    name: string;
+    author: string | null;
+    description: string | null;
+    bpm: number | null;
+    difficulty: number | null;
+    phash: string | null;
+    startTime: number | null;
+    endTime: number | null;
+    type: RoundType;
+    installSourceKey: string | null;
+    heroId: string | null;
+};
+
+function toSidecarRoundDataFromExistingRound(row: ReconciliationRoundRow): SidecarRoundData {
+    return {
+        name: row.name,
+        author: row.author,
+        description: row.description,
+        bpm: row.bpm,
+        difficulty: row.difficulty,
+        phash: row.phash,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        type: row.type,
+        resources: [],
+    };
+}
+
+async function findRoundByIdForReconciliation(
+    db: ReturnType<typeof getDb>,
+    roundId: string,
+): Promise<ReconciliationRoundRow | null> {
+    return (await db.query.round.findFirst({
+        where: eq(round.id, roundId),
+        columns: {
+            id: true,
+            name: true,
+            author: true,
+            description: true,
+            bpm: true,
+            difficulty: true,
+            phash: true,
+            startTime: true,
+            endTime: true,
+            type: true,
+            installSourceKey: true,
+            heroId: true,
+        },
+    })) ?? null;
+}
+
+async function buildPreparedResourcesFromInstalledRound(
+    db: ReturnType<typeof getDb>,
+    installedRoundId: string,
+): Promise<PreparedResource[]> {
+    const sourceRound = await db.query.round.findFirst({
+        where: eq(round.id, installedRoundId),
+        with: {
+            resources: true,
+        },
+        columns: {
+            id: true,
+        },
+    });
+    if (!sourceRound) {
+        throw new Error("Installed source round not found.");
+    }
+    const sourceResources = sourceRound.resources.filter((entry) => !entry.disabled);
+    if (sourceResources.length === 0) {
+        throw new Error("Selected source round has no usable resources.");
+    }
+    return sourceResources.map((entry) => ({
+        videoUri: entry.videoUri,
+        funscriptUri: entry.funscriptUri,
+        phash: entry.phash,
+        durationMs: entry.durationMs,
+    }));
+}
+
+async function computePreviewForExistingRound(
+    context: InstallSessionContext,
+    roundRow: ReconciliationRoundRow,
+    resources: PreparedResource[],
+): Promise<string | null> {
+    const firstResource = resources[0];
+    if (!firstResource) return null;
+    return await computePreviewImage(
+        context,
+        firstResource.videoUri,
+        roundRow.startTime,
+        roundRow.endTime,
+    );
+}
+
+async function attachResourcesToTemplateRound(
+    tx: TransactionClient,
+    context: InstallSessionContext,
+    roundRow: ReconciliationRoundRow,
+    resources: PreparedResource[],
+): Promise<void> {
+    const installSourceKey = normalizeText(roundRow.installSourceKey);
+    if (!installSourceKey) {
+        throw new Error("Template round is missing installSourceKey.");
+    }
+    const previewImage = await computePreviewForExistingRound(context, roundRow, resources);
+    await upsertRoundWithResources(tx, context, {
+        installSourceKey,
+        round: toSidecarRoundDataFromExistingRound(roundRow),
+        heroId: roundRow.heroId,
+        resources,
+        previewImage,
+    });
+}
+
+async function tryResolveTemplateRoundFromFilesystem(
+    context: InstallSessionContext,
+    roundRow: ReconciliationRoundRow,
+): Promise<PreparedResource[] | null> {
+    if (roundRow.heroId) return null;
+    const sidecarPath = stripInstallSourceFragment(roundRow.installSourceKey);
+    if (!sidecarPath) return null;
+    const basePath = sidecarPath.replace(/\.(round|hero)$/iu, "");
+    const localVideoPath = await findSiblingVideo(basePath);
+    if (!localVideoPath) return null;
+    const funscriptPath = `${basePath}.funscript`;
+    const localFunscriptExists = await fileExists(funscriptPath);
+    return [{
+        videoUri: toLocalMediaUri(localVideoPath),
+        funscriptUri: localFunscriptExists ? toLocalMediaUri(funscriptPath) : null,
+        phash: roundRow.phash,
+        durationMs: await resolveLocalVideoDurationMs(context, localVideoPath),
+    }];
+}
+
+function tryResolveTemplateRoundFromInstalledRounds(
+    context: InstallSessionContext,
+    roundRow: ReconciliationRoundRow,
+): PreparedResource[] | null {
+    const normalizedPhash = normalizeText(roundRow.phash);
+    if (!normalizedPhash) return null;
+    const exact = context.exactResourceByPhash.get(normalizedPhash);
+    if (exact) {
+        return [{ ...exact }];
+    }
+    const normalizedForSimilarity = normalizePhashForSimilarity(normalizedPhash);
+    if (!normalizedForSimilarity) return null;
+    const similarMatch = findBestSimilarPhashMatch(
+        normalizedForSimilarity,
+        context.similarPhashCandidates,
+        (candidate) => candidate.phash,
+    );
+    if (!similarMatch) return null;
+    return [{
+        videoUri: similarMatch.item.videoUri,
+        funscriptUri: similarMatch.item.funscriptUri ?? null,
+        phash: normalizedPhash,
+        durationMs: similarMatch.item.durationMs ?? null,
+    }];
+}
+
+async function findHeroRounds(
+    db: ReturnType<typeof getDb>,
+    heroId: string,
+): Promise<ExistingHeroGroupRound[]> {
+    const rows = await db.query.round.findMany({
+        where: eq(round.heroId, heroId),
+        with: {
+            resources: true,
+        },
+        orderBy: [asc(round.createdAt), asc(round.id)],
+        columns: {
+            id: true,
+            name: true,
+            heroId: true,
+            phash: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+    });
+
+    return rows.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        heroId: entry.heroId,
+        phash: entry.phash,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        resources: entry.resources.filter((resourceEntry) => !resourceEntry.disabled).map((resourceEntry) => ({
+            videoUri: resourceEntry.videoUri,
+            funscriptUri: resourceEntry.funscriptUri,
+            phash: resourceEntry.phash,
+            durationMs: resourceEntry.durationMs,
+        })),
+    }));
+}
+
+function buildHeroRoundAssignmentsFromMatchedHero(
+    templateRounds: ExistingHeroGroupRound[],
+    sourceRounds: ExistingHeroGroupRound[],
+): Array<{ templateRoundId: string; sourceRoundId: string }> {
+    const sourceById = new Map(sourceRounds.map((entry) => [entry.id, entry]));
+    const remainingSourceIds = new Set(sourceRounds.filter((entry) => entry.resources.length > 0).map((entry) => entry.id));
+    const assignments: Array<{ templateRoundId: string; sourceRoundId: string }> = [];
+
+    for (const templateRound of templateRounds) {
+        const exactNameMatch = sourceRounds.find((candidate) =>
+            remainingSourceIds.has(candidate.id)
+            && candidate.resources.length > 0
+            && candidate.name === templateRound.name,
+        );
+        if (!exactNameMatch) continue;
+        assignments.push({ templateRoundId: templateRound.id, sourceRoundId: exactNameMatch.id });
+        remainingSourceIds.delete(exactNameMatch.id);
+    }
+
+    const unmatchedTemplates = templateRounds.filter((entry) => !assignments.some((assignment) => assignment.templateRoundId === entry.id));
+    const fallbackSources = [...remainingSourceIds]
+        .map((id) => sourceById.get(id))
+        .filter((entry): entry is ExistingHeroGroupRound => Boolean(entry))
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+
+    unmatchedTemplates
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+        .forEach((templateRound, index) => {
+            const fallback = fallbackSources[index];
+            if (!fallback) return;
+            assignments.push({ templateRoundId: templateRound.id, sourceRoundId: fallback.id });
+        });
+
+    return assignments;
+}
+
+function tryResolveTemplateHeroByHeroPhash(
+    context: InstallSessionContext,
+    heroId: string,
+): string | null {
+    const heroEntry = context.heroById.get(heroId);
+    const normalizedHeroPhash = normalizeText(heroEntry?.phash);
+    if (!normalizedHeroPhash) return null;
+
+    for (const candidate of context.heroById.values()) {
+        if (candidate.id === heroId) continue;
+        if (normalizeText(candidate.phash) === normalizedHeroPhash) {
+            return candidate.id;
+        }
+    }
+
+    const normalizedTarget = normalizePhashForSimilarity(normalizedHeroPhash);
+    if (!normalizedTarget) return null;
+    const candidates = [...context.heroById.values()]
+        .filter((candidate) => candidate.id !== heroId)
+        .map((candidate) => ({
+            id: candidate.id,
+            phash: normalizePhashForSimilarity(candidate.phash ?? "") ?? "",
+        }))
+        .filter((candidate) => candidate.phash.length > 0);
+    const similarMatch = findBestSimilarPhashMatch(
+        normalizedTarget,
+        candidates,
+        (candidate) => candidate.phash,
+    );
+    return similarMatch?.item.id ?? null;
+}
+
+async function attachResourcesToTemplateHeroRounds(
+    tx: TransactionClient,
+    context: InstallSessionContext,
+    heroId: string,
+    assignments: Array<{ templateRoundId: string; sourceRoundId: string }>,
+): Promise<number> {
+    let linked = 0;
+    for (const assignment of assignments) {
+        const templateRound = await findRoundByIdForReconciliation(context.db, assignment.templateRoundId);
+        if (!templateRound || templateRound.heroId !== heroId) continue;
+        const resources = await buildPreparedResourcesFromInstalledRound(context.db, assignment.sourceRoundId);
+        await attachResourcesToTemplateRound(tx, context, templateRound, resources);
+        linked += 1;
+    }
+    return linked;
+}
+
+async function reconcileTemplateRounds(
+    context: InstallSessionContext,
+    input?: { roundId?: string; heroId?: string },
+): Promise<{ linkedRoundIds: string[]; linkedHeroIds: string[] }> {
+    const linkedRoundIds: string[] = [];
+    const linkedHeroIds = new Set<string>();
+    const roundsToInspect = context.templateRounds.filter((entry) => {
+        if (input?.roundId && entry.id !== input.roundId) return false;
+        if (input?.heroId && entry.heroId !== input.heroId) return false;
+        return true;
+    });
+
+    for (const templateEntry of roundsToInspect.filter((entry) => !entry.heroId)) {
+        const roundRow = await findRoundByIdForReconciliation(context.db, templateEntry.id);
+        if (!roundRow) continue;
+        const fromFilesystem = await tryResolveTemplateRoundFromFilesystem(context, roundRow);
+        const resources = fromFilesystem ?? tryResolveTemplateRoundFromInstalledRounds(context, roundRow);
+        if (!resources || resources.length === 0) continue;
+        await context.db.transaction(async (tx) => {
+            await attachResourcesToTemplateRound(tx, context, roundRow, resources);
+        });
+        linkedRoundIds.push(roundRow.id);
+    }
+
+    const heroIds = new Set(
+        roundsToInspect
+            .map((entry) => entry.heroId)
+            .filter((entry): entry is string => typeof entry === "string" && entry.length > 0),
+    );
+
+    for (const heroId of heroIds) {
+        const sourceHeroId = tryResolveTemplateHeroByHeroPhash(context, heroId);
+        if (!sourceHeroId) continue;
+        const [templateRounds, sourceRounds] = await Promise.all([
+            findHeroRounds(context.db, heroId),
+            findHeroRounds(context.db, sourceHeroId),
+        ]);
+        const unresolvedTemplateRounds = templateRounds.filter((entry) => entry.resources.length === 0);
+        if (unresolvedTemplateRounds.length === 0) continue;
+        const assignments = buildHeroRoundAssignmentsFromMatchedHero(unresolvedTemplateRounds, sourceRounds);
+        if (assignments.length === 0) continue;
+        await context.db.transaction(async (tx) => {
+            await attachResourcesToTemplateHeroRounds(tx, context, heroId, assignments);
+        });
+        linkedHeroIds.add(heroId);
+    }
+
+    return {
+        linkedRoundIds,
+        linkedHeroIds: [...linkedHeroIds],
+    };
+}
+
+export async function retryTemplateLinking(input?: { roundId?: string; heroId?: string }): Promise<{ linkedRoundIds: string[]; linkedHeroIds: string[] }> {
+    const context = await createInstallSessionContext();
+    return await reconcileTemplateRounds(context, input);
+}
+
+export async function repairTemplateRound(roundId: string, installedRoundId: string): Promise<{ repairedRoundId: string }> {
+    const context = await createInstallSessionContext();
+    const roundRow = await findRoundByIdForReconciliation(context.db, roundId);
+    if (!roundRow) {
+        throw new Error("Template round not found.");
+    }
+    if (roundRow.heroId) {
+        throw new Error("Round belongs to a hero template. Use hero repair instead.");
+    }
+    const resources = await buildPreparedResourcesFromInstalledRound(context.db, installedRoundId);
+    await context.db.transaction(async (tx) => {
+        await attachResourcesToTemplateRound(tx, context, roundRow, resources);
+    });
+    return { repairedRoundId: roundId };
+}
+
+export async function repairTemplateHero(
+    heroId: string,
+    sourceHeroId: string,
+    assignments?: Array<{ roundId: string; installedRoundId: string }>,
+): Promise<{ repairedHeroId: string; repairedRoundCount: number }> {
+    const context = await createInstallSessionContext();
+    const templateRounds = await findHeroRounds(context.db, heroId);
+    const unresolvedTemplateRounds = templateRounds.filter((entry) => entry.resources.length === 0);
+    if (unresolvedTemplateRounds.length === 0) {
+        return { repairedHeroId: heroId, repairedRoundCount: 0 };
+    }
+
+    let resolvedAssignments = assignments?.map((entry) => ({
+        templateRoundId: entry.roundId,
+        sourceRoundId: entry.installedRoundId,
+    })) ?? [];
+
+    if (resolvedAssignments.length === 0) {
+        const sourceRounds = await findHeroRounds(context.db, sourceHeroId);
+        resolvedAssignments = buildHeroRoundAssignmentsFromMatchedHero(unresolvedTemplateRounds, sourceRounds);
+    }
+
+    if (resolvedAssignments.length === 0) {
+        throw new Error("No hero round assignments could be resolved.");
+    }
+
+    let repairedRoundCount = 0;
+    await context.db.transaction(async (tx) => {
+        repairedRoundCount = await attachResourcesToTemplateHeroRounds(tx, context, heroId, resolvedAssignments);
+    });
+    return { repairedHeroId: heroId, repairedRoundCount };
 }
 
 async function prepareLegacyRoundEntry(
@@ -1138,8 +1737,8 @@ async function prepareLegacyRoundEntry(
                 endTime: null,
                 type: "Normal",
                 resources: [{
-                    videoUri: toAppMediaUri(absoluteVideoPath),
-                    funscriptUri: hasFunscript ? toAppMediaUri(funscriptPath) : null,
+                    videoUri: toLocalMediaUri(absoluteVideoPath),
+                    funscriptUri: hasFunscript ? toLocalMediaUri(funscriptPath) : null,
                 }],
             },
             false,
@@ -1282,6 +1881,7 @@ async function importLegacyFolderAsRounds(
         }
 
         const persisted = await persistPreparedEntry(context, {
+            kind: "hero_round",
             heroInput: null,
             writes: [preparedEntry.write],
         });
@@ -1386,6 +1986,7 @@ async function importLegacyFolderFromReviewedSlots(
         }
 
         const persisted = await persistPreparedEntry(context, {
+            kind: "hero_round",
             heroInput: null,
             writes: [preparedEntry.write],
         });
@@ -1418,11 +2019,8 @@ async function importLegacyFolderFromReviewedSlots(
 }
 
 export async function inspectInstallFolder(folderPath: string): Promise<InstallFolderInspectionResult> {
-    const normalizedFolder = assertApprovedDialogPath("installFolder", folderPath);
+    const normalizedFolder = await resolveApprovedInstallFolder(folderPath);
     approveDialogPath("installFolder", normalizedFolder);
-    if (!(await isDirectory(normalizedFolder))) {
-        throw new Error("Folder does not exist or is not a directory.");
-    }
 
     const sidecars = await collectSidecarFiles(normalizedFolder);
     if (sidecars.length > 0) {
@@ -1479,7 +2077,7 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
 
         const ext = path.extname(normalizedFile).toLowerCase();
         if (!SIDECAR_EXTENSIONS.has(ext)) {
-            throw new Error("Selected file must be a .round or .hero sidecar.");
+            throw new Error("Selected file must be a .round, .hero, or .fplay import file.");
         }
 
         const nextStatus: InstallScanStatus = {
@@ -1501,7 +2099,9 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
             const prepared = await prepareSidecar(context, normalizedFile);
             const result = await persistPreparedEntry(context, prepared);
             nextStatus.stats.installed += result.installed;
+            nextStatus.stats.playlistsImported += result.playlistsImported;
             nextStatus.stats.updated += result.updated;
+            await reconcileTemplateRounds(context);
         } catch (error) {
             recordInstallError(nextStatus, normalizedFile, error);
         }
@@ -1516,9 +2116,7 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
 
         nextStatus.state = "done";
         nextStatus.finishedAt = new Date().toISOString();
-        nextStatus.lastMessage =
-            `Import finished. Installed: ${nextStatus.stats.installed}, ` +
-            `Updated: ${nextStatus.stats.updated}, Failed: ${nextStatus.stats.failed}.`;
+        nextStatus.lastMessage = `Import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
         scanStatus = nextStatus;
         return {
@@ -1551,16 +2149,28 @@ export function getAutoScanFolders(): string[] {
 }
 
 export async function addAutoScanFolder(folderPath: string): Promise<string[]> {
-    const normalized = assertApprovedDialogPath("installFolder", folderPath);
-    if (!(await isDirectory(normalized))) {
-        throw new Error("Folder does not exist or is not a directory.");
-    }
+    const normalized = await resolveApprovedInstallFolder(folderPath);
 
     const next = new Set(getAutoScanFolders());
     next.add(normalized);
     const list = Array.from(next).sort((a, b) => a.localeCompare(b));
     getStore().set(AUTO_SCAN_FOLDERS_KEY, list);
     return list;
+}
+
+export async function addAutoScanFolderAndScan(folderPath: string): Promise<AddAutoScanFolderAndScanResult> {
+    const normalizedFolder = await resolveApprovedInstallFolder(folderPath);
+
+    const next = new Set(getAutoScanFolders());
+    next.add(normalizedFolder);
+    const folders = Array.from(next).sort((a, b) => a.localeCompare(b));
+    getStore().set(AUTO_SCAN_FOLDERS_KEY, folders);
+
+    const result = await scanInstallFolderOnceWithLegacySupportResolved(normalizedFolder, {
+        omitCheckpointRounds: true,
+    });
+
+    return { folders, result };
 }
 
 export function removeAutoScanFolder(folderPath: string): string[] {
@@ -1681,10 +2291,18 @@ async function runScanWithFolders(triggeredBy: InstallScanTrigger, folders: stri
         try {
             const result = await persistPreparedEntry(context, prepared.entry);
             nextStatus.stats.installed += result.installed;
+            nextStatus.stats.playlistsImported += result.playlistsImported;
             nextStatus.stats.updated += result.updated;
         } catch (error) {
             recordInstallError(nextStatus, prepared.sidecarPath, error);
         }
+    }
+
+    try {
+        await reconcileTemplateRounds(context);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Template linking failed.";
+        pushScanError(nextStatus, "templates", message);
     }
 
     try {
@@ -1697,30 +2315,25 @@ async function runScanWithFolders(triggeredBy: InstallScanTrigger, folders: stri
 
     nextStatus.state = "done";
     nextStatus.finishedAt = new Date().toISOString();
-    nextStatus.lastMessage = `Scan finished. Installed: ${nextStatus.stats.installed}, Updated: ${nextStatus.stats.updated}, Failed: ${nextStatus.stats.failed}.`;
+    nextStatus.lastMessage = `Scan finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
     scanStatus = nextStatus;
     return cloneStatus(nextStatus);
 }
 
-export async function scanInstallFolderOnceWithLegacySupport(
-    folderPath: string,
+async function scanInstallFolderOnceWithLegacySupportResolved(
+    normalizedFolder: string,
     options?: { omitCheckpointRounds?: boolean },
 ): Promise<InstallFolderScanResult> {
     activeManualFolderImport = true;
 
     try {
-        const normalizedFolder = assertApprovedDialogPath("installFolder", folderPath);
-        if (!(await isDirectory(normalizedFolder))) {
-            throw new Error("Folder does not exist or is not a directory.");
-        }
-
         const status = await scanInstallSources("manual", [normalizedFolder]);
         if (status.state !== "done") {
             return { status };
         }
 
-        if (status.stats.installed > 0 || status.stats.updated > 0) {
+        if (status.stats.installed > 0 || status.stats.playlistsImported > 0 || status.stats.updated > 0) {
             return { status };
         }
 
@@ -1738,7 +2351,7 @@ export async function scanInstallFolderOnceWithLegacySupport(
         nextStatus.finishedAt = new Date().toISOString();
         nextStatus.stats.installed += legacy.installed;
         nextStatus.stats.updated += legacy.updated;
-        nextStatus.lastMessage = `Legacy import finished. Installed: ${legacy.installed}, Updated: ${legacy.updated}, Failed: ${nextStatus.stats.failed}.`;
+        nextStatus.lastMessage = `Legacy import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
         scanStatus = nextStatus;
         return {
@@ -1768,6 +2381,14 @@ export async function scanInstallFolderOnceWithLegacySupport(
     }
 }
 
+export async function scanInstallFolderOnceWithLegacySupport(
+    folderPath: string,
+    options?: { omitCheckpointRounds?: boolean },
+): Promise<InstallFolderScanResult> {
+    const normalizedFolder = await resolveApprovedInstallFolder(folderPath);
+    return scanInstallFolderOnceWithLegacySupportResolved(normalizedFolder, options);
+}
+
 export async function importLegacyFolderWithPlan(
     folderPath: string,
     reviewedSlots: ReviewedLegacyImportSlot[],
@@ -1775,11 +2396,7 @@ export async function importLegacyFolderWithPlan(
     activeManualFolderImport = true;
 
     try {
-        const normalizedFolder = assertApprovedDialogPath("installFolder", folderPath);
-        if (!(await isDirectory(normalizedFolder))) {
-            throw new Error("Folder does not exist or is not a directory.");
-        }
-
+        const normalizedFolder = await resolveApprovedInstallFolder(folderPath);
         const nextStatus: InstallScanStatus = {
             state: "running",
             triggeredBy: "manual",
@@ -1798,7 +2415,7 @@ export async function importLegacyFolderWithPlan(
         nextStatus.stats.scannedFolders = 1;
         nextStatus.stats.installed = legacy.installed;
         nextStatus.stats.updated = legacy.updated;
-        nextStatus.lastMessage = `Legacy import finished. Installed: ${legacy.installed}, Updated: ${legacy.updated}, Failed: ${nextStatus.stats.failed}.`;
+        nextStatus.lastMessage = `Legacy import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
         scanStatus = nextStatus;
 
         return {

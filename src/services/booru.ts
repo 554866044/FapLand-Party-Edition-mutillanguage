@@ -1,11 +1,11 @@
 import { trpc } from "./trpc";
 import { isLikelyVideoUrl } from "../constants/videoFormats";
+import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 
 export type BooruMediaItem = Awaited<ReturnType<typeof trpc.booru.searchMedia.query>>[number];
 type BooruMediaSource = BooruMediaItem["source"];
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
-const DEFAULT_INTERMEDIARY_LOADING_PROMPT = "animated gif webm";
 const BOORU_MEDIA_CACHE_KEY = "game.intermediary.booruMediaCache.v1";
 const BOORU_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const BOORU_CACHE_WARM_LIMIT = 8;

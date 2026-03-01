@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyPerkByIdToPlayer,
   completeRound,
@@ -6,9 +6,14 @@ import {
   createInitialGameState,
   rollTurn,
   selectPerk,
+  triggerQueuedRound,
 } from "./engine";
 import { getPerkById } from "./data/perks";
 import type { GameConfig, GameState, PendingPerkSelection } from "./types";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function makeConfig(): GameConfig {
   return {
@@ -42,6 +47,10 @@ function makeConfig(): GameConfig {
         "lazy-hero",
         "gooooal",
         "be-gentle",
+        "treasure-magnet",
+        "lucky-star",
+        "high-roller",
+        "coupon-clipper",
       ],
       enabledAntiPerkIds: [
         "jammed-dice",
@@ -49,6 +58,8 @@ function makeConfig(): GameConfig {
         "score-leech",
         "cement-boots",
         "panic-loop",
+        "dry-spell",
+        "bad-omen",
         "sticky-fingers",
         "snake-eyes",
       ],
@@ -74,7 +85,7 @@ function makeConfig(): GameConfig {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -117,6 +128,26 @@ describe("engine new perks", () => {
     const scored = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "gooooal"), "gooooal", { applyDirectly: true });
     const player = scored.players[scored.currentPlayerIndex]!;
     expect(player.score).toBe(150);
+  });
+
+  it("applies persistent perk frequency and luck modifiers", () => {
+    const magnet = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "treasure-magnet"), "treasure-magnet", { applyDirectly: true });
+    const magnetPlayer = magnet.players[magnet.currentPlayerIndex]!;
+    expect(magnetPlayer.stats.perkFrequency).toBeCloseTo(0.15);
+
+    const lucky = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "lucky-star"), "lucky-star", { applyDirectly: true });
+    const luckyPlayer = lucky.players[lucky.currentPlayerIndex]!;
+    expect(luckyPlayer.stats.perkLuck).toBeCloseTo(0.4);
+
+    const highRoller = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "high-roller"), "high-roller", { applyDirectly: true });
+    const highRollerPlayer = highRoller.players[highRoller.currentPlayerIndex]!;
+    expect(highRollerPlayer.stats.perkLuck).toBeCloseTo(0.55);
+    expect(highRollerPlayer.stats.perkFrequency).toBeCloseTo(-0.1);
+
+    const couponClipper = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "coupon-clipper"), "coupon-clipper", { applyDirectly: true });
+    const couponPlayer = couponClipper.players[couponClipper.currentPlayerIndex]!;
+    expect(couponPlayer.stats.perkFrequency).toBeCloseTo(0.2);
+    expect(couponPlayer.stats.perkLuck).toBeCloseTo(-0.3);
   });
 
   it("doubles the next roll and consumes the multiplier", () => {
@@ -219,7 +250,21 @@ describe("engine new perks", () => {
   });
 
   it("restores cold streak after it expires", () => {
-    const base = createInitialGameState(makeConfig());
+    const config = makeConfig();
+    config.runtimeGraph.edges = [
+      { id: "e1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 },
+      { id: "e2", fromNodeId: "path-1", toNodeId: "start", gateCost: 0, weight: 1 },
+    ];
+    config.runtimeGraph.edgesById = {
+      e1: { id: "e1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 },
+      e2: { id: "e2", fromNodeId: "path-1", toNodeId: "start", gateCost: 0, weight: 1 },
+    };
+    config.runtimeGraph.outgoingEdgeIdsByNodeId = {
+      start: ["e1"],
+      "path-1": ["e2"],
+    };
+
+    const base = createInitialGameState(config);
     const playerId = base.players[base.currentPlayerIndex]!.id;
     const prepared = {
       ...base,
@@ -272,6 +317,81 @@ describe("engine new perks", () => {
       sourceLabel: "test",
     });
     expect(withPanicLoop.intermediaryProbability).toBeCloseTo(0.6);
+  });
+
+  it("applies anti-perks that reduce perk frequency and luck", () => {
+    const base = createInitialGameState(makeConfig());
+    const playerId = base.players[base.currentPlayerIndex]!.id;
+
+    const withDrySpell = applyPerkByIdToPlayer(base, {
+      targetPlayerId: playerId,
+      perkId: "dry-spell",
+      sourceLabel: "test",
+    });
+    expect(withDrySpell.players[withDrySpell.currentPlayerIndex]!.stats.perkFrequency).toBeCloseTo(-0.15);
+
+    const withBadOmen = applyPerkByIdToPlayer(withDrySpell, {
+      targetPlayerId: playerId,
+      perkId: "bad-omen",
+      sourceLabel: "test",
+    });
+    expect(withBadOmen.players[withBadOmen.currentPlayerIndex]!.stats.perkLuck).toBeCloseTo(-0.4);
+  });
+
+  it("uses perk frequency to change post-round offer chance", () => {
+    const config = makeConfig();
+    config.perkSelection.triggerChancePerCompletedRound = 0.1;
+    config.perkPool.enabledPerkIds = ["treasure-magnet"];
+    config.perkPool.enabledAntiPerkIds = [];
+
+    const boosted = selectPerk(withPendingSelection(createInitialGameState(config), "treasure-magnet"), "treasure-magnet", { applyDirectly: true });
+    const activeRoundState: GameState = {
+      ...boosted,
+      activeRound: {
+        fieldId: "path-1",
+        nodeId: "path-1",
+        roundId: "round-1",
+        roundName: "Round 1",
+        selectionKind: "fixed",
+        poolId: null,
+        phaseKind: "normal",
+        campaignIndex: 1,
+      },
+    };
+
+    vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const afterRound = completeRound(activeRoundState, undefined, []);
+    expect(afterRound.pendingPerkSelection?.options[0]?.id).toBe("treasure-magnet");
+  });
+
+  it("uses luck to bias perk rarity", () => {
+    const config = makeConfig();
+    config.perkSelection.triggerChancePerCompletedRound = 1;
+    config.perkSelection.optionsPerPick = 1;
+    config.perkPool.enabledPerkIds = ["loaded-dice", "shield", "lucky-star"];
+    config.perkPool.enabledAntiPerkIds = [];
+
+    const luckyState = selectPerk(withPendingSelection(createInitialGameState(config), "lucky-star"), "lucky-star", { applyDirectly: true });
+    const activeRoundState: GameState = {
+      ...luckyState,
+      activeRound: {
+        fieldId: "path-1",
+        nodeId: "path-1",
+        roundId: "round-1",
+        roundName: "Round 1",
+        selectionKind: "fixed",
+        poolId: null,
+        phaseKind: "normal",
+        campaignIndex: 1,
+      },
+    };
+
+    vi.spyOn(Math, "random")
+      .mockReturnValueOnce(0.1)
+      .mockReturnValueOnce(0.5)
+      .mockReturnValueOnce(0.6);
+    const afterRound = completeRound(activeRoundState, undefined, []);
+    expect(afterRound.pendingPerkSelection?.options[0]?.id).toBe("shield");
   });
 
   it("sticky fingers removes round control charges without underflow", () => {
@@ -363,5 +483,56 @@ describe("engine new perks", () => {
       reason: "No-rest completed.",
     });
     expect(resolved.players[resolved.currentPlayerIndex]!.antiPerks).not.toContain("no-rest");
+  });
+
+  it("consumes no-rest when the queued round starts", () => {
+    const base = createInitialGameState(makeConfig());
+    const playerId = base.players[base.currentPlayerIndex]!.id;
+    const withNoRest = applyPerkByIdToPlayer(base, {
+      targetPlayerId: playerId,
+      perkId: "no-rest",
+      sourceLabel: "test",
+    });
+    const withQueuedRound = {
+      ...withNoRest,
+      queuedRound: {
+        fieldId: "round-field",
+        nodeId: "path-1",
+        roundId: "round-1",
+        roundName: "Round 1",
+        skippable: true,
+        selectionKind: "fixed" as const,
+        poolId: null,
+        phaseKind: "normal" as const,
+        campaignIndex: 1,
+      },
+    };
+
+    const started = triggerQueuedRound(withQueuedRound);
+
+    expect(started.activeRound?.roundId).toBe("round-1");
+    expect(started.queuedRound).toBeNull();
+    expect(started.players[started.currentPlayerIndex]!.antiPerks).not.toContain("no-rest");
+    expect(started.log).toContain("No-rest ended when the round started.");
+  });
+
+  it("replaces no-rest when milker is applied", () => {
+    const base = createInitialGameState(makeConfig());
+    const playerId = base.players[base.currentPlayerIndex]!.id;
+    const withNoRest = applyPerkByIdToPlayer(base, {
+      targetPlayerId: playerId,
+      perkId: "no-rest",
+      sourceLabel: "test",
+    });
+    expect(withNoRest.players[withNoRest.currentPlayerIndex]!.antiPerks).toContain("no-rest");
+
+    const withMilker = applyPerkByIdToPlayer(withNoRest, {
+      targetPlayerId: playerId,
+      perkId: "milker",
+      sourceLabel: "test",
+    });
+    expect(withMilker.players[withMilker.currentPlayerIndex]!.antiPerks).toContain("milker");
+    expect(withMilker.players[withMilker.currentPlayerIndex]!.antiPerks).not.toContain("no-rest");
+    expect(withMilker.log.some(line => line.includes("Milker replaced No Rest."))).toBe(true);
   });
 });

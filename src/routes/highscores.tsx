@@ -1,7 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatedBackground } from "../components/AnimatedBackground";
+import { MenuButton } from "../components/MenuButton";
+import { useControllerSurface } from "../controller";
 import { db, type SinglePlayerRunHistoryRow } from "../services/db";
-import { resolveAssetUrl } from "../utils/audio";
+import { playHoverSound, playSelectSound } from "../utils/audio";
+import { formatDurationLabel } from "../utils/duration";
 import {
   getMatchHistoryByLobby,
   listMatchHistory,
@@ -16,6 +20,34 @@ type HighscoreMatchView = {
   isFinal: boolean;
   rows: MultiplayerStandingRow[];
 };
+type HighscoreSectionId = "overview" | "single" | "multiplayer";
+type HighscoreSection = {
+  id: HighscoreSectionId;
+  icon: string;
+  title: string;
+  description: string;
+};
+
+const HIGHSCORE_SECTIONS: HighscoreSection[] = [
+  {
+    id: "overview",
+    icon: "🏆",
+    title: "Overview",
+    description: "Top-level score health, sync status, and quick actions.",
+  },
+  {
+    id: "single",
+    icon: "🎯",
+    title: "Single-Player",
+    description: "Inspect local run history, survival time, and highscore progression.",
+  },
+  {
+    id: "multiplayer",
+    icon: "🌐",
+    title: "Multiplayer",
+    description: "Review cached match standings and sync queued remote results.",
+  },
+];
 
 const singlePlayerReasonLabel: Record<string, string> = {
   finished: "Campaign Completed",
@@ -27,6 +59,23 @@ function toIsoString(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) return value;
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString();
   return null;
+}
+
+function formatRunSurvival(run: SinglePlayerRunHistoryRow): string {
+  if (typeof run.survivedDurationSec !== "number" || !Number.isFinite(run.survivedDurationSec)) {
+    return "Legacy run";
+  }
+  return formatDurationLabel(run.survivedDurationSec);
+}
+
+function formatPlaylistLabel(run: SinglePlayerRunHistoryRow): string {
+  if (typeof run.playlistName === "string" && run.playlistName.trim().length > 0) {
+    return run.playlistName;
+  }
+  if (typeof run.playlistId === "string" && run.playlistId.trim().length > 0) {
+    return run.playlistId;
+  }
+  return "N/A";
 }
 
 function toResultJson(rows: MultiplayerStandingRow[]) {
@@ -90,7 +139,7 @@ export const Route = createFileRoute("/highscores")({
   component: HighscoresRoute,
 });
 
-function HighscoresRoute() {
+export function HighscoresRoute() {
   const navigate = useNavigate();
   const {
     localHighscore: initialHighscore,
@@ -106,33 +155,19 @@ function HighscoresRoute() {
   const [expandedLobbyId, setExpandedLobbyId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<HighscoreSectionId>("overview");
+  const scopeRef = useRef<HTMLDivElement | null>(null);
 
   const playHover = useCallback(() => {
-    const a = new Audio(resolveAssetUrl("/sounds/ui-hover.wav"));
-    a.volume = 0.3;
-    a.play().catch(() => { });
+    playHoverSound();
   }, []);
 
   const playClick = useCallback(() => {
-    const a = new Audio(resolveAssetUrl("/sounds/ui-select.wav"));
-    a.volume = 0.6;
-    a.play().catch(() => { });
+    playSelectSound();
   }, []);
 
   const playReveal = useCallback(() => {
-    const a = new Audio(resolveAssetUrl("/sounds/ui-hover.wav"));
-    a.volume = 0.5;
-    a.play().catch(() => { });
-  }, []);
-
-  useEffect(() => {
-    const drone = new Audio(resolveAssetUrl("/sounds/highscore-drone.wav"));
-    drone.loop = true;
-    drone.volume = 0.15;
-    drone.play().catch(() => { });
-    return () => {
-      drone.pause();
-    };
+    playSelectSound();
   }, []);
 
   const syncNow = useCallback(async () => {
@@ -221,186 +256,442 @@ function HighscoresRoute() {
     () => singleRuns.filter((run) => run.wasNewHighscore).length,
     [singleRuns],
   );
+  const activeSection = HIGHSCORE_SECTIONS.find((section) => section.id === activeSectionId) ?? HIGHSCORE_SECTIONS[0];
+  const latestSingleRun = singleRuns[0] ?? null;
+  const topMultiplayerScore = useMemo(
+    () => matches.flatMap((match) => match.rows).reduce((best, row) => Math.max(best, row.finalScore), 0),
+    [matches],
+  );
+
+  useControllerSurface({
+    id: "highscores-route",
+    scopeRef,
+    priority: 10,
+    initialFocusId: "highscores-sync",
+    onBack: () => {
+      void navigate({ to: "/" });
+      return true;
+    },
+  });
 
   return (
-    <div className="relative h-screen overflow-y-auto overflow-x-hidden bg-[#030713] text-zinc-100 selection:bg-cyan-500/30">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(34,211,238,0.28),transparent_40%),radial-gradient(circle_at_82%_16%,rgba(236,72,153,0.26),transparent_35%),radial-gradient(circle_at_55%_95%,rgba(244,114,182,0.15),transparent_45%),linear-gradient(145deg,#020611_0%,#06112a_56%,#18081f_100%)] animate-pulse" style={{ animationDuration: '4s' }} />
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[length:100%_4px] opacity-20 mix-blend-overlay" />
+    <div ref={scopeRef} className="relative min-h-screen overflow-hidden text-zinc-100 selection:bg-cyan-500/30">
+      <AnimatedBackground />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(34,211,238,0.18),transparent_40%),radial-gradient(circle_at_82%_16%,rgba(236,72,153,0.18),transparent_35%),radial-gradient(circle_at_55%_95%,rgba(244,114,182,0.12),transparent_45%)]" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-8 sm:py-8">
-        <header className="rounded-3xl border border-cyan-300/30 bg-[#041026]/78 p-5 shadow-[0_0_42px_rgba(34,211,238,0.16)] backdrop-blur-xl sm:p-6 transition-all duration-500 hover:shadow-[0_0_60px_rgba(34,211,238,0.25)]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.26em] text-cyan-100/90">Result Nexus</p>
-              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.07em] sm:text-5xl">Highscore Hub</h1>
-              <p className="mt-2 text-sm text-zinc-300">
-                Local DB powered history for single-player highscores and multiplayer opponent results.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+      <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
+        <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-64 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
+          <div className="hidden lg:mb-5 lg:block lg:px-3">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
+              Result Nexus
+            </p>
+            <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
+              Highscore Hub
+            </h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              Track local runs, compare multiplayer standings, and keep cached results in sync.
+            </p>
+          </div>
+
+          {HIGHSCORE_SECTIONS.map((section) => {
+            const active = section.id === activeSectionId;
+            return (
               <button
+                key={section.id}
                 type="button"
                 onMouseEnter={playHover}
+                onFocus={playHover}
                 onClick={() => {
                   playClick();
-                  void syncNow();
+                  setActiveSectionId(section.id);
                 }}
-                className="rounded-xl border border-cyan-300/60 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 transition duration-300 hover:border-cyan-200 hover:bg-cyan-400/25 hover:shadow-[0_0_15px_rgba(34,211,238,0.4)] active:scale-95"
+                className={`settings-sidebar-item whitespace-nowrap ${active ? "is-active" : ""}`}
               >
-                {syncing ? "Syncing..." : "Sync Now"}
+                <span aria-hidden="true" className="settings-sidebar-icon">{section.icon}</span>
+                <span>{section.title}</span>
               </button>
-              <button
-                type="button"
-                onMouseEnter={playHover}
+            );
+          })}
+
+          <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
+            <MenuButton
+              label="← Back"
+              onHover={playHover}
+              onClick={() => {
+                playClick();
+                void navigate({ to: "/" });
+              }}
+              controllerFocusId="highscores-main-menu"
+              controllerBack
+            />
+          </div>
+        </nav>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10 lg:py-8">
+          <main className="parallax-ui-none mx-auto flex w-full max-w-6xl flex-col gap-5">
+            <header className="settings-panel-enter mb-1">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.34em] text-violet-200/75">
+                    Highscore Hub
+                  </p>
+                  <h2 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-4xl">
+                    {activeSection.title}
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm text-zinc-400">{activeSection.description}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-xl border border-violet-200/30 bg-violet-400/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-violet-100">
+                    Local Best {localHighscore}
+                  </div>
+                  <div className="rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-cyan-100">
+                    Queue {syncQueueCount}
+                  </div>
+                  <button
+                    type="button"
+                    onMouseEnter={playHover}
+                    onClick={() => {
+                      playClick();
+                      void syncNow();
+                    }}
+                    className="rounded-xl border border-cyan-300/55 bg-cyan-500/16 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/80 hover:bg-cyan-500/30"
+                    data-controller-focus-id="highscores-sync"
+                    data-controller-initial="true"
+                  >
+                    {syncing ? "Syncing..." : "Sync Now"}
+                  </button>
+                </div>
+              </div>
+              {error && (
+                <p className="mt-4 rounded-xl border border-amber-300/35 bg-amber-500/15 px-4 py-3 text-sm text-amber-100">
+                  {error}
+                </p>
+              )}
+            </header>
+
+            <div className="settings-panel-enter flex flex-col gap-5" key={`content-${activeSection.id}`}>
+              {activeSection.id === "overview" && (
+                <>
+                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                    <div className="mb-5">
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Score Snapshot</h3>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        The fastest read on current local progress and multiplayer cache health.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <HighscoreStatCard label="🏆 Local Best" value={localHighscore} description="Best single-player score stored in the local profile." tone="violet" />
+                      <HighscoreStatCard label="🎯 Single Runs" value={singleRunCount} description="Completed local single-player sessions in history." tone="cyan" />
+                      <HighscoreStatCard label="🌐 Final Matches" value={finalMatchCount} description="Multiplayer lobbies with finalized cached standings." tone="emerald" />
+                      <HighscoreStatCard label="📡 Sync Queue" value={syncQueueCount} description={syncing ? "A sync is currently running." : "Queued multiplayer results still waiting to sync."} tone="amber" />
+                    </div>
+                  </section>
+
+                  <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+                    <div className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Sync & Cache</h3>
+                        <p className="mt-1 text-sm text-zinc-300">
+                          Pull remote match history into the local cache, then browse it instantly from the multiplayer section.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <HighscoreActionButton
+                          label={syncing ? "Syncing..." : "Sync Now"}
+                          description="Refresh local highscore data and attempt multiplayer result cache updates."
+                          tone="cyan"
+                          onHover={playHover}
+                          onClick={() => {
+                            playClick();
+                            void syncNow();
+                          }}
+                        />
+                        <div className="rounded-2xl border border-zinc-700/70 bg-black/25 p-4">
+                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-400">Current Status</p>
+                          <p className="mt-2 text-sm text-zinc-100">
+                            {syncing ? "Refreshing local and remote result history." : "Idle. Cached history is ready to browse."}
+                          </p>
+                          <p className="mt-2 text-sm text-zinc-400">
+                            {syncQueueCount > 0
+                              ? `${syncQueueCount} multiplayer result ${syncQueueCount === 1 ? "entry is" : "entries are"} still queued.`
+                              : "No queued multiplayer results remain."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.11s" }}>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Quick Jumps</h3>
+                        <p className="mt-1 text-sm text-zinc-300">
+                          Move straight to the detailed score views when you know what you want to inspect.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playClick();
+                            setActiveSectionId("single");
+                          }}
+                          className="w-full rounded-2xl border border-violet-300/25 bg-black/30 px-4 py-4 text-left transition-all duration-200 hover:border-violet-200/60 hover:bg-violet-500/10"
+                        >
+                          <div className="font-semibold text-zinc-100">Open single-player history</div>
+                          <div className="mt-1 text-sm text-zinc-400">
+                            Review {singleRunCount} stored runs, including survival time and playlist provenance.
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playClick();
+                            setActiveSectionId("multiplayer");
+                          }}
+                          className="w-full rounded-2xl border border-cyan-300/25 bg-black/30 px-4 py-4 text-left transition-all duration-200 hover:border-cyan-200/60 hover:bg-cyan-500/10"
+                        >
+                          <div className="font-semibold text-zinc-100">Open multiplayer standings</div>
+                          <div className="mt-1 text-sm text-zinc-400">
+                            Browse {matches.length} cached match {matches.length === 1 ? "result" : "results"} and expand individual player standings.
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {activeSection.id === "single" && (
+                <>
+                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                    <div className="mb-5">
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Single-Player Summary</h3>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        Local run history is stored directly in the app database, including legacy rows and newer survival-time data.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <HighscoreStatCard label="🏆 Best Score" value={localHighscore} description="Highest recorded single-player score." tone="violet" />
+                      <HighscoreStatCard label="🎮 Run Count" value={singleRunCount} description="Completed runs stored in local history." tone="cyan" />
+                      <HighscoreStatCard label="✨ New Bests" value={singleRunNewBestCount} description="Runs that pushed the local best score upward." tone="emerald" />
+                      <HighscoreStatCard label="⏱ Latest Survival" value={latestSingleRun ? formatRunSurvival(latestSingleRun) : "N/A"} description="Survival time of the newest recorded run." tone="amber" />
+                    </div>
+                  </section>
+
+                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                    <div className="mb-4">
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Singleplayer Run History</h3>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        Each row preserves score progression, completion reason, playlist reference, and survival duration when available.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      {singleRuns.length === 0 && (
+                        <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
+                          No single-player history yet.
+                        </div>
+                      )}
+                      {singleRuns.map((run) => (
+                        <article key={run.id} className="rounded-2xl border border-violet-300/20 bg-black/25 p-4 transition-all duration-200 hover:border-violet-200/40 hover:bg-violet-500/[0.06]">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold text-zinc-100">{singlePlayerReasonLabel[run.completionReason] ?? run.completionReason}</p>
+                              <p className="mt-1 text-xs text-zinc-400">
+                                {new Date(run.finishedAt).toLocaleString()} | Playlist: {run.playlistName}
+                              </p>
+                            </div>
+                            <p className="rounded-lg border border-violet-300/30 bg-violet-500/12 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-violet-100">
+                              Score {run.score}
+                            </p>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs text-zinc-300 sm:grid-cols-4">
+                            <p>Survived: <span className="text-zinc-100">{formatRunSurvival(run)}</span></p>
+                            <p>Highscore Before: <span className="text-zinc-100">{run.highscoreBefore}</span></p>
+                            <p>Highscore After: <span className="text-zinc-100">{run.highscoreAfter}</span></p>
+                            <p>Ending Position: <span className="text-zinc-100">{run.endingPosition}</span></p>
+                          </div>
+                          <div className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-4">
+                            <p>Turn: <span className="text-zinc-100">{run.turn}</span></p>
+                            <p>New Best: <span className="text-zinc-100">{run.wasNewHighscore ? "Yes" : "No"}</span></p>
+                            <p>Playlist: <span className="text-zinc-100">{formatPlaylistLabel(run)}</span></p>
+                            <p>Playlist Format: <span className="text-zinc-100">{run.playlistFormatVersion ?? "N/A"}</span></p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {activeSection.id === "multiplayer" && (
+                <>
+                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.05s" }}>
+                    <div className="mb-5">
+                      <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Multiplayer Summary</h3>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        Cached standings let you revisit prior lobbies even when the remote service is unavailable.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <HighscoreStatCard label="🌐 Cached Matches" value={matches.length} description="All cached multiplayer result snapshots." tone="cyan" />
+                      <HighscoreStatCard label="✅ Finalized" value={finalMatchCount} description="Matches that finished with final standings." tone="emerald" />
+                      <HighscoreStatCard label="📡 Pending Queue" value={syncQueueCount} description="Remote lobbies still waiting for cache sync." tone="amber" />
+                      <HighscoreStatCard label="🔥 Top Score" value={topMultiplayerScore} description="Highest player score currently present in cached standings." tone="violet" />
+                    </div>
+                  </section>
+
+                  <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h3 className="text-lg font-extrabold tracking-tight text-violet-100">Multiplayer Result History</h3>
+                        <p className="mt-1 text-sm text-zinc-300">
+                          Expand a cached match to review every player row from the stored standings snapshot.
+                        </p>
+                      </div>
+                      <HighscoreActionButton
+                        label={syncing ? "Syncing..." : "Refresh Multiplayer"}
+                        tone="cyan"
+                        onHover={playHover}
+                        onClick={() => {
+                          playClick();
+                          void syncNow();
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      {matches.length === 0 && (
+                        <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
+                          No multiplayer result cache yet.
+                        </div>
+                      )}
+                      {matches.map((match) => {
+                        const expanded = expandedLobbyId === match.lobbyId;
+                        return (
+                          <article key={match.lobbyId} className="rounded-2xl border border-cyan-300/20 bg-black/25 p-4 transition-all duration-200 hover:border-cyan-200/40 hover:bg-cyan-500/[0.05]">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-bold text-zinc-100">Lobby {match.lobbyId.slice(0, 12)}</p>
+                                <p className="mt-1 text-xs text-zinc-400">
+                                  {match.isFinal ? "Final result" : "Temporary snapshot"} | {new Date(match.finishedAtIso).toLocaleString()}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onMouseEnter={playHover}
+                                onClick={() => {
+                                  playClick();
+                                  if (!expanded) playReveal();
+                                  setExpandedLobbyId(expanded ? null : match.lobbyId);
+                                }}
+                                className="rounded-xl border border-cyan-300/40 bg-cyan-500/12 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.14em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/75 hover:bg-cyan-500/25"
+                                data-controller-focus-id={`highscores-match-${match.lobbyId}`}
+                              >
+                                {expanded ? "Hide Players" : "Show Players"}
+                              </button>
+                            </div>
+                            {expanded && (
+                              <div className="mt-3 grid gap-2">
+                                {match.rows.map((row) => (
+                                  <div key={row.playerId} className="rounded-xl border border-cyan-300/18 bg-black/35 px-3 py-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="font-semibold text-zinc-100">#{row.place} {row.displayName}</p>
+                                      <p className="text-sm font-bold text-cyan-200">Score {row.finalScore}</p>
+                                    </div>
+                                    <div className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-3">
+                                      <p>state: <span className="text-zinc-100">{row.state}</span></p>
+                                      <p>player_id: <span className="text-zinc-100">{row.playerId}</span></p>
+                                      <p>user_id: <span className="text-zinc-100">{row.userId}</span></p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
+
+            <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6 lg:hidden">
+              <MenuButton
+                label="Back to Main Menu"
+                onHover={playHover}
                 onClick={() => {
                   playClick();
                   void navigate({ to: "/" });
                 }}
-                className="rounded-xl border border-zinc-400/45 bg-zinc-900/70 px-4 py-2 text-sm font-semibold text-zinc-100 transition duration-300 hover:border-zinc-300 hover:bg-zinc-800 hover:shadow-[0_0_15px_rgba(255,255,255,0.2)] active:scale-95"
-              >
-                Main Menu
-              </button>
+                controllerFocusId="highscores-main-menu"
+                controllerBack
+              />
             </div>
-          </div>
-          {error && (
-            <p className="mt-3 rounded-lg border border-amber-300/55 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
-              {error}
-            </p>
-          )}
-        </header>
-
-        <section className="grid gap-4 sm:grid-cols-3">
-          <article className="group relative overflow-hidden rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/12 p-4 shadow-[0_0_26px_rgba(217,70,239,0.18)] transition duration-500 hover:border-fuchsia-300/70 hover:shadow-[0_0_40px_rgba(217,70,239,0.3)] hover:-translate-y-0.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-fuchsia-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-            <p className="relative z-10 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-fuchsia-100/90 drop-shadow-[0_0_5px_rgba(217,70,239,0.5)]">Local Best</p>
-            <p className="relative z-10 mt-2 text-4xl font-black text-fuchsia-100 drop-shadow-[0_0_10px_rgba(217,70,239,0.8)]">{localHighscore}</p>
-            <p className="relative z-10 mt-1 text-xs text-zinc-300">Single-player highscore from SQLite profile.</p>
-          </article>
-          <article className="group relative overflow-hidden rounded-2xl border border-cyan-300/35 bg-cyan-500/10 p-4 transition duration-500 hover:border-cyan-300/70 hover:shadow-[0_0_40px_rgba(34,211,238,0.25)] hover:-translate-y-0.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-            <p className="relative z-10 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-cyan-100/90 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">Single Runs</p>
-            <p className="relative z-10 mt-2 text-4xl font-black text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">{singleRunCount}</p>
-            <p className="relative z-10 mt-1 text-xs text-zinc-300">All completed local single-player sessions.</p>
-          </article>
-          <article className="group relative overflow-hidden rounded-2xl border border-emerald-300/35 bg-emerald-500/10 p-4 transition duration-500 hover:border-emerald-300/70 hover:shadow-[0_0_40px_rgba(16,185,129,0.25)] hover:-translate-y-0.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-            <p className="relative z-10 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-emerald-100/90 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">Single New Bests</p>
-            <p className="relative z-10 mt-2 text-4xl font-black text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]">{singleRunNewBestCount}</p>
-            <p className="relative z-10 mt-1 text-xs text-zinc-300">Runs that set a new local highscore.</p>
-          </article>
-        </section>
-
-        <section className="rounded-2xl border border-fuchsia-300/25 bg-[#1a0825]/70 p-3 shadow-[0_0_34px_rgba(217,70,239,0.14)] backdrop-blur-xl sm:p-4">
-          <h2 className="font-[family-name:var(--font-jetbrains-mono)] text-sm uppercase tracking-[0.2em] text-fuchsia-100/90">
-            Singleplayer Run History
-          </h2>
-          <div className="mt-3 space-y-3">
-            {singleRuns.length === 0 && (
-              <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
-                No single-player history yet.
-              </div>
-            )}
-            {singleRuns.map((run) => (
-              <article key={run.id} className="group relative overflow-hidden rounded-xl border border-fuchsia-300/25 bg-fuchsia-500/5 p-3 transition duration-300 hover:border-fuchsia-300/50 hover:bg-fuchsia-500/10">
-                <div className="flex flex-wrap items-center justify-between gap-2 relative z-10">
-                  <div>
-                    <p className="text-sm font-bold text-zinc-100 group-hover:text-fuchsia-100 transition-colors drop-shadow-[0_0_8px_rgba(217,70,239,0)] group-hover:drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{singlePlayerReasonLabel[run.completionReason] ?? run.completionReason}</p>
-                    <p className="text-xs text-zinc-400">
-                      {new Date(run.finishedAt).toLocaleString()} | Playlist: {run.playlistName}
-                    </p>
-                  </div>
-                  <p className="rounded-lg border border-fuchsia-300/40 bg-fuchsia-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-fuchsia-100 shadow-[0_0_10px_rgba(217,70,239,0.2)]">
-                    Score {run.score}
-                  </p>
-                </div>
-                <div className="mt-2 grid gap-1 text-xs text-zinc-300 sm:grid-cols-4 relative z-10">
-                  <p>Highscore Before: <span className="text-zinc-100">{run.highscoreBefore}</span></p>
-                  <p>Highscore After: <span className="text-zinc-100 drop-shadow-[0_0_3px_rgba(255,255,255,0.4)]">{run.highscoreAfter}</span></p>
-                  <p>Ending Position: <span className="text-zinc-100">{run.endingPosition}</span></p>
-                  <p>Turn: <span className="text-zinc-100">{run.turn}</span></p>
-                </div>
-                <div className="mt-2 grid gap-1 text-xs text-zinc-300 sm:grid-cols-3 relative z-10">
-                  <p>New Best: <span className="text-zinc-100">{run.wasNewHighscore ? "Yes" : "No"}</span></p>
-                  <p>Playlist ID: <span className="text-zinc-100">{run.playlistId ?? "N/A"}</span></p>
-                  <p>Playlist Format: <span className="text-zinc-100">{run.playlistFormatVersion ?? "N/A"}</span></p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2">
-          <article className="group relative overflow-hidden rounded-2xl border border-cyan-300/35 bg-cyan-500/10 p-4 transition duration-500 hover:border-cyan-300/70 hover:shadow-[0_0_40px_rgba(34,211,238,0.25)] hover:-translate-y-0.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-            <p className="relative z-10 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-cyan-100/90 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">Matches Cached</p>
-            <p className="relative z-10 mt-2 text-4xl font-black text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">{matches.length}</p>
-            <p className="relative z-10 mt-1 text-xs text-zinc-300">Includes cached temporary and final standings.</p>
-          </article>
-          <article className="group relative overflow-hidden rounded-2xl border border-emerald-300/35 bg-emerald-500/10 p-4 transition duration-500 hover:border-emerald-300/70 hover:shadow-[0_0_40px_rgba(16,185,129,0.25)] hover:-translate-y-0.5">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-            <p className="relative z-10 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-emerald-100/90 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">Finalized</p>
-            <p className="relative z-10 mt-2 text-4xl font-black text-emerald-100 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]">{finalMatchCount}</p>
-            <p className="relative z-10 mt-1 text-xs text-zinc-300">Pending sync queue: {syncQueueCount}</p>
-          </article>
-        </section>
-
-        <section className="rounded-2xl border border-cyan-300/25 bg-[#050d1e]/76 p-3 shadow-[0_0_34px_rgba(34,211,238,0.12)] backdrop-blur-xl sm:p-4">
-          <h2 className="font-[family-name:var(--font-jetbrains-mono)] text-sm uppercase tracking-[0.2em] text-cyan-100/90">
-            Multiplayer Result History
-          </h2>
-          <div className="mt-3 space-y-3">
-            {matches.length === 0 && (
-              <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
-                No multiplayer result cache yet.
-              </div>
-            )}
-            {matches.map((match) => {
-              const expanded = expandedLobbyId === match.lobbyId;
-              return (
-                <article key={match.lobbyId} className="group relative overflow-hidden rounded-xl border border-cyan-300/25 bg-cyan-500/5 p-3 transition duration-300 hover:border-cyan-300/40">
-                  <div className="flex flex-wrap items-center justify-between gap-2 relative z-10">
-                    <div>
-                      <p className="text-sm font-bold text-zinc-100 group-hover:text-cyan-100 group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,0.5)] transition-all">Lobby {match.lobbyId.slice(0, 12)}</p>
-                      <p className="text-xs text-zinc-400">
-                        {match.isFinal ? "Final result" : "Temporary snapshot"} | {new Date(match.finishedAtIso).toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onMouseEnter={playHover}
-                      onClick={() => {
-                        playClick();
-                        if (!expanded) playReveal();
-                        setExpandedLobbyId(expanded ? null : match.lobbyId);
-                      }}
-                      className="rounded-lg border border-cyan-300/40 bg-cyan-500/12 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-cyan-100 transition duration-300 hover:border-cyan-300 hover:bg-cyan-500/25 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] active:scale-95"
-                    >
-                      {expanded ? "Hide Players" : "Show Players"}
-                    </button>
-                  </div>
-                  {expanded && (
-                    <div className="mt-3 grid gap-2">
-                      {match.rows.map((row) => (
-                        <div key={row.playerId} className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-lg border border-cyan-400/20 bg-black/40 px-3 py-2 shadow-inner">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="font-semibold text-zinc-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">#{row.place} {row.displayName}</p>
-                            <p className="text-sm font-bold text-cyan-200 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]">Score {row.finalScore}</p>
-                          </div>
-                          <div className="mt-1 grid gap-1 text-xs text-zinc-300 sm:grid-cols-3">
-                            <p>state: <span className="text-zinc-100">{row.state}</span></p>
-                            <p>player_id: <span className="text-zinc-100">{row.playerId}</span></p>
-                            <p>user_id: <span className="text-zinc-100">{row.userId}</span></p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      </main>
+          </main>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function HighscoreStatCard({
+  label,
+  value,
+  description,
+  tone = "violet",
+}: {
+  label: string;
+  value: string | number;
+  description: string;
+  tone?: "violet" | "cyan" | "emerald" | "amber";
+}) {
+  const toneClass =
+    tone === "cyan"
+      ? "border-cyan-300/25 bg-cyan-500/10"
+      : tone === "emerald"
+        ? "border-emerald-300/25 bg-emerald-500/10"
+        : tone === "amber"
+          ? "border-amber-300/25 bg-amber-500/10"
+          : "border-violet-300/25 bg-violet-500/10";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">{label}</p>
+      <p className="mt-2 text-2xl font-black tracking-tight text-zinc-50">{value}</p>
+      <p className="mt-2 text-sm text-zinc-400">{description}</p>
+    </div>
+  );
+}
+
+function HighscoreActionButton({
+  label,
+  onClick,
+  onHover,
+  description,
+  tone = "cyan",
+}: {
+  label: string;
+  onClick: () => void;
+  onHover: () => void;
+  description?: string;
+  tone?: "cyan" | "violet";
+}) {
+  const toneClass =
+    tone === "violet"
+      ? "border-violet-300/55 bg-violet-500/18 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/30"
+      : "border-cyan-300/55 bg-cyan-500/18 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/30";
+
+  return (
+    <button
+      type="button"
+      onMouseEnter={onHover}
+      onFocus={onHover}
+      onClick={onClick}
+      className={`rounded-2xl border px-4 py-3 text-left font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] transition-all duration-200 ${toneClass}`}
+    >
+      <div>{label}</div>
+      {description && <div className="mt-2 text-[11px] normal-case tracking-normal opacity-80">{description}</div>}
+    </button>
   );
 }

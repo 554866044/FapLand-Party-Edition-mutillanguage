@@ -1,0 +1,223 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MusicLoopMode } from "../constants/musicSettings";
+import { ForegroundMediaProvider, useForegroundMedia } from "./ForegroundMediaContext";
+import { GlobalMusicProvider } from "./GlobalMusicContext";
+import { useGlobalMusic } from "../hooks/useGlobalMusic";
+
+const mocks = vi.hoisted(() => ({
+  getQuery: vi.fn(),
+  setMutate: vi.fn(),
+}));
+
+vi.mock("../services/trpc", () => ({
+  trpc: {
+    store: {
+      get: {
+        query: mocks.getQuery,
+      },
+      set: {
+        mutate: mocks.setMutate,
+      },
+    },
+  },
+}));
+
+class FakeAudio extends EventTarget {
+  src = "";
+  currentTime = 0;
+  paused = true;
+  volume = 1;
+  preload = "auto";
+  play = vi.fn(async () => {
+    this.paused = false;
+    this.dispatchEvent(new Event("play"));
+  });
+  pause = vi.fn(() => {
+    const wasPaused = this.paused;
+    this.paused = true;
+    if (!wasPaused) {
+      this.dispatchEvent(new Event("pause"));
+    }
+  });
+  load = vi.fn();
+  removeAttribute = vi.fn((name: string) => {
+    if (name === "src") this.src = "";
+  });
+}
+
+const audioInstances: FakeAudio[] = [];
+
+function installAudioMock() {
+  audioInstances.length = 0;
+  vi.stubGlobal("Audio", vi.fn(() => {
+    const audio = new FakeAudio();
+    audioInstances.push(audio);
+    return audio;
+  }));
+}
+
+function Suppressor() {
+  const media = useForegroundMedia();
+  return (
+    <div>
+      <button type="button" onClick={() => media.register("video")}>register</button>
+      <button type="button" onClick={() => media.setPlaying("video", true)}>play-video</button>
+      <button type="button" onClick={() => media.setPlaying("video", false)}>pause-video</button>
+    </div>
+  );
+}
+
+function Consumer() {
+  const music = useGlobalMusic();
+  return (
+    <div>
+      <div data-testid="track">{music.currentTrack?.name ?? "none"}</div>
+      <div data-testid="playing">{String(music.isPlaying)}</div>
+      <div data-testid="suppressed">{String(music.isSuppressedByVideo)}</div>
+      <div data-testid="loop-mode">{music.loopMode}</div>
+      <button type="button" onClick={() => void music.pause()}>pause</button>
+      <button type="button" onClick={() => void music.play()}>play</button>
+      <button type="button" onClick={() => void music.next()}>next</button>
+      <button type="button" onClick={() => void music.setLoopMode("off")}>loop-off</button>
+    </div>
+  );
+}
+
+function renderProviders() {
+  return render(
+    <ForegroundMediaProvider>
+      <GlobalMusicProvider>
+        <Suppressor />
+        <Consumer />
+      </GlobalMusicProvider>
+    </ForegroundMediaProvider>,
+  );
+}
+
+describe("GlobalMusicContext", () => {
+  beforeEach(() => {
+    installAudioMock();
+    window.electronAPI = {
+      file: {
+        convertFileSrc: vi.fn((filePath: string) => `app://media/${encodeURIComponent(filePath)}`),
+      },
+      dialog: {
+        selectFolders: vi.fn(),
+        selectInstallImportFile: vi.fn(),
+        selectPlaylistImportFile: vi.fn(),
+        selectPlaylistExportPath: vi.fn(),
+        selectPlaylistExportDirectory: vi.fn(),
+        selectConverterVideoFile: vi.fn(),
+        selectMusicFiles: vi.fn(),
+        selectConverterFunscriptFile: vi.fn(),
+      },
+      window: {
+        isFullscreen: vi.fn(),
+        setFullscreen: vi.fn(),
+        toggleFullscreen: vi.fn(),
+        close: vi.fn(),
+      },
+      updates: {
+        subscribe: vi.fn(() => () => {}),
+      },
+      appOpen: {
+        consumePendingFiles: vi.fn(async () => []),
+        subscribe: vi.fn(() => () => {}),
+      },
+    };
+    mocks.setMutate.mockResolvedValue(undefined);
+    const values = new Map<string, unknown>([
+      ["music.enabled", true],
+      ["music.queue", [
+        { id: "t1", filePath: "/music/one.mp3", name: "one.mp3" },
+        { id: "t2", filePath: "/music/two.mp3", name: "two.mp3" },
+      ]],
+      ["music.volume", 0.5],
+      ["music.shuffle", false],
+      ["music.loopMode", "queue" satisfies MusicLoopMode],
+      ["music.currentIndex", 0],
+    ]);
+    mocks.getQuery.mockImplementation(async ({ key }: { key: string }) => values.get(key));
+  });
+
+  it("loads the persisted queue and starts playback when enabled", async () => {
+    renderProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("track").textContent).toBe("one.mp3");
+      expect(audioInstances[0]?.play).toHaveBeenCalled();
+    });
+  });
+
+  it("pauses for foreground video and resumes from the same timestamp", async () => {
+    renderProviders();
+
+    await waitFor(() => {
+      expect(audioInstances[0]?.play).toHaveBeenCalledTimes(1);
+    });
+
+    audioInstances[0]!.currentTime = 37;
+
+    act(() => {
+      screen.getByText("register").click();
+      screen.getByText("play-video").click();
+    });
+
+    expect(audioInstances[0]!.pause).toHaveBeenCalled();
+    expect(screen.getByTestId("suppressed").textContent).toBe("true");
+
+    act(() => {
+      screen.getByText("pause-video").click();
+    });
+
+    await waitFor(() => {
+      expect(audioInstances[0]!.play).toHaveBeenCalledTimes(2);
+    });
+    expect(audioInstances[0]!.currentTime).toBe(37);
+  });
+
+  it("does not auto-resume after a manual pause", async () => {
+    renderProviders();
+
+    await waitFor(() => {
+      expect(audioInstances[0]?.play).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      screen.getByText("pause").click();
+      screen.getByText("register").click();
+      screen.getByText("play-video").click();
+      screen.getByText("pause-video").click();
+    });
+
+    await waitFor(() => {
+      expect(audioInstances[0]!.play).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("advances and stops at the end when loop mode is off", async () => {
+    renderProviders();
+
+    await waitFor(() => {
+      expect(audioInstances[0]?.play).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      screen.getByText("loop-off").click();
+    });
+    act(() => {
+      audioInstances[0]!.dispatchEvent(new Event("ended"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("track").textContent).toBe("two.mp3");
+    });
+
+    act(() => {
+      audioInstances[0]!.dispatchEvent(new Event("ended"));
+    });
+
+    expect(screen.getByTestId("playing").textContent).toBe("false");
+  });
+});

@@ -11,7 +11,10 @@ import {
     Text,
     TextStyle,
 } from "pixi.js";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useControllerSurface } from "../../controller";
+import { useHandy } from "../../contexts/HandyContext";
+import { getPerkById, getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../../game/data/perks";
 import {
     DICE_RESULT_REVEAL_DURATION,
     DICE_ROLL_DURATION,
@@ -22,13 +25,19 @@ import {
     type AnimPhase,
     useGameAnimation,
 } from "../../game/useGameAnimation";
-import type { BoardField, GameState } from "../../game/types";
+import type { BoardField, GameState, PlayerState } from "../../game/types";
 import { PERK_RARITY_META, resolvePerkRarity } from "../../game/data/perkRarity";
 import type { InstalledRound } from "../../services/db";
 import { describePerkEffects } from "../../game/engine";
 import { playRoundRewardSound, playRoundRewardTickSound } from "../../utils/audio";
+import { isGameDevelopmentMode } from "../../utils/devFeatures";
+import { formatDurationLabel } from "../../utils/duration";
 import { RoundVideoOverlay } from "./RoundVideoOverlay";
+import { RoundStartTransition } from "./RoundStartTransition";
 import { getPerkIconGlyph } from "./PerkIcon";
+import { PerkInventoryPanel } from "./PerkInventoryPanel";
+import { buildTileDurationLabelByFieldId } from "./tileDurationLabels";
+import { getNodeScale, parseHexColorToNumber } from "../../features/map-editor/nodeVisuals";
 
 // ─── Board layout strategy ────────────────────────────────────────────────────
 // Switch ACTIVE_LAYOUT to change how the board positions tiles.
@@ -99,14 +108,27 @@ function indexToSnake(i: number, total: number): { x: number; y: number } {
 
 type TileLayout = {
     origins: Array<{ x: number; y: number }>;
+    dimensions: Array<{ width: number; height: number }>;
+    centres: Array<{ x: number; y: number }>;
     width: number;
     height: number;
 };
+
+type Point = { x: number; y: number };
+type PathPreviewSegment = { from: Point; to: Point };
 
 function hasFiniteStyleHintXY(field: BoardField): boolean {
     const x = field.styleHint?.x;
     const y = field.styleHint?.y;
     return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y);
+}
+
+function getFieldTileWidth(field: BoardField): number {
+    return TILE_W * getNodeScale(field);
+}
+
+function getFieldTileHeight(field: BoardField): number {
+    return TILE_H * getNodeScale(field);
 }
 
 function buildFallbackTileOrigins(total: number): Array<{ x: number; y: number }> {
@@ -120,12 +142,18 @@ function buildTileLayout(board: BoardField[]): TileLayout {
     if (board.length === 0) {
         return {
             origins: [],
+            dimensions: [],
+            centres: [],
             width: TILE_W + GRAPH_PAD_X * 2,
             height: TILE_H + GRAPH_PAD_Y * 2,
         };
     }
 
     const fallbackOrigins = buildFallbackTileOrigins(board.length);
+    const dimensions = board.map((field) => ({
+        width: getFieldTileWidth(field),
+        height: getFieldTileHeight(field),
+    }));
     const hasGraphCoords = board.some(hasFiniteStyleHintXY);
     if (hasGraphCoords) {
         const graphOrigins = board.map((field, index) => (
@@ -146,26 +174,43 @@ function buildTileLayout(board: BoardField[]): TileLayout {
             x: point.x - minX + GRAPH_PAD_X,
             y: point.y - minY + GRAPH_PAD_Y,
         }));
+        const maxRight = normalizedOrigins.reduce((max, point, index) => Math.max(max, point.x + (dimensions[index]?.width ?? TILE_W)), 0);
+        const maxBottom = normalizedOrigins.reduce((max, point, index) => Math.max(max, point.y + (dimensions[index]?.height ?? TILE_H)), 0);
+        const centres = normalizedOrigins.map((point, index) => ({
+            x: point.x + ((dimensions[index]?.width ?? TILE_W) / 2),
+            y: point.y + ((dimensions[index]?.height ?? TILE_H) / 2),
+        }));
         return {
             origins: normalizedOrigins,
-            width: (maxX - minX) + TILE_W + GRAPH_PAD_X * 2,
-            height: (maxY - minY) + TILE_H + GRAPH_PAD_Y * 2,
+            dimensions,
+            centres,
+            width: maxRight + GRAPH_PAD_X,
+            height: maxBottom + GRAPH_PAD_Y,
         };
     }
 
     const origins = fallbackOrigins;
+    const centres = origins.map((point, index) => ({
+        x: point.x + ((dimensions[index]?.width ?? TILE_W) / 2),
+        y: point.y + ((dimensions[index]?.height ?? TILE_H) / 2),
+    }));
+    const maxRight = origins.reduce((max, point, index) => Math.max(max, point.x + (dimensions[index]?.width ?? TILE_W)), 0);
+    const maxBottom = origins.reduce((max, point, index) => Math.max(max, point.y + (dimensions[index]?.height ?? TILE_H)), 0);
     if (ACTIVE_LAYOUT === "vertical") {
         return {
             origins,
-            width: BOARD_PAD_VX * 2 + TILE_W,
-            height: BOARD_PAD_H * 2 + (board.length - 1) * TILE_STEP_V + TILE_H,
+            dimensions,
+            centres,
+            width: Math.max(BOARD_PAD_VX * 2 + TILE_W, maxRight + BOARD_PAD_VX),
+            height: Math.max(BOARD_PAD_H * 2 + (board.length - 1) * TILE_STEP_V + TILE_H, maxBottom + BOARD_PAD_H),
         };
     }
-    const rows = Math.ceil(board.length / COL_COUNT);
     return {
         origins,
-        width: PAD_X_SN * 2 + (COL_COUNT - 1) * GAP_X_SN + TILE_W,
-        height: PAD_Y_SN * 2 + (rows - 1) * GAP_Y_SN + TILE_H,
+        dimensions,
+        centres,
+        width: Math.max(PAD_X_SN * 2 + (COL_COUNT - 1) * GAP_X_SN + TILE_W, maxRight + PAD_X_SN),
+        height: Math.max(PAD_Y_SN * 2 + TILE_H, maxBottom + PAD_Y_SN),
     };
 }
 
@@ -183,9 +228,16 @@ function tileOrigin(layout: TileLayout, index: number): { x: number; y: number }
     return layout.origins[wrapIndex(index, total)] ?? layout.origins[0]!;
 }
 
+function tileDimensions(layout: TileLayout, index: number): { width: number; height: number } {
+    const total = layout.dimensions.length;
+    if (total === 0) return { width: TILE_W, height: TILE_H };
+    return layout.dimensions[wrapIndex(index, total)] ?? layout.dimensions[0] ?? { width: TILE_W, height: TILE_H };
+}
+
 function tileCentre(layout: TileLayout, index: number): { x: number; y: number } {
     const { x, y } = tileOrigin(layout, index);
-    return { x: x + TILE_W / 2, y: y + TILE_H / 2 };
+    const { width, height } = tileDimensions(layout, index);
+    return { x: x + width / 2, y: y + height / 2 };
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -212,6 +264,12 @@ function tileCentreAtProgress(layout: TileLayout, indexProgress: number): { x: n
         x: lerp(from.x, to.x, t),
         y: lerp(from.y, to.y, t),
     };
+}
+
+function getBoardProgressRatio(state: GameState, position: number | undefined): number {
+    if (state.sessionPhase === "completed") return 1;
+    const finalBoardIndex = Math.max(1, state.config.board.length - 1);
+    return clampNum((position ?? 0) / finalBoardIndex, 0, 1);
 }
 
 function easeOutBack(t: number): number {
@@ -242,6 +300,72 @@ function clampNum(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
 }
 
+function resolveTileColours(field: BoardField): TileC {
+    const customColor = parseHexColorToNumber(field.styleHint?.color);
+    if (customColor === null) {
+        return TILE_COLOURS[field.kind] ?? TILE_COLOURS.path;
+    }
+    return {
+        accent: customColor,
+        dark: blendColor(customColor, 0x000000, 0.38),
+        glow: blendColor(customColor, 0xffffff, 0.24),
+        base: blendColor(customColor, 0x050816, 0.84),
+    };
+}
+
+function buildPendingPathPreviewSegments(
+    state: GameState,
+    edgeId: string,
+): PathPreviewSegment[] {
+    const pending = state.pendingPathChoice;
+    if (!pending) return [];
+
+    const graph = state.config.runtimeGraph;
+    const board = state.config.board;
+    const layout = buildTileLayout(board);
+    const centres = layout.centres;
+    const segments: PathPreviewSegment[] = [];
+
+    let selectedEdge = graph.edgesById[edgeId];
+    let currentNodeId = pending.fromNodeId;
+    let remainingSteps = pending.remainingSteps;
+    let remainingMoney = state.players[state.currentPlayerIndex]?.money ?? 0;
+    let safety = Math.max(4, remainingSteps + 4);
+
+    while (selectedEdge && remainingSteps > 0 && safety > 0) {
+        safety -= 1;
+        if (selectedEdge.fromNodeId !== currentNodeId || remainingMoney < selectedEdge.gateCost) break;
+
+        const fromIndex = graph.nodeIndexById[selectedEdge.fromNodeId];
+        const toIndex = graph.nodeIndexById[selectedEdge.toNodeId];
+        const from = typeof fromIndex === "number" ? centres[fromIndex] : undefined;
+        const to = typeof toIndex === "number" ? centres[toIndex] : undefined;
+        if (from && to) {
+            segments.push({ from, to });
+        }
+
+        remainingMoney -= selectedEdge.gateCost;
+        currentNodeId = selectedEdge.toNodeId;
+        remainingSteps -= 1;
+        if (remainingSteps <= 0) break;
+
+        const currentField = board[graph.nodeIndexById[currentNodeId] ?? -1];
+        if (!currentField) break;
+        if (currentField.forceStop || currentField.kind === "safePoint" || currentField.kind === "end") {
+            break;
+        }
+
+        const outgoing = (graph.outgoingEdgeIdsByNodeId[currentNodeId] ?? [])
+            .map((candidateEdgeId) => graph.edgesById[candidateEdgeId])
+            .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge))
+            .filter((edge) => remainingMoney >= edge.gateCost);
+        if (outgoing.length !== 1) break;
+        selectedEdge = outgoing[0];
+    }
+
+    return segments;
+}
+
 function hashString(input: string): number {
     let hash = 0;
     for (let i = 0; i < input.length; i += 1) {
@@ -259,17 +383,19 @@ function hashString(input: string): number {
 function drawTile(
     g: Graphics,
     x: number, y: number,
+    width: number,
+    height: number,
     field: BoardField,
     isActive: boolean,
     isHighlighted: boolean,
     phase: number,
 ): void {
-    const c = TILE_COLOURS[field.kind] ?? TILE_COLOURS.path;
+    const c = resolveTileColours(field);
     const pulse = 0.5 + 0.5 * Math.sin(phase * 2.1);
     const outerX = x + 8;
     const outerY = y + 10;
-    const outerW = TILE_W - 16;
-    const outerH = TILE_H - 18;
+    const outerW = Math.max(28, width - 16);
+    const outerH = Math.max(28, height - 18);
     const innerX = outerX + 4;
     const innerY = outerY + 4;
     const innerW = outerW - 8;
@@ -301,8 +427,8 @@ function drawTile(
     g.roundRect(innerX + 5, outerY + outerH - 20, innerW - 10, 8, 4);
     g.fill({ color: c.accent, alpha: 0.38 + pulse * 0.24 });
 
-    const cx = x + TILE_W / 2;
-    const cy = y + TILE_H / 2 + 5;
+    const cx = x + width / 2;
+    const cy = y + height / 2 + 5;
     if (field.kind === "start") {
         g.poly([cx - 7, cy - 7, cx + 8, cy, cx - 7, cy + 7]);
         g.fill({ color: 0xe9fbff, alpha: 0.95 });
@@ -322,10 +448,10 @@ function drawTile(
     }
 }
 
-function drawTileHighlight(g: Graphics, x: number, y: number, color: number, alpha: number): void {
-    g.roundRect(x - 6, y - 6, TILE_W + 12, TILE_H + 12, 18);
+function drawTileHighlight(g: Graphics, x: number, y: number, width: number, height: number, color: number, alpha: number): void {
+    g.roundRect(x - 6, y - 6, width + 12, height + 12, 18);
     g.fill({ color, alpha: alpha * 0.18 });
-    g.roundRect(x - 1, y - 1, TILE_W + 2, TILE_H + 2, 12);
+    g.roundRect(x - 1, y - 1, width + 2, height + 2, 12);
     g.stroke({ color, alpha: alpha * 0.85, width: 2.2 });
 }
 
@@ -380,6 +506,164 @@ function drawNeonRoadConnector(
         g.circle(mx, my, 2.1);
         g.fill({ color: 0xdce7ff, alpha: 0.7 });
     }
+}
+
+function drawConnectorFlow(
+    g: Graphics,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    t: number,
+    color: number,
+    alpha = 1,
+): void {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return;
+
+    g.moveTo(x1, y1);
+    g.lineTo(x2, y2);
+    g.stroke({ color, alpha: 0.1 * alpha, width: 2 });
+
+    for (let i = 0; i < 3; i++) {
+        const progress = (t * 0.22 + i * 0.31) % 1;
+        const px = x1 + dx * progress;
+        const py = y1 + dy * progress;
+        const r = 3.5 - i * 0.6;
+        g.circle(px, py, r * 1.9);
+        g.fill({ color, alpha: (0.08 - i * 0.015) * alpha });
+        g.circle(px, py, r);
+        g.fill({ color: 0xf6fbff, alpha: (0.7 - i * 0.16) * alpha });
+    }
+}
+
+function drawRoadGate(
+    g: Graphics,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    t: number,
+): { x: number; y: number; normalX: number; normalY: number } | null {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return null;
+
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+    const gateX = x1 + dx * 0.5;
+    const gateY = y1 + dy * 0.5;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
+
+    const frameWidth = 38;
+    const frameHeight = 32;
+    const pillarWidth = 8;
+    const lintelHeight = 7;
+    const innerWidth = 24;
+    const innerHeight = 20;
+    const pillarRadius = 3;
+
+    g.circle(gateX, gateY + 2, 28);
+    g.fill({ color: 0xff79b4, alpha: 0.05 + pulse * 0.04 });
+
+    g.roundRect(gateX - frameWidth / 2, gateY - frameHeight / 2, pillarWidth, frameHeight, pillarRadius);
+    g.fill({ color: 0x182235, alpha: 0.98 });
+    g.stroke({ color: 0xaed9ff, alpha: 0.55, width: 1.1 });
+
+    g.roundRect(gateX + frameWidth / 2 - pillarWidth, gateY - frameHeight / 2, pillarWidth, frameHeight, pillarRadius);
+    g.fill({ color: 0x182235, alpha: 0.98 });
+    g.stroke({ color: 0xaed9ff, alpha: 0.55, width: 1.1 });
+
+    g.roundRect(gateX - frameWidth / 2 - 3, gateY + frameHeight / 2 - 5, pillarWidth + 6, 6, 3);
+    g.fill({ color: 0x0d1322, alpha: 0.94 });
+    g.roundRect(gateX + frameWidth / 2 - pillarWidth - 3, gateY + frameHeight / 2 - 5, pillarWidth + 6, 6, 3);
+    g.fill({ color: 0x0d1322, alpha: 0.94 });
+
+    g.roundRect(gateX - frameWidth / 2, gateY - frameHeight / 2, frameWidth, lintelHeight, 4);
+    g.fill({ color: 0x243651, alpha: 0.98 });
+    g.stroke({ color: 0x8fd0ff, alpha: 0.7, width: 1.2 });
+
+    g.roundRect(gateX - innerWidth / 2, gateY - innerHeight / 2 + 2, innerWidth, innerHeight, 4);
+    g.fill({ color: 0x0f1728, alpha: 0.96 });
+    g.stroke({ color: 0xffc96d, alpha: 0.75 + pulse * 0.12, width: 1.3 });
+
+    for (let bar = -1; bar <= 1; bar++) {
+        const barX = gateX + bar * 6;
+        g.moveTo(barX, gateY - innerHeight / 2 + 5);
+        g.lineTo(barX, gateY + innerHeight / 2 - 3);
+        g.stroke({ color: 0xffd978, alpha: 0.85, width: 1.7, cap: "round" });
+    }
+
+    g.moveTo(gateX - innerWidth / 2 + 3, gateY - 1);
+    g.lineTo(gateX + innerWidth / 2 - 3, gateY - 1);
+    g.stroke({ color: 0xffd978, alpha: 0.65, width: 1.4, cap: "round" });
+
+    g.circle(gateX, gateY + 2, 3.5);
+    g.fill({ color: 0xff89bb, alpha: 0.95 });
+    g.circle(gateX, gateY + 2, 7);
+    g.stroke({ color: 0xff89bb, alpha: 0.24 + pulse * 0.12, width: 1.6 });
+
+    return { x: gateX, y: gateY, normalX: nx, normalY: ny };
+}
+
+function drawTileBeacon(g: Graphics, cx: number, cy: number, color: number, t: number, alpha = 1): void {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+    for (let i = 0; i < 3; i++) {
+        const radius = 34 + i * 15 + pulse * (8 + i * 3);
+        g.circle(cx, cy, radius);
+        g.stroke({
+            color,
+            alpha: (0.24 - i * 0.06) * alpha,
+            width: 2 - i * 0.35,
+        });
+    }
+
+    for (let i = 0; i < 5; i++) {
+        const ang = t * 1.5 + i * ((Math.PI * 2) / 5);
+        const orbit = 24 + pulse * 6;
+        const px = cx + Math.cos(ang) * orbit;
+        const py = cy + Math.sin(ang) * orbit;
+        g.circle(px, py, 2.4);
+        g.fill({ color: 0xf4fbff, alpha: 0.8 * alpha });
+    }
+}
+
+function drawTokenTrail(
+    g: Graphics,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    color: number,
+    progress: number,
+): void {
+    const clamped = clampNum(progress, 0, 1);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+
+    for (let i = 0; i < 6; i++) {
+        const step = clampNum(clamped - i * 0.09, 0, 1);
+        const px = from.x + dx * step;
+        const py = from.y + dy * step - Math.sin(step * Math.PI) * 18;
+        const alpha = (0.26 - i * 0.035) * clamped;
+        if (alpha <= 0) continue;
+        g.circle(px, py, 18 - i * 2.2);
+        g.fill({ color, alpha });
+    }
+}
+
+function drawBoardSweep(g: Graphics, width: number, height: number, t: number, alpha = 1): void {
+    const sweepX = ((t * 180) % (width + 260)) - 130;
+    g.poly([
+        sweepX - 90, -30,
+        sweepX + 70, -30,
+        sweepX + 180, height + 30,
+        sweepX + 20, height + 30,
+    ]);
+    g.fill({ color: 0x8ad6ff, alpha: 0.05 * alpha });
 }
 
 function drawPlayerAvatarToken(
@@ -532,60 +816,129 @@ function getDiceDots(value: number): [number, number][] {
 }
 
 /**
- * Dark futuristic background with neon mist and soft vignette.
+ * Perfect balance of fun and calm: Constellation network + Floating Triangles and Hexagons.
  */
 function drawBackground(g: Graphics, w: number, h: number, t: number): void {
-    const top = 0x070711;
-    const mid = 0x0f0a1f;
-    const bottom = 0x06060d;
-    const bands = 24;
+    // 1. Deep space base backdrop
+    const baseTop = 0x060714;
+    const baseBottom = 0x1d0a2b;
+    const bands = Math.max(12, Math.floor(h / 30));
     const bandH = h / bands;
+
+    // Smooth vertical gradient
     for (let i = 0; i < bands; i++) {
         const p = i / (bands - 1);
-        const col = p < 0.6
-            ? blendColor(top, mid, p / 0.6)
-            : blendColor(mid, bottom, (p - 0.6) / 0.4);
+        const col = blendColor(baseTop, baseBottom, p);
         g.rect(0, i * bandH, w, bandH + 1);
         g.fill({ color: col, alpha: 1 });
     }
 
-    const fogBlobs: [number, number, number, number, number, number][] = [
-        [0.16, 0.23, 320, 0xff56ba, 0.18, 0.21],
-        [0.71, 0.17, 290, 0x64d8ff, 0.17, 0.18],
-        [0.44, 0.76, 420, 0x8f66ff, 0.15, 0.24],
-        [0.86, 0.66, 260, 0xff4f82, 0.14, 0.27],
-    ];
-    fogBlobs.forEach(([xf, yf, r, col, alpha, speed], idx) => {
-        const driftX = Math.sin(t * speed + idx * 1.3) * 40;
-        const driftY = Math.cos(t * speed * 0.8 + idx) * 26;
-        g.circle(w * xf + driftX, h * yf + driftY, r);
-        g.fill({ color: col, alpha: alpha + 0.05 * Math.sin(t * 0.4 + idx) });
+    // 2. Dynamic Constellation Network
+    const numNodes = 75;
+    const maxDist = 200;
+    const nodes: { x: number; y: number; r: number; c: number }[] = [];
+
+    for (let i = 0; i < numNodes; i++) {
+        const sx = Math.sin(i * 12.5) * 10000;
+        const sy = Math.cos(i * 4.3) * 10000;
+        const startX = (sx - Math.floor(sx)) * w;
+        const startY = (sy - Math.floor(sy)) * h;
+
+        // Complex movement: drifting and swirling
+        const speed = 15 + (i % 10);
+        const moveX = Math.sin(t * 0.4 + i) * speed;
+        const moveY = Math.cos(t * 0.3 + i * 1.2) * speed;
+
+        // Wrap around logic
+        let nx = startX + moveX + (t * 8 % w);
+        if (nx > w + 50) nx = (nx % w) - 50;
+        else if (nx < -50) nx = w + 50 - (-nx % w);
+
+        let ny = startY + moveY + ((t * (4 + (i % 4))) % h);
+        if (ny > h + 50) ny = (ny % h) - 50;
+        else if (ny < -50) ny = h + 50 - (-ny % h);
+
+        const r = 2.0 + (i % 4);
+        const col = i % 2 === 0 ? 0x00f3ff : 0xff3b99;
+        nodes.push({ x: nx, y: ny, r, c: col });
+    }
+
+    // Draw Constellation Lines + Nodes
+    for (let i = 0; i < numNodes; i++) {
+        const n1 = nodes[i];
+        if (!n1) continue;
+        for (let j = i + 1; j < numNodes; j++) {
+            const n2 = nodes[j];
+            if (!n2) continue;
+
+            const dx = n2.x - n1.x;
+            const dy = n2.y - n1.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < maxDist) {
+                const alpha = Math.pow(1 - (dist / maxDist), 2) * 0.55;
+                g.moveTo(n1.x, n1.y);
+                g.lineTo(n2.x, n2.y);
+                g.stroke({ color: blendColor(n1.c, n2.c, 0.5), alpha, width: 2.0 });
+            }
+        }
+    }
+
+    // Draw Nodes over lines
+    nodes.forEach(n => {
+        g.circle(n.x, n.y, n.r);
+        g.fill({ color: n.c, alpha: 0.95 });
+        g.circle(n.x, n.y, n.r * 2.5);
+        g.fill({ color: n.c, alpha: 0.25 });
     });
 
-    g.rect(0, 0, w, h);
-    g.fill({ color: 0x000000, alpha: 0.16 });
+    // 3. Floating Geometric Polygons (Hexagons and Triangles)
+    const numShapes = 12;
+    for (let i = 0; i < numShapes; i++) {
+        const sx = Math.sin(i * 33.1) * 10000;
+        const startX = (sx - Math.floor(sx)) * w;
+
+        // Float upwards while rotating
+        const floatSpeed = 12 + (i % 8);
+        const my = h + 150 - ((t * floatSpeed + i * 200) % (h + 300));
+        const mx = startX + Math.sin(t * 0.5 + i) * 60;
+
+        const size = 20 + (i % 4) * 15;
+        const col = i % 3 === 0 ? 0xff00b3 : (i % 3 === 1 ? 0x00f3ff : 0x7b2cbf);
+        const rot = t * (0.3 + (i % 2) * 0.2) + i;
+
+        const shapePulse = 0.5 + 0.5 * Math.sin(t * 1.5 + i);
+        const alpha = 0.12 + shapePulse * 0.08;
+
+        if (i % 2 === 0) {
+            // Hexagon
+            const pts = [];
+            for (let a = 0; a < 6; a++) {
+                const ang = rot + a * (Math.PI / 3);
+                pts.push(mx + Math.cos(ang) * size);
+                pts.push(my + Math.sin(ang) * size);
+            }
+            g.poly(pts);
+            g.stroke({ color: col, alpha, width: 2.5 });
+            g.fill({ color: col, alpha: alpha * 0.2 });
+        } else {
+            // Triangle
+            const pts = [];
+            for (let a = 0; a < 3; a++) {
+                pts.push(mx + Math.cos(rot + a * (Math.PI * 2 / 3)) * size);
+                pts.push(my + Math.sin(rot + a * (Math.PI * 2 / 3)) * size);
+            }
+            g.poly(pts);
+            g.stroke({ color: col, alpha, width: 2.5 });
+            g.fill({ color: col, alpha: alpha * 0.2 });
+        }
+    }
 }
 
 /**
- * Perspective grid lines for subtle depth.
+ * Empty static grid (now drawn dynamically in drawBackground context)
  */
 function drawGrid(g: Graphics, w: number, h: number): void {
-    const horizonY = h * 0.24;
-    const baseY = h + 10;
-    const centerX = w * 0.5;
-    for (let i = -8; i <= 8; i++) {
-        const x = centerX + i * 120;
-        g.moveTo(centerX, horizonY);
-        g.lineTo(x, baseY);
-        g.stroke({ color: 0x6d6ab8, alpha: 0.08, width: 1 });
-    }
-    for (let y = 0; y < 9; y++) {
-        const p = y / 8;
-        const yy = horizonY + Math.pow(p, 1.8) * (h - horizonY);
-        g.moveTo(0, yy);
-        g.lineTo(w, yy);
-        g.stroke({ color: 0x7f86ff, alpha: 0.05 + p * 0.07, width: 1 });
-    }
+    // Dynamic grid implementation moved to drawBackground for animation sync
 }
 
 function drawStars(
@@ -602,9 +955,80 @@ function drawStars(
 }
 
 const HUD_W = 348;
-const HUD_H = 322;
+const HUD_H = 390;
 const HUD_MARGIN = 16;
 const HUD_TEXT_X_PAD = 24;
+
+function formatHudDurationRounds(rounds: number | null | undefined): string {
+    if (rounds === null) return "perm";
+    if (typeof rounds !== "number" || !Number.isFinite(rounds) || rounds <= 0) return "active";
+    return `${rounds}r`;
+}
+
+function buildHudActiveEffectLines(player: PlayerState | undefined): string[] {
+    if (!player) return [];
+
+    const entries: string[] = [];
+    const seenIds = new Set<string>();
+
+    for (const effect of player.activePerkEffects) {
+        const name = effect.name ?? getPerkById(effect.id)?.name ?? effect.id;
+        entries.push(`${name} (${formatHudDurationRounds(effect.remainingRounds)})`);
+        seenIds.add(effect.id);
+    }
+
+    for (const antiPerkId of player.antiPerks) {
+        if (seenIds.has(antiPerkId)) continue;
+        const antiPerk = getPerkById(antiPerkId);
+        entries.push(`${antiPerk?.name ?? antiPerkId} (active)`);
+    }
+
+    if ((player.shieldRoundsRemaining ?? 0) > 0) {
+        entries.push(`Shield (${player.shieldRoundsRemaining}r)`);
+    }
+    if ((player.pendingRollMultiplier ?? 0) > 0) {
+        entries.push(`Next roll x${player.pendingRollMultiplier}`);
+    }
+    if ((player.pendingRollCeiling ?? 0) > 0) {
+        entries.push(`Roll cap ${player.pendingRollCeiling}`);
+    }
+    if ((player.pendingIntensityCap ?? 0) > 0) {
+        entries.push(`Intensity <= ${Math.round(player.pendingIntensityCap * 100)}%`);
+    }
+
+    const pauseCharges = Math.max(0, player.roundControl?.pauseCharges ?? 0);
+    const skipCharges = Math.max(0, player.roundControl?.skipCharges ?? 0);
+    if (pauseCharges > 0 || skipCharges > 0) {
+        entries.push(`Controls P${pauseCharges} S${skipCharges}`);
+    }
+
+    return entries;
+}
+
+function formatHudActiveEffects(player: PlayerState | undefined): string {
+    const entries = buildHudActiveEffectLines(player);
+    if (entries.length === 0) return "ACTIVE EFFECTS\nNone";
+
+    const visible = entries.slice(0, 3);
+    if (entries.length > visible.length) {
+        visible.push(`+${entries.length - visible.length} more`);
+    }
+    return `ACTIVE EFFECTS ${entries.length}\n${visible.join("\n")}`;
+}
+
+function formatHudDiceMeta(player: PlayerState | undefined): string {
+    if (!player) return "RANGE 1-6";
+
+    const parts = [`RANGE ${player.stats.diceMin}-${player.stats.diceMax}`];
+    if ((player.pendingRollMultiplier ?? 0) > 0) {
+        parts.push(`NEXT x${player.pendingRollMultiplier}`);
+    }
+    if ((player.pendingRollCeiling ?? 0) > 0) {
+        parts.push(`CAP ${player.pendingRollCeiling}`);
+    }
+
+    return parts.join("  ");
+}
 const ROUND_REWARD_FX_DURATION = 2.25;
 
 function drawHUD(
@@ -620,8 +1044,7 @@ function drawHUD(
     const py = 12;
     const score = player?.score ?? 0;
     const money = player?.money ?? 0;
-    const boardProgress =
-        (player?.position ?? 0) / Math.max(1, state.config.singlePlayer.totalIndices);
+    const boardProgress = getBoardProgressRatio(state, player?.position);
     const highscore = Math.max(1, state.highscore, score);
     const scoreRatio = Math.max(0, Math.min(1, score / highscore));
     const moneyCap = Math.max(1, state.config.economy.startingMoney * 2);
@@ -629,107 +1052,116 @@ function drawHUD(
     const intermediaryRatio = Math.max(0, Math.min(1, state.intermediaryProbability));
     const antiRatio = Math.max(0, Math.min(1, state.antiPerkProbability));
 
-    const outerX = px - 8;
-    const outerY = py - 8;
-    hudG.roundRect(outerX, outerY, HUD_W + 16, HUD_H + 16, 30);
-    hudG.fill({ color: 0x71c6ff, alpha: 0.06 + pulse * 0.03 });
+    const outerX = px - 6;
+    const outerY = py - 6;
 
-    hudG.roundRect(px, py, HUD_W, HUD_H, 24);
-    hudG.fill({ color: 0x050c1b, alpha: 0.95 });
-    hudG.stroke({ color: 0x3e5d8f, alpha: 0.9, width: 1.8 });
+    // Outer glow
+    hudG.roundRect(outerX, outerY, HUD_W + 12, HUD_H + 12, 28);
+    hudG.fill({ color: 0x9d00ff, alpha: 0.05 + pulse * 0.03 });
 
-    hudG.roundRect(px + 2, py + 2, HUD_W - 4, HUD_H - 4, 22);
-    hudG.stroke({ color: 0x6f8fcb, alpha: 0.28, width: 1 });
+    // Main dark glass background
+    hudG.roundRect(px, py, HUD_W, HUD_H, 20);
+    hudG.fill({ color: 0x0d0614, alpha: 0.85 });
 
-    const headerX = px + 12;
-    const headerY = py + 12;
-    const headerW = HUD_W - 24;
-    const headerH = 64;
-    hudG.roundRect(headerX, headerY, headerW, headerH, 14);
-    hudG.fill({ color: 0x0b1427, alpha: 0.94 });
-    hudG.stroke({ color: 0x4665a1, alpha: 0.62, width: 1 });
+    // Sleek inner border
+    hudG.stroke({ color: 0x3a1c5e, alpha: 0.8, width: 2 });
 
-    const progressCardX = px + 12;
-    const progressCardY = py + 86;
-    const progressCardW = 202;
-    const progressCardH = 78;
-    hudG.roundRect(progressCardX, progressCardY, progressCardW, progressCardH, 12);
-    hudG.fill({ color: 0x0a1326, alpha: 0.94 });
-    hudG.stroke({ color: 0x4463a2, alpha: 0.56, width: 1 });
+    // Top bright highlight edge (glass rim)
+    hudG.roundRect(px + 1, py + 1, HUD_W - 2, HUD_H - 2, 18);
+    hudG.stroke({ color: 0x613499, alpha: 0.4, width: 1 });
 
-    const diceCardX = px + 224;
-    const diceCardY = py + 86;
-    const diceCardW = 112;
-    const diceCardH = 78;
-    hudG.roundRect(diceCardX, diceCardY, diceCardW, diceCardH, 12);
-    hudG.fill({ color: 0x091224, alpha: 0.95 });
-    hudG.stroke({ color: 0x4f6cb0, alpha: 0.58, width: 1 });
-    hudG.roundRect(diceCardX + 9, diceCardY + 10, diceCardW - 18, diceCardH - 20, 10);
-    hudG.stroke({ color: 0x8eb4ff, alpha: 0.42 + pulse * 0.14, width: 1.2 });
+    const headerX = px + 16;
+    const headerY = py + 16;
+    const headerW = HUD_W - 32;
 
-    const statCardY = py + 172;
-    const statCardW = 154;
-    const scoreCardX = px + 12;
-    const moneyCardX = px + 182;
-    if (rewardPulse > 0) {
-        hudG.roundRect(scoreCardX - 6, statCardY - 6, statCardW + 12, 74, 14);
-        hudG.fill({ color: 0x77dcff, alpha: 0.12 + rewardPulse * 0.22 });
-        hudG.roundRect(moneyCardX - 6, statCardY - 6, statCardW + 12, 74, 14);
-        hudG.fill({ color: 0x79ffd0, alpha: 0.12 + rewardPulse * 0.24 });
+    // Subtle accent line under header
+    hudG.moveTo(headerX, headerY + 61);
+    hudG.lineTo(headerX + headerW, headerY + 61);
+    hudG.stroke({ color: 0xff007f, alpha: 0.35 + pulse * 0.15, width: 1.5 });
+
+    const section2Y = headerY + 75;
+
+    // Track background for Board Progress
+    const progressBarX = headerX;
+    const progressBarY = section2Y + 28;
+    const progressBarW = headerW;
+
+    hudG.roundRect(progressBarX, progressBarY, progressBarW, 6, 3);
+    hudG.fill({ color: 0x1a0b2e, alpha: 0.9 });
+
+    // Progress fill (Cyan)
+    hudG.roundRect(progressBarX, progressBarY, progressBarW * boardProgress, 6, 3);
+    hudG.fill({ color: 0x00e5ff, alpha: 0.95 });
+
+    if (boardProgress > 0) {
+        hudG.circle(progressBarX + progressBarW * boardProgress, progressBarY + 3, 5 + pulse * 2);
+        hudG.fill({ color: 0x00e5ff, alpha: 0.6 });
     }
-    hudG.roundRect(scoreCardX, statCardY, statCardW, 62, 12);
-    hudG.fill({ color: 0x0a1325, alpha: 0.94 });
-    hudG.stroke({ color: 0x3d5d9f, alpha: 0.56, width: 1 });
-    hudG.roundRect(moneyCardX, statCardY, statCardW, 62, 12);
-    hudG.fill({ color: 0x08172a, alpha: 0.94 });
-    hudG.stroke({ color: 0x238e97, alpha: 0.62, width: 1 });
 
-    const probCardX = px + 12;
-    const probCardY = py + 242;
-    const probCardW = HUD_W - 24;
-    const probCardH = 56;
-    hudG.roundRect(probCardX, probCardY, probCardW, probCardH, 12);
-    hudG.fill({ color: 0x081225, alpha: 0.94 });
-    hudG.stroke({ color: 0x3d5f99, alpha: 0.52, width: 1 });
+    const statCardY = section2Y + 60;
+    const statW = (HUD_W - 40) / 2;
+    const scoreX = headerX;
+    const moneyX = headerX + statW + 8;
 
-    hudG.roundRect(px + HUD_W - 114, py + 22, 90, 20, 8);
-    hudG.fill({ color: 0x101a31, alpha: 0.95 });
-    hudG.stroke({ color: 0x5a76b6, alpha: 0.58, width: 1 });
+    if (rewardPulse > 0) {
+        const rewardGlow = rewardPulse * 0.25;
+        hudG.roundRect(scoreX - 4, statCardY - 4, statW + 8, 48 + 8, 12);
+        hudG.fill({ color: 0x00e5ff, alpha: rewardGlow });
+        hudG.roundRect(moneyX - 4, statCardY - 4, statW + 8, 48 + 8, 12);
+        hudG.fill({ color: 0xff007f, alpha: rewardGlow });
+    }
 
-    const progressBarX = progressCardX + 14;
-    const progressBarY = progressCardY + 52;
-    const progressBarW = progressCardW - 28;
-    hudG.roundRect(progressBarX, progressBarY, progressBarW, 8, 4);
-    hudG.fill({ color: 0x071629, alpha: 1 });
-    hudG.roundRect(progressBarX, progressBarY, progressBarW * boardProgress, 8, 4);
-    hudG.fill({ color: 0x75cfff, alpha: 0.95 });
+    // Score Box
+    hudG.roundRect(scoreX, statCardY, statW, 56, 10);
+    hudG.fill({ color: 0x150926, alpha: 0.8 });
+    hudG.stroke({ color: 0x2b144d, alpha: 0.6, width: 1 });
 
-    const scoreBarX = scoreCardX + 12;
-    const scoreBarY = statCardY + 42;
-    const statBarW = statCardW - 24;
-    hudG.roundRect(scoreBarX, scoreBarY, statBarW, 7, 4);
-    hudG.fill({ color: 0x0b213e, alpha: 1 });
-    hudG.roundRect(scoreBarX, scoreBarY, statBarW * scoreRatio, 7, 4);
-    hudG.fill({ color: 0x67d7ff, alpha: 0.95 });
+    const scoreBarY = statCardY + 44;
+    hudG.roundRect(scoreX + 8, scoreBarY, statW - 16, 4, 2);
+    hudG.fill({ color: 0x1f0d36, alpha: 1 });
+    hudG.roundRect(scoreX + 8, scoreBarY, (statW - 16) * scoreRatio, 4, 2);
+    hudG.fill({ color: 0x00e5ff, alpha: 0.9 });
 
-    const moneyBarX = moneyCardX + 12;
-    const moneyBarY = statCardY + 42;
-    hudG.roundRect(moneyBarX, moneyBarY, statBarW, 7, 4);
-    hudG.fill({ color: 0x06322b, alpha: 1 });
-    hudG.roundRect(moneyBarX, moneyBarY, statBarW * moneyRatio, 7, 4);
-    hudG.fill({ color: 0x6ff3d2, alpha: 0.96 });
+    // Money Box
+    hudG.roundRect(moneyX, statCardY, statW, 56, 10);
+    hudG.fill({ color: 0x1a061c, alpha: 0.8 });
+    hudG.stroke({ color: 0x4a113a, alpha: 0.6, width: 1 });
 
-    const probBarX = probCardX + 14;
-    const probBarW = probCardW - 28;
-    hudG.roundRect(probBarX, probCardY + 24, probBarW, 7, 4);
-    hudG.fill({ color: 0x11182d, alpha: 1 });
-    hudG.roundRect(probBarX, probCardY + 24, probBarW * intermediaryRatio, 7, 4);
-    hudG.fill({ color: 0xd15be9, alpha: 0.96 });
+    const moneyBarY = statCardY + 44;
+    hudG.roundRect(moneyX + 8, moneyBarY, statW - 16, 4, 2);
+    hudG.fill({ color: 0x2d0a21, alpha: 1 });
+    hudG.roundRect(moneyX + 8, moneyBarY, (statW - 16) * moneyRatio, 4, 2);
+    hudG.fill({ color: 0xff007f, alpha: 0.9 });
 
-    hudG.roundRect(probBarX, probCardY + 40, probBarW, 7, 4);
-    hudG.fill({ color: 0x11182d, alpha: 1 });
-    hudG.roundRect(probBarX, probCardY + 40, probBarW * antiRatio, 7, 4);
-    hudG.fill({ color: 0xf06399, alpha: 0.96 });
+    // Effects Area
+    const effectsY = statCardY + 70;
+    hudG.roundRect(headerX, effectsY, headerW, 60, 8);
+    hudG.fill({ color: 0x12081f, alpha: 0.7 });
+    hudG.stroke({ color: 0x24113d, alpha: 0.5, width: 1 });
+
+    // Probabilities Area
+    const probY = effectsY + 74;
+    hudG.roundRect(headerX, probY, headerW, 50, 8);
+    hudG.fill({ color: 0x11071c, alpha: 0.7 });
+    hudG.stroke({ color: 0x2d1547, alpha: 0.5, width: 1 });
+
+    const probBarW = headerW - 24;
+    const interBarY = probY + 20;
+    const antiBarY = probY + 34;
+
+    hudG.roundRect(headerX + 12, interBarY, probBarW, 4, 2);
+    hudG.fill({ color: 0x1b0c2e, alpha: 1 });
+    hudG.roundRect(headerX + 12, interBarY, probBarW * intermediaryRatio, 4, 2);
+    hudG.fill({ color: 0xb92b27, alpha: 0.9 });
+
+    hudG.roundRect(headerX + 12, antiBarY, probBarW, 4, 2);
+    hudG.fill({ color: 0x1b0c2e, alpha: 1 });
+    hudG.roundRect(headerX + 12, antiBarY, probBarW * antiRatio, 4, 2);
+    hudG.fill({ color: 0xff007f, alpha: 0.9 });
+
+    hudG.roundRect(px + HUD_W - 86, py + 16, 70, 18, 6);
+    hudG.fill({ color: 0x220e3b, alpha: 0.85 });
+    hudG.stroke({ color: 0x441b75, alpha: 0.7, width: 1 });
 }
 
 function drawRoundRewardOverlay(
@@ -779,10 +1211,17 @@ function generateStars(w: number, h: number, count: number) {
     }));
 }
 
+function setTextIfChanged(textNode: Text, nextText: string): void {
+    if (textNode.text !== nextText) {
+        textNode.text = nextText;
+    }
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface GameSceneProps {
     initialState: GameState;
+    sessionStartedAtMs: number;
     installedRounds: InstalledRound[];
     onGiveUp: () => void;
     giveUpLabel?: string;
@@ -794,6 +1233,7 @@ interface GameSceneProps {
         tone?: "default" | "danger";
     }>;
     allowDebugRoundControls?: boolean;
+    showDevPerkMenu?: boolean;
     onHighscoreChange?: (highscore: number) => void;
     onRoundPlayed?: (payload: { roundId: string; nodeId: string; poolId: string | null }) => void;
     onStateChange?: (state: GameState) => void;
@@ -831,17 +1271,21 @@ interface GameSceneProps {
     intermediaryLoadingPrompt: string;
     intermediaryLoadingDurationSec: number;
     intermediaryReturnPauseSec: number;
+    initialShowProgressBarAlways?: boolean;
+    initialShowAntiPerkBeatbar?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const GameScene = memo(function GameScene({
     initialState,
+    sessionStartedAtMs,
     installedRounds,
     onGiveUp,
     giveUpLabel = "Give Up",
     optionsActions = [],
     allowDebugRoundControls = false,
+    showDevPerkMenu = false,
     onHighscoreChange,
     onRoundPlayed,
     onStateChange,
@@ -858,10 +1302,17 @@ export const GameScene = memo(function GameScene({
     intermediaryLoadingPrompt,
     intermediaryLoadingDurationSec,
     intermediaryReturnPauseSec,
+    initialShowProgressBarAlways = false,
+    initialShowAntiPerkBeatbar = true,
     showMultiplayerPlayerNames = false,
 }: GameSceneProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
+    const {
+        connected: handyConnected,
+        manuallyStopped: handyManuallyStopped,
+        toggleManualStop,
+    } = useHandy();
 
     const {
         state,
@@ -923,16 +1374,89 @@ export const GameScene = memo(function GameScene({
     applyPerkDirectlyRef.current = applyPerkDirectly;
     const [showCumConfirm, setShowCumConfirm] = useState(false);
     const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+    const [showPerkInventoryMenu, setShowPerkInventoryMenu] = useState(false);
+    const [showDevPerkMenuModal, setShowDevPerkMenuModal] = useState(false);
+    const [handyNotification, setHandyNotification] = useState<string | null>(null);
+    const [roundPreviewState, setRoundPreviewState] = useState({ active: false, loading: false });
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    const [completedElapsedSec, setCompletedElapsedSec] = useState<number | null>(null);
+    const [controllerPerkSelectionIndex, setControllerPerkSelectionIndex] = useState(0);
+    const [highlightedPathEdgeId, setHighlightedPathEdgeId] = useState<string | null>(null);
+    const highlightedPathEdgeIdRef = useRef<string | null>(highlightedPathEdgeId);
+    highlightedPathEdgeIdRef.current = highlightedPathEdgeId;
+    const nowMsRef = useRef(nowMs);
+    nowMsRef.current = nowMs;
+    const completedElapsedSecRef = useRef<number | null>(completedElapsedSec);
+    completedElapsedSecRef.current = completedElapsedSec;
+    const handyNotificationTimerRef = useRef<number | null>(null);
+    const controllerPerkSelectionIndexRef = useRef(controllerPerkSelectionIndex);
+    controllerPerkSelectionIndexRef.current = controllerPerkSelectionIndex;
+    const showCumConfirmRef = useRef(showCumConfirm);
+    showCumConfirmRef.current = showCumConfirm;
+    const showOptionsMenuRef = useRef(showOptionsMenu);
+    showOptionsMenuRef.current = showOptionsMenu;
+    const showPerkInventoryMenuRef = useRef(showPerkInventoryMenu);
+    showPerkInventoryMenuRef.current = showPerkInventoryMenu;
+    const showDevPerkMenuModalRef = useRef(showDevPerkMenuModal);
+    showDevPerkMenuModalRef.current = showDevPerkMenuModal;
+    const canShowDevPerkMenu = showDevPerkMenu && isGameDevelopmentMode();
+    const devPerkPool = useMemo(() => getSinglePlayerPerkPool(), []);
+    const devAntiPerkPool = useMemo(() => getSinglePlayerAntiPerkPool(), []);
+
+    const showHandyNotification = useCallback((message: string) => {
+        if (handyNotificationTimerRef.current !== null) {
+            window.clearTimeout(handyNotificationTimerRef.current);
+        }
+        setHandyNotification(message);
+        handyNotificationTimerRef.current = window.setTimeout(() => {
+            handyNotificationTimerRef.current = null;
+            setHandyNotification(null);
+        }, 2400);
+    }, []);
 
     const isLastCumRoundActive =
         state.sessionPhase === "cum" &&
-        state.activeRound?.phaseKind === "cum" &&
-        state.nextCumRoundIndex >= state.config.singlePlayer.cumRoundIds.length;
+        state.activeRound?.phaseKind === "cum";
+    const tileDurationLabelByFieldId = useMemo(
+        () => buildTileDurationLabelByFieldId(initialState.config.board, installedRounds),
+        [initialState.config.board, installedRounds],
+    );
 
     const requestCumConfirmation = () => {
         if (stateRef.current.sessionPhase === "completed") return;
         setShowCumConfirm(true);
     };
+
+    const handleHandyManualToggle = useCallback(() => {
+        void toggleManualStop().then((result) => {
+            if (result === "stopped") {
+                showHandyNotification("TheHandy stopped.");
+                return;
+            }
+            if (result === "resumed") {
+                showHandyNotification("TheHandy resumed.");
+                return;
+            }
+            showHandyNotification("No connected TheHandy to toggle.");
+        });
+    }, [showHandyNotification, toggleManualStop]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            setNowMs(Date.now());
+        }, 1000);
+        return () => {
+            window.clearInterval(timer);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (state.sessionPhase === "completed") {
+            setCompletedElapsedSec((prev) => prev ?? Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000)));
+            return;
+        }
+        setCompletedElapsedSec(null);
+    }, [sessionStartedAtMs, state.sessionPhase]);
 
     useEffect(() => {
         onHighscoreChange?.(state.highscore);
@@ -946,12 +1470,238 @@ export const GameScene = memo(function GameScene({
     }, [animPhase.kind, onStateChange, state]);
 
     useEffect(() => {
+        const optionCount = state.pendingPerkSelection?.options.length ?? 0;
+        if (optionCount <= 0) {
+            setControllerPerkSelectionIndex(0);
+            return;
+        }
+        setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(optionCount, previous)));
+    }, [state.pendingPerkSelection]);
+
+    useEffect(() => {
+        const options = state.pendingPathChoice?.options ?? [];
+        if (options.length === 0) {
+            setHighlightedPathEdgeId(null);
+            return;
+        }
+        setHighlightedPathEdgeId((previous) => (
+            previous && options.some((option) => option.edgeId === previous)
+                ? previous
+                : options[0]?.edgeId ?? null
+        ));
+    }, [state.pendingPathChoice]);
+
+    const pendingPathPreviewByEdgeId = useMemo(() => {
+        const pending = state.pendingPathChoice;
+        if (!pending) return {};
+        return Object.fromEntries(
+            pending.options.map((option) => [option.edgeId, buildPendingPathPreviewSegments(state, option.edgeId)]),
+        ) as Record<string, PathPreviewSegment[]>;
+    }, [state]);
+    const [selectedInventoryItemId, setSelectedInventoryItemId] = useState<string | null>(null);
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    const currentPlayerInventory = currentPlayer?.inventory ?? [];
+    const currentPlayerActiveEffects = currentPlayer?.activePerkEffects ?? [];
+    const previousInventoryRef = useRef<{
+        playerId: string | null;
+        itemIds: Set<string>;
+    }>({
+        playerId: currentPlayer?.id ?? null,
+        itemIds: new Set(currentPlayerInventory.map((item) => item.itemId)),
+    });
+
+    useEffect(() => {
+        if (currentPlayerInventory.length === 0) {
+            setSelectedInventoryItemId(null);
+            return;
+        }
+        setSelectedInventoryItemId((previous) => (
+            previous && currentPlayerInventory.some((item) => item.itemId === previous)
+                ? previous
+                : currentPlayerInventory[0]?.itemId ?? null
+        ));
+    }, [currentPlayerInventory]);
+
+    useEffect(() => {
+        const nextPlayerId = currentPlayer?.id ?? null;
+        const nextItemIds = new Set(currentPlayerInventory.map((item) => item.itemId));
+        const previousInventory = previousInventoryRef.current;
+
+        if (previousInventory.playerId !== nextPlayerId) {
+            previousInventoryRef.current = {
+                playerId: nextPlayerId,
+                itemIds: nextItemIds,
+            };
+            return;
+        }
+
+        const newlyAdded = currentPlayerInventory.filter((item) => !previousInventory.itemIds.has(item.itemId));
+        if (newlyAdded.length > 0) {
+            const latestItem = newlyAdded[0];
+            if (latestItem) {
+                showHandyNotification(`Received ${latestItem.kind === "antiPerk" ? "anti-perk" : "perk"}: ${latestItem.name}.`);
+            }
+        }
+
+        previousInventoryRef.current = {
+            playerId: nextPlayerId,
+            itemIds: nextItemIds,
+        };
+    }, [currentPlayer?.id, currentPlayerInventory, showHandyNotification]);
+
+    const canRollViaController =
+        state.sessionPhase === "normal" &&
+        animPhase.kind === "idle" &&
+        !state.pendingPathChoice &&
+        !state.pendingPerkSelection &&
+        (!state.queuedRound || Boolean(state.queuedRound.skippable)) &&
+        !state.activeRound;
+    const canStartQueuedRoundViaController =
+        animPhase.kind === "idle" &&
+        Boolean(state.queuedRound) &&
+        !state.pendingPerkSelection &&
+        !state.activeRound;
+    const canFinishRoundViaController = Boolean(state.activeRound) && animPhase.kind === "idle";
+    const perkOptionCount = state.pendingPerkSelection?.options.length ?? 0;
+    const shouldPrioritiseGameplayPrimaryAction =
+        !showPerkInventoryMenu &&
+        !showOptionsMenu &&
+        !showCumConfirm &&
+        !showDevPerkMenuModal &&
+        !state.pendingPathChoice &&
+        !state.pendingPerkSelection;
+    const tryHandlePrimaryGameplayAction = () => {
+        if (canRollViaController) {
+            handleRollRef.current();
+            return true;
+        }
+        if (canStartQueuedRoundViaController) {
+            handleStartQueuedRoundRef.current();
+            return true;
+        }
+        if (canFinishRoundViaController) {
+            handleCompleteRoundRef.current();
+            return true;
+        }
+        return false;
+    };
+
+    useControllerSurface({
+        id: "game-scene",
+        priority: 70,
+        initialFocusId: showCumConfirm
+            ? "game-cum-confirm-no"
+            : showPerkInventoryMenu
+                ? "game-inventory-close"
+                : showOptionsMenu
+                    ? "game-options-proceed"
+                    : showDevPerkMenuModal
+                        ? "game-dev-close"
+                        : state.pendingPathChoice?.options[0]
+                            ? `game-path-${state.pendingPathChoice.options[0].edgeId}`
+                            : (!state.activeRound && state.sessionPhase !== "completed" && handyConnected)
+                                ? "game-handy-toggle"
+                                : (!state.activeRound && state.sessionPhase !== "completed")
+                                    ? "game-options-open"
+                                    : undefined,
+        onBeforeDomAction: (action) => {
+            if (action !== "PRIMARY" || !shouldPrioritiseGameplayPrimaryAction) {
+                return false;
+            }
+            const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            const focusId = activeElement?.dataset.controllerFocusId;
+            if (
+                focusId &&
+                focusId !== "game-handy-toggle" &&
+                focusId !== "game-options-open" &&
+                focusId !== "game-cum-open"
+            ) {
+                return false;
+            }
+            return tryHandlePrimaryGameplayAction();
+        },
+        onBack: () => {
+            if (showDevPerkMenuModal) {
+                setShowDevPerkMenuModal(false);
+                return true;
+            }
+            if (showPerkInventoryMenu) {
+                setShowPerkInventoryMenu(false);
+                return true;
+            }
+            if (showOptionsMenu) {
+                setShowOptionsMenu(false);
+                return true;
+            }
+            if (showCumConfirm) {
+                setShowCumConfirm(false);
+                return true;
+            }
+            if (state.sessionPhase === "completed") {
+                return false;
+            }
+            if (state.pendingPerkSelection) {
+                return true;
+            }
+            setShowOptionsMenu(true);
+            return true;
+        },
+        onUnhandledAction: (action) => {
+            if (state.pendingPerkSelection) {
+                if (action === "LEFT") {
+                    setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(perkOptionCount, previous - 1)));
+                    return true;
+                }
+                if (action === "RIGHT") {
+                    setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(perkOptionCount, previous + 1)));
+                    return true;
+                }
+                if (action === "DOWN") {
+                    setControllerPerkSelectionIndex(perkOptionCount);
+                    return true;
+                }
+                if (action === "UP") {
+                    setControllerPerkSelectionIndex((previous) => (previous >= perkOptionCount ? 0 : previous));
+                    return true;
+                }
+                if (action === "PRIMARY") {
+                    const selectedIndex = controllerPerkSelectionIndexRef.current;
+                    if (selectedIndex >= perkOptionCount) {
+                        handleSkipPerkRef.current();
+                        return true;
+                    }
+                    const perkId = state.pendingPerkSelection.options[selectedIndex]?.id;
+                    if (!perkId) return true;
+                    handleSelectPerkRef.current(perkId, { applyDirectly: applyPerkDirectlyRef.current });
+                    return true;
+                }
+            }
+
+            if (action !== "PRIMARY") return false;
+            return tryHandlePrimaryGameplayAction();
+        },
+    });
+
+    useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             if (target && (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
             if (event.repeat) return;
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "w") {
+                event.preventDefault();
+                handleHandyManualToggle();
+                return;
+            }
             if (event.key === "Escape") {
                 event.preventDefault();
+                if (showDevPerkMenuModalRef.current) {
+                    setShowDevPerkMenuModal(false);
+                    return;
+                }
+                if (showPerkInventoryMenuRef.current) {
+                    setShowPerkInventoryMenu(false);
+                    return;
+                }
                 setShowOptionsMenu(true);
                 return;
             }
@@ -968,6 +1718,14 @@ export const GameScene = memo(function GameScene({
         window.addEventListener("keydown", onKeyDown);
         return () => {
             window.removeEventListener("keydown", onKeyDown);
+        };
+    }, [handleHandyManualToggle]);
+
+    useEffect(() => {
+        return () => {
+            if (handyNotificationTimerRef.current !== null) {
+                window.clearTimeout(handyNotificationTimerRef.current);
+            }
         };
     }, []);
 
@@ -1090,6 +1848,30 @@ export const GameScene = memo(function GameScene({
             drawGrid(gridG, W, H);
             stage.addChild(gridG);
 
+            const tileOrigins = boardLayout.origins;
+            const tileDimensionsByIndex = boardLayout.dimensions;
+            const tileCentres = boardLayout.centres;
+            const validatedRuntimeEdges = stateRef.current.config.runtimeGraph.edges.flatMap((edge) => {
+                const fromIndex = stateRef.current.config.runtimeGraph.nodeIndexById[edge.fromNodeId];
+                const toIndex = stateRef.current.config.runtimeGraph.nodeIndexById[edge.toNodeId];
+                if (
+                    typeof fromIndex !== "number"
+                    || typeof toIndex !== "number"
+                    || fromIndex < 0
+                    || fromIndex >= stateRef.current.config.board.length
+                    || toIndex < 0
+                    || toIndex >= stateRef.current.config.board.length
+                ) {
+                    return [];
+                }
+                return [{
+                    edgeId: edge.id,
+                    gateCost: edge.gateCost,
+                    from: tileCentres[fromIndex]!,
+                    to: tileCentres[toIndex]!,
+                }];
+            });
+
             // Board area — centred in the full viewport, scaled up
             const scaledBoardW = rawBoardW * boardScale;
             const scaledBoardH = rawBoardH * boardScale;
@@ -1138,6 +1920,14 @@ export const GameScene = memo(function GameScene({
             connG.interactiveChildren = false;
             boardContainer.addChild(connG);
 
+            const gateG = new Graphics();
+            gateG.interactiveChildren = false;
+            boardContainer.addChild(gateG);
+
+            const connFxG = new Graphics();
+            connFxG.interactiveChildren = false;
+            boardContainer.addChild(connFxG);
+
             const tileG = new Graphics();
             tileG.interactiveChildren = false;
             boardContainer.addChild(tileG);
@@ -1146,15 +1936,19 @@ export const GameScene = memo(function GameScene({
             tileFxG.interactiveChildren = false;
             boardContainer.addChild(tileFxG);
 
+            const boardSweepG = new Graphics();
+            boardSweepG.interactiveChildren = false;
+            boardContainer.addChild(boardSweepG);
+
             // Text labels for tiles
             const textContainer = new Container();
             boardContainer.addChild(textContainer);
 
-            type LabelSet = { name: Text; kind: Text; num: Text };
+            type LabelSet = { name: Text; kind: Text; num: Text; duration: Text; durationBg: Graphics };
             const labelMap = new Map<string, LabelSet>();
+            const gateCostLabelMap = new Map<string, Text>();
 
             const brd = stateRef.current.config.board;
-            const runtimeGraph = stateRef.current.config.runtimeGraph;
             brd.forEach((field, idx) => {
                 const nameT = new Text({
                     text: field.name,
@@ -1185,6 +1979,27 @@ export const GameScene = memo(function GameScene({
                 kindT.alpha = 0.92;
                 kindT.interactiveChildren = false;
 
+                const durationLabel = tileDurationLabelByFieldId.get(field.id) ?? "";
+                const durationT = new Text({
+                    text: durationLabel,
+                    style: new TextStyle({
+                        fontFamily: "JetBrains Mono,monospace",
+                        fontSize: 8.5,
+                        fill: 0xf3f8ff,
+                        fontWeight: "700",
+                        letterSpacing: 0.4,
+                        stroke: { color: 0x041225, width: 3, join: "round" },
+                    }),
+                });
+                durationT.anchor.set(0.5, 0.5);
+                durationT.alpha = durationLabel.length > 0 ? 0.98 : 0;
+                durationT.visible = durationLabel.length > 0;
+                durationT.interactiveChildren = false;
+
+                const durationBg = new Graphics();
+                durationBg.visible = durationLabel.length > 0;
+                durationBg.interactiveChildren = false;
+
                 const numT = new Text({
                     text: `${idx + 1}`,
                     style: new TextStyle({
@@ -1199,45 +2014,86 @@ export const GameScene = memo(function GameScene({
                 numT.interactiveChildren = false;
 
                 textContainer.addChild(nameT);
+                textContainer.addChild(durationBg);
+                textContainer.addChild(durationT);
                 textContainer.addChild(kindT);
                 textContainer.addChild(numT);
-                labelMap.set(field.id, { name: nameT, kind: kindT, num: numT });
+                labelMap.set(field.id, { name: nameT, kind: kindT, num: numT, duration: durationT, durationBg });
+            });
+
+            validatedRuntimeEdges.forEach((edge) => {
+                if (edge.gateCost <= 0) return;
+                const costLabel = new Text({
+                    text: `$${edge.gateCost}`,
+                    style: new TextStyle({
+                        fontFamily: "JetBrains Mono,monospace",
+                        fontSize: 11,
+                        fill: 0xfff3cf,
+                        fontWeight: "800",
+                        letterSpacing: 0.6,
+                        stroke: { color: 0x130816, width: 4, join: "round" },
+                        dropShadow: { color: 0xff76b1, alpha: 0.36, blur: 8, distance: 0 },
+                    }),
+                });
+                costLabel.anchor.set(0.5, 0.5);
+                costLabel.interactiveChildren = false;
+                textContainer.addChild(costLabel);
+                gateCostLabelMap.set(edge.edgeId, costLabel);
             });
 
             // Static board geometry and labels are drawn once.
             const drawStaticBoard = () => {
                 connG.clear();
-                runtimeGraph.edges.forEach((edge) => {
-                    const fromIndex = runtimeGraph.nodeIndexById[edge.fromNodeId];
-                    const toIndex = runtimeGraph.nodeIndexById[edge.toNodeId];
-                    if (
-                        typeof fromIndex !== "number"
-                        || typeof toIndex !== "number"
-                        || fromIndex < 0
-                        || fromIndex >= brd.length
-                        || toIndex < 0
-                        || toIndex >= brd.length
-                    ) {
-                        return;
+                gateG.clear();
+                validatedRuntimeEdges.forEach((edge) => {
+                    drawNeonRoadConnector(connG, edge.from.x, edge.from.y, edge.to.x, edge.to.y, 0);
+                    const pair = gateCostLabelMap.get(edge.edgeId);
+                    if (edge.gateCost > 0) {
+                        const gateAnchor = drawRoadGate(gateG, edge.from.x, edge.from.y, edge.to.x, edge.to.y, 0);
+                        if (pair && gateAnchor) {
+                            pair.x = gateAnchor.x + gateAnchor.normalX * 34;
+                            pair.y = gateAnchor.y + gateAnchor.normalY * 34 - 8;
+                            pair.visible = true;
+                        }
+                    } else if (pair) {
+                        pair.visible = false;
                     }
-                    const from = tileCentre(boardLayout, fromIndex);
-                    const to = tileCentre(boardLayout, toIndex);
-                    drawNeonRoadConnector(connG, from.x, from.y, to.x, to.y, 0);
                 });
 
                 tileG.clear();
                 brd.forEach((f: BoardField, i: number) => {
-                    const { x, y } = tileOrigin(boardLayout, i);
-                    drawTile(tileG, x, y, f, false, false, 0);
+                    const { x, y } = tileOrigins[i]!;
+                    const { width, height } = tileDimensionsByIndex[i] ?? { width: TILE_W, height: TILE_H };
+                    const tileColours = resolveTileColours(f);
+                    drawTile(tileG, x, y, width, height, f, false, false, 0);
 
                     const pair = labelMap.get(f.id);
                     if (!pair) return;
-                    pair.name.x = x + TILE_W / 2;
-                    pair.name.y = y + TILE_H / 2 - 8;
-                    pair.kind.x = x + TILE_W / 2;
-                    pair.kind.y = y + TILE_H - 21;
-                    pair.num.x = x + TILE_W / 2;
+                    pair.name.style.wordWrapWidth = Math.max(40, width - 24);
+                    pair.name.x = x + width / 2;
+                    pair.name.y = y + 27;
+                    pair.duration.x = x + width / 2;
+                    pair.duration.y = y + height - 31;
+                    pair.kind.style.fill = tileColours.accent;
+                    pair.kind.x = x + width / 2;
+                    pair.kind.y = y + height - 17;
+                    pair.num.x = x + width / 2;
                     pair.num.y = y + 7;
+
+                    pair.durationBg.clear();
+                    if (pair.duration.visible) {
+                        const badgeWidth = Math.max(30, Math.ceil(pair.duration.width + 16));
+                        const badgeHeight = 15;
+                        pair.durationBg.roundRect(
+                            pair.duration.x - badgeWidth / 2,
+                            pair.duration.y - badgeHeight / 2,
+                            badgeWidth,
+                            badgeHeight,
+                            7,
+                        );
+                        pair.durationBg.fill({ color: 0x08182d, alpha: 0.9 });
+                        pair.durationBg.stroke({ color: 0x8ab6ff, alpha: 0.45, width: 1 });
+                    }
                 });
             };
             drawStaticBoard();
@@ -1296,13 +2152,28 @@ export const GameScene = memo(function GameScene({
             stage.addChild(btnContainer);
 
             // ── Hit areas for tiles ────────────────────────────────────────────────
-            brd.forEach((_f: BoardField, idx: number) => {
+            brd.forEach((field: BoardField, idx: number) => {
                 const { x, y } = tileOrigin(boardLayout, idx);
+                const { width, height } = tileDimensions(boardLayout, idx);
                 const hit = new Graphics();
-                hit.rect(x, y, TILE_W, TILE_H);
+                hit.rect(x, y, width, height);
                 hit.fill({ alpha: 0 });
                 hit.interactive = true;
                 hit.eventMode = "static";
+                hit.on("pointerover", () => {
+                    const pending = stateRef.current.pendingPathChoice;
+                    if (!pending) return;
+                    const option = pending.options.find((candidate) => candidate.toNodeId === field.id);
+                    if (!option) return;
+                    setHighlightedPathEdgeId(option.edgeId);
+                });
+                hit.on("pointertap", () => {
+                    const pending = stateRef.current.pendingPathChoice;
+                    if (!pending) return;
+                    const option = pending.options.find((candidate) => candidate.toNodeId === field.id);
+                    if (!option) return;
+                    handleSelectPathEdgeRef.current(option.edgeId);
+                });
                 hitContainer.addChild(hit);
             });
 
@@ -1338,8 +2209,8 @@ export const GameScene = memo(function GameScene({
             btnContainer.addChild(rollBtn);
 
             const rollBtnLabel = new Text({
-                text: "ROLL DICE",
-                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 12, fill: 0xe8e2ff, fontWeight: "700", letterSpacing: 1.2 }),
+                text: "ROLL DICE (SPACE)",
+                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 11, fill: 0xe8e2ff, fontWeight: "700", letterSpacing: 1.1 }),
             });
             rollBtnLabel.anchor.set(0.5, 0.5);
             rollBtnLabel.x = rollBtnX + rollBtnW / 2;
@@ -1406,7 +2277,7 @@ export const GameScene = memo(function GameScene({
             btnContainer.addChild(startRoundBtn);
 
             const startRoundLabel = new Text({
-                text: "START VIDEO",
+                text: "PLAY",
                 style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 12, fill: 0xf8dfff, fontWeight: "700", letterSpacing: 1.2 }),
             });
             startRoundLabel.anchor.set(0.5, 0.5);
@@ -1417,84 +2288,84 @@ export const GameScene = memo(function GameScene({
             // ── HUD text objects ───────────────────────────────────────────────────
             const hudTurnLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0x97b7ee, letterSpacing: 1.6 }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0xff007f, letterSpacing: 2, fontWeight: "700" }),
             });
-            hudTurnLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudTurnLabel.y = 26;
             hudText.addChild(hudTurnLabel);
 
             const hudPhaseLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0xc8d7ff, fontWeight: "700", letterSpacing: 1.2 }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 9, fill: 0xdfb8ff, fontWeight: "800", letterSpacing: 1.5 }),
             });
             hudPhaseLabel.anchor.set(1, 0);
-            hudPhaseLabel.x = W - HUD_MARGIN - 24;
-            hudPhaseLabel.y = 26;
             hudText.addChild(hudPhaseLabel);
 
             const hudPlayerLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 20, fill: 0xf4f8ff, fontWeight: "800" }),
+                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 24, fill: 0xffffff, fontWeight: "900", letterSpacing: 0.5 }),
             });
-            hudPlayerLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudPlayerLabel.y = 44;
             hudText.addChild(hudPlayerLabel);
 
             const hudFieldLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 11, fill: 0xafc2e7, wordWrap: true, wordWrapWidth: 206 }),
+                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 11, fill: 0x9068be, fontWeight: "600", wordWrap: true, wordWrapWidth: 240 }),
             });
-            hudFieldLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudFieldLabel.y = 70;
             hudText.addChild(hudFieldLabel);
 
             const hudProgressLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 11, fill: 0x8fd0ff, fontWeight: "700", letterSpacing: 1.1 }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 11, fill: 0x00e5ff, fontWeight: "800", letterSpacing: 1 }),
             });
-            hudProgressLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudProgressLabel.y = 108;
             hudText.addChild(hudProgressLabel);
 
             const hudDiceLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 40, fill: 0xf2f7ff, fontWeight: "800", align: "center" }),
+                style: new TextStyle({ fontFamily: "Inter,sans-serif", fontSize: 32, fill: 0xffffff, fontWeight: "900", align: "right" }),
             });
-            hudDiceLabel.anchor.set(0.5, 0);
-            hudDiceLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudDiceLabel.y = 103;
+            hudDiceLabel.anchor.set(1, 0);
             hudText.addChild(hudDiceLabel);
+
+            const hudDiceMetaLabel = new Text({
+                text: "",
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 9, fill: 0x8a5cb0, fontWeight: "700", align: "right", wordWrap: true, wordWrapWidth: 100 }),
+            });
+            hudDiceMetaLabel.anchor.set(1, 0);
+            hudText.addChild(hudDiceMetaLabel);
 
             const hudMoneyLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 12, fill: 0x76f3d5, fontWeight: "700" }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 13, fill: 0xff007f, fontWeight: "800" }),
             });
-            hudMoneyLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudMoneyLabel.y = 190;
             hudText.addChild(hudMoneyLabel);
 
             const hudScoreLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 12, fill: 0x81dbff, fontWeight: "700" }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 13, fill: 0x00e5ff, fontWeight: "800" }),
             });
-            hudScoreLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudScoreLabel.y = 190;
             hudText.addChild(hudScoreLabel);
 
             const hudHighscoreLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 11, fill: 0xd5ddff, fontWeight: "700" }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 9, fill: 0x5e3785, fontWeight: "800" }),
             });
-            hudHighscoreLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudHighscoreLabel.y = 229;
             hudText.addChild(hudHighscoreLabel);
+
+            const hudTimeLabel = new Text({
+                text: "",
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0xffa338, fontWeight: "800", align: "right" }),
+            });
+            hudTimeLabel.anchor.set(1, 0);
+            hudText.addChild(hudTimeLabel);
+
+            const hudEffectsLabel = new Text({
+                text: "",
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 11, fill: 0xdfb8ff, fontWeight: "600", wordWrap: true, wordWrapWidth: HUD_W - 52, breakWords: true }),
+            });
+            hudText.addChild(hudEffectsLabel);
 
             const hudProbabilityLabel = new Text({
                 text: "",
-                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0xd9c4ff, wordWrap: true, wordWrapWidth: HUD_W - 52 }),
+                style: new TextStyle({ fontFamily: "JetBrains Mono,monospace", fontSize: 10, fill: 0xbd8aff, fontWeight: "600", wordWrap: true, wordWrapWidth: HUD_W - 52 }),
             });
-            hudProbabilityLabel.x = W - HUD_W - HUD_MARGIN + HUD_TEXT_X_PAD;
-            hudProbabilityLabel.y = 257;
             hudText.addChild(hudProbabilityLabel);
 
             const autoRollLabel = new Text({
@@ -1525,6 +2396,9 @@ export const GameScene = memo(function GameScene({
                     fill: 0xfff2f2,
                     fontWeight: "800",
                     letterSpacing: 1.4,
+                    wordWrap: true,
+                    breakWords: true,
+                    align: "center",
                 }),
             });
             antiPerkAlertLabel.anchor.set(0.5, 0.5);
@@ -1708,6 +2582,30 @@ export const GameScene = memo(function GameScene({
 
             // ── Star field ─────────────────────────────────────────────────────────
             const stars = generateStars(W, H, 120);
+            const offsetByPlayerIdCache = new Map<string, Point>();
+            const getOffsetByPlayerId = (playerId: string): Point => {
+                const cached = offsetByPlayerIdCache.get(playerId);
+                if (cached) return cached;
+                const hash = hashString(playerId);
+                const angle = (hash % 360) * (Math.PI / 180);
+                const radius = 8 + (hash % 3) * 6;
+                const offset = {
+                    x: Math.cos(angle) * radius,
+                    y: Math.sin(angle) * radius,
+                };
+                offsetByPlayerIdCache.set(playerId, offset);
+                return offset;
+            };
+            const BG_REDRAW_INTERVAL = 1 / 24;
+            const BOARD_FX_REDRAW_INTERVAL = 1 / 30;
+            const HUD_REDRAW_INTERVAL = 1 / 30;
+            let lastBgRedrawAt = Number.NEGATIVE_INFINITY;
+            let lastBoardFxRedrawAt = Number.NEGATIVE_INFINITY;
+            let lastHudRedrawAt = Number.NEGATIVE_INFINITY;
+            let previousShowRoundReward = false;
+            let previousCanRoll: boolean | null = null;
+            let previousCanFinishRound: boolean | null = null;
+            let previousCanStartQueuedRound: boolean | null = null;
 
             // ── Main RAF loop ──────────────────────────────────────────────────────
             let t = 0;
@@ -1751,12 +2649,13 @@ export const GameScene = memo(function GameScene({
                 const currentPos = currentPlayer?.position ?? 0;
                 const roundRewardElapsed = t - roundRewardStart;
                 const showRoundReward = roundRewardElapsed >= 0 && roundRewardElapsed <= ROUND_REWARD_FX_DURATION;
+                const didRoundRewardVisibilityChange = previousShowRoundReward !== showRoundReward;
                 const roundRewardPulse = showRoundReward
                     ? Math.sin(clampNum(roundRewardElapsed / ROUND_REWARD_FX_DURATION, 0, 1) * Math.PI)
                     : 0;
 
                 // Find the currently visible token position (may be mid-hop)
-                let tokenDisplayPos: { x: number; y: number } = tileCentre(boardLayout, currentPos);
+                let tokenDisplayPos: Point = tileCentres[currentPos] ?? tileCentre(boardLayout, currentPos);
                 let tokenBob = Math.sin(bobT) * 5;
                 let tokenScaleY = 1;
 
@@ -1768,7 +2667,7 @@ export const GameScene = memo(function GameScene({
                             : currentPos,
                         total,
                     );
-                    tokenDisplayPos = tileCentre(boardLayout, startIdx);
+                    tokenDisplayPos = tileCentres[startIdx] ?? tileCentre(boardLayout, startIdx);
                 }
 
                 if (phase.kind === "movingToken") {
@@ -1787,8 +2686,8 @@ export const GameScene = memo(function GameScene({
                         ? startIdx
                         : phase.path[phase.stepIndex - 1] ?? 0;
                     const toIdx = wrapIndex(phase.path[phase.stepIndex] ?? phase.path[phase.path.length - 1] ?? currentPos, total);
-                    const from = tileCentre(boardLayout, fromIdx);
-                    const to = tileCentre(boardLayout, toIdx);
+                    const from = tileCentres[fromIdx] ?? tileCentre(boardLayout, fromIdx);
+                    const to = tileCentres[toIdx] ?? tileCentre(boardLayout, toIdx);
                     // Arc: sine bell curve peaks at midpoint of the hop
                     const arc = Math.sin(stepT * Math.PI) * 36;
 
@@ -1815,54 +2714,144 @@ export const GameScene = memo(function GameScene({
                 const camLerp = phase.kind === "movingToken" ? 0.08 : 0.035;
                 camX = lerp(camX, targetCamX, camLerp);
                 camY = lerp(camY, targetCamY, camLerp);
-                boardContainer.x = camX;
-                boardContainer.y = camY;
+                boardContainer.x = camX + Math.sin(t * 0.42) * 6;
+                boardContainer.y = camY + Math.cos(t * 0.35) * 4;
+                const ambientScale = 1 + Math.sin(t * 0.55) * 0.008;
+                boardContainer.scale.set(boardScale * ambientScale);
+                boardContainer.rotation = Math.sin(t * 0.22) * 0.008;
 
                 // ── BG ──────────────────────────────────────────────────────────
-                bgG.clear();
-                drawBackground(bgG, W, H, t);
+                const shouldRedrawBackground = (t - lastBgRedrawAt) >= BG_REDRAW_INTERVAL;
+                if (shouldRedrawBackground) {
+                    lastBgRedrawAt = t;
+                    bgG.clear();
+                    drawBackground(bgG, W, H, t);
 
-                starG.clear();
-                drawStars(starG, stars, t);
+                    starG.clear();
+                    drawStars(starG, stars, t);
+                }
 
                 // ── Dynamic tile highlights only (static board geometry is cached) ──
+                const shouldRedrawBoardFx = (t - lastBoardFxRedrawAt) >= BOARD_FX_REDRAW_INTERVAL;
                 const hopHighlight = phase.kind === "movingToken" ? phase.path[phase.stepIndex] : -1;
-                tileFxG.clear();
-                if (phase.kind !== "movingToken") {
-                    const activeField = board[currentPos];
-                    if (activeField) {
-                        const { x, y } = tileOrigin(boardLayout, currentPos);
-                        const color = TILE_COLOURS[activeField.kind]?.glow ?? 0x9ab1ff;
-                        const pulse = 0.65 + 0.35 * Math.sin(t * 2.1);
-                        drawTileHighlight(tileFxG, x, y, color, pulse);
+                if (shouldRedrawBoardFx) {
+                    const pendingPathChoice = s.pendingPathChoice;
+                    lastBoardFxRedrawAt = t;
+                    connFxG.clear();
+                    tileFxG.clear();
+                    boardSweepG.clear();
+                    drawBoardSweep(boardSweepG, rawBoardW, rawBoardH, t);
+                    validatedRuntimeEdges.forEach((edge, index) => {
+                        drawConnectorFlow(
+                            connFxG,
+                            edge.from.x,
+                            edge.from.y,
+                            edge.to.x,
+                            edge.to.y,
+                            t + index * 0.17,
+                            index % 2 === 0 ? 0x79ddff : 0xff71ca,
+                            0.9,
+                        );
+                    });
+                    if (phase.kind !== "movingToken") {
+                        const activeField = board[currentPos];
+                        if (activeField) {
+                            const { x, y } = tileOrigins[currentPos] ?? tileOrigin(boardLayout, currentPos);
+                            const { width, height } = tileDimensions(boardLayout, currentPos);
+                            const color = resolveTileColours(activeField).glow;
+                            const pulse = 0.65 + 0.35 * Math.sin(t * 2.1);
+                            drawTileHighlight(tileFxG, x, y, width, height, color, pulse);
+                            drawTileBeacon(tileFxG, x + width / 2, y + height / 2, color, t, 0.75);
+                        }
                     }
-                }
-                if (hopHighlight >= 0 && hopHighlight < total) {
-                    const hopField = board[hopHighlight];
-                    if (hopField) {
-                        const { x, y } = tileOrigin(boardLayout, hopHighlight);
-                        const color = TILE_COLOURS[hopField.kind]?.accent ?? 0xffffff;
-                        const pulse = 0.72 + 0.28 * Math.sin(t * 5.2);
-                        drawTileHighlight(tileFxG, x, y, color, pulse);
+                    if (pendingPathChoice) {
+                        const focusEdgeId = highlightedPathEdgeIdRef.current ?? pendingPathChoice.options[0]?.edgeId ?? null;
+                        const fromIndex = s.config.runtimeGraph.nodeIndexById[pendingPathChoice.fromNodeId] ?? -1;
+                        if (fromIndex >= 0) {
+                            const { x, y } = tileOrigins[fromIndex] ?? tileOrigin(boardLayout, fromIndex);
+                            const { width, height } = tileDimensions(boardLayout, fromIndex);
+                            const pulse = 0.8 + 0.2 * Math.sin(t * 4.4);
+                            drawTileHighlight(tileFxG, x, y, width, height, 0xffd36a, pulse);
+                            drawTileBeacon(tileFxG, x + width / 2, y + height / 2, 0xffd36a, t * 1.2, 1.05);
+                        }
+
+                        pendingPathChoice.options.forEach((option, optionIndex) => {
+                            const toIndex = s.config.runtimeGraph.nodeIndexById[option.toNodeId] ?? -1;
+                            if (toIndex < 0) return;
+
+                            const previewSegments = pendingPathPreviewByEdgeId[option.edgeId] ?? [];
+                            const isFocused = option.edgeId === focusEdgeId;
+                            const optionColor = isFocused
+                                ? 0xffd36a
+                                : optionIndex % 2 === 0
+                                    ? 0x7addff
+                                    : 0xff8ac5;
+                            const optionPulse = isFocused ? 0.95 + 0.05 * Math.sin(t * 6.4) : 0.52 + 0.12 * Math.sin(t * 3.1 + optionIndex);
+
+                            previewSegments.forEach((segment, previewIndex) => {
+                                drawConnectorFlow(
+                                    connFxG,
+                                    segment.from.x,
+                                    segment.from.y,
+                                    segment.to.x,
+                                    segment.to.y,
+                                    t * (isFocused ? 1.5 : 1.1) + previewIndex * 0.23,
+                                    optionColor,
+                                    isFocused ? 1.6 : 0.62,
+                                );
+                            });
+
+                            const { x, y } = tileOrigins[toIndex] ?? tileOrigin(boardLayout, toIndex);
+                            const { width, height } = tileDimensions(boardLayout, toIndex);
+                            drawTileHighlight(tileFxG, x, y, width, height, optionColor, optionPulse);
+                            drawTileBeacon(
+                                tileFxG,
+                                x + width / 2,
+                                y + height / 2,
+                                optionColor,
+                                t * (isFocused ? 1.7 : 1.1),
+                                isFocused ? 1.1 : 0.78,
+                            );
+                        });
+                    }
+                    if (hopHighlight >= 0 && hopHighlight < total) {
+                        const hopField = board[hopHighlight];
+                        if (hopField) {
+                            const { x, y } = tileOrigins[hopHighlight] ?? tileOrigin(boardLayout, hopHighlight);
+                            const { width, height } = tileDimensions(boardLayout, hopHighlight);
+                            const color = resolveTileColours(hopField).accent;
+                            const pulse = 0.72 + 0.28 * Math.sin(t * 5.2);
+                            drawTileHighlight(tileFxG, x, y, width, height, color, pulse);
+                            drawTileBeacon(tileFxG, x + width / 2, y + height / 2, color, t * 1.4, 0.95);
+                        }
                     }
                 }
 
                 // ── Token ─────────────────────────────────────────────────────────────
                 tokenG.clear();
+                if (phase.kind === "movingToken") {
+                    const startNodeId = s.lastTraversalPathNodeIds[0];
+                    const startIdx = wrapIndex(
+                        typeof startNodeId === "string"
+                            ? s.config.runtimeGraph.nodeIndexById[startNodeId] ?? currentPos
+                            : currentPos,
+                        total,
+                    );
+                    const fromIdx = phase.stepIndex === 0
+                        ? startIdx
+                        : phase.path[phase.stepIndex - 1] ?? 0;
+                    const toIdx = wrapIndex(phase.path[phase.stepIndex] ?? phase.path[phase.path.length - 1] ?? currentPos, total);
+                    const from = tileCentres[fromIdx] ?? tileCentre(boardLayout, fromIdx);
+                    const to = tileCentres[toIdx] ?? tileCentre(boardLayout, toIdx);
+                    const stepT = Math.min(1, phase.stepElapsed / STEP_DURATION);
+                    const trailColor = board[toIdx] ? resolveTileColours(board[toIdx]!).accent : 0x7de0ff;
+                    drawTokenTrail(tokenG, from, to, trailColor, stepT);
+                }
                 const localTX = tokenDisplayPos.x;
                 const localTY = tokenDisplayPos.y;
                 const activeTokenLabelIds = new Set<string>();
 
                 const localPlayerId = currentPlayer?.id ?? "local-player";
-                const offsetByPlayerId = (playerId: string): { x: number; y: number } => {
-                    const hash = hashString(playerId);
-                    const angle = (hash % 360) * (Math.PI / 180);
-                    const radius = 8 + (hash % 3) * 6;
-                    return {
-                        x: Math.cos(angle) * radius,
-                        y: Math.sin(angle) * radius,
-                    };
-                };
                 const labelPlayerToken = (playerId: string, playerName: string, x: number, y: number) => {
                     if (!showMultiplayerPlayerNamesRef.current) return;
                     const trimmedName = playerName.trim();
@@ -1925,7 +2914,7 @@ export const GameScene = memo(function GameScene({
                         : 1;
                     const displayIndex = lerp(nextMotion.fromIndex, nextMotion.toIndex, easeInOutCubic(motionProgress));
                     const center = tileCentreAtProgress(boardLayout, displayIndex);
-                    const offset = offsetByPlayerId(remote.id);
+                    const offset = getOffsetByPlayerId(remote.id);
                     const hash = hashString(remote.id);
                     const travelArc = nextMotion.toIndex !== nextMotion.fromIndex
                         ? Math.sin(motionProgress * Math.PI) * 10
@@ -1967,27 +2956,65 @@ export const GameScene = memo(function GameScene({
                 }
 
                 // ── HUD — always in screen space ───────────────────────────────────────
-                hudG.clear();
-                drawHUD(hudG, s, W, roundRewardPulse);
+                const shouldRedrawHud = (t - lastHudRedrawAt) >= HUD_REDRAW_INTERVAL;
+                if (shouldRedrawHud) {
+                    lastHudRedrawAt = t;
+                    hudG.clear();
+                    drawHUD(hudG, s, W, roundRewardPulse);
+                }
 
                 // Reposition HUD text to right side
                 const hudPanelX = W - HUD_W - HUD_MARGIN;
-                const hudX = hudPanelX + HUD_TEXT_X_PAD;
-                const hudRightX = hudPanelX + 192;
-                const hudDiceX = hudPanelX + 280;
-                hudTurnLabel.x = hudX;
-                hudPhaseLabel.x = hudPanelX + HUD_W - 24;
-                hudPlayerLabel.x = hudX;
-                hudFieldLabel.x = hudX;
-                hudProgressLabel.x = hudX;
-                hudDiceLabel.x = hudDiceX;
-                hudMoneyLabel.x = hudRightX;
-                hudScoreLabel.x = hudX;
-                hudHighscoreLabel.x = hudX;
-                hudProbabilityLabel.x = hudX;
+                const py = 12; // Base panel Y
+                const headerX = hudPanelX + 16;
+                const headerY = py + 16;
+                const section2Y = headerY + 75;
+                const statCardY = section2Y + 60;
+                const effectsY = statCardY + 70;
+                const probY = effectsY + 74;
+                const statW = (HUD_W - 40) / 2;
+
+                hudTurnLabel.x = headerX;
+                hudTurnLabel.y = headerY;
+
+                hudPhaseLabel.x = hudPanelX + HUD_W - 19;
+                hudPhaseLabel.y = headerY + 2;
+
+                hudPlayerLabel.x = headerX;
+                hudPlayerLabel.y = headerY + 16;
+
+                hudFieldLabel.x = headerX;
+                hudFieldLabel.y = headerY + 44;
+
+                hudProgressLabel.x = headerX;
+                hudProgressLabel.y = section2Y + 8;
+
+                hudDiceLabel.x = hudPanelX + HUD_W - 16;
+                hudDiceLabel.y = section2Y - 4;
+
+                hudDiceMetaLabel.x = hudPanelX + HUD_W - 16;
+                hudDiceMetaLabel.y = section2Y + 34;
+
+                hudScoreLabel.x = headerX + 8;
+                hudScoreLabel.y = statCardY + 10;
+
+                hudHighscoreLabel.x = headerX + 8;
+                hudHighscoreLabel.y = statCardY + 26;
+
+                hudMoneyLabel.x = headerX + statW + 16;
+                hudMoneyLabel.y = statCardY + 10;
+
+                hudTimeLabel.x = headerX + statW + 8 + statW - 8;
+                hudTimeLabel.y = statCardY + 26;
+
+                hudEffectsLabel.x = headerX + 12;
+                hudEffectsLabel.y = effectsY + 8;
+
+                hudProbabilityLabel.x = headerX + 12;
+                hudProbabilityLabel.y = probY + 9;
 
                 // Update HUD text
-                hudTurnLabel.text = `TURN ${s.turn.toString().padStart(2, "0")}`;
+                setTextIfChanged(hudTurnLabel, `TURN ${s.turn.toString().padStart(2, "0")}`);
                 const phaseLabelMap: Record<AnimPhase["kind"], string> = {
                     idle: "STANDBY",
                     rollingDice: "ROLLING",
@@ -1997,18 +3024,24 @@ export const GameScene = memo(function GameScene({
                     roundCountdown: "COUNTDOWN",
                     perkReveal: "PERK",
                 };
-                hudPhaseLabel.text = phaseLabelMap[phase.kind];
-                hudPlayerLabel.text = currentPlayer?.name ?? "Player";
+                setTextIfChanged(hudPhaseLabel, phaseLabelMap[phase.kind]);
+                setTextIfChanged(hudPlayerLabel, currentPlayer?.name ?? "Player");
                 const currentField = board[currentPos];
-                hudFieldLabel.text = currentField ? `FIELD ${currentPos + 1}: ${currentField.name}` : "";
-                const boardProgressPct =
-                    (currentPos / Math.max(1, s.config.singlePlayer.totalIndices)) * 100;
-                hudProgressLabel.text = `BOARD PROGRESS ${boardProgressPct.toFixed(0)}%`;
-                hudDiceLabel.text = s.lastRoll ? `${s.lastRoll}` : "";
-                hudScoreLabel.text = `SCORE ${currentPlayer?.score ?? 0}`;
-                hudMoneyLabel.text = `MONEY $${currentPlayer?.money ?? 0}`;
-                hudHighscoreLabel.text = `BEST ${s.highscore}`;
-                hudProbabilityLabel.text = `INTERMEDIARY ${(s.intermediaryProbability * 100).toFixed(0)}%\nANTI-PERK ${(s.antiPerkProbability * 100).toFixed(0)}%`;
+                setTextIfChanged(hudFieldLabel, currentField ? `FIELD ${currentPos + 1}: ${currentField.name}` : "");
+                const boardProgressPct = getBoardProgressRatio(s, currentPos) * 100;
+                setTextIfChanged(hudProgressLabel, `BOARD PROGRESS ${boardProgressPct.toFixed(0)}%`);
+                setTextIfChanged(hudDiceLabel, s.lastRoll ? `${s.lastRoll}` : "");
+                setTextIfChanged(hudDiceMetaLabel, formatHudDiceMeta(currentPlayer));
+                setTextIfChanged(hudScoreLabel, `SCORE ${currentPlayer?.score ?? 0}`);
+                setTextIfChanged(hudMoneyLabel, `MONEY $${currentPlayer?.money ?? 0}`);
+                setTextIfChanged(hudHighscoreLabel, `BEST ${s.highscore}`);
+                const elapsedSec = completedElapsedSecRef.current ?? Math.max(0, Math.floor((nowMsRef.current - sessionStartedAtMs) / 1000));
+                setTextIfChanged(hudTimeLabel, `TIME ${formatDurationLabel(elapsedSec)}`);
+                setTextIfChanged(hudEffectsLabel, formatHudActiveEffects(currentPlayer));
+                setTextIfChanged(
+                    hudProbabilityLabel,
+                    `INTERMEDIARY ${(s.intermediaryProbability * 100).toFixed(0)}%\nANTI-PERK ${(s.antiPerkProbability * 100).toFixed(0)}%`,
+                );
                 const topLog = s.log[0] ?? "";
                 if (topLog !== lastTopLog) {
                     lastTopLog = topLog;
@@ -2036,17 +3069,48 @@ export const GameScene = memo(function GameScene({
                     phase.kind === "idle" &&
                     !s.pendingPathChoice &&
                     !s.pendingPerkSelection &&
-                    !s.queuedRound &&
+                    (!s.queuedRound || Boolean(s.queuedRound.skippable)) &&
                     !s.activeRound;
                 const hasRound = !!s.activeRound;
                 const canStartQueuedRound = phase.kind === "idle" && !!s.queuedRound && !s.pendingPerkSelection && !s.activeRound;
+                const controllerPrimaryTarget =
+                    showOptionsMenuRef.current || showCumConfirmRef.current || showDevPerkMenuModalRef.current || s.pendingPathChoice || s.pendingPerkSelection
+                        ? null
+                        : canRoll
+                            ? "roll"
+                            : canStartQueuedRound
+                                ? "start"
+                                : hasRound && phase.kind === "idle"
+                                    ? "finish"
+                                    : null;
 
-                rollBtn.visible = canRoll;
-                rollBtnLabel.visible = canRoll;
-                startRoundBtn.visible = canStartQueuedRound;
-                startRoundLabel.visible = canStartQueuedRound;
-                finishBtn.visible = hasRound && phase.kind === "idle";
-                finishLabel.visible = hasRound && phase.kind === "idle";
+                setTextIfChanged(startRoundLabel, s.queuedRound?.skippable ? "PLAY" : "START VIDEO");
+
+                if (previousCanRoll !== canRoll) {
+                    previousCanRoll = canRoll;
+                    rollBtn.visible = canRoll;
+                    rollBtnLabel.visible = canRoll;
+                }
+                if (canRoll) {
+                    drawRollBtn(false, controllerPrimaryTarget === "roll");
+                }
+                if (previousCanStartQueuedRound !== canStartQueuedRound) {
+                    previousCanStartQueuedRound = canStartQueuedRound;
+                    startRoundBtn.visible = canStartQueuedRound;
+                    startRoundLabel.visible = canStartQueuedRound;
+                }
+                if (canStartQueuedRound) {
+                    drawStartRoundBtn(controllerPrimaryTarget === "start");
+                }
+                const canFinishRound = hasRound && phase.kind === "idle";
+                if (previousCanFinishRound !== canFinishRound) {
+                    previousCanFinishRound = canFinishRound;
+                    finishBtn.visible = canFinishRound;
+                    finishLabel.visible = canFinishRound;
+                }
+                if (canFinishRound) {
+                    drawFinishBtn(controllerPrimaryTarget === "finish");
+                }
 
                 // ── Dice overlay ─────────────────────────────────────────────────────
                 diceG.clear();
@@ -2057,7 +3121,7 @@ export const GameScene = memo(function GameScene({
                     const pct = phase.elapsed / DICE_ROLL_DURATION;
                     drawDiceOverlay(diceG, W / 2, H / 2, phase.displayValue, pct, W, H);
                     bigDiceText.visible = true;
-                    bigDiceText.text = `${phase.displayValue}`;
+                    setTextIfChanged(bigDiceText, `${phase.displayValue}`);
                     // Harmonic shake looks energetic without noisy jitter.
                     const shake = 7 * Math.pow(1 - Math.min(1, pct), 1.7);
                     bigDiceText.x = W / 2 + Math.sin(t * 44) * shake;
@@ -2070,33 +3134,12 @@ export const GameScene = memo(function GameScene({
                     const pct = Math.min(1, phase.elapsed / DICE_RESULT_REVEAL_DURATION);
                     drawDiceResultOverlay(diceG, W / 2, H / 2, phase.value, pct, W, H);
                     bigDiceText.visible = true;
-                    bigDiceText.text = `${phase.value}`;
+                    setTextIfChanged(bigDiceText, `${phase.value}`);
                     bigDiceText.x = W / 2;
                     bigDiceText.y = H / 2;
                     const entry = easeOutBack(Math.min(1, pct * 1.25));
                     const pulse = Math.sin(pct * Math.PI * 5) * (1 - pct) * 0.08;
                     bigDiceText.scale.set(1.12 + entry * 0.24 + pulse);
-                }
-
-                if (phase.kind === "roundCountdown") {
-                    const pct = 1 - phase.remaining / ROUND_COUNTDOWN_DURATION;
-                    const pulse = 0.7 + 0.3 * Math.sin(pct * Math.PI * 9);
-
-                    diceG.rect(0, 0, W, H);
-                    diceG.fill({ color: 0x0b1732, alpha: 0.5 });
-                    diceG.circle(W / 2, H * 0.3, 92 + 14 * pulse);
-                    diceG.fill({ color: 0xffca3a, alpha: 0.22 });
-                    diceG.circle(W / 2, H * 0.3, 68 + 8 * pulse);
-                    diceG.fill({ color: 0xffffff, alpha: 0.22 });
-                    diceG.circle(W / 2, H * 0.3, 56);
-                    diceG.fill({ color: 0x174a7a, alpha: 0.9 });
-                    diceG.stroke({ color: 0xe6f7ff, alpha: 0.95, width: 2.2 });
-
-                    bigDiceText.visible = true;
-                    bigDiceText.text = `${Math.max(0, Math.ceil(phase.remaining))}`;
-                    bigDiceText.x = W / 2;
-                    bigDiceText.y = H * 0.3;
-                    bigDiceText.scale.set(0.95 + 0.15 * pulse);
                 }
 
                 const autoRollRemaining = nextAutoRollInSecRef.current;
@@ -2127,7 +3170,7 @@ export const GameScene = memo(function GameScene({
                     autoRollLabel.visible = true;
                     autoRollLabel.x = W / 2;
                     autoRollLabel.y = panelY + 16;
-                    autoRollLabel.text = `NEXT AUTO ROLL IN ${autoRollRemaining.toFixed(1)}s`;
+                    setTextIfChanged(autoRollLabel, `NEXT AUTO ROLL IN ${autoRollRemaining.toFixed(1)}s`);
                 }
 
                 antiPerkAlertG.clear();
@@ -2140,11 +3183,18 @@ export const GameScene = memo(function GameScene({
                     const fadeOut = Math.min(1, (1 - progress) / 0.2);
                     const alpha = Math.min(fadeIn, fadeOut);
                     const pulse = 0.5 + 0.5 * Math.sin(t * 20);
-                    const panelW = 560;
-                    const panelH = 54;
+                    const panelW = Math.min(640, Math.max(360, W - 80));
+                    const panelPaddingX = 24;
+                    const panelPaddingY = 14;
                     const panelX = W / 2 - panelW / 2;
                     const panelY = 84;
                     const shake = (1 - progress) * 2.8 * Math.sin(t * 45);
+
+                    antiPerkAlertLabel.scale.set(1);
+                    antiPerkAlertLabel.style.wordWrapWidth = panelW - panelPaddingX * 2;
+                    setTextIfChanged(antiPerkAlertLabel, antiPerkAlertText);
+                    const labelBounds = antiPerkAlertLabel.getLocalBounds();
+                    const panelH = Math.max(54, Math.ceil(labelBounds.height + panelPaddingY * 2));
 
                     antiPerkAlertG.roundRect(panelX - 6 + shake, panelY - 6, panelW + 12, panelH + 12, 16);
                     antiPerkAlertG.fill({ color: 0xff3f57, alpha: (0.14 + pulse * 0.08) * alpha });
@@ -2153,7 +3203,6 @@ export const GameScene = memo(function GameScene({
                     antiPerkAlertG.stroke({ color: 0xff6d8e, alpha: (0.82 + pulse * 0.16) * alpha, width: 2.3 });
 
                     antiPerkAlertLabel.visible = true;
-                    antiPerkAlertLabel.text = antiPerkAlertText;
                     antiPerkAlertLabel.alpha = alpha;
                     antiPerkAlertLabel.x = W / 2 + shake;
                     antiPerkAlertLabel.y = panelY + panelH / 2;
@@ -2189,35 +3238,35 @@ export const GameScene = memo(function GameScene({
                     rewardFxG.alpha = rewardAlpha;
 
                     rewardTitleLabel.visible = true;
-                    rewardTitleLabel.text = "ROUND COMPLETE";
+                    setTextIfChanged(rewardTitleLabel, "ROUND COMPLETE");
                     rewardTitleLabel.alpha = rewardAlpha;
                     rewardTitleLabel.x = W / 2;
                     rewardTitleLabel.y = H * 0.29 - rise * 0.6;
                     rewardTitleLabel.scale.set(0.9 + pop * 0.12 + pulse * 0.03);
 
                     rewardMoneyLabel.visible = true;
-                    rewardMoneyLabel.text = `+$${roundRewardMoney}`;
+                    setTextIfChanged(rewardMoneyLabel, `+$${roundRewardMoney}`);
                     rewardMoneyLabel.alpha = rewardAlpha;
                     rewardMoneyLabel.x = W / 2;
                     rewardMoneyLabel.y = H * 0.4 - rise;
                     rewardMoneyLabel.scale.set(0.92 + pop * 0.2 + pulse * 0.05);
 
                     rewardScoreLabel.visible = true;
-                    rewardScoreLabel.text = `+${roundRewardScore} SCORE`;
+                    setTextIfChanged(rewardScoreLabel, `+${roundRewardScore} SCORE`);
                     rewardScoreLabel.alpha = rewardAlpha;
                     rewardScoreLabel.x = W / 2;
                     rewardScoreLabel.y = H * 0.49 - rise * 0.8;
                     rewardScoreLabel.scale.set(0.92 + pop * 0.16 + pulse * 0.03);
 
                     rewardTotalMoneyLabel.visible = true;
-                    rewardTotalMoneyLabel.text = `NEW MONEY TOTAL: $${countingMoney}`;
+                    setTextIfChanged(rewardTotalMoneyLabel, `NEW MONEY TOTAL: $${countingMoney}`);
                     rewardTotalMoneyLabel.alpha = rewardAlpha;
                     rewardTotalMoneyLabel.x = W / 2;
                     rewardTotalMoneyLabel.y = H * 0.58 - rise * 0.5;
                     rewardTotalMoneyLabel.scale.set(0.94 + pop * 0.08);
 
                     rewardTotalScoreLabel.visible = true;
-                    rewardTotalScoreLabel.text = `NEW SCORE TOTAL: ${countingScore}`;
+                    setTextIfChanged(rewardTotalScoreLabel, `NEW SCORE TOTAL: ${countingScore}`);
                     rewardTotalScoreLabel.alpha = rewardAlpha;
                     rewardTotalScoreLabel.x = W / 2;
                     rewardTotalScoreLabel.y = H * 0.63 - rise * 0.4;
@@ -2225,6 +3274,7 @@ export const GameScene = memo(function GameScene({
                 } else {
                     roundRewardLastTickStep = -1;
                 }
+                previousShowRoundReward = showRoundReward;
 
                 // ── Perk modal ────────────────────────────────────────────────────────
                 const showPerks = (phase.kind === "perkReveal" || phase.kind === "idle") && !!s.pendingPerkSelection;
@@ -2265,6 +3315,7 @@ export const GameScene = memo(function GameScene({
                     const canAfford = (currentPlayer?.money ?? 0) >= perk.cost;
                     const rarity = resolvePerkRarity(perk);
                     const rarityMeta = PERK_RARITY_META[rarity];
+                    const isControllerSelected = controllerPerkSelectionIndexRef.current === pi;
                     card.alpha = perkRevealT * (canAfford ? 1 : 0.6);
                     card.cursor = canAfford ? "pointer" : "not-allowed";
                     card.interactive = canAfford;
@@ -2273,6 +3324,11 @@ export const GameScene = memo(function GameScene({
                     cardG.roundRect(0, 0, CARD_W, CARD_H, 14);
                     cardG.fill({ color: 0x0d0d2e, alpha: 0.97 });
                     cardG.stroke({ color: rarityMeta.pixi.stroke, alpha: 0.86, width: 2 });
+
+                    if (isControllerSelected) {
+                        cardG.roundRect(-8, -8, CARD_W + 16, CARD_H + 16, 20);
+                        cardG.stroke({ color: 0xe5f9ff, alpha: 0.95, width: 3.2 });
+                    }
 
                     // Subtle glow
                     cardG.roundRect(-4, -4, CARD_W + 8, CARD_H + 8, 18);
@@ -2318,10 +3374,11 @@ export const GameScene = memo(function GameScene({
                 const skipBtnH = 42;
                 const skipBtnX = W / 2 - skipBtnW / 2;
                 const skipBtnY = perkY + CARD_H + 26;
+                const skipSelected = controllerPerkSelectionIndexRef.current >= numPerks;
                 skipPerkBtn.clear();
                 skipPerkBtn.roundRect(skipBtnX, skipBtnY, skipBtnW, skipBtnH, 12);
-                skipPerkBtn.fill({ color: 0x2a0d28, alpha: 0.96 });
-                skipPerkBtn.stroke({ color: 0xff8fd0, alpha: 0.85, width: 1.8 });
+                skipPerkBtn.fill({ color: skipSelected ? 0x4a153f : 0x2a0d28, alpha: 0.96 });
+                skipPerkBtn.stroke({ color: skipSelected ? 0xffd8ef : 0xff8fd0, alpha: 0.92, width: skipSelected ? 2.8 : 1.8 });
                 skipPerkBtn.visible = showPerks;
 
                 skipPerkLabel.x = W / 2;
@@ -2330,12 +3387,19 @@ export const GameScene = memo(function GameScene({
 
                 // Dim background when perk modal is open
                 if (showPerks) {
+                    hudG.clear();
                     hudG.rect(0, 0, W, H);
                     hudG.fill({ color: 0x000000, alpha: 0.45 });
                     drawHUD(hudG, s, W, roundRewardPulse); // redraw HUD on top of dim
+                    lastHudRedrawAt = t;
                 } else {
                     skipPerkBtn.visible = false;
                     skipPerkLabel.visible = false;
+                    if (didRoundRewardVisibilityChange && !shouldRedrawHud) {
+                        hudG.clear();
+                        drawHUD(hudG, s, W, roundRewardPulse);
+                        lastHudRedrawAt = t;
+                    }
                 }
 
                 rafId = requestAnimationFrame(renderFrame);
@@ -2362,7 +3426,9 @@ export const GameScene = memo(function GameScene({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const currentPlayer = state.players[state.currentPlayerIndex];
+    const activePathChoiceOption = state.pendingPathChoice?.options.find((option) => option.edgeId === highlightedPathEdgeId)
+        ?? state.pendingPathChoice?.options[0]
+        ?? null;
     const boardAntiPerkSequence = (
         !state.activeRound &&
         !state.pendingPathChoice &&
@@ -2371,15 +3437,60 @@ export const GameScene = memo(function GameScene({
         state.sessionPhase === "normal" &&
         currentPlayer
     )
-        ? (["milker", "jackhammer", "no-rest"] as const).find((id) => currentPlayer.antiPerks.includes(id)) ?? null
+        ? (["milker", "jackhammer"] as const).find((id) => currentPlayer.antiPerks.includes(id)) ?? null
         : null;
+
+    const idleBoardSequence = (
+        !state.activeRound &&
+        !state.queuedRound &&
+        state.sessionPhase === "normal" &&
+        currentPlayer &&
+        !currentPlayer.antiPerks.includes("milker") &&
+        !currentPlayer.antiPerks.includes("jackhammer")
+    )
+        ? (currentPlayer.antiPerks.includes("no-rest") ? "no-rest" : null)
+        : null;
+    const isRoundCountdown = animPhase.kind === "roundCountdown";
+    const boardOpacity = roundPreviewState.loading
+        ? 0.24
+        : roundPreviewState.active
+            ? 0.52
+            : isRoundCountdown
+                ? 0.24
+                : 1;
+    const boardFilter = roundPreviewState.loading
+        ? "blur(5px) saturate(0.75) brightness(0.7)"
+        : roundPreviewState.active
+            ? "blur(2px) saturate(0.9) brightness(0.82)"
+            : isRoundCountdown
+                ? "blur(8px) saturate(0.68) brightness(0.48)"
+                : "none";
+    const boardTransform = roundPreviewState.active || isRoundCountdown ? "scale(1.015)" : "scale(1)";
 
     return (
         <>
             <div
                 ref={containerRef}
-                style={{ width: "100vw", height: "100vh", overflow: "hidden", display: "block", position: "relative", zIndex: 1 }}
+                style={{
+                    width: "100vw",
+                    height: "100vh",
+                    overflow: "hidden",
+                    display: "block",
+                    position: "relative",
+                    zIndex: 1,
+                    opacity: boardOpacity,
+                    filter: boardFilter,
+                    transform: boardTransform,
+                    transition: "opacity 260ms ease, filter 260ms ease, transform 260ms ease",
+                }}
             />
+            {animPhase.kind === "roundCountdown" && (
+                <RoundStartTransition
+                    queuedRound={state.queuedRound}
+                    remaining={animPhase.remaining}
+                    duration={ROUND_COUNTDOWN_DURATION}
+                />
+            )}
             <RoundVideoOverlay
                 activeRound={state.activeRound}
                 booruSearchPrompt={intermediaryLoadingPrompt}
@@ -2393,8 +3504,13 @@ export const GameScene = memo(function GameScene({
                 showCumRoundOutcomeMenuOnCumRequest={isLastCumRoundActive}
                 onOpenOptions={() => setShowOptionsMenu(true)}
                 onUiVisibilityChange={onRoundOverlayUiVisibilityChange}
+                onPreviewStateChange={setRoundPreviewState}
+                initialShowProgressBarAlways={initialShowProgressBarAlways}
+                initialShowAntiPerkBeatbar={initialShowAntiPerkBeatbar}
                 allowDebugRoundControls={allowDebugRoundControls}
+                lastLogMessage={state.log[0]}
                 boardSequence={boardAntiPerkSequence}
+                idleBoardSequence={idleBoardSequence}
                 onCompleteBoardSequence={(perkId) => {
                     if (!currentPlayer) return;
                     handleConsumeAntiPerkById({
@@ -2416,23 +3532,59 @@ export const GameScene = memo(function GameScene({
                     },
                 }}
             />
-            {!state.activeRound && state.sessionPhase !== "completed" && (
+            {handyNotification && (
+                <div className="pointer-events-none fixed left-1/2 top-6 z-[142] -translate-x-1/2">
+                    <div className="rounded-xl border border-cyan-300/45 bg-zinc-950/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl backdrop-blur">
+                        {handyNotification}
+                    </div>
+                </div>
+            )}
+            {!state.activeRound && !isRoundCountdown && state.sessionPhase !== "completed" && handyConnected && (
+                <div className="pointer-events-none fixed bottom-28 right-4 z-[96]">
+                    <button
+                        type="button"
+                        className="pointer-events-auto rounded-lg border border-rose-400/70 bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-500/35"
+                        onClick={() => {
+                            handleHandyManualToggle();
+                        }}
+                        data-controller-focus-id="game-handy-toggle"
+                        data-controller-initial="true"
+                    >
+                        {handyManuallyStopped ? "Resume Handy" : "Force Stop Handy"}
+                    </button>
+                </div>
+            )}
+            {!state.activeRound && !isRoundCountdown && state.sessionPhase !== "completed" && (
+                <div className="pointer-events-none fixed bottom-16 left-4 z-[96]">
+                    <button
+                        type="button"
+                        className="pointer-events-auto rounded-lg border border-cyan-300/55 bg-zinc-950/88 px-4 py-2 text-sm font-semibold text-cyan-100 backdrop-blur transition-colors hover:bg-zinc-900"
+                        onClick={() => setShowPerkInventoryMenu(true)}
+                        data-controller-focus-id="game-inventory-open"
+                    >
+                        Perks {currentPlayerInventory.length > 0 ? `(${currentPlayerInventory.length})` : ""}
+                    </button>
+                </div>
+            )}
+            {!state.activeRound && !isRoundCountdown && state.sessionPhase !== "completed" && (
                 <div className="pointer-events-none fixed bottom-16 right-4 z-[96]">
                     <button
                         type="button"
                         className="pointer-events-auto rounded-lg border border-indigo-300/55 bg-zinc-950/88 px-4 py-2 text-sm font-semibold text-indigo-100 backdrop-blur transition-colors hover:bg-zinc-900"
                         onClick={() => setShowOptionsMenu(true)}
+                        data-controller-focus-id="game-options-open"
                     >
                         Options
                     </button>
                 </div>
             )}
-            {!state.activeRound && state.sessionPhase !== "completed" && (
+            {!state.activeRound && !isRoundCountdown && state.sessionPhase !== "completed" && (
                 <div className="pointer-events-none fixed bottom-4 right-4 z-[96]">
                     <button
                         type="button"
                         className="pointer-events-auto rounded-lg border border-rose-400/70 bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-500/35"
                         onClick={requestCumConfirmation}
+                        data-controller-focus-id="game-cum-open"
                     >
                         Cum (C)
                     </button>
@@ -2451,33 +3603,125 @@ export const GameScene = memo(function GameScene({
                     </label>
                 </div>
             )}
+            {showPerkInventoryMenu && currentPlayer && (
+                <div className="pointer-events-none fixed inset-0 z-[141] flex items-center justify-center bg-black/60 px-4">
+                    <div className="pointer-events-auto w-full max-w-5xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <button
+                                type="button"
+                                className="absolute right-7 top-5 z-[1] rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm text-zinc-100 backdrop-blur hover:border-zinc-300"
+                                onClick={() => setShowPerkInventoryMenu(false)}
+                                data-controller-focus-id="game-inventory-close"
+                                data-controller-initial="true"
+                                data-controller-back="true"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <PerkInventoryPanel
+                            title="Perk Inventory"
+                            subtitle="Apply stored perks to your run or clear out items you do not want to keep."
+                            inventory={currentPlayerInventory}
+                            activeEffects={currentPlayerActiveEffects}
+                            selectedItemId={selectedInventoryItemId}
+                            onSelectItem={setSelectedInventoryItemId}
+                            onUseSelectedItem={(item) => {
+                                if (item.kind !== "perk") return;
+                                handleApplyInventoryItemToSelfRef.current({
+                                    playerId: currentPlayer.id,
+                                    itemId: item.itemId,
+                                });
+                            }}
+                            onDiscardSelectedItem={(item) => {
+                                handleConsumeInventoryItemRef.current({
+                                    playerId: currentPlayer.id,
+                                    itemId: item.itemId,
+                                    reason: `Discarded item: ${item.name}.`,
+                                });
+                            }}
+                            useActionLabel="Apply Perk"
+                            useDisabled={!currentPlayerInventory.some((item) => item.itemId === selectedInventoryItemId && item.kind === "perk")}
+                            useDisabledReason={
+                                currentPlayerInventory.some((item) => item.itemId === selectedInventoryItemId && item.kind === "antiPerk")
+                                    ? "Anti-perk items cannot be applied to yourself in singleplayer."
+                                    : null
+                            }
+                            emptyStateLabel="No stored perks yet."
+                            headerBadge={`Score ${currentPlayer.score}`}
+                        />
+                    </div>
+                </div>
+            )}
             {state.pendingPathChoice && (
-                <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4">
-                    <div className="pointer-events-auto w-full max-w-xl rounded-2xl border border-zinc-600 bg-zinc-950/95 p-5 shadow-2xl">
-                        <h2 className="text-lg font-bold text-zinc-100">Choose Your Path</h2>
-                        <p className="mt-1 text-sm text-zinc-300">
-                            Pick a route. If time runs out, the game selects one automatically.
-                        </p>
-                        <p className="mt-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.14em] text-violet-200">
-                            {pathChoiceRemainingMs !== null
-                                ? `Auto-select in ${(pathChoiceRemainingMs / 1000).toFixed(1)}s`
-                                : "Auto-select pending"}
-                        </p>
-                        <div className="mt-4 grid gap-2">
-                            {state.pendingPathChoice.options.map((option) => (
-                                <button
-                                    key={option.edgeId}
-                                    type="button"
-                                    onClick={() => handleSelectPathEdgeRef.current(option.edgeId)}
-                                    className="w-full rounded-lg border border-violet-300/35 bg-zinc-900/80 px-4 py-3 text-left text-sm text-zinc-100 transition-colors hover:border-violet-200/70 hover:bg-zinc-800"
-                                >
-                                    <div className="font-semibold">{option.label ?? option.toFieldName}</div>
-                                    <div className="mt-1 text-xs text-zinc-300">
-                                        Destination: {option.toFieldName}
-                                        {option.gateCost > 0 ? ` • Gate Cost: $${option.gateCost}` : " • No Gate Cost"}
-                                    </div>
-                                </button>
-                            ))}
+                <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+                    <div className="pointer-events-auto w-full max-w-5xl rounded-[30px] border border-amber-200/30 bg-[linear-gradient(135deg,rgba(10,18,31,0.88),rgba(17,27,46,0.96))] p-4 shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-amber-200/80">
+                                    Split Ahead
+                                </div>
+                                <h2 className="mt-1 text-xl font-black tracking-[0.04em] text-white">Choose your route</h2>
+                                <p className="mt-1 text-sm text-slate-200/85">
+                                    Hover, focus, or click a route to preview it on the board. You can also click the glowing destination tiles.
+                                </p>
+                            </div>
+                            <div className="self-start rounded-full border border-amber-300/35 bg-amber-300/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.18em] text-amber-100">
+                                {pathChoiceRemainingMs !== null
+                                    ? `Auto-pick in ${(pathChoiceRemainingMs / 1000).toFixed(1)}s`
+                                    : "Auto-pick pending"}
+                            </div>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {state.pendingPathChoice.options.map((option, index) => {
+                                const isActive = option.edgeId === activePathChoiceOption?.edgeId;
+                                const previewLength = pendingPathPreviewByEdgeId[option.edgeId]?.length ?? 0;
+                                return (
+                                    <button
+                                        key={option.edgeId}
+                                        type="button"
+                                        onClick={() => handleSelectPathEdgeRef.current(option.edgeId)}
+                                        onMouseEnter={() => setHighlightedPathEdgeId(option.edgeId)}
+                                        onFocus={() => setHighlightedPathEdgeId(option.edgeId)}
+                                        className={`rounded-[24px] border px-4 py-4 text-left transition-all duration-150 ${isActive
+                                            ? "border-amber-200/70 bg-amber-300/12 text-white shadow-[0_0_0_1px_rgba(253,224,71,0.28)]"
+                                            : "border-slate-300/15 bg-slate-950/40 text-slate-100 hover:border-cyan-200/45 hover:bg-slate-900/70"}`}
+                                        data-controller-focus-id={`game-path-${option.edgeId}`}
+                                        data-controller-initial={index === 0 ? "true" : undefined}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">
+                                                    Route {index + 1}
+                                                </div>
+                                                <div className="mt-1 text-lg font-bold">{option.label ?? option.toFieldName}</div>
+                                            </div>
+                                            <div className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${isActive ? "bg-amber-200/20 text-amber-100" : "bg-slate-200/10 text-slate-200/80"}`}>
+                                                {isActive ? "Previewing" : "Preview"}
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 text-sm text-slate-200/88">
+                                            Destination: <span className="font-semibold text-white">{option.toFieldName}</span>
+                                        </div>
+                                        <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-300/70">
+                                            {option.gateCost > 0 ? `Gate cost $${option.gateCost}` : "No gate cost"}
+                                            {previewLength > 1 ? ` • ${previewLength} visible steps` : ""}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {state.pendingPathChoice && activePathChoiceOption && (
+                <div className="pointer-events-none fixed left-1/2 top-5 z-[51] -translate-x-1/2 px-4">
+                    <div className="rounded-full border border-cyan-200/35 bg-slate-950/78 px-4 py-2 text-center shadow-xl backdrop-blur-md">
+                        <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/70">
+                            Current Preview
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-white">
+                            {activePathChoiceOption.label ?? activePathChoiceOption.toFieldName}
+                            {activePathChoiceOption.gateCost > 0 ? ` • $${activePathChoiceOption.gateCost}` : " • Free"}
                         </div>
                     </div>
                 </div>
@@ -2494,6 +3738,9 @@ export const GameScene = memo(function GameScene({
                                 type="button"
                                 className="rounded-lg border border-zinc-500 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 hover:border-zinc-300"
                                 onClick={() => setShowCumConfirm(false)}
+                                data-controller-focus-id="game-cum-confirm-no"
+                                data-controller-initial="true"
+                                data-controller-back="true"
                             >
                                 No
                             </button>
@@ -2504,6 +3751,7 @@ export const GameScene = memo(function GameScene({
                                     setShowCumConfirm(false);
                                     handleReportCumRef.current();
                                 }}
+                                data-controller-focus-id="game-cum-confirm-yes"
                             >
                                 Yes, End Run
                             </button>
@@ -2523,23 +3771,50 @@ export const GameScene = memo(function GameScene({
                                 type="button"
                                 className="w-full rounded-lg border border-zinc-500 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 hover:border-zinc-300"
                                 onClick={() => setShowOptionsMenu(false)}
+                                data-controller-focus-id="game-options-proceed"
+                                data-controller-initial="true"
+                                data-controller-back="true"
                             >
                                 Proceed
                             </button>
+                            <button
+                                type="button"
+                                className="w-full rounded-lg border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
+                                onClick={() => {
+                                    setShowOptionsMenu(false);
+                                    setShowPerkInventoryMenu(true);
+                                }}
+                                data-controller-focus-id="game-options-inventory"
+                            >
+                                Perk Inventory
+                            </button>
+                            {canShowDevPerkMenu && currentPlayer && (
+                                <button
+                                    type="button"
+                                    className="w-full rounded-lg border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
+                                    onClick={() => {
+                                        setShowOptionsMenu(false);
+                                        setShowDevPerkMenuModal(true);
+                                    }}
+                                    data-controller-focus-id="game-options-dev-perks"
+                                >
+                                    Dev Perks
+                                </button>
+                            )}
                             {optionsActions.map((action) => (
                                 <button
                                     key={action.id}
                                     type="button"
                                     disabled={action.disabled}
-                                    className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
-                                        action.tone === "danger"
-                                            ? "border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                                            : "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-                                    }`}
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${action.tone === "danger"
+                                        ? "border-rose-400/70 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                                        : "border-amber-400/60 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                                        }`}
                                     onClick={() => {
                                         setShowOptionsMenu(false);
                                         action.onClick();
                                     }}
+                                    data-controller-focus-id={`game-options-${action.id}`}
                                 >
                                     {action.label}
                                 </button>
@@ -2551,9 +3826,86 @@ export const GameScene = memo(function GameScene({
                                     setShowOptionsMenu(false);
                                     onGiveUp();
                                 }}
+                                data-controller-focus-id="game-options-give-up"
                             >
                                 {giveUpLabel}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showDevPerkMenuModal && currentPlayer && (
+                <div className="pointer-events-none fixed inset-0 z-[142] flex items-center justify-center bg-black/70 px-4">
+                    <div className="pointer-events-auto w-full max-w-5xl rounded-2xl border border-cyan-300/45 bg-zinc-950/95 p-5 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-bold text-cyan-100">Dev Perks</h2>
+                                <p className="mt-2 text-sm text-zinc-200">
+                                    Trigger perks and anti-perks for {currentPlayer.name} in development mode.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="rounded-lg border border-zinc-500 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 hover:border-zinc-300"
+                                onClick={() => setShowDevPerkMenuModal(false)}
+                                data-controller-focus-id="game-dev-close"
+                                data-controller-initial="true"
+                                data-controller-back="true"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="mt-4 grid max-h-[70vh] gap-4 overflow-y-auto lg:grid-cols-2">
+                            <section>
+                                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-200">Perks</h3>
+                                <div className="mt-3 grid gap-2">
+                                    {devPerkPool.map((perk) => (
+                                        <button
+                                            key={perk.id}
+                                            type="button"
+                                            className="rounded-xl border border-emerald-400/35 bg-zinc-900/80 px-4 py-3 text-left hover:border-emerald-300/70 hover:bg-zinc-900"
+                                            onClick={() => {
+                                                handleApplyExternalPerkRef.current({
+                                                    targetPlayerId: currentPlayer.id,
+                                                    perkId: perk.id,
+                                                    sourceLabel: "Dev menu",
+                                                });
+                                            }}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-semibold text-emerald-100">{perk.name}</span>
+                                                <span className="text-xs uppercase tracking-[0.14em] text-emerald-300">{perk.rarity}</span>
+                                            </div>
+                                            <p className="mt-1 text-sm text-zinc-300">{perk.description}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                            <section>
+                                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-rose-200">Anti-Perks</h3>
+                                <div className="mt-3 grid gap-2">
+                                    {devAntiPerkPool.map((perk) => (
+                                        <button
+                                            key={perk.id}
+                                            type="button"
+                                            className="rounded-xl border border-rose-400/35 bg-zinc-900/80 px-4 py-3 text-left hover:border-rose-300/70 hover:bg-zinc-900"
+                                            onClick={() => {
+                                                handleApplyExternalPerkRef.current({
+                                                    targetPlayerId: currentPlayer.id,
+                                                    perkId: perk.id,
+                                                    sourceLabel: "Dev menu",
+                                                });
+                                            }}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-semibold text-rose-100">{perk.name}</span>
+                                                <span className="text-xs uppercase tracking-[0.14em] text-rose-300">{perk.rarity}</span>
+                                            </div>
+                                            <p className="mt-1 text-sm text-zinc-300">{perk.description}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </div>

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { PerkIcon } from "../components/game/PerkIcon";
+import { PerkInventoryPanel } from "../components/game/PerkInventoryPanel";
 import { GameScene } from "../components/game/GameScene";
 import { createInitialGameState } from "../game/engine";
 import { getPerkById } from "../game/data/perks";
@@ -29,7 +30,14 @@ import {
   type MultiplayerAntiPerkEvent,
   type MultiplayerLobbySnapshot,
 } from "../services/multiplayer";
+import { getMultiplayerSessionNotifications, type MultiplayerSessionNotification } from "../services/multiplayer/sessionNotifications";
 import { trpc } from "../services/trpc";
+import {
+  DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
+  ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
+  normalizeRoundProgressBarAlwaysVisible,
+} from "../constants/roundVideoOverlaySettings";
+import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 
 const MatchSearchSchema = z.object({
   lobbyId: z.string().min(1),
@@ -40,8 +48,7 @@ const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
 const INTERMEDIARY_RETURN_PAUSE_KEY = "game.intermediary.returnPauseSec";
 const MULTIPLAYER_APPLY_DIRECTLY_KEY = "game.multiplayer.applyDirectly";
-const DEFAULT_INTERMEDIARY_LOADING_PROMPT = "animated gif webm";
-const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 10;
+const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
 const EMPTY_PROGRESS_BY_PLAYER_ID: MultiplayerLobbySnapshot["progressByPlayerId"] = {};
 
@@ -104,8 +111,14 @@ function toSafeStats(value: unknown, fallback: PlayerStats): PlayerStats {
   const roundPauseMs = typeof raw.roundPauseMs === "number" && Number.isFinite(raw.roundPauseMs)
     ? Math.max(250, Math.floor(raw.roundPauseMs))
     : fallback.roundPauseMs;
+  const perkFrequency = typeof raw.perkFrequency === "number" && Number.isFinite(raw.perkFrequency)
+    ? Math.max(-0.5, Math.min(0.5, raw.perkFrequency))
+    : fallback.perkFrequency;
+  const perkLuck = typeof raw.perkLuck === "number" && Number.isFinite(raw.perkLuck)
+    ? Math.max(-1, Math.min(1, raw.perkLuck))
+    : fallback.perkLuck;
 
-  return { diceMin, diceMax, roundPauseMs };
+  return { diceMin, diceMax, roundPauseMs, perkFrequency, perkLuck };
 }
 
 function toSafeActiveEffects(value: unknown): ActivePerkEffect[] {
@@ -206,10 +219,11 @@ function deriveInitialMultiplayerState(input: {
 
 async function getIntermediarySettings() {
   try {
-    const [rawPrompt, rawDuration, rawReturnPause] = await Promise.all([
+    const [rawPrompt, rawDuration, rawReturnPause, rawRoundProgressBarAlwaysVisible] = await Promise.all([
       trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
       trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
       trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
+      trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
     ]);
 
     const prompt =
@@ -228,12 +242,14 @@ async function getIntermediarySettings() {
       intermediaryReturnPauseSec: Number.isFinite(parsedReturnPause)
         ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause)))
         : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC,
+      roundProgressBarAlwaysVisible: normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible),
     };
   } catch {
     return {
       intermediaryLoadingPrompt: DEFAULT_INTERMEDIARY_LOADING_PROMPT,
       intermediaryLoadingDurationSec: DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC,
       intermediaryReturnPauseSec: DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC,
+      roundProgressBarAlwaysVisible: DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
     };
   }
 }
@@ -301,6 +317,7 @@ function MultiplayerMatchRoute() {
     intermediaryLoadingPrompt,
     intermediaryLoadingDurationSec,
     intermediaryReturnPauseSec,
+    roundProgressBarAlwaysVisible,
   } = Route.useLoaderData();
 
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);
@@ -317,6 +334,8 @@ function MultiplayerMatchRoute() {
   const [isVideoHudHotzoneActive, setIsVideoHudHotzoneActive] = useState(false);
   const [applyPerkDirectly, setApplyPerkDirectly] = useState(initialApplyDirectly);
   const [videoUiVisible, setVideoUiVisible] = useState(true);
+  const [sessionNotificationQueue, setSessionNotificationQueue] = useState<MultiplayerSessionNotification[]>([]);
+  const [activeSessionNotification, setActiveSessionNotification] = useState<MultiplayerSessionNotification | null>(null);
   const [incomingAntiPerkEvent, setIncomingAntiPerkEvent] = useState<{
     eventId: string;
     targetPlayerId: string;
@@ -328,6 +347,7 @@ function MultiplayerMatchRoute() {
   const [activeInventoryFx, setActiveInventoryFx] = useState<{ fxId: string; item: InventoryItem } | null>(null);
   const [inventoryBadgePulse, setInventoryBadgePulse] = useState(false);
 
+  const sessionStartedAtMsRef = useRef(Date.now());
   const localStateRef = useRef(localState);
   localStateRef.current = localState;
 
@@ -342,6 +362,8 @@ function MultiplayerMatchRoute() {
   const finishSubmittedRef = useRef(false);
   const resultNavigationSubmittedRef = useRef(false);
   const prevInventoryIdsRef = useRef<Set<string>>(new Set(initialState.players[0]?.inventory.map((entry: InventoryItem) => entry.itemId) ?? []));
+  const previousPlayersRef = useRef(initialSnapshot.players);
+  const sessionNotificationTimerRef = useRef<number | null>(null);
 
   const refreshSnapshot = useCallback(async () => {
     const [nextSnapshot, nextOwnPlayer] = await Promise.all([
@@ -429,6 +451,9 @@ function MultiplayerMatchRoute() {
     return () => {
       if (syncTimerRef.current !== null) {
         window.clearTimeout(syncTimerRef.current);
+      }
+      if (sessionNotificationTimerRef.current !== null) {
+        window.clearTimeout(sessionNotificationTimerRef.current);
       }
     };
   }, []);
@@ -519,6 +544,27 @@ function MultiplayerMatchRoute() {
       window.clearInterval(interval);
     };
   }, [requestSnapshotRefresh]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const notifications = getMultiplayerSessionNotifications(previousPlayersRef.current, snapshot.players, ownPlayerId);
+    previousPlayersRef.current = snapshot.players;
+    if (notifications.length === 0) return;
+    setSessionNotificationQueue((prev) => [...prev, ...notifications]);
+  }, [ownPlayerId, snapshot]);
+
+  useEffect(() => {
+    if (activeSessionNotification || sessionNotificationQueue.length === 0) return;
+    const [nextNotification, ...rest] = sessionNotificationQueue;
+    if (!nextNotification) return;
+
+    setSessionNotificationQueue(rest);
+    setActiveSessionNotification(nextNotification);
+    sessionNotificationTimerRef.current = window.setTimeout(() => {
+      sessionNotificationTimerRef.current = null;
+      setActiveSessionNotification(null);
+    }, 2400);
+  }, [activeSessionNotification, sessionNotificationQueue]);
 
   useEffect(() => {
     if (!ownPlayerId) return;
@@ -738,40 +784,22 @@ function MultiplayerMatchRoute() {
     () => players.filter((player) => player.id !== ownPlayerId && !isTerminalPlayerState(player.state)),
     [ownPlayerId, players],
   );
+  const targetPlayerOptions = useMemo(
+    () => targetPlayers.map((player) => {
+      const progress = progressByPlayerId[player.id];
+      return {
+        id: player.id,
+        label: player.displayName,
+        description: `Pos ${progress?.positionIndex ?? 0} • $${progress?.money ?? 0} • Score ${progress?.score ?? player.finalScore ?? 0}`,
+      };
+    }),
+    [progressByPlayerId, targetPlayers],
+  );
 
   const localPlayer = useMemo(
     () => localState.players[localState.currentPlayerIndex],
     [localState.currentPlayerIndex, localState.players],
   );
-
-  const inventoryStacks = useMemo(() => {
-    const inventory = localPlayer?.inventory ?? [];
-    const byPerkId = new Map<string, { itemIds: string[]; item: InventoryItem }>();
-
-    for (const item of inventory) {
-      const found = byPerkId.get(item.perkId);
-      if (!found) {
-        byPerkId.set(item.perkId, { itemIds: [item.itemId], item });
-        continue;
-      }
-      found.itemIds.push(item.itemId);
-    }
-
-    return Array.from(byPerkId.values())
-      .map((entry) => {
-        const perk = getPerkById(entry.item.perkId);
-        const rarity = perk ? resolvePerkRarity(perk) : fallbackRarityFromCost(entry.item.cost);
-        return {
-          ...entry,
-          itemIds: [...entry.itemIds],
-          count: entry.itemIds.length,
-          iconKey: perk?.iconKey ?? "unknown",
-          displayName: perk?.name ?? entry.item.name,
-          rarity,
-        };
-      })
-      .sort((a, b) => b.count - a.count || a.displayName.localeCompare(b.displayName));
-  }, [localPlayer?.inventory]);
 
   const selectedInventoryItem = useMemo(() => {
     if (!selectedInventoryItemId || !localPlayer) return null;
@@ -842,15 +870,18 @@ function MultiplayerMatchRoute() {
       setPending(false);
     }
   };
+  const handleDiscardInventoryItem = (item: InventoryItem) => {
+    if (!localPlayer) return;
+    setPendingInventoryAction({
+      actionId: `discard-${item.itemId}-${Date.now()}`,
+      type: "consume",
+      playerId: localPlayer.id,
+      itemId: item.itemId,
+      reason: `Discarded item: ${item.name}.`,
+    });
+  };
 
-  const applyDirectlyLabel = applyPerkDirectly ? "Direct" : "Store";
   const inventoryCount = localPlayer?.inventory.length ?? 0;
-  const selectedPerkDefinition = selectedInventoryItem ? getPerkById(selectedInventoryItem.perkId) : undefined;
-  const selectedItemIconKey = selectedPerkDefinition?.iconKey ?? "unknown";
-  const selectedItemRarity = selectedInventoryItem
-    ? (selectedPerkDefinition ? resolvePerkRarity(selectedPerkDefinition) : fallbackRarityFromCost(selectedInventoryItem.cost))
-    : "common";
-  const selectedItemRarityMeta = PERK_RARITY_META[selectedItemRarity];
   const activeInventoryPerk = activeInventoryFx ? getPerkById(activeInventoryFx.item.perkId) : undefined;
   const activeInventoryRarityMeta = PERK_RARITY_META[
     activeInventoryPerk
@@ -961,6 +992,14 @@ function MultiplayerMatchRoute() {
         </div>
       )}
 
+      {activeSessionNotification && (
+        <div className="pointer-events-none fixed left-1/2 top-20 z-[121] -translate-x-1/2">
+          <div className="rounded-xl border border-cyan-300/40 bg-zinc-950/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl backdrop-blur">
+            {activeSessionNotification.message}
+          </div>
+        </div>
+      )}
+
       {activeInventoryFx && (
         <div className="pointer-events-none fixed inset-0 z-[121]">
           <div className={`inventory-fly-item rounded-lg border bg-zinc-950/92 px-3 py-2 text-xs shadow-[0_0_24px_rgba(0,0,0,0.35)] ${activeInventoryRarityMeta.tailwind.inventorySelected}`}>
@@ -978,6 +1017,7 @@ function MultiplayerMatchRoute() {
       <GameScene
         key={`${search.lobbyId}:${ownPlayerId}`}
         initialState={initialState}
+        sessionStartedAtMs={sessionStartedAtMsRef.current}
         installedRounds={installedRounds}
         multiplayerRemotePlayers={remotePlayers}
         showMultiplayerPlayerNames
@@ -1042,6 +1082,7 @@ function MultiplayerMatchRoute() {
         intermediaryLoadingPrompt={intermediaryLoadingPrompt}
         intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
         intermediaryReturnPauseSec={intermediaryReturnPauseSec}
+        initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
       />
 
       {showVideoHotzoneHint && (
@@ -1066,19 +1107,16 @@ function MultiplayerMatchRoute() {
 
       {remoteHudPlayers.length > 0 && (
         <aside
-          className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${
-            inVideoView
+          className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${inVideoView
               ? "border-cyan-200/25 bg-[linear-gradient(150deg,rgba(5,20,44,0.5),rgba(4,10,26,0.34))] shadow-[0_14px_34px_rgba(2,8,22,0.35),0_0_18px_rgba(34,211,238,0.09)]"
               : "border-cyan-300/35 bg-[linear-gradient(150deg,rgba(5,20,44,0.92),rgba(4,10,26,0.88))] shadow-[0_18px_48px_rgba(2,8,22,0.6),0_0_26px_rgba(34,211,238,0.15)]"
-          } ${
-            otherPlayersVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-2 opacity-0"
-          } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
+            } ${otherPlayersVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-2 opacity-0"
+            } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
         >
-          <div className={`flex items-center justify-between border-b px-4 py-2.5 ${
-            inVideoView
+          <div className={`flex items-center justify-between border-b px-4 py-2.5 ${inVideoView
               ? "border-cyan-200/15 bg-[linear-gradient(180deg,rgba(10,30,56,0.46),rgba(7,18,38,0.42))]"
               : "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(10,30,56,0.78),rgba(7,18,38,0.75))]"
-          }`}>
+            }`}>
             <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-cyan-100">
               Other Players
             </div>
@@ -1090,11 +1128,10 @@ function MultiplayerMatchRoute() {
             {remoteHudPlayers.map((remote) => (
               <div
                 key={remote.id}
-                className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${
-                  inVideoView
+                className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${inVideoView
                     ? "border-blue-200/20 bg-[linear-gradient(145deg,rgba(8,26,53,0.56),rgba(6,16,34,0.52))]"
                     : "border-blue-300/30 bg-[linear-gradient(145deg,rgba(8,26,53,0.9),rgba(6,16,34,0.9))]"
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="truncate text-[27px] leading-none font-semibold text-zinc-100 [font-size:clamp(1rem,1.5vw,1.65rem)]">
@@ -1180,15 +1217,12 @@ function MultiplayerMatchRoute() {
         type="button"
         aria-label={isOverlayOpen ? "Close inventory controls" : "Open inventory controls"}
         title={isOverlayOpen ? "Close Inventory" : "Open Inventory"}
-        className={`fixed left-4 z-[115] flex h-12 w-12 items-center justify-center rounded-full border backdrop-blur transition-all duration-200 ${
-          inVideoView ? "bottom-24" : "bottom-4"
-        } ${
-          controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-        } ${inventoryBadgePulse ? "inventory-dock-pulse" : ""} ${
-          isOverlayOpen
+        className={`fixed z-[115] flex h-12 w-12 items-center justify-center rounded-full border backdrop-blur transition-all duration-200 ${inVideoView ? "bottom-24 right-4" : "bottom-4 left-4"
+          } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          } ${inventoryBadgePulse ? "inventory-dock-pulse" : ""} ${isOverlayOpen
             ? "border-cyan-400/70 bg-cyan-500/20 text-cyan-100"
             : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
-        }`}
+          }`}
         onClick={() => setIsOverlayOpen((prev) => !prev)}
       >
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
@@ -1203,15 +1237,12 @@ function MultiplayerMatchRoute() {
           type="button"
           aria-label={isLobbyControlOpen ? "Close lobby control" : "Open lobby control"}
           title={isLobbyControlOpen ? "Close Lobby Control" : "Open Lobby Control"}
-          className={`fixed left-20 z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${
-            inVideoView ? "bottom-24" : "bottom-4"
-          } ${
-            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          } ${
-            isLobbyControlOpen
+          className={`fixed z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${inVideoView ? "bottom-24 right-20" : "bottom-4 left-20"
+            } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+            } ${isLobbyControlOpen
               ? "border-amber-300/80 bg-amber-500/20 text-amber-100"
               : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
-          }`}
+            }`}
           onClick={() => setIsLobbyControlOpen((prev) => !prev)}
         >
           Host
@@ -1219,100 +1250,33 @@ function MultiplayerMatchRoute() {
       )}
 
       {isOverlayOpen && (
-        <aside className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${
-          controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-        } ${isNarrowViewport
-            ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[52vh]`
-            : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[380px] max-h-[calc(100vh-7rem)]`}`}>
-          <div className="rounded-xl border border-cyan-500/35 bg-zinc-950/90 p-3 backdrop-blur">
-            <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-cyan-200">
-              <span>Item Inventory</span>
-              <span>{applyDirectlyLabel}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs text-zinc-300">
-              <div>Players: {players.length}</div>
-              <div>Lobby: {search.lobbyId.slice(0, 8)}</div>
-              <div>Phase: {localState.sessionPhase}</div>
-              <div>Turn: {localState.turn}</div>
-            </div>
-
-            <div className="mt-3 space-y-2">
-              {inventoryStacks.length === 0 && (
-                <div className="rounded border border-zinc-800 bg-zinc-900/65 p-2 text-xs text-zinc-400">No stored items yet.</div>
-              )}
-              {inventoryStacks.map((stack) => {
-                const selected = selectedInventoryItemId !== null && stack.itemIds.includes(selectedInventoryItemId);
-                const rarityMeta = PERK_RARITY_META[stack.rarity];
-                return (
-                  <button
-                    key={`${stack.item.perkId}-${stack.itemIds[0]}`}
-                    type="button"
-                    onClick={() => setSelectedInventoryItemId(stack.itemIds[0] ?? null)}
-                    className={`inventory-card-tilt w-full rounded border px-3 py-2 text-left text-sm transition-colors ${selected ? rarityMeta.tailwind.inventorySelected : rarityMeta.tailwind.inventoryIdle}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <PerkIcon iconKey={stack.iconKey} className="h-4 w-4" />
-                        <span className="font-semibold text-zinc-100">{stack.displayName}</span>
-                        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}>
-                          {rarityMeta.label}
-                        </span>
-                      </div>
-                      <span className="rounded border border-zinc-600/70 bg-zinc-800/80 px-1.5 text-[11px] text-zinc-200">x{stack.count}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-300">{stack.item.kind === "perk" ? "Applies to self" : "Targets another player"}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-3 rounded border border-zinc-700/80 bg-zinc-900/55 p-2">
-              {selectedInventoryItem ? (
-                <>
-                  <div className="mb-2 flex items-center gap-2 text-sm text-zinc-100">
-                    <PerkIcon iconKey={selectedItemIconKey} className="h-4 w-4" />
-                    <span>{selectedPerkDefinition?.name ?? selectedInventoryItem.name}</span>
-                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selectedItemRarityMeta.tailwind.badge}`}>
-                      {selectedItemRarityMeta.label}
-                    </span>
-                  </div>
-
-                  {selectedInventoryItem.kind === "antiPerk" ? (
-                    <div className="space-y-2">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">Target Player</div>
-                      <div className="grid grid-cols-1 gap-1">
-                        {targetPlayers.map((target) => (
-                          <button
-                            key={target.id}
-                            type="button"
-                            onClick={() => setSelectedTargetId(target.id)}
-                            className={`rounded border px-2 py-1 text-left text-xs ${selectedTargetId === target.id ? "border-cyan-300/80 bg-cyan-500/20 text-cyan-100" : "border-zinc-700 bg-zinc-900/75 text-zinc-200 hover:border-zinc-500"}`}
-                          >
-                            {target.displayName}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-zinc-300">This perk will be applied to your current run.</div>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={pending || (selectedInventoryItem.kind === "antiPerk" && !selectedTargetId)}
-                    className="mt-3 w-full rounded border border-cyan-500/65 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-55"
-                    onClick={() => {
-                      void handleUseInventoryItem();
-                    }}
-                  >
-                    {selectedInventoryItem.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"}
-                  </button>
-                </>
-              ) : (
-                <div className="text-xs text-zinc-400">Select an item to use it.</div>
-              )}
-            </div>
-          </div>
+        <aside className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          } ${isNarrowViewport
+            ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[58vh]`
+            : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)]`}`}>
+          <PerkInventoryPanel
+            title="Lobby Inventory"
+            subtitle="Use perks on yourself, fire anti-perks at opponents, or discard stored items."
+            inventory={localPlayer?.inventory ?? []}
+            activeEffects={localPlayer?.activePerkEffects ?? []}
+            selectedItemId={selectedInventoryItemId}
+            onSelectItem={setSelectedInventoryItemId}
+            onUseSelectedItem={() => {
+              void handleUseInventoryItem();
+            }}
+            onDiscardSelectedItem={handleDiscardInventoryItem}
+            useActionLabel={selectedInventoryItem?.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"}
+            useDisabled={pending || (selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId)}
+            useDisabledReason={
+              selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId
+                ? "Pick a target player before sending this anti-perk."
+                : null
+            }
+            targets={targetPlayerOptions}
+            selectedTargetId={selectedTargetId}
+            onSelectTarget={setSelectedTargetId}
+            headerBadge={`Lobby ${search.lobbyId.slice(0, 8)} • ${applyPerkDirectly ? "Direct" : "Store"}`}
+          />
 
           <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
             <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">Player Standings</div>
@@ -1355,9 +1319,8 @@ function MultiplayerMatchRoute() {
         </aside>
       )}
       {isHost && isLobbyControlOpen && (
-        <aside className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${
-          controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-        } ${isNarrowViewport
+        <aside className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          } ${isNarrowViewport
             ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[40vh]`
             : `${inVideoView ? "bottom-40" : "bottom-20"} left-[412px] w-[380px] max-h-[calc(100vh-7rem)]`}`}
         >

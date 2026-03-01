@@ -1,4 +1,9 @@
 import type { InstalledRound, Resource } from "../../services/db";
+import {
+  AUTOFIX_BROKEN_FUNSCRIPTS_KEY,
+  normalizeAutofixBrokenFunscripts,
+} from "../../constants/funscriptSettings";
+import { trpc } from "../../services/trpc";
 
 export type PlaybackResource = Pick<Resource, "videoUri" | "funscriptUri">;
 
@@ -107,6 +112,16 @@ function toNumber(value: unknown): number | null {
 const funscriptTimelineCache = new Map<string, FunscriptTimeline>();
 const funscriptTimelineInFlight = new Map<string, Promise<FunscriptTimeline | null>>();
 
+async function shouldAutofixBrokenFunscripts(): Promise<boolean> {
+  try {
+    const stored = await trpc.store.get.query({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY });
+    return normalizeAutofixBrokenFunscripts(stored);
+  } catch (error) {
+    console.warn("Failed to read autofix broken funscripts setting", error);
+    return true;
+  }
+}
+
 export async function loadFunscriptTimeline(funscriptUri: string): Promise<FunscriptTimeline | null> {
   const cached = funscriptTimelineCache.get(funscriptUri);
   if (cached) return cached;
@@ -126,8 +141,10 @@ export async function loadFunscriptTimeline(funscriptUri: string): Promise<Funsc
         range?: unknown;
         inverted?: unknown;
       };
+      const autofixBrokenFunscripts = await shouldAutofixBrokenFunscripts();
       const range = toNumber(raw.range);
-      const normalizeRange = range !== null && range > 0 ? range : 100;
+      const effectiveRange = autofixBrokenFunscripts && range === 90 ? 100 : range;
+      const normalizeRange = effectiveRange !== null && effectiveRange > 0 ? effectiveRange : 100;
       const isInverted = raw.inverted === true;
       const actions = (raw.actions ?? [])
         .map((action) => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX, type MouseEvent, type WheelEvent } from "react";
 import type { EditorGraphConfig, EditorNode, EditorSelectionState, MapEditorTool, ViewportState } from "./EditorState";
 import { getNodesIntersectingScreenRect, mergeNodeSelection, replaceNodeSelection, toggleNodeSelection } from "./editorInteractions";
+import { getNodeDisplayColor, getNodeRenderHeight, getNodeRenderWidth } from "./nodeVisuals";
 
 type Interaction =
   | {
@@ -51,22 +52,9 @@ type EditorCanvasProps = {
   onEndNodeDrag?: () => void;
 };
 
-const NODE_MIN_WIDTH = 160;
-const NODE_MIN_HEIGHT = 58;
 const WORLD_ZOOM_MIN = 0.35;
 const WORLD_ZOOM_MAX = 2;
 const EDGE_COLOR = "#94a3b8";
-
-const KIND_COLORS: Record<EditorNode["kind"], string> = {
-  start: "#a78bfa",
-  end: "#f97316",
-  path: "#6b7280",
-  safePoint: "#22c55e",
-  round: "#38bdf8",
-  randomRound: "#f59e0b",
-  perk: "#ec4899",
-  event: "#8b5cf6",
-};
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -277,10 +265,6 @@ export function EditorCanvas({
             startY: current.anchorY,
             endX: current.currentX,
             endY: current.currentY,
-          },
-          {
-            nodeMinWidth: NODE_MIN_WIDTH,
-            nodeMinHeight: NODE_MIN_HEIGHT,
           },
         );
 
@@ -502,10 +486,10 @@ export function EditorCanvas({
             return null;
           }
 
-          const sourceWidth = Math.max(NODE_MIN_WIDTH, isFiniteNumber(source.styleHint.width) ? source.styleHint.width : 180);
-          const sourceHeight = Math.max(NODE_MIN_HEIGHT, isFiniteNumber(source.styleHint.height) ? source.styleHint.height : 78);
-          const targetWidth = Math.max(NODE_MIN_WIDTH, isFiniteNumber(target.styleHint.width) ? target.styleHint.width : 180);
-          const targetHeight = Math.max(NODE_MIN_HEIGHT, isFiniteNumber(target.styleHint.height) ? target.styleHint.height : 78);
+          const sourceWidth = getNodeRenderWidth(source);
+          const sourceHeight = getNodeRenderHeight(source);
+          const targetWidth = getNodeRenderWidth(target);
+          const targetHeight = getNodeRenderHeight(target);
           const sourcePos = toScreenSpace({ x: source.styleHint.x, y: source.styleHint.y }, viewport);
           const targetPos = toScreenSpace({ x: target.styleHint.x, y: target.styleHint.y }, viewport);
           const edgePoints = getTrimmedEdgePoints(
@@ -570,9 +554,9 @@ export function EditorCanvas({
 
         {config.nodes.map((node) => {
           if (!node.styleHint || !isFiniteNumber(node.styleHint.x) || !isFiniteNumber(node.styleHint.y)) return null;
-          const width = Math.max(NODE_MIN_WIDTH, isFiniteNumber(node.styleHint.width) ? node.styleHint.width : 180);
-          const height = Math.max(NODE_MIN_HEIGHT, isFiniteNumber(node.styleHint.height) ? node.styleHint.height : 78);
-          const color = KIND_COLORS[node.kind] ?? KIND_COLORS.path;
+          const width = getNodeRenderWidth(node);
+          const height = getNodeRenderHeight(node);
+          const color = getNodeDisplayColor(node);
           const isSelected = selection.selectedNodeIds.includes(node.id);
           const isPrimary = selection.primaryNodeId === node.id;
           const position = toScreenSpace({ x: node.styleHint.x, y: node.styleHint.y }, viewport);
@@ -654,8 +638,8 @@ export function EditorCanvas({
           if (!startNode?.styleHint || !isFiniteNumber(startNode.styleHint.x) || !isFiniteNumber(startNode.styleHint.y)) {
             return null;
           }
-          const startWidth = Math.max(NODE_MIN_WIDTH, isFiniteNumber(startNode.styleHint.width) ? startNode.styleHint.width : 180);
-          const startHeight = Math.max(NODE_MIN_HEIGHT, isFiniteNumber(startNode.styleHint.height) ? startNode.styleHint.height : 78);
+          const startWidth = getNodeRenderWidth(startNode);
+          const startHeight = getNodeRenderHeight(startNode);
           const startPos = toScreenSpace({ x: startNode.styleHint.x, y: startNode.styleHint.y }, viewport);
           const startRect = {
             x: startPos.x,

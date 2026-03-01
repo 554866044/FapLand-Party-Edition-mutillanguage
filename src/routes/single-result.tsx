@@ -1,10 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useControllerSurface } from "../controller";
+import { formatDurationLabel } from "../utils/duration";
 
 const SingleResultSearchSchema = z.object({
   score: z.coerce.number().int().min(0).default(0),
   highscore: z.coerce.number().int().min(0).default(0),
+  survivedDurationSec: z.coerce.number().int().min(0).default(0),
   reason: z.enum(["finished", "self_reported_cum", "cum_instruction_failed"]).default("finished"),
 });
 
@@ -25,11 +28,13 @@ export const Route = createFileRoute("/single-result")({
   component: SingleResultRoute,
 });
 
-function SingleResultRoute() {
+export function SingleResultRoute() {
   const navigate = useNavigate();
   const search = SingleResultSearchSchema.parse(Route.useSearch());
+  const scopeRef = useRef<HTMLDivElement | null>(null);
   const isNewBest = search.score > 0 && search.score >= search.highscore;
   const isCum = search.reason === "self_reported_cum";
+  const survivedLabel = formatDurationLabel(search.survivedDurationSec);
 
   // State for animated score counting
   const [displayScore, setDisplayScore] = useState(0);
@@ -53,8 +58,19 @@ function SingleResultRoute() {
     window.requestAnimationFrame(step);
   }, [search.score]);
 
+  useControllerSurface({
+    id: "single-result-route",
+    scopeRef,
+    priority: 10,
+    initialFocusId: "single-result-play-again",
+    onBack: () => {
+      void navigate({ to: "/" });
+      return true;
+    },
+  });
+
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#030509] text-zinc-100 font-sans select-none">
+    <div ref={scopeRef} className="relative min-h-screen w-full overflow-hidden bg-[#030509] text-zinc-100 font-sans select-none">
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0">
         {/* Orgasmic / Climax pulsating rings */}
@@ -91,7 +107,7 @@ function SingleResultRoute() {
         </div>
 
         {/* Score Grid */}
-        <div className="mt-16 grid gap-6 sm:grid-cols-2 animate-entrance" style={{ animationDelay: '400ms' }}>
+        <div className="mt-16 grid gap-6 sm:grid-cols-3 animate-entrance" style={{ animationDelay: '400ms' }}>
           {/* Final Score */}
           <article className="relative overflow-hidden rounded-3xl border border-cyan-400/30 bg-black/40 p-8 backdrop-blur-2xl transition-all hover:bg-black/60 hover:border-cyan-400/60 hover:shadow-[0_0_40px_rgba(34,211,238,0.15)] group">
             <div className="absolute -inset-x-full -inset-y-full animate-[border-spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,transparent_0%,rgba(34,211,238,0.1)_50%,transparent_100%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
@@ -119,6 +135,19 @@ function SingleResultRoute() {
               </div>
             </div>
           </article>
+
+          <article className="relative overflow-hidden rounded-3xl border border-amber-400/30 bg-black/40 p-8 backdrop-blur-2xl transition-all hover:bg-black/60 hover:border-amber-400/60 hover:shadow-[0_0_40px_rgba(251,191,36,0.15)] group">
+            <div className="absolute -inset-x-full -inset-y-full animate-[border-spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,transparent_0%,rgba(251,191,36,0.1)_50%,transparent_100%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+            <div className="relative z-10">
+              <p className="font-mono text-xs uppercase tracking-[0.3em] text-amber-300/70">Survived</p>
+              <div className="mt-4 flex items-baseline gap-2">
+                <p className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-100 to-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]">
+                  {survivedLabel}
+                </p>
+                <span className="text-amber-500/50 font-mono text-xl">TIME</span>
+              </div>
+            </div>
+          </article>
         </div>
 
         {/* Highscore Notification */}
@@ -131,9 +160,17 @@ function SingleResultRoute() {
           <button
             type="button"
             onClick={() => {
-              void navigate({ to: "/game", replace: true });
+              void navigate({
+                to: "/game",
+                search: {
+                  launchNonce: Date.now(),
+                },
+                replace: true,
+              });
             }}
             className="group relative w-full sm:w-auto overflow-hidden rounded-full bg-cyan-500 px-10 py-4 font-bold uppercase tracking-widest text-black transition-all hover:scale-105 hover:bg-cyan-400 hover:shadow-[0_0_40px_rgba(34,211,238,0.6)] focus:outline-none focus:ring-4 focus:ring-cyan-500/50"
+            data-controller-focus-id="single-result-play-again"
+            data-controller-initial="true"
           >
             <div className="absolute inset-0 flex h-full w-full justify-center [transform:skew(-12deg)_translateX(-150%)] group-hover:duration-1000 group-hover:[transform:skew(-12deg)_translateX(150%)]">
               <div className="relative h-full w-8 bg-white/30" />
@@ -147,6 +184,8 @@ function SingleResultRoute() {
               void navigate({ to: "/", replace: true });
             }}
             className="w-full sm:w-auto rounded-full border border-zinc-700 bg-zinc-900/80 px-10 py-4 font-bold uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white focus:outline-none focus:ring-4 focus:ring-zinc-700/50"
+            data-controller-focus-id="single-result-main-menu"
+            data-controller-back="true"
           >
             Go to Main Menu
           </button>
@@ -157,6 +196,7 @@ function SingleResultRoute() {
               void navigate({ to: "/highscores" });
             }}
             className="w-full sm:w-auto rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-10 py-4 font-bold uppercase tracking-widest text-fuchsia-300 transition-all hover:bg-fuchsia-500/20 hover:border-fuchsia-500/60 hover:shadow-[0_0_20px_rgba(236,72,153,0.3)] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/50"
+            data-controller-focus-id="single-result-highscores"
           >
             Leaderboard
           </button>

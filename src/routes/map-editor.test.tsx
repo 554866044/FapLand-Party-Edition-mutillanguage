@@ -44,7 +44,7 @@ function makePlaylist(id: string, name: string) {
         scorePerCompletedRound: 100,
         scorePerIntermediary: 30,
         scorePerActiveAntiPerk: 25,
-        scorePerCumRoundSuccess: 120,
+        scorePerCumRoundSuccess: 420,
       },
     },
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -70,8 +70,12 @@ const mocks = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
     analyzeImportFile: vi.fn(),
+    analyzeExportPackage: vi.fn(),
     importFromFile: vi.fn(),
     exportToFile: vi.fn(),
+    exportPackage: vi.fn(),
+    getExportPackageStatus: vi.fn(),
+    abortExportPackage: vi.fn(),
     setActive: vi.fn(),
   },
   canvasProps: null as null | Record<string, unknown>,
@@ -210,13 +214,16 @@ beforeEach(() => {
       selectInstallImportFile: vi.fn(),
       selectPlaylistImportFile: vi.fn(),
       selectPlaylistExportPath: vi.fn(),
+      selectPlaylistExportDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
+      selectMusicFiles: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
     },
     window: {
       isFullscreen: vi.fn(),
       setFullscreen: vi.fn(),
       toggleFullscreen: vi.fn(),
+      close: vi.fn(),
     },
     updates: {
       subscribe: vi.fn(() => () => {}),
@@ -290,14 +297,106 @@ beforeEach(() => {
       appliedMapping: {},
     },
   }));
+  mocks.playlists.analyzeExportPackage.mockResolvedValue({
+    videoTotals: {
+      uniqueVideos: 1,
+      localVideos: 1,
+      remoteVideos: 0,
+      alreadyAv1Videos: 0,
+      estimatedReencodeVideos: 1,
+    },
+    compression: {
+      supported: true,
+      defaultMode: "av1",
+      encoderName: "av1_nvenc",
+      encoderKind: "hardware",
+      warning: null,
+      strength: 80,
+      estimate: {
+        sourceVideoBytes: 200 * 1024 * 1024,
+        expectedVideoBytes: 90 * 1024 * 1024,
+        savingsBytes: 110 * 1024 * 1024,
+        estimatedCompressionSeconds: 600,
+        approximate: false,
+      },
+    },
+    settings: {
+      outputContainer: "mp4",
+      audioCodec: "aac",
+      audioBitrateKbps: 128,
+      lowPriority: true,
+      parallelJobs: 2,
+    },
+    estimate: {
+      sourceVideoBytes: 200 * 1024 * 1024,
+      expectedVideoBytes: 90 * 1024 * 1024,
+      savingsBytes: 110 * 1024 * 1024,
+      estimatedCompressionSeconds: 600,
+      approximate: false,
+    },
+  });
   mocks.playlists.update.mockImplementation(async ({ playlistId, config }: { playlistId: string; config: unknown }) => ({
     ...makePlaylist(playlistId, "Test Playlist"),
     config,
   }));
   mocks.playlists.exportToFile.mockResolvedValue(undefined);
+  mocks.playlists.exportPackage.mockResolvedValue({
+    exportDir: "/tmp/test-playlist",
+    playlistFilePath: "/tmp/test-playlist/Test Playlist.fplay",
+    sidecarFiles: 1,
+    videoFiles: 1,
+    funscriptFiles: 0,
+    referencedRounds: 1,
+    compression: {
+      enabled: true,
+      encoderName: "av1_nvenc",
+      encoderKind: "hardware",
+      strength: 80,
+      reencodedVideos: 1,
+      alreadyAv1Copied: 0,
+      actualVideoBytes: 90 * 1024 * 1024,
+    },
+  });
+  mocks.playlists.getExportPackageStatus.mockResolvedValue({
+    state: "idle",
+    phase: "idle",
+    startedAt: null,
+    finishedAt: null,
+    lastMessage: null,
+    progress: {
+      completed: 0,
+      total: 0,
+    },
+    stats: {
+      playlistFiles: 0,
+      sidecarFiles: 0,
+      videoFiles: 0,
+      funscriptFiles: 0,
+    },
+    compression: null,
+  });
+  mocks.playlists.abortExportPackage.mockResolvedValue({
+    state: "aborted",
+    phase: "aborted",
+    startedAt: "2026-03-18T00:00:00.000Z",
+    finishedAt: "2026-03-18T00:00:01.000Z",
+    lastMessage: "Export aborted by user.",
+    progress: {
+      completed: 1,
+      total: 4,
+    },
+    stats: {
+      playlistFiles: 0,
+      sidecarFiles: 0,
+      videoFiles: 1,
+      funscriptFiles: 0,
+    },
+    compression: null,
+  });
   mocks.playlists.setActive.mockResolvedValue(undefined);
   vi.mocked(window.electronAPI.dialog.selectPlaylistImportFile).mockResolvedValue(null);
   vi.mocked(window.electronAPI.dialog.selectPlaylistExportPath).mockResolvedValue(null);
+  vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -371,6 +470,27 @@ describe("MapEditorRoute", () => {
     });
   });
 
+  it("deletes a selected edge from the edge inspector", async () => {
+    render(<MapEditorRoute />);
+    await enterEditor();
+
+    await act(async () => {
+      (mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null)?.onSelectionChange?.({
+        selectedNodeIds: [],
+        primaryNodeId: null,
+        selectedEdgeId: "edge-start-path-1",
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Edge" }));
+
+    await waitFor(() => {
+      const props = mocks.canvasProps as { config: { edges: Array<{ id: string }> } } | null;
+      expect(props?.config.edges.map((edge) => edge.id)).not.toContain("edge-start-path-1");
+    });
+  });
+
   it("shows layout controls and applies the selected layout strategy", async () => {
     render(<MapEditorRoute />);
     await enterEditor();
@@ -435,7 +555,13 @@ describe("MapEditorRoute", () => {
     await waitFor(() => {
       expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
       expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-1");
-      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/game" });
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: "/game",
+        search: {
+          playlistId: "playlist-1",
+          launchNonce: expect.any(Number),
+        },
+      });
     });
   });
 
@@ -466,11 +592,116 @@ describe("MapEditorRoute", () => {
       expect(screen.getByText(/unsaved/i)).toBeDefined();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export Fplay" }));
 
     await waitFor(() => {
       expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
       expect(mocks.playlists.exportToFile).toHaveBeenCalledWith("playlist-1", "/tmp/test-playlist.fplay");
+    });
+  });
+
+  it("exports the current graph playlist package after persisting dirty changes", async () => {
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue("/tmp");
+
+    render(<MapEditorRoute />);
+    await enterEditor();
+
+    fireEvent.change(screen.getByLabelText("Layout strategy"), { target: { value: "layeredVertical" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Layout" }));
+    await waitFor(() => {
+      expect(screen.getByText(/unsaved/i)).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Pack" }));
+    expect(await screen.findByText("Playlist Pack Export")).toBeDefined();
+    expect(mocks.playlists.analyzeExportPackage).toHaveBeenCalledWith({
+      playlistId: "playlist-1",
+      compressionMode: undefined,
+      compressionStrength: 80,
+    });
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Choose Folder and Export" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Folder and Export" }));
+
+    await waitFor(() => {
+      expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
+      expect(mocks.playlists.exportPackage).toHaveBeenCalledWith({
+        playlistId: "playlist-1",
+        directoryPath: "/tmp",
+        compressionMode: "av1",
+        compressionStrength: 80,
+      });
+    });
+  });
+
+  it("shows a blocking export overlay with progress and allows aborting the export", async () => {
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue("/tmp");
+    mocks.playlists.exportPackage.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    mocks.playlists.getExportPackageStatus.mockResolvedValue({
+      state: "running",
+      phase: "compressing",
+      startedAt: "2026-03-18T00:00:00.000Z",
+      finishedAt: null,
+      lastMessage: "Downloading video pack-asset.mp4...",
+      progress: {
+        completed: 2,
+        total: 5,
+      },
+      stats: {
+        playlistFiles: 0,
+        sidecarFiles: 0,
+        videoFiles: 1,
+        funscriptFiles: 0,
+      },
+      compression: {
+        enabled: true,
+        encoderName: "av1_nvenc",
+        encoderKind: "hardware",
+        strength: 80,
+        reencodedCompleted: 1,
+        reencodedTotal: 3,
+        alreadyAv1Copied: 0,
+        activeJobs: 2,
+        expectedVideoBytes: 90 * 1024 * 1024,
+        estimatedCompressionSeconds: 600,
+        approximate: false,
+        liveProgress: {
+          completedDurationMs: 30_000,
+          totalDurationMs: 120_000,
+          percent: 0.25,
+          etaSecondsRemaining: 450,
+        },
+      },
+    });
+
+    render(<MapEditorRoute />);
+    await enterEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Pack" }));
+    expect(await screen.findByText("Playlist Pack Export")).toBeDefined();
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Choose Folder and Export" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Choose Folder and Export" }));
+
+    expect(await screen.findByText("Playlist Export Running")).toBeDefined();
+    expect(screen.getByText("2 / 5 steps completed")).toBeDefined();
+    expect(screen.getByText("Downloading video pack-asset.mp4...")).toBeDefined();
+    expect(screen.getAllByText(/av1_nvenc/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("1 / 3")).toBeDefined();
+    expect(screen.getByText("0:30 / 2:00 encoded")).toBeDefined();
+    expect(screen.getByText("7 min remaining")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abort Export" }));
+
+    await waitFor(() => {
+      expect(mocks.playlists.abortExportPackage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -512,6 +743,26 @@ describe("MapEditorRoute", () => {
   });
 
   it("shows and persists force stop for round nodes only", async () => {
+    mocks.loaderData = {
+      ...mocks.loaderData,
+      installedRounds: [
+        {
+          id: "installed-round-1",
+          name: "Round 1",
+          author: "Preview Author",
+          description: null,
+          type: "Normal",
+          difficulty: 2,
+          startTime: 1000,
+          endTime: 6000,
+          installSourceKey: "local:test",
+          phash: null,
+          previewImage: "data:image/png;base64,preview",
+          resources: [{ videoUri: "file:///tmp/round-1.mp4", funscriptUri: null, phash: null }],
+        },
+      ],
+    };
+
     render(<MapEditorRoute />);
     await enterEditor();
 
@@ -524,8 +775,11 @@ describe("MapEditorRoute", () => {
       });
     });
 
-    const forceStopCheckbox = await screen.findByRole("checkbox");
+    const [forceStopCheckbox] = await screen.findAllByRole("checkbox");
     expect(screen.getByText("Force stop")).toBeDefined();
+    expect(screen.getByText("Round preview")).toBeDefined();
+    expect(screen.getByText("Preview Author")).toBeDefined();
+    expect(screen.getByAltText("Round 1 preview")).toBeDefined();
     fireEvent.click(forceStopCheckbox);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -552,6 +806,51 @@ describe("MapEditorRoute", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Force stop")).toBeNull();
+    });
+  });
+
+  it("updates and resets node color and size from the inspector", async () => {
+    render(<MapEditorRoute />);
+    await enterEditor();
+
+    await act(async () => {
+      (mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null)?.onSelectionChange?.({
+        selectedNodeIds: ["start"],
+        primaryNodeId: "start",
+        selectedEdgeId: null,
+      });
+    });
+
+    const colorInput = await screen.findByLabelText("Node color");
+    const sizeInput = await screen.findByLabelText("Node size");
+    const resetColorButton = screen.getByRole("button", { name: "Reset node color" });
+    const resetSizeButton = screen.getByRole("button", { name: "Reset node size" });
+
+    fireEvent.change(colorInput, { target: { value: "#10b981" } });
+    await waitFor(() => {
+      const startNode = (mocks.canvasProps as {
+        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+      } | null)?.config?.nodes.find((node) => node.id === "start");
+      expect(startNode?.styleHint?.color).toBe("#10b981");
+    });
+
+    fireEvent.change(sizeInput, { target: { value: "1.8" } });
+    await waitFor(() => {
+      const startNode = (mocks.canvasProps as {
+        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+      } | null)?.config?.nodes.find((node) => node.id === "start");
+      expect(startNode?.styleHint?.size).toBe(1.8);
+    });
+
+    fireEvent.click(resetColorButton);
+    fireEvent.click(resetSizeButton);
+
+    await waitFor(() => {
+      const startNode = (mocks.canvasProps as {
+        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+      } | null)?.config?.nodes.find((node) => node.id === "start");
+      expect(startNode?.styleHint?.color).toBeUndefined();
+      expect(startNode?.styleHint?.size).toBeUndefined();
     });
   });
 

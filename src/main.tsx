@@ -5,6 +5,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import "./styles.css";
 import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
+import { handleMultiplayerAuthCallback } from "./services/multiplayer";
 import { importOpenedFile } from "./services/openedFiles";
 
 const router = getRouter();
@@ -49,6 +50,29 @@ function registerOpenedFileHandler() {
 }
 
 registerOpenedFileHandler();
+
+function registerMultiplayerAuthCallbackHandler() {
+    if (typeof window === "undefined" || !window.electronAPI?.auth) {
+        return;
+    }
+
+    const handleUrl = (url: string | null) => {
+        if (!url) return;
+        void handleMultiplayerAuthCallback(url).catch((error) => {
+            console.error("Failed to process multiplayer auth callback", error);
+        });
+    };
+
+    void window.electronAPI.auth.consumePendingCallback().then(handleUrl).catch((error) => {
+        console.error("Failed to consume pending multiplayer auth callback", error);
+    });
+
+    window.electronAPI.auth.subscribe((url) => {
+        handleUrl(url);
+    });
+}
+
+registerMultiplayerAuthCallbackHandler();
 
 createRoot(rootElement).render(
     <StrictMode>

@@ -48,3 +48,4 @@ dev.db
 /.agent/tmp/
 /snapshot.tar
 /snapshot/
+VideoInfo.json

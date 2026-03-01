@@ -1,0 +1,320 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  globalMusic: {
+    enabled: true,
+    queue: [
+      { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
+      { id: "track-2", filePath: "/music/two.mp3", name: "two.mp3" },
+    ],
+    currentIndex: 0,
+    currentTrack: { id: "track-1", filePath: "/music/one.mp3", name: "one.mp3" },
+    isPlaying: false,
+    isSuppressedByVideo: false,
+    volume: 0.45,
+    shuffle: false,
+    loopMode: "queue" as const,
+    setEnabled: vi.fn(async () => { }),
+    addTracks: vi.fn(async () => { }),
+    removeTrack: vi.fn(async () => { }),
+    moveTrack: vi.fn(async () => { }),
+    clearQueue: vi.fn(async () => { }),
+    play: vi.fn(async () => { }),
+    pause: vi.fn(),
+    next: vi.fn(async () => { }),
+    previous: vi.fn(async () => { }),
+    setCurrentTrack: vi.fn(async () => { }),
+    setVolume: vi.fn(async () => { }),
+    setShuffle: vi.fn(async () => { }),
+    setLoopMode: vi.fn(async () => { }),
+  },
+  handy: {
+    connectionKey: "",
+    appApiKey: "default-app-key",
+    appApiKeyOverride: "",
+    isUsingDefaultAppApiKey: true,
+    localIp: "",
+    connected: false,
+    manuallyStopped: false,
+    synced: false,
+    syncError: null,
+    isConnecting: false,
+    error: null,
+    connect: vi.fn(async () => { }),
+    disconnect: vi.fn(async () => { }),
+    forceStop: vi.fn(async () => { }),
+    toggleManualStop: vi.fn(async () => "unavailable" as const),
+    setSyncStatus: vi.fn(),
+  },
+  appUpdate: {
+    state: {
+      status: "up_to_date" as const,
+      currentVersion: "0.1.2",
+      latestVersion: "0.1.2",
+      checkedAtIso: "2026-03-20T00:00:00.000Z",
+      releasePageUrl: "https://example.com/release",
+      downloadUrl: null,
+      releaseNotes: null,
+      publishedAtIso: null,
+      canAutoUpdate: false,
+      errorMessage: null,
+    },
+    isBusy: false,
+    actionLabel: "Check Again",
+    menuBadge: undefined,
+    menuTone: "success" as const,
+    systemMessage: "Installed build is current.",
+    triggerPrimaryAction: vi.fn(async () => { }),
+  },
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  createFileRoute: () => () => ({
+    useSearch: () => ({ section: undefined }),
+  }),
+  useNavigate: () => mocks.navigate,
+}));
+
+vi.mock("../components/AnimatedBackground", () => ({
+  AnimatedBackground: () => null,
+}));
+
+vi.mock("../components/MenuButton", () => ({
+  MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
+    <button type="button" onClick={onClick}>{label}</button>
+  ),
+}));
+
+vi.mock("../utils/audio", () => ({
+  playHoverSound: vi.fn(),
+  playSelectSound: vi.fn(),
+}));
+
+vi.mock("../services/booru", () => ({
+  ensureBooruMediaCache: vi.fn(),
+}));
+
+vi.mock("../services/db", () => ({
+  db: {
+    install: {
+      getAutoScanFolders: vi.fn(async () => []),
+      clearAllData: vi.fn(async () => { }),
+      addAutoScanFolderAndScan: vi.fn(),
+      removeAutoScanFolder: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("../services/integrations", () => ({
+  integrations: {
+    listSources: vi.fn(async () => []),
+    getSyncStatus: vi.fn(async () => null),
+    syncNow: vi.fn(),
+    createStashSource: vi.fn(),
+    updateStashSource: vi.fn(),
+    deleteSource: vi.fn(),
+    testStashConnection: vi.fn(),
+    searchStashTags: vi.fn(),
+    setSourceEnabled: vi.fn(),
+  },
+}));
+
+vi.mock("../services/trpc", () => ({
+  trpc: {
+    store: {
+      get: {
+        query: vi.fn(async ({ key }: { key: string }) => {
+          if (key === "game.intermediary.loadingPrompt") return "animated gif webm score:>300";
+          if (key === "game.intermediary.loadingDurationSec") return 5;
+          if (key === "game.intermediary.returnPauseSec") return 4;
+          if (key === "videoHash.ffmpegSourcePreference") return "auto";
+          if (key === "background.video.enabled") return true;
+          if (key === "experimental.controllerSupportEnabled") return false;
+          if (key === "round.video.progressBarAlwaysVisible") return false;
+          return null;
+        }),
+      },
+      set: {
+        mutate: vi.fn(async () => { }),
+      },
+    },
+  },
+}));
+
+vi.mock("../hooks/useGlobalMusic", () => ({
+  useGlobalMusic: () => mocks.globalMusic,
+}));
+
+vi.mock("../contexts/HandyContext", () => ({
+  useHandy: () => mocks.handy,
+}));
+
+vi.mock("../hooks/useAppUpdate", () => ({
+  useAppUpdate: () => mocks.appUpdate,
+}));
+
+import { trpc } from "../services/trpc";
+import { getVisibleShortcutGroups, SettingsPage } from "./settings";
+
+describe("Settings music section", () => {
+  beforeEach(() => {
+    mocks.globalMusic.addTracks.mockClear();
+    mocks.globalMusic.moveTrack.mockClear();
+    mocks.globalMusic.removeTrack.mockClear();
+    mocks.globalMusic.setVolume.mockClear();
+    mocks.handy.connect.mockClear();
+    mocks.handy.disconnect.mockClear();
+    mocks.handy.forceStop.mockClear();
+    mocks.appUpdate.triggerPrimaryAction.mockClear();
+
+    window.electronAPI = {
+      file: {
+        convertFileSrc: vi.fn(),
+      },
+      dialog: {
+        selectFolders: vi.fn(),
+        selectInstallImportFile: vi.fn(),
+        selectPlaylistImportFile: vi.fn(),
+        selectPlaylistExportPath: vi.fn(),
+        selectPlaylistExportDirectory: vi.fn(),
+        selectConverterVideoFile: vi.fn(),
+        selectMusicFiles: vi.fn(async () => ["/music/three.mp3", "/music/four.mp3"]),
+        selectConverterFunscriptFile: vi.fn(),
+      },
+      window: {
+        isFullscreen: vi.fn(async () => false),
+        setFullscreen: vi.fn(async () => false),
+        toggleFullscreen: vi.fn(),
+        close: vi.fn(),
+      },
+      updates: {
+        subscribe: vi.fn(() => () => { }),
+      },
+      appOpen: {
+        consumePendingFiles: vi.fn(async () => []),
+        subscribe: vi.fn(() => () => { }),
+      },
+    };
+  });
+
+  it("adds tracks through the music picker and forwards queue actions", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Music/ })[0]!);
+    fireEvent.click(screen.getByText("Add Tracks"));
+
+    await waitFor(() => {
+      expect(window.electronAPI.dialog.selectMusicFiles).toHaveBeenCalled();
+      expect(mocks.globalMusic.addTracks).toHaveBeenCalledWith(["/music/three.mp3", "/music/four.mp3"]);
+    });
+
+    fireEvent.click(screen.getAllByText("Down")[0]!);
+    await waitFor(() => {
+      expect(mocks.globalMusic.moveTrack).toHaveBeenCalledWith("track-1", "down");
+    });
+
+    fireEvent.click(screen.getAllByText("Remove")[0]!);
+    await waitFor(() => {
+      expect(mocks.globalMusic.removeTrack).toHaveBeenCalledWith("track-1");
+    });
+  });
+
+  it("persists experimental controller support when toggled", async () => {
+    const setMutate = vi.mocked(trpc.store.set.mutate);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+
+    const toggle = await screen.findByRole("switch", { name: "Toggle Controller Support" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(setMutate).toHaveBeenCalledWith({
+        key: "experimental.controllerSupportEnabled",
+        value: true,
+      });
+    });
+  });
+
+  it("only persists settings volume when slider interaction completes", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Music/ })[0]!);
+
+    const volume = screen.getByLabelText("Music volume");
+    fireEvent.change(volume, { target: { value: "72" } });
+
+    expect(mocks.globalMusic.setVolume).not.toHaveBeenCalled();
+
+    fireEvent.mouseUp(volume);
+
+    await waitFor(() => {
+      expect(mocks.globalMusic.setVolume).toHaveBeenCalledWith(0.72);
+    });
+  });
+
+  it("renders hardware connection controls inline in settings", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Hardware & Sync/ })[0]!);
+    fireEvent.change(screen.getByLabelText("Connection Key / Channel Ref"), {
+      target: { value: "conn-key-123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => {
+      expect(mocks.handy.connect).toHaveBeenCalledWith("conn-key-123", "", "");
+    });
+  });
+
+  it("can relaunch the first start workflow from settings", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /General/ })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Open First Start Workflow" }));
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: "/first-start",
+        search: { returnTo: "settings" },
+      });
+    });
+  });
+
+  it("keeps update actions available in the app settings section", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Data & Storage/ })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Check Again" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Updates")).toBeDefined();
+      expect(mocks.appUpdate.triggerPrimaryAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("renders a help section with documented keyboard shortcut groups", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Help/ })[0]!);
+
+    expect(await screen.findByText("Keyboard Shortcuts")).toBeDefined();
+    expect(screen.getByText("Global")).toBeDefined();
+    expect(screen.getByText("Keyboard Controller Navigation")).toBeDefined();
+    expect(screen.getByText("Game Session")).toBeDefined();
+    expect(screen.getByText("Converter")).toBeDefined();
+    expect(screen.getByText("Map Editor")).toBeDefined();
+    expect(screen.getByText("Ctrl/Cmd+M")).toBeDefined();
+    expect(screen.getByText("Ctrl/Cmd+S")).toBeDefined();
+  });
+
+  it("hides debug shortcuts in production builds", () => {
+    expect(getVisibleShortcutGroups(true).some((group) => group.id === "game-debug")).toBe(false);
+    expect(getVisibleShortcutGroups(false).some((group) => group.id === "game-debug")).toBe(true);
+  });
+});

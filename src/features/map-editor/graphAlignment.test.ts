@@ -27,7 +27,7 @@ const makeGraph = (): EditorGraphConfig => ({
     maxIntermediaryProbability: 0.85,
     maxAntiPerkProbability: 0.75,
   },
-  economy: { scorePerCumRoundSuccess: 120 },
+  economy: { scorePerCumRoundSuccess: 420 },
 });
 
 describe("realignGraph", () => {

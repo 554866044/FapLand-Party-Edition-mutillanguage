@@ -7,6 +7,7 @@ type CachedResourceRow = {
   id: string;
   videoUri: string;
   phash: string | null;
+  durationMs: number | null;
   disabled: boolean;
 };
 
@@ -32,6 +33,7 @@ const {
   toStashInstallSourceKeyMock,
   syncSourceMock,
   normalizeBaseUrlMock,
+  fetchStashMediaWithAuthMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   listExternalSourcesMock: vi.fn(),
@@ -43,6 +45,7 @@ const {
   toStashInstallSourceKeyMock: vi.fn(),
   syncSourceMock: vi.fn(),
   normalizeBaseUrlMock: vi.fn(),
+  fetchStashMediaWithAuthMock: vi.fn(),
 }));
 
 vi.mock("../db", () => ({
@@ -63,7 +66,7 @@ vi.mock("./providers/stashProvider", () => ({
 }));
 
 vi.mock("./stashClient", () => ({
-  fetchStashMediaWithAuth: vi.fn(),
+  fetchStashMediaWithAuth: fetchStashMediaWithAuthMock,
   searchStashTags: vi.fn(),
   testStashConnection: vi.fn(async () => ({ ok: true })),
   toNormalizedPhash: vi.fn((value: string | null | undefined) => {
@@ -136,6 +139,7 @@ function createDbMock(initialRounds: CachedRoundRow[]) {
                 id: res.id,
                 videoUri: res.videoUri,
                 phash: res.phash,
+                durationMs: res.durationMs,
                 disabled: res.disabled,
               })),
             }));
@@ -160,12 +164,14 @@ function createDbMock(initialRounds: CachedRoundRow[]) {
               videoUri: string;
               funscriptUri: string | null;
               phash: string | null;
+              durationMs: number | null;
               disabled: boolean;
             };
             const created = {
               id: `res-${nextResourceId++}`,
               videoUri: payload.videoUri,
               phash: payload.phash,
+              durationMs: payload.durationMs,
               disabled: payload.disabled,
             };
             const targetRound = rounds.find((entry) => entry.id === payload.roundId);
@@ -276,6 +282,7 @@ describe("integration phash linking", () => {
     toStashInstallSourceKeyMock.mockImplementation(
       (baseUrl: string, sceneId: string) => `stash:${baseUrl.replace(/\/+$/, "")}:scene:${sceneId}`,
     );
+    fetchStashMediaWithAuthMock.mockResolvedValue(new Response("{\"actions\":[{\"at\":0,\"pos\":50}]}", { status: 200 }));
   });
 
   afterEach(() => {
@@ -292,7 +299,7 @@ describe("integration phash linking", () => {
         phash: "0",
         previewImage: "preview",
         installSourceKey: null,
-        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, disabled: false }],
+        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, durationMs: null, disabled: false }],
       },
     ]));
 
@@ -306,8 +313,10 @@ describe("integration phash linking", () => {
         author: "Author",
         description: null,
         phash: "3ff",
+        previewImageUri: null,
         videoUri: "https://stash.example/new.mp4",
         funscriptUri: null,
+        durationMs: null,
       });
     });
 
@@ -331,7 +340,7 @@ describe("integration phash linking", () => {
         phash: "sha256:abc@0-1000",
         previewImage: "preview",
         installSourceKey: null,
-        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, disabled: false }],
+        resources: [{ id: "res-1", videoUri: "https://stash.example/old.mp4", phash: null, durationMs: null, disabled: false }],
       },
     ]));
 
@@ -345,8 +354,10 @@ describe("integration phash linking", () => {
         author: "Author",
         description: null,
         phash: "sha256:abd@0-1000",
+        previewImageUri: null,
         videoUri: "https://stash.example/new.mp4",
         funscriptUri: null,
+        durationMs: null,
       });
     });
 
@@ -357,5 +368,75 @@ describe("integration phash linking", () => {
     expect(result.stats.failed).toBe(0);
     expect(result.stats.roundsLinked).toBe(0);
     expect(result.stats.roundsCreated).toBe(1);
+  });
+
+  it("skips creating managed rounds for empty funscripts", async () => {
+    getDbMock.mockReturnValue(createDbMock([]));
+    fetchStashMediaWithAuthMock.mockResolvedValueOnce(new Response("{\"actions\":[]}", { status: 200 }));
+
+    syncSourceMock.mockImplementationOnce(async (_source, context) => {
+      context.onSceneSeen();
+      await context.ingestScene({
+        sceneId: "scene-empty",
+        installSourceKey: "ignored-by-wrapper",
+        roundTypeFallback: "Normal",
+        name: "Empty Scene",
+        author: "Author",
+        description: null,
+        phash: "abc",
+        previewImageUri: null,
+        videoUri: "https://stash.example/empty.mp4",
+        funscriptUri: "https://stash.example/empty.funscript",
+        durationMs: null,
+      });
+    });
+
+    const { syncExternalSources } = await import("./index");
+    const result = await syncExternalSources("manual");
+
+    expect(result.stats.failed).toBe(0);
+    expect(result.stats.roundsCreated).toBe(0);
+    expect(result.stats.roundsLinked).toBe(0);
+    expect(result.stats.resourcesAdded).toBe(0);
+  });
+
+  it("treats managed rounds with empty funscripts as not installed", async () => {
+    getDbMock.mockReturnValue(createDbMock([
+      {
+        id: "round-managed",
+        name: "Managed",
+        author: "Author",
+        description: null,
+        phash: "abc",
+        previewImage: "preview",
+        installSourceKey: "stash:https://stash.example:scene:scene-empty",
+        resources: [{ id: "res-1", videoUri: "https://stash.example/existing.mp4", phash: "abc", durationMs: null, disabled: false }],
+      },
+    ]));
+    fetchStashMediaWithAuthMock.mockResolvedValueOnce(new Response("{\"actions\":[]}", { status: 200 }));
+
+    syncSourceMock.mockImplementationOnce(async (_source, context) => {
+      context.onSceneSeen();
+      await context.ingestScene({
+        sceneId: "scene-empty",
+        installSourceKey: "ignored-by-wrapper",
+        roundTypeFallback: "Normal",
+        name: "Managed",
+        author: "Author",
+        description: null,
+        phash: "abc",
+        previewImageUri: null,
+        videoUri: "https://stash.example/existing.mp4",
+        funscriptUri: "https://stash.example/empty.funscript",
+        durationMs: null,
+      });
+    });
+
+    const { syncExternalSources } = await import("./index");
+    const result = await syncExternalSources("manual");
+
+    expect(result.stats.failed).toBe(0);
+    expect(result.stats.disabledRounds).toBe(1);
+    expect(setDisabledRoundIdsMock).toHaveBeenLastCalledWith(new Set(["round-managed"]));
   });
 });

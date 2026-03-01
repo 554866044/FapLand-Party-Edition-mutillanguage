@@ -36,7 +36,8 @@ export const db = {
     },
     round: {
         findByHero: (heroId: string) => trpc.db.getHeroRounds.query({ heroId }),
-        findInstalled: (includeDisabled = false) => trpc.db.getInstalledRounds.query({ includeDisabled }),
+        findInstalled: (includeDisabled = false, includeTemplates = false) =>
+            trpc.db.getInstalledRounds.query({ includeDisabled, includeTemplates }),
         getDisabledIds: () => trpc.db.getDisabledRoundIds.query(),
         update: (input: {
             id: string;
@@ -50,12 +51,31 @@ export const db = {
             type: "Normal" | "Interjection" | "Cum";
         }) => trpc.db.updateRound.mutate(input),
         delete: (id: string) => trpc.db.deleteRound.mutate({ id }),
+        repairTemplate: (input: {
+            roundId: string;
+            installedRoundId: string;
+        }) => trpc.db.repairTemplateRound.mutate(input),
+        retryTemplateLinking: (input?: {
+            roundId?: string;
+            heroId?: string;
+        }) => trpc.db.retryTemplateLinking.mutate(input),
         convertHeroGroupToRound: (input: {
             keepRoundId: string;
             roundIds: string[];
             heroId?: string | null;
             roundName: string;
         }) => trpc.db.convertHeroGroupToRound.mutate(input),
+    },
+    template: {
+        repairHero: (input: {
+            heroId: string;
+            sourceHeroId: string;
+            assignments?: Array<{ roundId: string; installedRoundId: string }>;
+        }) => trpc.db.repairTemplateHero.mutate(input),
+        retryLinking: (input?: {
+            roundId?: string;
+            heroId?: string;
+        }) => trpc.db.retryTemplateLinking.mutate(input),
     },
     install: {
         getScanStatus: () => trpc.db.getInstallScanStatus.query(),
@@ -74,6 +94,7 @@ export const db = {
         }>) => trpc.db.importLegacyFolderWithPlan.mutate({ folderPath, reviewedSlots }),
         getAutoScanFolders: () => trpc.db.getAutoScanFolders.query(),
         addAutoScanFolder: (folderPath: string) => trpc.db.addAutoScanFolder.mutate({ folderPath }),
+        addAutoScanFolderAndScan: (folderPath: string) => trpc.db.addAutoScanFolderAndScan.mutate({ folderPath }),
         removeAutoScanFolder: (folderPath: string) => trpc.db.removeAutoScanFolder.mutate({ folderPath }),
         exportDatabase: (includeResourceUris = false) =>
             trpc.db.exportInstalledDatabase.mutate({ includeResourceUris }),
@@ -88,6 +109,7 @@ export const db = {
         recordRun: (input: {
             finishedAtIso?: string;
             score: number;
+            survivedDurationSec?: number | null;
             highscoreBefore: number;
             highscoreAfter: number;
             wasNewHighscore: boolean;

@@ -31,12 +31,12 @@ export const ZSinglePlayerSetup = z.object({
   perkTriggerChancePerRound: z.number().min(0).max(1).default(0.35),
   probabilities: z.object({
     intermediary: ZProbabilityConfig.default({
-      initial: 0,
+      initial: 0.1,
       increasePerRound: 0.02,
       max: 0.85,
     }),
     antiPerk: ZProbabilityConfig.default({
-      initial: 0,
+      initial: 0.1,
       increasePerRound: 0.015,
       max: 0.75,
     }),
@@ -104,12 +104,12 @@ export function createDefaultSinglePlayerSetup(installedRounds: InstalledRound[]
     perkTriggerChancePerRound: 0.35,
     probabilities: {
       intermediary: {
-        initial: 0,
+        initial: 0.1,
         increasePerRound: 0.02,
         max: 0.85,
       },
       antiPerk: {
-        initial: 0,
+        initial: 0.1,
         increasePerRound: 0.015,
         max: 0.75,
       },

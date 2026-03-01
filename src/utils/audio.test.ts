@@ -1,5 +1,44 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveAssetUrl } from "./audio";
+import { playHoverSound, resolveAssetUrl } from "./audio";
+
+class FakeAudio {
+    currentTime = 0;
+    playbackRate = 1;
+    preload = "";
+    src: string | undefined;
+    volume = 1;
+
+    readonly addEventListener = vi.fn((type: string, listener: EventListenerOrEventListenerObject) => {
+        this.listeners.set(type, listener);
+    });
+    readonly load = vi.fn();
+    readonly pause = vi.fn();
+    readonly play = vi.fn(() => Promise.resolve());
+    readonly removeAttribute = vi.fn((name: string) => {
+        if (name === "src") {
+            this.src = undefined;
+        }
+    });
+
+    private readonly listeners = new Map<string, EventListenerOrEventListenerObject>();
+
+    constructor(src?: string) {
+        this.src = src;
+    }
+
+    dispatch(type: string) {
+        const listener = this.listeners.get(type);
+        if (!listener) return;
+
+        const event = new Event(type);
+        if (typeof listener === "function") {
+            listener(event);
+            return;
+        }
+
+        listener.handleEvent(event);
+    }
+}
 
 describe("resolveAssetUrl", () => {
     afterEach(() => {
@@ -24,5 +63,34 @@ describe("resolveAssetUrl", () => {
         expect(resolveAssetUrl("/sounds/ui-hover.wav")).toBe(
             "http://localhost:3000/sounds/ui-hover.wav",
         );
+    });
+
+    it("releases transient audio elements after playback ends", async () => {
+        const instances: FakeAudio[] = [];
+
+        vi.stubGlobal("fetch", vi.fn(async () => {
+            throw new Error("decode unavailable");
+        }));
+        vi.stubGlobal(
+            "Audio",
+            vi.fn((src?: string) => {
+                const audio = new FakeAudio(src);
+                instances.push(audio);
+                return audio;
+            }),
+        );
+        vi.stubGlobal("document", {
+            baseURI: "http://localhost:3000/",
+        });
+
+        playHoverSound();
+        await Promise.resolve();
+
+        expect(instances).toHaveLength(1);
+        instances[0]!.dispatch("ended");
+
+        expect(instances[0]!.pause).toHaveBeenCalledTimes(1);
+        expect(instances[0]!.removeAttribute).toHaveBeenCalledWith("src");
+        expect(instances[0]!.load).toHaveBeenCalledTimes(1);
     });
 });

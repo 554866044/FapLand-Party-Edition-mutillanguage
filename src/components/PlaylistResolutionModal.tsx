@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useControllerSurface } from "../controller";
 import type { InstalledRound } from "../services/db";
 import type {
   PlaylistResolutionAnalysis,
@@ -50,6 +51,7 @@ export function PlaylistResolutionModal({
   const [expandedIssueKey, setExpandedIssueKey] = useState<string | null>(null);
   const [searchByKey, setSearchByKey] = useState<Record<string, string>>({});
   const [sameTypeOnlyByKey, setSameTypeOnlyByKey] = useState<Record<string, boolean>>({});
+  const overlayRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -104,11 +106,26 @@ export function PlaylistResolutionModal({
     }, {});
   }, [analysis.issues, installedRounds, roundById, sameTypeOnlyByKey, searchByKey]);
 
+  useControllerSurface({
+    id: "playlist-resolution-modal",
+    scopeRef: overlayRef,
+    priority: 160,
+    enabled: open,
+    initialFocusId: "playlist-resolution-close",
+    onBack: () => {
+      onClose();
+      return true;
+    },
+  });
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 px-4 py-6">
-      <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-cyan-300/30 bg-zinc-950/95 shadow-2xl backdrop-blur-xl">
+      <div
+        ref={overlayRef}
+        className="w-full max-w-5xl overflow-hidden rounded-3xl border border-cyan-300/30 bg-zinc-950/95 shadow-2xl backdrop-blur-xl"
+      >
         <div className="border-b border-white/10 px-5 py-4 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -128,6 +145,8 @@ export function PlaylistResolutionModal({
               type="button"
               onClick={onClose}
               className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+              data-controller-focus-id="playlist-resolution-close"
+              data-controller-back="true"
             >
               Close
             </button>
@@ -189,6 +208,7 @@ export function PlaylistResolutionModal({
                               setOverrides((prev) => ({ ...prev, [issue.key]: issue.defaultRoundId }));
                             }}
                             className="rounded-xl border border-cyan-300/45 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
+                            data-controller-focus-id={`playlist-resolution-suggested-${issue.key}`}
                           >
                             Use Suggested
                           </button>
@@ -199,6 +219,7 @@ export function PlaylistResolutionModal({
                             setExpandedIssueKey((prev) => (prev === issue.key ? null : issue.key));
                           }}
                           className="rounded-xl border border-violet-300/45 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-500/25"
+                          data-controller-focus-id={`playlist-resolution-picker-${issue.key}`}
                         >
                           {isExpanded ? "Hide Picker" : "Choose Different"}
                         </button>
@@ -208,6 +229,7 @@ export function PlaylistResolutionModal({
                             setOverrides((prev) => ({ ...prev, [issue.key]: null }));
                           }}
                           className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+                          data-controller-focus-id={`playlist-resolution-clear-${issue.key}`}
                         >
                           Clear
                         </button>
@@ -230,6 +252,7 @@ export function PlaylistResolutionModal({
                               }}
                               className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-4 py-2.5 text-sm text-zinc-100 outline-none focus:border-violet-300/70 focus:ring-2 focus:ring-violet-400/30"
                               placeholder="Search by round, author, or type"
+                              data-controller-focus-id={`playlist-resolution-search-${issue.key}`}
                             />
                           </label>
                           <div className="flex items-end">
@@ -243,6 +266,7 @@ export function PlaylistResolutionModal({
                                   ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100"
                                   : "border-zinc-700 bg-zinc-900 text-zinc-200"
                               }`}
+                              data-controller-focus-id={`playlist-resolution-type-${issue.key}`}
                             >
                               {sameTypeOnly ? "Same Type Only" : "All Types"}
                             </button>
@@ -263,6 +287,7 @@ export function PlaylistResolutionModal({
                                     ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-100"
                                     : "border-white/10 bg-black/30 text-zinc-200 hover:border-violet-300/40 hover:bg-violet-500/10"
                                 }`}
+                                data-controller-focus-id={`playlist-resolution-choice-${issue.key}-${round.id}`}
                               >
                                 <div className="text-sm font-semibold">{round.name}</div>
                                 <div className="mt-1 text-xs text-zinc-400">{formatRoundMeta(round)}</div>
@@ -290,6 +315,7 @@ export function PlaylistResolutionModal({
               type="button"
               onClick={() => onSecondaryAction(overrides)}
               className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+              data-controller-focus-id="playlist-resolution-secondary"
             >
               {secondaryActionLabel}
             </button>
@@ -298,6 +324,7 @@ export function PlaylistResolutionModal({
             type="button"
             onClick={() => onPrimaryAction(overrides)}
             className="rounded-xl border border-cyan-300/45 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/25"
+            data-controller-focus-id="playlist-resolution-primary"
           >
             {primaryActionLabel}
           </button>

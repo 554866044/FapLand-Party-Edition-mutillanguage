@@ -48,6 +48,7 @@ begin
       'mp_player_progress',
       'mp_anti_perk_events',
       'mp_playlist_resolution',
+      'mp_join_rate_limits',
       'mp_match_history',
       'mp_match_history_participants'
     ]) as tbl_name
@@ -87,7 +88,10 @@ begin
     select fn_name
     from unnest(array[
       'mp_create_lobby',
+      'mp_enforce_join_lobby_rate_limit',
       'mp_join_lobby',
+      'mp_record_join_lobby_failure',
+      'mp_reset_join_lobby_rate_limit',
       'mp_set_ready',
       'mp_set_lobby_open',
       'mp_kick_player',

@@ -135,6 +135,10 @@ async function ensureLoginSessionCookie(source: ExternalSource, forceRefresh = f
 }
 
 async function buildAuthHeaders(source: ExternalSource, forceRefreshLogin = false): Promise<Record<string, string>> {
+  if (source.authMode === "none") {
+    return {};
+  }
+
   if (source.authMode === "apiKey") {
     const apiKey = normalizeNullableText(source.apiKey);
     if (!apiKey) {
@@ -256,6 +260,7 @@ type FindScenesData = {
       studio: { name: string | null } | null;
       performers: Array<{ name: string | null }>;
       paths: {
+        screenshot: string | null;
         stream: string | null;
         funscript: string | null;
       };
@@ -312,6 +317,7 @@ export async function fetchScenesForTag(
                 name
               }
               paths {
+                screenshot
                 stream
                 funscript
               }

@@ -1,6 +1,6 @@
 export type EffectTarget = "self" | "opponent" | "all";
 
-export type NumericStat = "diceMin" | "diceMax" | "roundPauseMs";
+export type NumericStat = "diceMin" | "diceMax" | "roundPauseMs" | "perkFrequency" | "perkLuck";
 
 export type NumericDeltaEffect = {
   kind: "numericDelta";
@@ -97,9 +97,11 @@ export type BoardField = {
   kind: BoardFieldKind;
   fixedRoundId?: string;
   forceStop?: boolean;
+  skippable?: boolean;
   randomPoolId?: string;
   checkpointRestMs?: number;
   visualId?: string;
+  giftGuaranteedPerk?: boolean;
   styleHint?: {
     x?: number;
     y?: number;
@@ -171,6 +173,13 @@ export type PerkIconKey =
   | "lazyHero"
   | "gooooal"
   | "beGentle"
+  | "treasureMagnet"
+  | "drySpell"
+  | "luckyStar"
+  | "badOmen"
+  | "highRoller"
+  | "couponClipper"
+  | "imClose"
   | "unknown";
 
 export type PerkDefinition = {
@@ -249,6 +258,8 @@ export type PlayerStats = {
   diceMin: number;
   diceMax: number;
   roundPauseMs: number;
+  perkFrequency: number;
+  perkLuck: number;
 };
 
 export type PlayerState = {
@@ -278,6 +289,7 @@ export type ActiveRound = {
   nodeId: string;
   roundId: string;
   roundName: string;
+  skippable?: boolean;
   selectionKind: "fixed" | "random" | "cum";
   poolId: string | null;
   phaseKind: "normal" | "cum";

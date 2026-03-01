@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from "react";
-import { useGamepad, type GamepadAction } from "./useGamepad";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 
 export interface MenuOption {
@@ -60,50 +59,6 @@ export function useMenuNavigation(rootOptions: MenuOption[]) {
             option.action();
         }
     }, [currentOptions]);
-
-    const handleGamepadInput = useCallback(
-        (action: GamepadAction) => {
-            if (action === "UP") {
-                setSelectedIndex((prev) => {
-                    // + 1 for the synthesized back button if not at root
-                    const len = path.length > 0 ? currentOptions.length + 1 : currentOptions.length;
-                    const newIdx = prev > 0 ? prev - 1 : len - 1;
-                    playHoverSound();
-                    return newIdx;
-                });
-                return;
-            }
-
-            if (action === "DOWN") {
-                setSelectedIndex((prev) => {
-                    const len = path.length > 0 ? currentOptions.length + 1 : currentOptions.length;
-                    const newIdx = prev < len - 1 ? prev + 1 : 0;
-                    playHoverSound();
-                    return newIdx;
-                });
-                return;
-            }
-
-            if (action === "A") {
-                if (path.length > 0 && selectedIndex === currentOptions.length) {
-                    goBack();
-                } else {
-                    executeCurrentOption(selectedIndex);
-                }
-                return;
-            }
-
-            if (action === "B") {
-                if (path.length > 0) {
-                    goBack();
-                }
-                return;
-            }
-        },
-        [currentOptions, selectedIndex, path, executeCurrentOption, goBack]
-    );
-
-    useGamepad(handleGamepadInput);
 
     const handleMouseEnter = useCallback(
         (index: number) => {

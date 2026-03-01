@@ -3,6 +3,7 @@ import path from "node:path";
 export type DialogPathApprovalKind =
   | "installFolder"
   | "installSidecarFile"
+  | "playlistExportDirectory"
   | "playlistExportFile"
   | "playlistImportFile";
 

@@ -22,6 +22,7 @@ import { Route as MultiplayerRouteImport } from './routes/multiplayer'
 import { Route as MapEditorRouteImport } from './routes/map-editor'
 import { Route as HighscoresRouteImport } from './routes/highscores'
 import { Route as GameRouteImport } from './routes/game'
+import { Route as FirstStartRouteImport } from './routes/first-start'
 import { Route as ConverterRouteImport } from './routes/converter'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as IndexRouteImport } from './routes/index'
@@ -91,6 +92,11 @@ const GameRoute = GameRouteImport.update({
   path: '/game',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FirstStartRoute = FirstStartRouteImport.update({
+  id: '/first-start',
+  path: '/first-start',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConverterRoute = ConverterRouteImport.update({
   id: '/converter',
   path: '/converter',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
   '/converter': typeof ConverterRoute
+  '/first-start': typeof FirstStartRoute
   '/game': typeof GameRoute
   '/highscores': typeof HighscoresRoute
   '/map-editor': typeof MapEditorRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
   '/converter': typeof ConverterRoute
+  '/first-start': typeof FirstStartRoute
   '/game': typeof GameRoute
   '/highscores': typeof HighscoresRoute
   '/map-editor': typeof MapEditorRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
   '/converter': typeof ConverterRoute
+  '/first-start': typeof FirstStartRoute
   '/game': typeof GameRoute
   '/highscores': typeof HighscoresRoute
   '/map-editor': typeof MapEditorRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/'
     | '/connect'
     | '/converter'
+    | '/first-start'
     | '/game'
     | '/highscores'
     | '/map-editor'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/'
     | '/connect'
     | '/converter'
+    | '/first-start'
     | '/game'
     | '/highscores'
     | '/map-editor'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/'
     | '/connect'
     | '/converter'
+    | '/first-start'
     | '/game'
     | '/highscores'
     | '/map-editor'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConnectRoute: typeof ConnectRoute
   ConverterRoute: typeof ConverterRoute
+  FirstStartRoute: typeof FirstStartRoute
   GameRoute: typeof GameRoute
   HighscoresRoute: typeof HighscoresRoute
   MapEditorRoute: typeof MapEditorRoute
@@ -331,6 +344,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/first-start': {
+      id: '/first-start'
+      path: '/first-start'
+      fullPath: '/first-start'
+      preLoaderRoute: typeof FirstStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/converter': {
       id: '/converter'
       path: '/converter'
@@ -359,6 +379,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConnectRoute: ConnectRoute,
   ConverterRoute: ConverterRoute,
+  FirstStartRoute: FirstStartRoute,
   GameRoute: GameRoute,
   HighscoresRoute: HighscoresRoute,
   MapEditorRoute: MapEditorRoute,

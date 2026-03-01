@@ -43,6 +43,21 @@ describe("install sidecar schemas", () => {
     expect(parsed.rounds[0]?.resources[0]?.videoUri).toContain("hero-round-1.mp4");
   });
 
+  it("parses package-relative resource paths", () => {
+    const parsed = ZRoundSidecar.parse({
+      name: "Portable Round",
+      resources: [
+        {
+          videoUri: "./media/portable.mp4",
+          funscriptUri: "../shared/portable.funscript",
+        },
+      ],
+    });
+
+    expect(parsed.resources[0]?.videoUri).toBe("./media/portable.mp4");
+    expect(parsed.resources[0]?.funscriptUri).toBe("../shared/portable.funscript");
+  });
+
   it("rejects unknown keys (strict mode)", () => {
     const result = ZRoundSidecar.safeParse({
       name: "Broken",
@@ -59,6 +74,19 @@ describe("install sidecar schemas", () => {
       resources: [
         {
           videoUri: "ftp://example.com/video.mp4",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects relative paths without ./ or ../ prefix", () => {
+    const result = ZRoundSidecar.safeParse({
+      name: "Invalid Relative",
+      resources: [
+        {
+          videoUri: "media/video.mp4",
         },
       ],
     });

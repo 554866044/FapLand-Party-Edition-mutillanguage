@@ -48,8 +48,13 @@ interface AnimatedBackgroundProps {
     videoUris?: string[];
 }
 
+function getRandomVideoIndex(videoCount: number): number {
+    if (videoCount <= 1) return 0;
+    return Math.floor(Math.random() * videoCount);
+}
+
 export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(({ videoUris = [] }) => {
-    const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+    const [currentVideoIndex, setCurrentVideoIndex] = useState(() => getRandomVideoIndex(videoUris.length));
     const [nextVideoIndex, setNextVideoIndex] = useState<number | null>(null);
     const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(DEFAULT_BACKGROUND_VIDEO_ENABLED);
     const particles = useRef(generateParticles(18)).current;
@@ -99,6 +104,17 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
         setCurrentVideoIndex(0);
         setNextVideoIndex(null);
     }, [backgroundVideoEnabled]);
+
+    useEffect(() => {
+        if (videoUris.length === 0) {
+            setCurrentVideoIndex(0);
+            setNextVideoIndex(null);
+            return;
+        }
+
+        setCurrentVideoIndex((prev) => (prev < videoUris.length ? prev : getRandomVideoIndex(videoUris.length)));
+        setNextVideoIndex((prev) => (prev !== null && prev < videoUris.length ? prev : null));
+    }, [videoUris.length]);
 
     // Finalize crossfade
     useEffect(() => {

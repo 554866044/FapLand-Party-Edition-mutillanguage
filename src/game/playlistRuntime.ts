@@ -9,7 +9,6 @@ import {
 } from "./playlistSchema";
 import {
   resolvePortableRoundRefExact,
-  resolveRoundPhash,
   toPortableRoundRefFromRound,
 } from "./playlistResolution";
 import type {
@@ -161,6 +160,12 @@ function buildLinearConfig(
     });
   }
 
+  board.push({
+    id: "end",
+    name: "End",
+    kind: "end",
+  });
+
   const edges: RuntimeGraphEdge[] = [];
   for (let index = 0; index < board.length - 1; index += 1) {
     const from = board[index];
@@ -192,8 +197,8 @@ function buildLinearConfig(
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
@@ -212,7 +217,7 @@ function buildLinearConfig(
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -231,9 +236,11 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
     kind: toBoardKind(node.kind),
     checkpointRestMs: typeof node.checkpointRestMs === "number" ? node.checkpointRestMs : undefined,
     visualId: node.visualId,
+    giftGuaranteedPerk: node.giftGuaranteedPerk,
     styleHint: node.styleHint,
     fixedRoundId: resolvedRoundByNodeId[node.id],
-    forceStop: node.kind === "round" ? node.forceStop : undefined,
+    forceStop: node.kind === "round" || node.kind === "perk" ? node.forceStop : undefined,
+    skippable: node.kind === "round" ? node.skippable : undefined,
     randomPoolId: node.randomPoolId,
   }));
 
@@ -288,8 +295,8 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
@@ -308,7 +315,7 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -372,8 +379,8 @@ export function createDefaultPlaylistConfig(installedRounds: ReadonlyArray<Insta
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
@@ -386,7 +393,7 @@ export function createDefaultPlaylistConfig(installedRounds: ReadonlyArray<Insta
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }

@@ -32,6 +32,7 @@ const baseSource: ExternalSource = {
 describe("stash provider", () => {
   it("matches URLs under the source base and resolves proxy URLs", () => {
     expect(stashProvider.canHandleUri("https://stash.example.com/api/scene/1/stream", baseSource)).toBe(true);
+    expect(stashProvider.canHandleUri("https://stash.example.com/scene/1/screenshot", baseSource)).toBe(true);
     expect(stashProvider.canHandleUri("https://stash.example.com/other/scene/1/stream", baseSource)).toBe(false);
     expect(stashProvider.canHandleUri("https://example.com/api/scene/1/stream", baseSource)).toBe(false);
 
@@ -54,7 +55,11 @@ describe("stash provider", () => {
             studio: null,
             performers: [],
             tags: [],
-            paths: { stream: "https://stash.example.com/api/scene-1/stream?apikey=abc", funscript: null },
+            paths: {
+              screenshot: "https://stash.example.com/scene-1/screenshot?apikey=abc",
+              stream: "https://stash.example.com/api/scene-1/stream?apikey=abc",
+              funscript: null,
+            },
             files: [{ duration: null, fingerprint: "ABC" }],
           },
           {
@@ -65,7 +70,7 @@ describe("stash provider", () => {
             studio: null,
             performers: [],
             tags: [],
-            paths: { stream: null, funscript: null },
+            paths: { screenshot: null, stream: null, funscript: null },
             files: [],
           },
         ] as any;
@@ -80,7 +85,11 @@ describe("stash provider", () => {
           studio: null,
           performers: [],
           tags: [],
-          paths: { stream: "https://stash.example.com/api/scene-1/stream?apikey=abc", funscript: null },
+          paths: {
+            screenshot: "https://stash.example.com/scene-1/screenshot?apikey=abc",
+            stream: "https://stash.example.com/api/scene-1/stream?apikey=abc",
+            funscript: null,
+          },
           files: [],
         },
       ] as any;
@@ -103,8 +112,10 @@ describe("stash provider", () => {
 
     const [payload] = ingestScene.mock.calls[0]!;
     expect(payload.sceneId).toBe("scene-1");
+    expect(payload.previewImageUri).toBe("https://stash.example.com/scene-1/screenshot");
     expect(payload.videoUri).toBe("https://stash.example.com/api/scene-1/stream");
     expect(payload.phash).toBe("abc");
+    expect(payload.durationMs).toBeNull();
   });
 
   it("uses secondary file title when scene title is missing", async () => {
@@ -119,6 +130,7 @@ describe("stash provider", () => {
         performers: [],
         tags: [],
         paths: {
+          screenshot: null,
           stream: "https://stash.example.com/api/scene/123/stream?apikey=abc",
           funscript: null,
         },
@@ -146,6 +158,7 @@ describe("stash provider", () => {
     expect(ingestScene).toHaveBeenCalledTimes(1);
     const [payload] = ingestScene.mock.calls[0]!;
     expect(payload.name).toBe("My Great Video 01");
+    expect(payload.durationMs).toBeNull();
   });
 
   it("normalizes relative stream and funscript paths", async () => {
@@ -160,6 +173,7 @@ describe("stash provider", () => {
         performers: [],
         tags: [],
         paths: {
+          screenshot: "/scene/123/screenshot?apikey=abc",
           stream: "/api/scene/123/stream?apikey=abc",
           funscript: "api/scene/123/funscript?apikey=abc",
         },
@@ -186,7 +200,52 @@ describe("stash provider", () => {
 
     expect(ingestScene).toHaveBeenCalledTimes(1);
     const [payload] = ingestScene.mock.calls[0]!;
+    expect(payload.previewImageUri).toBe("https://stash.example.com/scene/123/screenshot");
     expect(payload.videoUri).toBe("https://stash.example.com/api/scene/123/stream");
     expect(payload.funscriptUri).toBe("https://stash.example.com/api/scene/123/funscript");
+    expect(payload.durationMs).toBeNull();
+  });
+
+  it("passes through the first positive file duration", async () => {
+    const mockedFetchScenesForTag = vi.mocked(fetchScenesForTag);
+    mockedFetchScenesForTag.mockResolvedValue([
+      {
+        id: "scene-with-duration",
+        title: "Scene Duration",
+        details: null,
+        date: null,
+        studio: null,
+        performers: [],
+        tags: [],
+        paths: {
+          screenshot: null,
+          stream: "https://stash.example.com/api/scene/321/stream?apikey=abc",
+          funscript: null,
+        },
+        files: [
+          { duration: 123.9, fingerprint: null, basename: null },
+          { duration: 5, fingerprint: null, basename: null },
+        ],
+      },
+    ] as any);
+
+    const ingestScene = vi.fn<ExternalSyncContext["ingestScene"]>().mockResolvedValue({
+      created: 1,
+      updated: 0,
+      linked: 0,
+      resourcesAdded: 1,
+      managedRoundId: "round-with-duration",
+    });
+
+    await stashProvider.syncSource(
+      {
+        ...baseSource,
+        tagSelections: [{ id: "tag-1", name: "Tag 1", roundTypeFallback: "Normal" }],
+      },
+      { ingestScene, onSceneSeen: vi.fn() },
+    );
+
+    const [payload] = ingestScene.mock.calls[0]!;
+    expect(payload.durationMs).toBe(123_900);
   });
 });

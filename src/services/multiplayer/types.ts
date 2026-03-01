@@ -1,9 +1,12 @@
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+
 export type MultiplayerServerProfile = {
   id: string;
   name: string;
   url: string;
   anonKey: string;
   isDefault: boolean;
+  isBuiltIn: boolean;
   createdAtIso: string;
   updatedAtIso: string;
 };
@@ -126,4 +129,19 @@ export type MultiplayerSendAntiPerkResult = {
   cooldownUntil: string;
   status: "applied" | "rejected";
   createdAt: string;
+};
+
+export type MultiplayerAuthRequirement = "anonymous_only" | "discord_required";
+
+export type MultiplayerAuthStatus = {
+  profile: MultiplayerServerProfile;
+  client: SupabaseClient;
+  user: User;
+  requirement: MultiplayerAuthRequirement;
+  isAnonymous: boolean;
+  hasDiscordIdentity: boolean;
+  hasEmail: boolean;
+  discordLinkUrl: string | null;
+  status: "ready" | "needs_discord" | "needs_email" | "oauth_unavailable" | "error";
+  message: string;
 };

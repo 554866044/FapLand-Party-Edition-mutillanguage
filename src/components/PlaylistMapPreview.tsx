@@ -1,28 +1,22 @@
 import { useMemo } from "react";
 import type { PlaylistConfig } from "../game/playlistSchema";
 import { layoutLinearGraphFromPlaylist, toEditorGraphConfig } from "../features/map-editor/EditorState";
+import { clampPreviewNodeScale, getNodeDisplayColor, getNodeScale } from "../features/map-editor/nodeVisuals";
 
 type PreviewNode = {
   id: string;
   kind: string;
   x: number;
   y: number;
+  color: string;
+  radius: number;
 };
 
 const PREVIEW_WIDTH = 320;
 const PREVIEW_HEIGHT = 220;
 const PREVIEW_PADDING = 18;
 
-const NODE_COLORS: Record<string, string> = {
-  start: "#a78bfa",
-  end: "#f97316",
-  path: "#475569",
-  safePoint: "#22c55e",
-  round: "#38bdf8",
-  randomRound: "#f59e0b",
-  perk: "#ec4899",
-  event: "#8b5cf6",
-};
+const PREVIEW_NODE_RADIUS = 4.2;
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value !== "number") return null;
@@ -37,15 +31,22 @@ function getPreviewGraph(config: PlaylistConfig) {
   return layoutLinearGraphFromPlaylist(config.boardConfig);
 }
 
-export function PlaylistMapPreview({ config, className }: { config: PlaylistConfig; className?: string }) {
+export function PlaylistMapPreview({
+  config,
+  className,
+}: {
+  config: PlaylistConfig;
+  className?: string;
+}) {
   const graph = useMemo(() => getPreviewGraph(config), [config]);
-
   const positionedNodes = useMemo<PreviewNode[]>(() => (
     graph.nodes.map((node, index) => ({
       id: node.id,
       kind: node.kind,
       x: toFiniteNumber(node.styleHint?.x) ?? (index * 220),
       y: toFiniteNumber(node.styleHint?.y) ?? 0,
+      color: getNodeDisplayColor(node),
+      radius: PREVIEW_NODE_RADIUS * clampPreviewNodeScale(getNodeScale(node)),
     }))
   ), [graph.nodes]);
 
@@ -147,8 +148,8 @@ export function PlaylistMapPreview({ config, className }: { config: PlaylistConf
               data-testid="playlist-map-node"
               cx={node.px}
               cy={node.py}
-              r={4.2}
-              fill={NODE_COLORS[node.kind] ?? "#94a3b8"}
+              r={node.radius}
+              fill={node.color}
               stroke="#e2e8f0"
               strokeOpacity={0.5}
               strokeWidth={0.85}

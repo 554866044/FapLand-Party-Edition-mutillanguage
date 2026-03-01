@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { hero, resource, round } from "./db/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toLocalMediaUri } from "./localMedia";
 
 type RoundRow = {
   id: string;
@@ -25,7 +26,7 @@ const state = {
   roundsById: new Map<string, RoundRow>(),
   roundIdByInstallSourceKey: new Map<string, string>(),
   resourcesByRoundId: new Map<string, Array<{ videoUri: string; phash: string | null }>>(),
-  resourceRows: [] as Array<{ roundId: string; videoUri: string; phash: string | null }>,
+  resourceRows: [] as Array<{ roundId: string; videoUri: string; funscriptUri: string | null; phash: string | null }>,
   nextRoundId: 1,
   nextHeroId: 1,
 };
@@ -108,7 +109,7 @@ function extractFirstSqlParam(input: { where?: unknown } | unknown): unknown {
   return values[0];
 }
 
-function rememberResources(resources: Array<{ roundId: string; videoUri: string; phash: string | null }>): void {
+function rememberResources(resources: Array<{ roundId: string; videoUri: string; funscriptUri: string | null; phash: string | null }>): void {
   for (const entry of resources) {
     const rows = state.resourcesByRoundId.get(entry.roundId) ?? [];
     rows.push({ videoUri: entry.videoUri, phash: entry.phash });
@@ -165,6 +166,7 @@ function buildDbMock() {
             input.map((entry) => ({
               roundId: entry.roundId,
               videoUri: entry.videoUri,
+              funscriptUri: entry.funscriptUri ?? null,
               phash: entry.phash,
             })),
           );
@@ -190,8 +192,13 @@ function buildDbMock() {
               if (Array.isArray(input)) {
                 return [];
               }
-              const payload = input as { roundId: string; videoUri: string; phash: string | null };
-              rememberResources([payload]);
+              const payload = input as { roundId: string; videoUri: string; funscriptUri?: string | null; phash: string | null };
+              rememberResources([{
+                roundId: payload.roundId,
+                videoUri: payload.videoUri,
+                funscriptUri: payload.funscriptUri ?? null,
+                phash: payload.phash,
+              }]);
               return [{
                 id: `res-${state.resourceRows.length}`,
                 roundId: payload.roundId,
@@ -373,6 +380,65 @@ describe("installer phash similarity", () => {
 
     expect(result.status.stats.installed).toBe(2);
     expect(generateRoundPreviewImageDataUriMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves relative .round resource paths against the sidecar location", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-installer-relative-round-"));
+    const mediaDir = path.join(root, "media");
+    await fs.mkdir(mediaDir, { recursive: true });
+    const videoPath = path.join(mediaDir, "portable.mp4");
+    const funscriptPath = path.join(mediaDir, "portable.funscript");
+    const roundPath = path.join(root, "portable.round");
+    await fs.writeFile(videoPath, "video");
+    await fs.writeFile(funscriptPath, "{\"actions\":[]}");
+    await fs.writeFile(roundPath, JSON.stringify({
+      name: "Portable Round",
+      phash: "portable-round-hash",
+      resources: [{
+        videoUri: "./media/portable.mp4",
+        funscriptUri: "./media/portable.funscript",
+      }],
+    }));
+
+    const { importInstallSidecarFile } = await import("./installer");
+    const result = await importInstallSidecarFile(roundPath);
+
+    expect(result.status.stats.installed).toBe(1);
+    expect(state.resourceRows[0]?.videoUri).toBe(toLocalMediaUri(videoPath));
+    expect(state.resourceRows[0]?.funscriptUri).toBe(toLocalMediaUri(funscriptPath));
+  });
+
+  it("resolves relative .hero resource paths against nested sidecar locations", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-installer-relative-hero-"));
+    const mediaDir = path.join(root, "media");
+    const sidecarDir = path.join(root, "sidecars");
+    await fs.mkdir(mediaDir, { recursive: true });
+    await fs.mkdir(sidecarDir, { recursive: true });
+    const videoPath = path.join(mediaDir, "portable-hero.mp4");
+    const heroPath = path.join(sidecarDir, "portable.hero");
+    await fs.writeFile(videoPath, "video");
+    await fs.writeFile(heroPath, JSON.stringify({
+      name: "Portable Hero",
+      rounds: [
+        {
+          name: "Round A",
+          phash: "portable-hero-a",
+          resources: [{ videoUri: "../media/portable-hero.mp4" }],
+        },
+        {
+          name: "Round B",
+          phash: "portable-hero-b",
+          resources: [{ videoUri: "../media/portable-hero.mp4" }],
+        },
+      ],
+    }));
+
+    const { importInstallSidecarFile } = await import("./installer");
+    const result = await importInstallSidecarFile(heroPath);
+
+    expect(result.status.stats.installed).toBe(2);
+    expect(state.resourceRows).toHaveLength(2);
+    expect(state.resourceRows.every((entry) => entry.videoUri === toLocalMediaUri(videoPath))).toBe(true);
   });
 
   it("persists sidecars in sorted order even when preparation completes out of order", async () => {

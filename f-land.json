@@ -1,0 +1,20 @@
+{
+	"integrations": {
+		"sources": [
+			{
+				"id": "7704bb2f-451d-4c23-9d9f-b968e73a0961",
+				"kind": "stash",
+				"name": "Protected Stash",
+				"enabled": true,
+				"baseUrl": "https://stash.example.com",
+				"authMode": "none",
+				"apiKey": null,
+				"username": "alice",
+				"password": "secret",
+				"tagSelections": [],
+				"createdAt": "2026-03-23T14:27:04.526Z",
+				"updatedAt": "2026-03-23T14:27:04.531Z"
+			}
+		]
+	}
+}

@@ -2,11 +2,12 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requestInstallScanAbortMock, scanInstallFolderOnceWithLegacySupportMock, inspectInstallFolderMock, importLegacyFolderWithPlanMock } = vi.hoisted(() => ({
+const { requestInstallScanAbortMock, scanInstallFolderOnceWithLegacySupportMock, inspectInstallFolderMock, importLegacyFolderWithPlanMock, addAutoScanFolderAndScanMock } = vi.hoisted(() => ({
   requestInstallScanAbortMock: vi.fn(),
   scanInstallFolderOnceWithLegacySupportMock: vi.fn(),
   inspectInstallFolderMock: vi.fn(),
   importLegacyFolderWithPlanMock: vi.fn(),
+  addAutoScanFolderAndScanMock: vi.fn(),
 }));
 
 vi.mock("../../services/db", () => ({
@@ -20,13 +21,14 @@ vi.mock("../../services/integrations", () => ({
 
 vi.mock("../../services/installer", () => ({
   addAutoScanFolder: vi.fn(),
+  addAutoScanFolderAndScan: addAutoScanFolderAndScanMock,
   getAutoScanFolders: vi.fn(() => []),
   getInstallScanStatus: vi.fn(() => ({
     state: "idle",
     triggeredBy: "manual",
     startedAt: null,
     finishedAt: null,
-    stats: { scannedFolders: 0, sidecarsSeen: 0, installed: 0, updated: 0, skipped: 0, failed: 0 },
+    stats: { scannedFolders: 0, sidecarsSeen: 0, installed: 0, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
     lastMessage: null,
     lastErrors: [],
   })),
@@ -71,7 +73,7 @@ describe("dbRouter scanInstallFolderOnce", () => {
         triggeredBy: "manual",
         startedAt: "2026-03-05T00:00:00.000Z",
         finishedAt: "2026-03-05T00:00:01.000Z",
-        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 2, updated: 0, skipped: 0, failed: 0 },
+        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 2, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
         lastMessage: "ok",
         lastErrors: [],
       },
@@ -107,7 +109,7 @@ describe("dbRouter scanInstallFolderOnce", () => {
         triggeredBy: "manual",
         startedAt: "2026-03-05T00:00:00.000Z",
         finishedAt: "2026-03-05T00:00:01.000Z",
-        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 3, updated: 0, skipped: 0, failed: 0 },
+        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 3, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
         lastMessage: "ok",
         lastErrors: [],
       },
@@ -146,7 +148,7 @@ describe("dbRouter scanInstallFolderOnce", () => {
       triggeredBy: "manual",
       startedAt: "2026-03-06T00:00:00.000Z",
       finishedAt: null,
-      stats: { scannedFolders: 1, sidecarsSeen: 4, installed: 1, updated: 0, skipped: 0, failed: 0 },
+      stats: { scannedFolders: 1, sidecarsSeen: 4, installed: 1, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
       lastMessage: "Abort requested. Waiting for the current import step to finish...",
       lastErrors: [],
     });
@@ -156,5 +158,29 @@ describe("dbRouter scanInstallFolderOnce", () => {
 
     expect(requestInstallScanAbortMock).toHaveBeenCalledTimes(1);
     expect(result.lastMessage).toContain("Abort requested");
+  });
+
+  it("adds auto-scan folders and imports them immediately", async () => {
+    addAutoScanFolderAndScanMock.mockResolvedValue({
+      folders: ["/tmp/pack"],
+      result: {
+        status: {
+          state: "done",
+          triggeredBy: "manual",
+          startedAt: "2026-03-10T00:00:00.000Z",
+          finishedAt: "2026-03-10T00:00:01.000Z",
+          stats: { scannedFolders: 1, sidecarsSeen: 2, installed: 2, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+          lastMessage: "ok",
+          lastErrors: [],
+        },
+      },
+    });
+
+    const caller = dbRouter.createCaller({} as never);
+    const result = await caller.addAutoScanFolderAndScan({ folderPath: "/tmp/pack" });
+
+    expect(addAutoScanFolderAndScanMock).toHaveBeenCalledWith("/tmp/pack");
+    expect(result.folders).toEqual(["/tmp/pack"]);
+    expect(result.result.status.stats.installed).toBe(2);
   });
 });

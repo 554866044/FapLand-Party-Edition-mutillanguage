@@ -99,7 +99,7 @@ function makeGraphConfig(input: {
       scorePerCompletedRound: 100,
       scorePerIntermediary: 30,
       scorePerActiveAntiPerk: 25,
-      scorePerCumRoundSuccess: 120,
+      scorePerCumRoundSuccess: 420,
     },
   };
 }
@@ -220,6 +220,77 @@ describe("graph engine runtime", () => {
     expect(state.bonusRolls).toBe(0);
   });
 
+  it("interrupts traversal when entering a forced-stop perk node", () => {
+    const config = {
+      ...makeGraphConfig({
+        board: [
+          { id: "start", name: "Start", kind: "start" },
+          { id: "perk-1", name: "Perk 1", kind: "perk", forceStop: true },
+          { id: "after", name: "After", kind: "path" },
+        ],
+        edges: [
+          { id: "e1", fromNodeId: "start", toNodeId: "perk-1", gateCost: 0, weight: 1 },
+          { id: "e2", fromNodeId: "perk-1", toNodeId: "after", gateCost: 0, weight: 1 },
+        ],
+      }),
+      perkPool: {
+        enabledPerkIds: ["loaded-dice"],
+        enabledAntiPerkIds: [],
+      },
+    };
+
+    const state = rollTurn(createInitialGameState(config), [makeRound("round-1")], 2);
+    expect(state.players[0]?.currentNodeId).toBe("perk-1");
+    expect(state.pendingPerkSelection).not.toBeNull();
+    expect(state.bonusRolls).toBe(0);
+  });
+
+  it("gifts a guaranteed perk into inventory when configured on a perk node", () => {
+    const config = makeGraphConfig({
+      board: [
+        { id: "start", name: "Start", kind: "start" },
+        { id: "perk-1", name: "Perk 1", kind: "perk", visualId: "loaded-dice", giftGuaranteedPerk: true },
+        { id: "after", name: "After", kind: "path" },
+      ],
+      edges: [
+        { id: "e1", fromNodeId: "start", toNodeId: "perk-1", gateCost: 0, weight: 1 },
+        { id: "e2", fromNodeId: "perk-1", toNodeId: "after", gateCost: 0, weight: 1 },
+      ],
+    });
+
+    const state = rollTurn(createInitialGameState(config), [makeRound("round-1")], 1);
+    const player = state.players[state.currentPlayerIndex]!;
+
+    expect(player.currentNodeId).toBe("perk-1");
+    expect(player.inventory).toHaveLength(1);
+    expect(player.inventory[0]?.perkId).toBe("loaded-dice");
+    expect(player.stats.diceMax).toBe(6);
+    expect(state.pendingPerkSelection).toBeNull();
+  });
+
+  it("allows rolling past a queued skippable round after a forced stop", () => {
+    const config = makeGraphConfig({
+      board: [
+        { id: "start", name: "Start", kind: "start" },
+        { id: "round-1", name: "Round 1", kind: "round", fixedRoundId: "round-1", forceStop: true, skippable: true },
+        { id: "after", name: "After", kind: "path" },
+      ],
+      edges: [
+        { id: "e1", fromNodeId: "start", toNodeId: "round-1", gateCost: 0, weight: 1 },
+        { id: "e2", fromNodeId: "round-1", toNodeId: "after", gateCost: 0, weight: 1 },
+      ],
+    });
+
+    const queued = rollTurn(createInitialGameState(config), [makeRound("round-1")], 2);
+    expect(queued.players[0]?.currentNodeId).toBe("round-1");
+    expect(queued.queuedRound?.roundId).toBe("round-1");
+    expect(queued.queuedRound?.skippable).toBe(true);
+
+    const skipped = rollTurn(queued, [makeRound("round-1")], 1);
+    expect(skipped.queuedRound).toBeNull();
+    expect(skipped.players[0]?.currentNodeId).toBe("after");
+  });
+
   it("passes over normal round nodes when force stop is disabled", () => {
     const config = makeGraphConfig({
       board: [
@@ -236,6 +307,29 @@ describe("graph engine runtime", () => {
     const state = rollTurn(createInitialGameState(config), [makeRound("round-1")], 2);
     expect(state.players[0]?.currentNodeId).toBe("after");
     expect(state.queuedRound).toBeNull();
+  });
+
+  it("allows rolling past a queued skippable round after landing on it", () => {
+    const config = makeGraphConfig({
+      board: [
+        { id: "start", name: "Start", kind: "start" },
+        { id: "round-1", name: "Round 1", kind: "round", fixedRoundId: "round-1", skippable: true },
+        { id: "after", name: "After", kind: "path" },
+      ],
+      edges: [
+        { id: "e1", fromNodeId: "start", toNodeId: "round-1", gateCost: 0, weight: 1 },
+        { id: "e2", fromNodeId: "round-1", toNodeId: "after", gateCost: 0, weight: 1 },
+      ],
+    });
+
+    const queued = rollTurn(createInitialGameState(config), [makeRound("round-1")], 1);
+    expect(queued.players[0]?.currentNodeId).toBe("round-1");
+    expect(queued.queuedRound?.roundId).toBe("round-1");
+    expect(queued.queuedRound?.skippable).toBe(true);
+
+    const skipped = rollTurn(queued, [makeRound("round-1")], 1);
+    expect(skipped.queuedRound).toBeNull();
+    expect(skipped.players[0]?.currentNodeId).toBe("after");
   });
 
   it("prefers unplayed random pool rounds and falls back to full pool when exhausted", () => {

@@ -7,6 +7,7 @@ export const resource = sqliteTable('Resource', {
     videoUri: text('videoUri').notNull(),
     funscriptUri: text('funscriptUri'),
     phash: text('phash'),
+    durationMs: integer('durationMs'),
     disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
     roundId: text('roundId').notNull().references(() => round.id, { onDelete: 'cascade' }),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
@@ -49,6 +50,7 @@ export const playlist = sqliteTable('Playlist', {
     description: text('description'),
     formatVersion: integer('formatVersion').notNull().default(1),
     configJson: text('configJson').notNull(),
+    installSourceKey: text('installSourceKey').unique(),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -91,6 +93,7 @@ export const singlePlayerRunHistory = sqliteTable('SinglePlayerRunHistory', {
     id: text('id').primaryKey().$defaultFn(() => createId()),
     finishedAt: integer('finishedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
     score: integer('score').notNull(),
+    survivedDurationSec: integer('survivedDurationSec'),
     highscoreBefore: integer('highscoreBefore').notNull(),
     highscoreAfter: integer('highscoreAfter').notNull(),
     wasNewHighscore: integer('wasNewHighscore', { mode: 'boolean' }).notNull().default(false),

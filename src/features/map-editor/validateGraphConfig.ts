@@ -25,7 +25,7 @@ const toMessage = (message: string, path: string, severity: ValidationSeverity):
 });
 
 const isKnownKind = (kind: EditorNodeKind): boolean => {
-  return kind === "start" || kind === "end" || kind === "path" || kind === "safePoint" || kind === "round" || kind === "randomRound" || kind === "perk" || kind === "event";
+  return kind === "start" || kind === "end" || kind === "path" || kind === "safePoint" || kind === "round" || kind === "randomRound" || kind === "perk";
 };
 
 export function validateGraphConfig(
@@ -87,8 +87,12 @@ export function validateGraphConfig(
       }
     }
 
-    if (node.kind !== "round" && typeof node.forceStop === "boolean") {
-      addError(`Only round nodes may define force stop`, `nodes.${node.id}.forceStop`, node.id);
+    if (node.kind !== "round" && node.kind !== "perk" && typeof node.forceStop === "boolean") {
+      addError(`Only round and perk nodes may define force stop`, `nodes.${node.id}.forceStop`, node.id);
+    }
+
+    if (node.kind !== "round" && typeof node.skippable === "boolean") {
+      addError(`Only round nodes may define skippable`, `nodes.${node.id}.skippable`, node.id);
     }
 
     if (node.kind === "randomRound") {
@@ -113,6 +117,10 @@ export function validateGraphConfig(
 
     if (typeof node.checkpointRestMs === "number" && (!Number.isFinite(node.checkpointRestMs) || node.checkpointRestMs < 0)) {
       addError(`Node "${node.id}" checkpoint rest must be a non-negative number`, `nodes.${node.id}.checkpointRestMs`, node.id);
+    }
+
+    if (node.kind !== "perk" && typeof node.giftGuaranteedPerk === "boolean") {
+      addError(`Only perk nodes may define guaranteed perk gifting`, `nodes.${node.id}.giftGuaranteedPerk`, node.id);
     }
 
     if (node.styleHint?.x !== undefined && !Number.isFinite(node.styleHint.x)) {

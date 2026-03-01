@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useControllerSurface } from "../controller";
 import {
   listActiveBans,
   listMatchHistory,
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/multiplayer-bans")({
 function MultiplayerBansRoute() {
   const navigate = useNavigate();
   const { bans, history } = Route.useLoaderData();
+  const scopeRef = useRef<HTMLDivElement | null>(null);
 
   const [banList, setBanList] = useState<MultiplayerBanRecord[]>(bans);
   const [historyList, setHistoryList] = useState<MultiplayerMatchHistory[]>(history);
@@ -40,8 +42,19 @@ function MultiplayerBansRoute() {
     setHistoryList(nextHistory);
   };
 
+  useControllerSurface({
+    id: "multiplayer-bans-route",
+    scopeRef,
+    priority: 10,
+    initialFocusId: "multiplayer-bans-back",
+    onBack: () => {
+      void navigate({ to: "/multiplayer" });
+      return true;
+    },
+  });
+
   return (
-    <div className="min-h-screen bg-zinc-950 px-6 py-8 text-zinc-100">
+    <div ref={scopeRef} className="min-h-screen bg-zinc-950 px-6 py-8 text-zinc-100">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         <header className="flex items-center justify-between">
           <div>
@@ -54,6 +67,9 @@ function MultiplayerBansRoute() {
             onClick={() => {
               void navigate({ to: "/multiplayer" });
             }}
+            data-controller-focus-id="multiplayer-bans-back"
+            data-controller-initial="true"
+            data-controller-back="true"
           >
             Back
           </button>
@@ -90,6 +106,7 @@ function MultiplayerBansRoute() {
                       }
                     })();
                   }}
+                  data-controller-focus-id={`multiplayer-bans-unban-${ban.id}`}
                 >
                   Unban
                 </button>

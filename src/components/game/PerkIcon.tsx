@@ -61,6 +61,20 @@ export function getPerkIconGlyph(iconKey: PerkIconKey | null | undefined): strin
       return "★";
     case "beGentle":
       return "~";
+    case "treasureMagnet":
+      return "🧲";
+    case "drySpell":
+      return "◌";
+    case "luckyStar":
+      return "✶";
+    case "badOmen":
+      return "☄";
+    case "highRoller":
+      return "♠";
+    case "couponClipper":
+      return "%";
+    case "imClose":
+      return "💦";
     default:
       return "✦";
   }
@@ -281,6 +295,56 @@ function resolvePath(iconKey: PerkIconKey | null | undefined): ReactNode {
         <>
           <path d="M4 13c1.5-2 2.5-2 4 0s2.5 2 4 0 2.5-2 4 0 2.5 2 4 0" />
           <path d="M4 9c1.5-2 2.5-2 4 0" />
+        </>
+      );
+    case "treasureMagnet":
+      return (
+        <>
+          <path d="M7 6v6a5 5 0 0 0 10 0V6" />
+          <path d="M7 6h3v4H7zM14 6h3v4h-3z" />
+          <path d="M9 12c1.2 1.5 2.2 2.2 3 2.2s1.8-.7 3-2.2" />
+        </>
+      );
+    case "drySpell":
+      return (
+        <>
+          <path d="M12 5c3.5 3.8 5.2 6.5 5.2 8.6A5.2 5.2 0 0 1 12 18.8a5.2 5.2 0 0 1-5.2-5.2C6.8 11.5 8.5 8.8 12 5z" />
+          <path d="M6 18L18 6" />
+        </>
+      );
+    case "luckyStar":
+      return (
+        <>
+          <path d="M12 4l2.2 4.8 5.3.5-4 3.5 1.2 5.2L12 15.3 7.3 18l1.2-5.2-4-3.5 5.3-.5z" />
+        </>
+      );
+    case "badOmen":
+      return (
+        <>
+          <path d="M12 4l1.8 4.2L18 10l-4.2 1.8L12 16l-1.8-4.2L6 10l4.2-1.8z" />
+          <path d="M5 19l14-14" />
+        </>
+      );
+    case "highRoller":
+      return (
+        <>
+          <path d="M12 4c2.5 3 5.5 4.6 5.5 7.2 0 3-2.5 5.3-5.5 8.8-3-3.5-5.5-5.8-5.5-8.8C6.5 8.6 9.5 7 12 4z" />
+          <path d="M10 10h4M12 8v6" />
+        </>
+      );
+    case "couponClipper":
+      return (
+        <>
+          <path d="M6 6h12v4a2 2 0 0 0 0 4v4H6v-4a2 2 0 0 0 0-4z" />
+          <path d="M9 15l6-6" />
+          <circle cx="9" cy="9" r="1" fill="currentColor" />
+          <circle cx="15" cy="15" r="1" fill="currentColor" />
+        </>
+      );
+    case "imClose":
+      return (
+        <>
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
         </>
       );
     default:

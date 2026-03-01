@@ -43,6 +43,14 @@ function toSceneDisplayName(sceneTitle: string | null, files: Array<{ basename: 
   return normalizeNullableText(sceneTitle) ?? toSecondaryTitleFromFiles(files) ?? "Untitled Scene";
 }
 
+function toSceneDurationMs(files: Array<{ duration: number | null }>): number | null {
+  for (const file of files) {
+    if (typeof file.duration !== "number" || !Number.isFinite(file.duration) || file.duration <= 0) continue;
+    return Math.floor(file.duration * 1000);
+  }
+  return null;
+}
+
 function toExternalProxyUrl(source: ExternalSource, uri: string, purpose: MediaPurpose): string {
   const params = new URLSearchParams({
     sourceId: source.id,
@@ -53,21 +61,60 @@ function toExternalProxyUrl(source: ExternalSource, uri: string, purpose: MediaP
   return `app://external/stash?${params.toString()}`;
 }
 
+function toStashAllowedBaseUrl(source: ExternalSource): string {
+  const normalized = normalizeBaseUrl(source.baseUrl);
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.pathname = parsed.pathname.replace(/\/api$/i, "");
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return normalized;
+  }
+}
+
+function pathMatchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+function isAllowedStashMediaPath(pathname: string, source: ExternalSource): boolean {
+  const normalizedBasePath = new URL(normalizeBaseUrl(source.baseUrl)).pathname.replace(/\/+$/, "");
+  const rootBasePath = normalizedBasePath.replace(/\/api$/i, "");
+
+  const allowedPrefixes = new Set<string>();
+
+  if (rootBasePath) {
+    allowedPrefixes.add(`${rootBasePath}/scene`);
+  } else {
+    allowedPrefixes.add("/scene");
+  }
+
+  if (normalizedBasePath) {
+    allowedPrefixes.add(`${normalizedBasePath}/scene`);
+  }
+
+  for (const prefix of allowedPrefixes) {
+    if (pathMatchesPrefix(pathname, prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function isUriUnderSourceBase(uri: string, source: ExternalSource): boolean {
   let target: URL;
   let base: URL;
 
   try {
     target = new URL(uri);
-    base = new URL(normalizeBaseUrl(source.baseUrl));
+    base = new URL(toStashAllowedBaseUrl(source));
   } catch {
     return false;
   }
 
   if (target.origin !== base.origin) return false;
-
-  const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
-  return target.pathname === base.pathname || target.pathname.startsWith(basePath);
+  return isAllowedStashMediaPath(target.pathname, source);
 }
 
 export const stashProvider: ExternalProvider = {
@@ -104,8 +151,10 @@ export const stashProvider: ExternalProvider = {
           author: toStashDisplayAuthor(scene),
           description: normalizeNullableText(scene.details),
           phash: toNormalizedPhash(scene.files[0]?.fingerprint ?? null),
+          previewImageUri: sanitizeStashMediaUri(scene.paths.screenshot, source.baseUrl),
           videoUri,
           funscriptUri: sanitizeStashMediaUri(scene.paths.funscript, source.baseUrl),
+          durationMs: toSceneDurationMs(scene.files),
         };
 
         await context.ingestScene(normalized);

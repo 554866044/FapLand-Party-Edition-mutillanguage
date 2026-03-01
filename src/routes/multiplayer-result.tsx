@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
+import { useControllerSurface } from "../controller";
 import { db } from "../services/db";
 import {
   buildTemporaryStandings,
@@ -85,6 +86,7 @@ export const Route = createFileRoute("/multiplayer-result")({
 function MultiplayerResultRoute() {
   const navigate = useNavigate();
   const { search, initialRows, initialIsFinal, initialSnapshot, ownPlayerId, finishedAtIso } = Route.useLoaderData();
+  const scopeRef = useRef<HTMLDivElement | null>(null);
 
   const [rows, setRows] = useState<MultiplayerStandingRow[]>(initialRows);
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);
@@ -174,8 +176,19 @@ function MultiplayerResultRoute() {
     [snapshot?.players],
   );
 
+  useControllerSurface({
+    id: "multiplayer-result-route",
+    scopeRef,
+    priority: 10,
+    initialFocusId: "multiplayer-result-refresh",
+    onBack: () => {
+      void navigate({ to: "/" });
+      return true;
+    },
+  });
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#030713] text-zinc-100">
+    <div ref={scopeRef} className="relative min-h-screen overflow-hidden bg-[#030713] text-zinc-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_12%,rgba(34,211,238,0.27),transparent_40%),radial-gradient(circle_at_86%_18%,rgba(236,72,153,0.26),transparent_36%),radial-gradient(circle_at_52%_90%,rgba(56,189,248,0.18),transparent_35%),linear-gradient(140deg,#020612_0%,#06122b_55%,#18051f_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[length:100%_4px] opacity-20" />
 
@@ -204,6 +217,8 @@ function MultiplayerResultRoute() {
                 void refresh();
               }}
               className="rounded-xl border border-cyan-300/55 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-200"
+              data-controller-focus-id="multiplayer-result-refresh"
+              data-controller-initial="true"
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
@@ -213,6 +228,7 @@ function MultiplayerResultRoute() {
                 void navigate({ to: "/highscores" });
               }}
               className="rounded-xl border border-fuchsia-300/50 bg-fuchsia-500/15 px-4 py-2 text-sm font-semibold text-fuchsia-100 transition hover:border-fuchsia-200"
+              data-controller-focus-id="multiplayer-result-highscores"
             >
               Highscore Hub
             </button>
@@ -222,6 +238,8 @@ function MultiplayerResultRoute() {
                 void navigate({ to: "/" });
               }}
               className="rounded-xl border border-zinc-400/45 bg-zinc-900/70 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300"
+              data-controller-focus-id="multiplayer-result-main-menu"
+              data-controller-back="true"
             >
               Main Menu
             </button>
@@ -290,4 +308,3 @@ function MultiplayerResultRoute() {
     </div>
   );
 }
-

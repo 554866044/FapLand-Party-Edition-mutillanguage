@@ -4,6 +4,7 @@ import {
   getSinglePlayerAntiPerkPool,
   getSinglePlayerPerkPool,
 } from "./data/perks";
+import { resolvePerkRarity } from "./data/perkRarity";
 import type {
   ActivePerkEffect,
   CompletedRoundSummary,
@@ -44,14 +45,28 @@ function pickWeightedRoundId(entries: Array<{ roundId: string; weight: number }>
   return entries[entries.length - 1]?.roundId ?? null;
 }
 
-function pickUniqueRandom<T>(items: T[], count: number): T[] {
+function pickUniqueWeighted<T>(items: T[], count: number, getWeight: (item: T) => number): T[] {
   const pool = [...items];
   const picked: T[] = [];
+
   while (pool.length > 0 && picked.length < count) {
-    const index = randomInt(0, pool.length - 1);
-    const [next] = pool.splice(index, 1);
+    const weights = pool.map((item) => Math.max(0.000001, getWeight(item)));
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    let target = Math.random() * totalWeight;
+    let selectedIndex = 0;
+
+    for (let index = 0; index < pool.length; index += 1) {
+      target -= weights[index] ?? 0;
+      if (target <= 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+
+    const [next] = pool.splice(selectedIndex, 1);
     if (next) picked.push(next);
   }
+
   return picked;
 }
 
@@ -63,6 +78,8 @@ function normalizeDice(stats: PlayerStats): PlayerStats {
     diceMin,
     diceMax,
     roundPauseMs: clamp(stats.roundPauseMs, 250, 30000),
+    perkFrequency: clamp(stats.perkFrequency, -0.5, 0.5),
+    perkLuck: clamp(stats.perkLuck, -1, 1),
   };
 }
 
@@ -111,6 +128,15 @@ function createInventoryItem(state: GameState, perk: PerkDefinition, playerId: s
 
 function getRoundById(installedRounds: InstalledRound[], roundId: string): InstalledRound | undefined {
   return installedRounds.find((round) => round.id === roundId);
+}
+
+function getInstalledCumRounds(installedRounds: InstalledRound[]): InstalledRound[] {
+  return installedRounds.filter((round) => (round.type ?? "Normal") === "Cum");
+}
+
+function pickRandomEntry<T>(entries: T[]): T | null {
+  if (entries.length === 0) return null;
+  return entries[randomInt(0, entries.length - 1)] ?? null;
 }
 
 function resolveRoundDifficulty(round: InstalledRound): number {
@@ -162,8 +188,29 @@ function getPerkChoicePool(config: GameConfig): PerkDefinition[] {
   return [...perks, ...getEnabledAntiPerkPool(config)];
 }
 
+function getEffectivePerkTriggerChance(state: GameState, player: PlayerState): number {
+  return clamp(
+    state.config.perkSelection.triggerChancePerCompletedRound + player.stats.perkFrequency,
+    0,
+    1,
+  );
+}
+
+function getPerkRarityWeight(perk: PerkDefinition, player: PlayerState): number {
+  const rarityBiasByTier = {
+    common: -1.5,
+    rare: -0.5,
+    epic: 0.5,
+    legendary: 1.5,
+  } as const;
+  const rarity = resolvePerkRarity(perk);
+  const bias = rarityBiasByTier[rarity];
+  return Math.exp(player.stats.perkLuck * bias);
+}
+
 function tickPerkDurations(state: GameState): GameState {
   const expiredLogs: string[] = [];
+  let didChange = false;
 
   const nextPlayers = state.players.map((player) => {
     const currentShieldRounds = getShieldRounds(player);
@@ -183,6 +230,7 @@ function tickPerkDurations(state: GameState): GameState {
 
       const remainingRounds = active.remainingRounds - 1;
       if (remainingRounds > 0) {
+        didChange = true;
         nextActivePerkEffects.push({ ...active, remainingRounds });
         continue;
       }
@@ -191,10 +239,13 @@ function tickPerkDurations(state: GameState): GameState {
         nextStats = applyNumericDelta(nextStats, effect, true);
       }
 
+      didChange = true;
       if (active.kind === "perk") nextPerks = stripPerkIdOnce(nextPerks, active.id);
       if (active.kind === "antiPerk") nextAntiPerks = stripPerkIdOnce(nextAntiPerks, active.id);
       expiredLogs.push(`${active.name ?? active.id} expired.`);
     }
+
+    if (decrementedShieldRounds !== currentShieldRounds) didChange = true;
 
     return {
       ...player,
@@ -207,11 +258,11 @@ function tickPerkDurations(state: GameState): GameState {
     };
   });
 
-  if (expiredLogs.length === 0) return state;
+  if (!didChange && expiredLogs.length === 0) return state;
   return {
     ...state,
     players: nextPlayers,
-    log: [...expiredLogs, ...state.log].slice(0, 40),
+    log: expiredLogs.length > 0 ? [...expiredLogs, ...state.log].slice(0, 40) : state.log,
   };
 }
 
@@ -418,6 +469,14 @@ function applyPerkToPlayer(
   }
 
   let nextState = state;
+  if (["milker", "jackhammer", "succubus"].includes(perk.id)) {
+    nextState = consumeAntiPerkById(state, {
+      playerId: sourcePlayerId,
+      perkId: "no-rest",
+      reason: `${perk.name} replaced No Rest.`,
+    });
+  }
+
   for (const effect of perk.effects) {
     nextState = applyEffect(nextState, effect, sourcePlayerId);
   }
@@ -452,8 +511,12 @@ function applyPerkToPlayer(
 }
 
 function queueCumRound(state: GameState, installedRounds: InstalledRound[]): GameState {
-  const cumRoundId = state.config.singlePlayer.cumRoundIds[state.nextCumRoundIndex];
-  if (!cumRoundId) {
+  const selectedCumRounds = state.config.singlePlayer.cumRoundIds
+    .map((roundId) => getRoundById(installedRounds, roundId))
+    .filter((round): round is InstalledRound => Boolean(round));
+  const fallbackCumRounds = getInstalledCumRounds(installedRounds);
+  const selectedRound = pickRandomEntry(selectedCumRounds) ?? pickRandomEntry(fallbackCumRounds);
+  if (!selectedRound) {
     return {
       ...state,
       sessionPhase: "completed",
@@ -462,29 +525,27 @@ function queueCumRound(state: GameState, installedRounds: InstalledRound[]): Gam
     };
   }
 
-  const round = getRoundById(installedRounds, cumRoundId);
-  const roundName = round?.name ?? `Cum Round ${state.nextCumRoundIndex + 1}`;
   return {
     ...state,
     sessionPhase: "cum",
     queuedRound: {
-      fieldId: `cum-${state.nextCumRoundIndex + 1}`,
-      nodeId: `cum-${state.nextCumRoundIndex + 1}`,
-      roundId: cumRoundId,
-      roundName,
+      fieldId: "cum-final",
+      nodeId: "cum-final",
+      roundId: selectedRound.id,
+      roundName: selectedRound.name,
       selectionKind: "cum",
       poolId: null,
       phaseKind: "cum",
       campaignIndex: null,
     },
-    nextCumRoundIndex: state.nextCumRoundIndex + 1,
-    log: [`Cum phase: ${roundName} queued.`, ...state.log].slice(0, 40),
+    nextCumRoundIndex: state.config.singlePlayer.cumRoundIds.length,
+    log: [`Cum phase: ${selectedRound.name} queued.`, ...state.log].slice(0, 40),
   };
 }
 
 function startCumPhase(state: GameState, installedRounds: InstalledRound[]): GameState {
   if (state.sessionPhase !== "normal") return state;
-  if (state.config.singlePlayer.cumRoundIds.length === 0) {
+  if (state.config.singlePlayer.cumRoundIds.length === 0 && getInstalledCumRounds(installedRounds).length === 0) {
     return {
       ...state,
       sessionPhase: "completed",
@@ -504,6 +565,8 @@ function startCumPhase(state: GameState, installedRounds: InstalledRound[]): Gam
 
 function triggerPerkSelection(state: GameState, playerId: string, sourceFieldId: string): GameState {
   if (state.pendingPerkSelection || state.pendingPathChoice || state.queuedRound || state.activeRound) return state;
+  const player = state.players.find((entry) => entry.id === playerId);
+  if (!player) return state;
 
   if (Math.random() < state.antiPerkProbability) {
     const antiPool = getEnabledAntiPerkPool(state.config);
@@ -531,7 +594,11 @@ function triggerPerkSelection(state: GameState, playerId: string, sourceFieldId:
   }
 
   const perkChoicePool = getPerkChoicePool(state.config);
-  const options = pickUniqueRandom(perkChoicePool, state.config.perkSelection.optionsPerPick);
+  const options = pickUniqueWeighted(
+    perkChoicePool,
+    state.config.perkSelection.optionsPerPick,
+    (perk) => getPerkRarityWeight(perk, player),
+  );
   if (options.length === 0) {
     return {
       ...state,
@@ -615,6 +682,7 @@ function queueRoundFromNode(
       nodeId,
       roundId,
       roundName: round?.name ?? field?.name ?? roundId,
+      skippable: field?.skippable,
       selectionKind,
       poolId,
       phaseKind: "normal",
@@ -625,6 +693,10 @@ function queueRoundFromNode(
       ...state.log,
     ].slice(0, 40),
   };
+}
+
+function canSkipQueuedRound(state: GameState): boolean {
+  return Boolean(state.queuedRound?.skippable && state.queuedRound?.phaseKind === "normal");
 }
 
 function movePlayerToNode(state: GameState, playerId: string, nodeId: string): GameState {
@@ -676,14 +748,41 @@ function resolveForcedRoundLanding(
   const nodeIndex = state.config.runtimeGraph.nodeIndexById[nodeId] ?? 0;
   const field = state.config.board[nodeIndex];
 
-  if (!field || field.kind !== "round" || !field.forceStop || !field.fixedRoundId) {
+  if (!field || !field.forceStop) {
     return { state, stopMovement: false, stoppedAtForcedRound: false };
   }
 
+  if (field.kind === "round" && field.fixedRoundId) {
+    return {
+      state: queueRoundFromNode(state, installedRounds, nodeId, field.fixedRoundId, "fixed", null),
+      stopMovement: true,
+      stoppedAtForcedRound: true,
+    };
+  }
+
+  if (field.kind === "perk") {
+    return {
+      state: resolveFinalNodeLanding(state, installedRounds),
+      stopMovement: true,
+      stoppedAtForcedRound: true,
+    };
+  }
+
+  return { state, stopMovement: false, stoppedAtForcedRound: false };
+}
+
+function grantPerkToInventory(
+  state: GameState,
+  playerId: string,
+  perk: PerkDefinition,
+): GameState {
+  const inventoryItem = createInventoryItem(state, perk, playerId);
   return {
-    state: queueRoundFromNode(state, installedRounds, nodeId, field.fixedRoundId, "fixed", null),
-    stopMovement: true,
-    stoppedAtForcedRound: true,
+    ...state,
+    players: updatePlayer(state.players, playerId, (player) => ({
+      ...player,
+      inventory: [inventoryItem, ...player.inventory],
+    })),
   };
 }
 
@@ -760,10 +859,17 @@ function resolveFinalNodeLanding(
         };
       }
 
-      const applied = applyPerkToPlayer(state, player.id, configuredPerk);
+      const applied = field.giftGuaranteedPerk
+        ? grantPerkToInventory(state, player.id, configuredPerk)
+        : applyPerkToPlayer(state, player.id, configuredPerk);
       return {
         ...applied,
-        log: [`Guaranteed perk: ${configuredPerk.name}.`, ...applied.log].slice(0, 40),
+        log: [
+          field.giftGuaranteedPerk
+            ? `Guaranteed perk gifted: ${configuredPerk.name}.`
+            : `Guaranteed perk: ${configuredPerk.name}.`,
+          ...applied.log,
+        ].slice(0, 40),
       };
     }
 
@@ -1018,6 +1124,8 @@ export function createInitialGameState(
           diceMin: config.dice.min,
           diceMax: config.dice.max,
           roundPauseMs: 20000,
+          perkFrequency: 0,
+          perkLuck: 0,
         },
         money: config.economy.startingMoney,
         score: config.economy.startingScore,
@@ -1083,7 +1191,8 @@ export function rollTurn(
   forcedRoll?: number,
 ): GameState {
   if (state.sessionPhase !== "normal") return state;
-  if (state.pendingPerkSelection || state.pendingPathChoice || state.queuedRound || state.activeRound) return state;
+  if (state.pendingPerkSelection || state.pendingPathChoice || state.activeRound) return state;
+  if (state.queuedRound && !canSkipQueuedRound(state)) return state;
 
   const player = state.players[state.currentPlayerIndex];
   if (!player) return state;
@@ -1098,6 +1207,7 @@ export function rollTurn(
 
   const movedState: GameState = {
     ...state,
+    queuedRound: null,
     players: updatePlayer(state.players, player.id, (entry) => ({
       ...entry,
       pendingRollMultiplier: null,
@@ -1135,12 +1245,25 @@ export function rollTurn(
 
 export function triggerQueuedRound(state: GameState): GameState {
   if (!state.queuedRound) return state;
+  const currentPlayerId = state.players[state.currentPlayerIndex]?.id;
+  const withResolvedNoRest =
+    currentPlayerId && state.players[state.currentPlayerIndex]?.antiPerks.includes("no-rest")
+      ? consumeAntiPerkById(state, {
+        playerId: currentPlayerId,
+        perkId: "no-rest",
+        reason: "No-rest ended when the round started.",
+      })
+      : state;
   return {
-    ...state,
+    ...withResolvedNoRest,
     activeRound: state.queuedRound,
     queuedRound: null,
-    log: [`${state.queuedRound.roundName} started.`, ...state.log].slice(0, 40),
+    log: [`${state.queuedRound.roundName} started.`, ...withResolvedNoRest.log].slice(0, 40),
   };
+}
+
+export function shouldAutoStartQueuedRound(state: GameState): boolean {
+  return Boolean(state.queuedRound && !canSkipQueuedRound(state));
 }
 
 export function completeRound(
@@ -1183,9 +1306,12 @@ export function completeRound(
         ...state.log,
       ].slice(0, 40),
     };
-    const queuedNextCum = queueCumRound(nextAfterCum, installedRounds);
-    if (queuedNextCum.sessionPhase === "completed") return queuedNextCum;
-    return advanceTurn(queuedNextCum);
+    return {
+      ...nextAfterCum,
+      sessionPhase: "completed",
+      completionReason: "finished",
+      log: ["Session completed.", ...nextAfterCum.log].slice(0, 40),
+    };
   }
 
   const intermediaryCount = Math.max(0, summary?.intermediaryCount ?? 0);
@@ -1251,7 +1377,8 @@ export function completeRound(
     };
   }
 
-  if (Math.random() < state.config.perkSelection.triggerChancePerCompletedRound) {
+  const updatedCurrentPlayer = next.players[next.currentPlayerIndex];
+  if (updatedCurrentPlayer && Math.random() < getEffectivePerkTriggerChance(next, updatedCurrentPlayer)) {
     next = triggerPerkSelection(next, currentPlayer.id, activeRound.fieldId);
     if (next.pendingPerkSelection || next.pendingPathChoice || next.queuedRound || next.activeRound) return next;
   }
@@ -1484,11 +1611,12 @@ export function applyPerkByIdToPlayer(
 
   const next = applyPerkToPlayer(state, targetPlayer.id, perk);
   const source = input.sourceLabel?.trim();
-  const prefix = source && source.length > 0 ? `${source} applied anti-perk:` : "Computer applied anti-perk:";
+  const actor = source && source.length > 0 ? source : "Computer";
+  const kindLabel = perk.kind === "antiPerk" ? "anti-perk" : "perk";
 
   return {
     ...next,
-    log: [`${prefix} ${perk.name} - ${perk.description}`, ...next.log].slice(0, 40),
+    log: [`${actor} applied ${kindLabel}: ${perk.name} - ${perk.description}`, ...next.log].slice(0, 40),
   };
 }
 

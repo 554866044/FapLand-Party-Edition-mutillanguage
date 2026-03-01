@@ -16,6 +16,10 @@ const EXPECTED_COSTS: Record<string, number> = {
   "lazy-hero": 210,
   gooooal: 190,
   "be-gentle": 200,
+  "treasure-magnet": 180,
+  "lucky-star": 200,
+  "high-roller": 220,
+  "coupon-clipper": 190,
   "no-rest": 220,
   highspeed: 240,
   virus: 260,
@@ -28,8 +32,11 @@ const EXPECTED_COSTS: Record<string, number> = {
   "score-leech": 240,
   "cement-boots": 260,
   "panic-loop": 270,
+  "dry-spell": 230,
+  "bad-omen": 240,
   "sticky-fingers": 280,
   "snake-eyes": 320,
+  "im-close": 400,
 };
 
 const EXPECTED_RARITIES: Record<string, PerkRarity> = {
@@ -45,6 +52,10 @@ const EXPECTED_RARITIES: Record<string, PerkRarity> = {
   "lazy-hero": "rare",
   gooooal: "rare",
   "be-gentle": "rare",
+  "treasure-magnet": "rare",
+  "lucky-star": "rare",
+  "high-roller": "rare",
+  "coupon-clipper": "rare",
   "no-rest": "rare",
   highspeed: "epic",
   virus: "epic",
@@ -57,8 +68,11 @@ const EXPECTED_RARITIES: Record<string, PerkRarity> = {
   "score-leech": "epic",
   "cement-boots": "epic",
   "panic-loop": "epic",
+  "dry-spell": "rare",
+  "bad-omen": "epic",
   "sticky-fingers": "epic",
   "snake-eyes": "legendary",
+  "im-close": "legendary",
 };
 
 describe("perk cost balance", () => {
@@ -92,6 +106,7 @@ describe("perk cost balance", () => {
       "panic-loop",
       "sticky-fingers",
       "snake-eyes",
+      "im-close",
     ];
     for (const perkId of extremeIds) {
       const perk = getPerkById(perkId);

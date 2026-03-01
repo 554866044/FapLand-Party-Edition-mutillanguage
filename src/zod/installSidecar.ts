@@ -2,7 +2,7 @@ import * as z from "zod";
 
 const ALLOWED_URI_PROTOCOLS = ["http:", "https:", "app:", "file:"] as const;
 
-const ZInstallUri = z
+const ZAbsoluteInstallUri = z
   .string()
   .url("Invalid URI format.")
   .refine((uri) => {
@@ -12,6 +12,14 @@ const ZInstallUri = z
       return false;
     }
   }, `Unsupported URI protocol. Allowed: ${ALLOWED_URI_PROTOCOLS.join(", ")}`);
+
+const ZRelativeInstallPath = z
+  .string()
+  .trim()
+  .min(2, "Relative resource path is required.")
+  .refine((value) => value.startsWith("./") || value.startsWith("../"), "Relative resource path must start with ./ or ../");
+
+const ZInstallUri = z.union([ZAbsoluteInstallUri, ZRelativeInstallPath]);
 
 const ZNullableString = z.string().trim().min(1).nullish();
 

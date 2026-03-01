@@ -8,7 +8,7 @@ Players race across a 2D virtual game board while simultaneously watching a loca
 
 ## Core Gameplay Loop
 
-1. **The Setup:** Players open multiplayer, get an anonymous multiplayer account automatically on the default online server, enter their Handy Connection Key, and select a local video (`.mp4`/`.webm`) and its matching `.funscript` file. Advanced users can still switch to a self-hosted Supabase server.
+1. **The Setup:** Players open multiplayer, the app resumes or creates a Supabase multiplayer account automatically, enter their Handy Connection Key, and select a local video (`.mp4`/`.webm`) and its matching `.funscript` file. On servers with Discord auth configured, players must link a Discord account that has an email. Custom/self-hosted servers without Discord OAuth fall back to anonymous multiplayer.
 2. **The Race:** The game is an asynchronous race. Players roll dice to move across the PixiJS 2D board.
 3. **The Sabotage (Traps):** Players spend coins to place traps on specific board tiles. If Player B lands on Player A's "Speed Trap," Player B's video `playbackRate` dynamically shifts to 1.5x, and their Handy hardware instantly scales its speed to match.
 4. **The Queue:** To handle concurrent attacks, traps do not overwrite each other. They are pushed into a sequential "Trap Queue." The player's client processes them one by one until the queue is empty.
@@ -31,48 +31,69 @@ Players race across a 2D virtual game board while simultaneously watching a loca
 
 ## Development
 
-Install dependencies (ensure you have the latest Node/npm or use the provided Nix flake for the environment):
+Install dependencies with the local flake-backed toolchain:
 
 ```bash
-npm install
+nix develop -c npm install
 ```
 
 Create a local env file before running multiplayer locally:
 
 ```bash
-cp example.env .env
+cp .example.env .env
 ```
 
 Set `VITE_MULTIPLAYER_DEVELOPMENT_SUPABASE_ANON_KEY` in `.env` to your local Supabase anon key. The development key is no longer kept in source.
 
+If you want local Supabase multiplayer to require Discord linking, also set:
+
+```bash
+SUPABASE_AUTH_EXTERNAL_DISCORD_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_DISCORD_SECRET=...
+```
+
+The desktop OAuth callback used by the packaged app is `fland://auth/callback`.
+
 Start the development server:
 
 ```bash
-npm run dev
+nix develop -c npm run dev
 ```
 
 Run multiplayer development environment:
 
 ```bash
-npm run dev:multiplayer
+nix develop -c npm run dev:multiplayer
 ```
 
 Build for production:
 
 ```bash
-npm run build
+nix develop -c npm run build
 ```
 
-Build a hardened release bundle with terser minification, target-specific obfuscation, and production source maps disabled:
+Build the hardened renderer/main bundle with terser minification, target-specific obfuscation, and production source maps disabled:
 
 ```bash
-npm run build:release
+nix develop -c npm run build:release
 ```
 
 Build the hardened release bundle with compressed size reporting enabled:
 
 ```bash
-npm run build:analyze
+nix develop -c npm run build:analyze
+```
+
+Build a packaged release with Electron fuses, ASAR packaging, and embedded ASAR integrity validation:
+
+```bash
+nix develop -c npm run build:package
+```
+
+Build a packaged tester build that keeps dev-only app features enabled while preserving the packaged hardening defaults:
+
+```bash
+nix develop -c npm run build:testers
 ```
 
 Optional build flags:
@@ -82,3 +103,8 @@ Optional build flags:
 - `FLAND_OBFUSCATE_PRELOAD=true|false`
 - `FLAND_OBFUSCATE_MAIN=true|false`
 - `FLAND_BUILD_ANALYZE=true|false`
+- `FLAND_ENABLE_DEV_FEATURES=true|false`
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

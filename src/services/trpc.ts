@@ -1,6 +1,5 @@
 import { createTRPCProxyClient } from "@trpc/client";
-import { createTRPCReact } from "@trpc/react-query";
-import { ipcLink } from "electron-trpc/renderer";
+import { ipcLink } from "trpc-electron/renderer";
 import superjson from "superjson";
 import type { AppRouter } from "../../electron/trpc/router";
 
@@ -10,9 +9,20 @@ import type { AppRouter } from "../../electron/trpc/router";
  *   trpc.store.set.mutate({ key: 'foo', value: 'bar' })
  *   trpc.phash.generate.query({ path: '/video.mp4' })
  */
-export const trpc = createTRPCProxyClient<AppRouter>({
-  links: [ipcLink()],
-  transformer: superjson
-});
+let trpcClient: ReturnType<typeof createTRPCProxyClient<AppRouter>> | null = null;
 
-export const trpcReact = createTRPCReact<AppRouter>();
+function getTrpcClient() {
+  if (!trpcClient) {
+    trpcClient = createTRPCProxyClient<AppRouter>({
+      links: [ipcLink<AppRouter>({ transformer: superjson as never })],
+    });
+  }
+
+  return trpcClient;
+}
+
+export const trpc = new Proxy({} as ReturnType<typeof createTRPCProxyClient<AppRouter>>, {
+  get(_target, property, receiver) {
+    return Reflect.get(getTrpcClient(), property, receiver);
+  },
+});

@@ -1,11 +1,11 @@
-import { app, BrowserWindow, protocol, ipcMain, dialog, Menu, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, protocol, ipcMain, dialog, Menu, shell, type OpenDialogOptions } from "electron";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { createIPCHandler } from "trpc-electron/main";
 import { config as loadDotenv } from "dotenv";
-import { createIPCHandler } from "electron-trpc/main";
 import { appRouter } from "./trpc/router";
 import { getNodeEnv } from "../src/zod/env";
 import {
@@ -14,6 +14,7 @@ import {
     isVideoExtension,
 } from "../src/constants/videoFormats";
 import { approveDialogPath } from "./services/dialogPathApproval";
+import { normalizeMultiplayerAuthCallback } from "./services/authCallback";
 import { ensureAppDatabaseReady } from "./services/db";
 import { scanInstallSources } from "./services/installer";
 import { proxyExternalRequest } from "./services/integrations";
@@ -21,8 +22,29 @@ import { initializeAppUpdater, subscribeToUpdateState } from "./services/updater
 
 const OPENABLE_FILE_EXTENSIONS = new Set([".hero", ".round", ".fplay"]);
 const pendingOpenedFiles: string[] = [];
+const pendingAuthCallbacks: string[] = [];
 let appOpenRendererReady = false;
 let mainWindowRef: BrowserWindow | null = null;
+let trpcIpcHandler: { attachWindow: (window: BrowserWindow) => void } | null = null;
+
+function reportFatalStartupError(error: unknown): void {
+    const message = error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
+    console.error("Fatal startup error", error);
+
+    try {
+        dialog.showErrorBox("Fap Land failed to start", message);
+    } catch {
+        // Best-effort reporting only.
+    }
+}
+
+process.on("uncaughtException", (error) => {
+    reportFatalStartupError(error);
+});
+
+process.on("unhandledRejection", (reason) => {
+    reportFatalStartupError(reason);
+});
 
 // Allow custom app:// URLs to behave like normal web URLs, including
 // media streaming and fetch() from the renderer.
@@ -40,11 +62,6 @@ protocol.registerSchemesAsPrivileged([
         },
     },
 ]);
-
-
-
-app.commandLine.appendSwitch("enable-features", "UseOzonePlatform,WaylandWindowDecorations");
-app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 
 function normalizeUserDataSuffix(raw: string | undefined): string | null {
     if (!raw) return null;
@@ -91,6 +108,8 @@ process.env = normalizedProcessEnv;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const RENDERER_DIST = path.join(APP_ROOT, "dist");
+const isDevServerEnabled = Boolean(VITE_DEV_SERVER_URL);
+const PACKAGED_RENDERER_ENTRY_URL = "app://renderer/index.html";
 
 function normalizeOpenedFilePath(rawPath: string): string | null {
     const trimmed = rawPath.trim();
@@ -132,6 +151,18 @@ function queueOpenedFiles(filePaths: string[]): void {
     pendingOpenedFiles.push(...normalized);
 }
 
+function queueAuthCallback(rawUrl: string): void {
+    const normalized = normalizeMultiplayerAuthCallback(rawUrl);
+    if (!normalized) return;
+
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        mainWindowRef.webContents.send("auth:callback", normalized);
+        return;
+    }
+
+    pendingAuthCallbacks.push(normalized);
+}
+
 function focusMainWindow(): void {
     const targetWindow = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
     if (!targetWindow) return;
@@ -145,9 +176,15 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
     queueOpenedFiles(process.argv.slice(1));
+    for (const arg of process.argv) {
+        queueAuthCallback(arg);
+    }
 
     app.on("second-instance", (_event, argv) => {
         queueOpenedFiles(argv.slice(1));
+        for (const arg of argv) {
+            queueAuthCallback(arg);
+        }
         focusMainWindow();
     });
 }
@@ -155,6 +192,12 @@ if (!app.requestSingleInstanceLock()) {
 app.on("open-file", (event, filePath) => {
     event.preventDefault();
     queueOpenedFiles([filePath]);
+    focusMainWindow();
+});
+
+app.on("open-url", (event, url) => {
+    event.preventDefault();
+    queueAuthCallback(url);
     focusMainWindow();
 });
 
@@ -171,6 +214,50 @@ function resolveMediaContentType(filePath: string): string {
     }
 
     return "application/octet-stream";
+}
+
+function resolveRendererContentType(filePath: string): string {
+    const extension = path.extname(filePath).toLowerCase();
+
+    switch (extension) {
+        case ".html":
+            return "text/html; charset=utf-8";
+        case ".js":
+        case ".mjs":
+        case ".cjs":
+            return "text/javascript; charset=utf-8";
+        case ".css":
+            return "text/css; charset=utf-8";
+        case ".json":
+        case ".map":
+            return "application/json; charset=utf-8";
+        case ".svg":
+            return "image/svg+xml";
+        case ".png":
+            return "image/png";
+        case ".jpg":
+        case ".jpeg":
+            return "image/jpeg";
+        case ".gif":
+            return "image/gif";
+        case ".ico":
+            return "image/x-icon";
+        case ".webp":
+            return "image/webp";
+        case ".woff":
+            return "font/woff";
+        case ".woff2":
+            return "font/woff2";
+        case ".txt":
+        case ".md":
+            return "text/plain; charset=utf-8";
+        case ".webmanifest":
+            return "application/manifest+json; charset=utf-8";
+        case ".xml":
+            return "application/xml; charset=utf-8";
+        default:
+            return "application/octet-stream";
+    }
 }
 
 type ParsedByteRange = { start: number; end: number } | null | "invalid";
@@ -277,6 +364,47 @@ async function createMediaResponse(filePath: string, request: Request): Promise<
     });
 }
 
+function resolveRendererPath(url: URL): string | null {
+    const decodedPath = decodeURIComponent(url.pathname);
+    const normalizedRelativePath = path.posix.normalize(decodedPath);
+    const relativePath = normalizedRelativePath === "/" ? "/index.html" : normalizedRelativePath;
+
+    if (!relativePath.startsWith("/") || relativePath.includes("\0") || relativePath.startsWith("/..") || relativePath.includes("/../")) {
+        return null;
+    }
+
+    return path.join(RENDERER_DIST, relativePath.slice(1));
+}
+
+async function createRendererResponse(url: URL): Promise<Response> {
+    const filePath = resolveRendererPath(url);
+    if (!filePath) {
+        return new Response("Not found", { status: 404 });
+    }
+
+    let fileStats;
+    try {
+        fileStats = await stat(filePath);
+    } catch {
+        return new Response("Not found", { status: 404 });
+    }
+
+    if (!fileStats.isFile()) {
+        return new Response("Not found", { status: 404 });
+    }
+
+    const headers = new Headers({
+        "Content-Length": `${fileStats.size}`,
+        "Content-Type": resolveRendererContentType(filePath),
+    });
+
+    const stream = createReadStream(filePath);
+    return new Response(Readable.toWeb(stream) as ReadableStream, {
+        status: 200,
+        headers,
+    });
+}
+
 function registerFileProtocol(): void {
     protocol.handle("app", async (request: Request) => {
         const url = new URL(request.url);
@@ -285,18 +413,50 @@ function registerFileProtocol(): void {
             return proxyExternalRequest(request);
         }
 
-        if (url.hostname !== "media") {
-            return new Response("Not found", { status: 404 });
+        if (url.hostname === "renderer") {
+            return createRendererResponse(url);
         }
 
-        const decoded = decodeURIComponent(url.pathname.slice(1));
-        const normalizedPath =
-            process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
-                ? path.normalize(decoded.slice(1))
-                : path.normalize(decoded);
+        if (url.hostname === "media") {
+            const decoded = decodeURIComponent(url.pathname.slice(1));
+            const normalizedPath =
+                process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
+                    ? path.normalize(decoded.slice(1))
+                    : path.normalize(decoded);
 
-        return createMediaResponse(normalizedPath, request);
+            return createMediaResponse(normalizedPath, request);
+        }
+
+        return new Response("Not found", { status: 404 });
     });
+}
+
+function isSafeExternalUrl(target: string): boolean {
+    try {
+        const parsed = new URL(target);
+        return parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:";
+    } catch {
+        return false;
+    }
+}
+
+function isAllowedNavigationTarget(target: string): boolean {
+    try {
+        const parsed = new URL(target);
+
+        if (parsed.protocol === "app:") {
+            return parsed.hostname === "media" || parsed.hostname === "renderer";
+        }
+
+        if (isDevServerEnabled && VITE_DEV_SERVER_URL) {
+            const devServerUrl = new URL(VITE_DEV_SERVER_URL);
+            return parsed.origin === devServerUrl.origin;
+        }
+
+        return parsed.protocol === "file:";
+    } catch {
+        return false;
+    }
 }
 
 function createWindow(): BrowserWindow {
@@ -304,11 +464,17 @@ function createWindow(): BrowserWindow {
         width: 1280,
         height: 800,
         title: "Fap Land",
+        safeDialogs: true,
         webPreferences: {
             preload: path.join(__dirname, "preload.cjs"),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false,
+            sandbox: !isDevServerEnabled,
+            devTools: isDevServerEnabled,
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            spellcheck: false,
+            backgroundThrottling: true,
         },
         backgroundColor: "#050508",
         autoHideMenuBar: true,
@@ -316,12 +482,37 @@ function createWindow(): BrowserWindow {
     mainWindowRef = mainWindow;
     appOpenRendererReady = false;
 
-    // Wire up tRPC IPC handler for this window
-    createIPCHandler({ router: appRouter });
+    if (!trpcIpcHandler) {
+        trpcIpcHandler = createIPCHandler({
+            router: appRouter,
+            windows: [mainWindow],
+        });
+    } else {
+        trpcIpcHandler.attachWindow(mainWindow);
+    }
 
     // Forward renderer console logs to terminal
-    mainWindow.webContents.on("console-message", (_event, _level, message, line, sourceId) => {
-        console.log(`[Renderer Console] ${sourceId}:${line} - ${message}`);
+    mainWindow.webContents.on("console-message", (details) => {
+        console.log(`[Renderer Console] ${details.sourceId}:${details.lineNumber} - ${details.message}`);
+    });
+
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (isSafeExternalUrl(url)) {
+            void shell.openExternal(url);
+        }
+
+        return { action: "deny" };
+    });
+
+    mainWindow.webContents.on("will-navigate", (event, url) => {
+        if (isAllowedNavigationTarget(url)) {
+            return;
+        }
+
+        event.preventDefault();
+        if (isSafeExternalUrl(url)) {
+            void shell.openExternal(url);
+        }
     });
 
     // Handle zoom shortcuts and F11 fullscreen toggle since we removed the default menu
@@ -349,11 +540,11 @@ function createWindow(): BrowserWindow {
         }
     });
 
-    if (VITE_DEV_SERVER_URL) {
+    if (isDevServerEnabled && VITE_DEV_SERVER_URL) {
         mainWindow.loadURL(VITE_DEV_SERVER_URL);
         mainWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(RENDERER_DIST, "index.html"));
+        mainWindow.loadURL(PACKAGED_RENDERER_ENTRY_URL);
     }
 
     mainWindow.on("closed", () => {
@@ -398,6 +589,13 @@ function registerWindowControlsIpc() {
         if (!win) return false;
         win.setFullScreen(!win.isFullScreen());
         return win.isFullScreen();
+    });
+
+    ipcMain.handle("window:close", (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win) return false;
+        win.close();
+        return true;
     });
 }
 
@@ -496,6 +694,30 @@ function registerDialogIpc() {
         return filePath;
     });
 
+    ipcMain.handle("dialog:selectPlaylistExportDirectory", async (event, defaultName?: string) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const options: OpenDialogOptions = {
+            title: defaultName && defaultName.trim().length > 0
+                ? `Choose export folder for ${defaultName}`
+                : "Choose export folder",
+            properties: ["openDirectory", "createDirectory"],
+        };
+        const result = win
+            ? await dialog.showOpenDialog(win, options)
+            : await dialog.showOpenDialog(options);
+
+        if (result.canceled) {
+            return null;
+        }
+
+        const directoryPath = result.filePaths[0] ?? null;
+        if (directoryPath) {
+            approveDialogPath("playlistExportDirectory", directoryPath);
+        }
+
+        return directoryPath;
+    });
+
     ipcMain.handle("dialog:selectConverterVideoFile", async (event) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         const options: OpenDialogOptions = {
@@ -511,6 +733,23 @@ function registerDialogIpc() {
             : await dialog.showOpenDialog(options);
         if (result.canceled) return null;
         return result.filePaths[0] ?? null;
+    });
+
+    ipcMain.handle("dialog:selectMusicFiles", async (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const options: OpenDialogOptions = {
+            title: "Select Music Files",
+            properties: ["openFile", "multiSelections"],
+            filters: [
+                { name: "Audio Files", extensions: ["mp3", "m4a", "aac", "ogg", "wav", "flac"] },
+                { name: "All Files", extensions: ["*"] },
+            ],
+        };
+        const result = win
+            ? await dialog.showOpenDialog(win, options)
+            : await dialog.showOpenDialog(options);
+        if (result.canceled) return [] as string[];
+        return result.filePaths;
     });
 
     ipcMain.handle("dialog:selectConverterFunscriptFile", async (event) => {
@@ -538,28 +777,41 @@ function registerAppOpenIpc() {
     });
 }
 
-app.whenReady().then(async () => {
-    await ensureAppDatabaseReady();
-    registerFileProtocol();
-    registerWindowControlsIpc();
-    registerDialogIpc();
-    registerAppOpenIpc();
-    broadcastUpdateState();
-    Menu.setApplicationMenu(null);
-    createWindow();
-    void initializeAppUpdater().catch((error) => {
-        console.error("Startup update check failed", error);
+function registerAuthCallbackIpc() {
+    ipcMain.handle("auth:consumePendingCallback", () => {
+        return pendingAuthCallbacks.shift() ?? null;
     });
-    void scanInstallSources("startup").catch((error) => {
-        console.error("Startup install scan failed", error);
-    });
+}
 
-    app.on("activate", () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
+app.whenReady()
+    .then(async () => {
+        app.setAsDefaultProtocolClient("fland");
+        await ensureAppDatabaseReady();
+        registerFileProtocol();
+        registerWindowControlsIpc();
+        registerDialogIpc();
+        registerAppOpenIpc();
+        registerAuthCallbackIpc();
+        broadcastUpdateState();
+        Menu.setApplicationMenu(null);
+        createWindow();
+        void initializeAppUpdater().catch((error) => {
+            console.error("Startup update check failed", error);
+        });
+        void scanInstallSources("startup").catch((error) => {
+            console.error("Startup install scan failed", error);
+        });
+
+        app.on("activate", () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    })
+    .catch((error) => {
+        reportFatalStartupError(error);
+        app.quit();
     });
-});
 
 app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {

@@ -135,4 +135,56 @@ describe("stash client helpers", () => {
     expect(oldGraphQlHeaders.Cookie).toBe("session=old-cookie");
     expect(newGraphQlHeaders.Cookie).toBe("session=new-cookie");
   });
+
+  it("sends no auth headers for no-auth GraphQL requests", async () => {
+    const upstreamFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { findTags: { count: 1 } } }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+    }));
+    vi.stubGlobal("fetch", upstreamFetch);
+
+    await executeStashGraphQL(
+      {
+        ...baseSource,
+        authMode: "none",
+        apiKey: null,
+      },
+      "query Test { findTags { count } }",
+    );
+
+    expect(upstreamFetch).toHaveBeenCalledTimes(1);
+    const [, init] = upstreamFetch.mock.calls[0] as [string, { headers: Record<string, string> }];
+    expect(init.headers.ApiKey).toBeUndefined();
+    expect(init.headers.Cookie).toBeUndefined();
+  });
+
+  it("does not add auth material for no-auth media proxy requests", async () => {
+    const upstreamFetch = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", upstreamFetch);
+
+    const request = new Request("app://external/stash?sourceId=source-1", {
+      method: "GET",
+      headers: {
+        Range: "bytes=0-100",
+      },
+    });
+
+    await fetchStashMediaWithAuth(
+      {
+        ...baseSource,
+        authMode: "none",
+        apiKey: null,
+      },
+      "https://stash.example.com/scene/123/stream",
+      request,
+    );
+
+    const [target, init] = upstreamFetch.mock.calls[0] as [string, { headers: Headers }];
+    expect(target).toBe("https://stash.example.com/scene/123/stream");
+    expect(init.headers.get("ApiKey")).toBeNull();
+    expect(init.headers.get("Cookie")).toBeNull();
+    expect(init.headers.get("Range")).toBe("bytes=0-100");
+  });
 });

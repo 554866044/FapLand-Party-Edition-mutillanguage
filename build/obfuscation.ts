@@ -1,5 +1,5 @@
 import JavaScriptObfuscator from "javascript-obfuscator";
-import type { Plugin } from "vite";
+import type { OutputChunk, Plugin } from "vite";
 
 const PRELOAD_RESERVED_NAMES = [
   "electronAPI",
@@ -13,7 +13,7 @@ const PRELOAD_RESERVED_NAMES = [
 
 const RESERVED_STRINGS = {
   preload: [
-    "electron-trpc",
+    "trpc-electron",
     "updates:state",
     "app-open:files",
     "app-open:consumePendingFiles",
@@ -32,7 +32,7 @@ const RESERVED_STRINGS = {
     "app-open:files",
     "app-open:consumePendingFiles",
     "updates:state",
-    "electron-trpc",
+    "trpc-electron",
     "file",
     "open-file",
     "second-instance",
@@ -98,20 +98,29 @@ function getTargetOptions(target: BuildTarget) {
   };
 }
 
-function shouldObfuscateChunk(target: BuildTarget, fileName: string) {
-  if (!fileName.endsWith(".js") && !fileName.endsWith(".cjs")) {
+function isJavaScriptChunk(fileName: string) {
+  return fileName.endsWith(".js") || fileName.endsWith(".cjs");
+}
+
+function isPureVendorChunk(chunk: OutputChunk) {
+  const moduleIds = Object.keys(chunk.modules);
+  return moduleIds.length > 0 && moduleIds.every((moduleId) => moduleId.includes("node_modules"));
+}
+
+export function shouldObfuscateChunk(target: BuildTarget, chunk: OutputChunk) {
+  if (!isJavaScriptChunk(chunk.fileName)) {
     return false;
   }
 
   if (target === "renderer") {
-    return fileName.startsWith("assets/");
+    return chunk.fileName.startsWith("assets/") && !isPureVendorChunk(chunk);
   }
 
   if (target === "preload") {
-    return fileName === "preload.cjs";
+    return chunk.fileName === "preload.cjs";
   }
 
-  return fileName === "main.js";
+  return chunk.fileName === "main.js";
 }
 
 export function createObfuscationPlugin(target: BuildTarget, enabled: boolean): Plugin | null {
@@ -127,7 +136,7 @@ export function createObfuscationPlugin(target: BuildTarget, enabled: boolean): 
       const obfuscatorOptions = getTargetOptions(target);
 
       for (const chunk of Object.values(bundle)) {
-        if (chunk.type !== "chunk" || !shouldObfuscateChunk(target, chunk.fileName)) {
+        if (chunk.type !== "chunk" || !shouldObfuscateChunk(target, chunk)) {
           continue;
         }
 

@@ -79,7 +79,7 @@ export function useAppUpdate() {
       return state.downloadUrl ? "Download Latest Version" : "Open Latest Release";
     }
     if (state.status === "up_to_date") {
-      return "Up to Date";
+      return "Check Again";
     }
     if (state.status === "error") {
       if ((state.errorMessage ?? "").toLowerCase().includes("not configured")) {
@@ -115,7 +115,7 @@ export function useAppUpdate() {
       ? "Retry"
       : undefined;
 
-  const menuTone = state.status === "update_available"
+  const menuTone: "default" | "success" | "warning" | "danger" = state.status === "update_available"
     ? "warning"
     : state.status === "error"
       ? "danger"

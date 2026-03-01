@@ -47,6 +47,7 @@ type SinglePlayerRunRow = {
   id: string;
   finishedAt: Date;
   score: number;
+  survivedDurationSec: number | null;
   highscoreBefore: number;
   highscoreAfter: number;
   wasNewHighscore: boolean;
@@ -522,6 +523,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     await caller.recordSinglePlayerRun({
       finishedAtIso: "2026-03-05T10:00:00.000Z",
       score: 540,
+      survivedDurationSec: 812,
       highscoreBefore: 500,
       highscoreAfter: 540,
       wasNewHighscore: true,
@@ -550,7 +552,9 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     expect(runs).toHaveLength(2);
     expect(runs[0]?.playlistName).toBe("Default Playlist");
     expect(runs[0]?.score).toBe(540);
+    expect(runs[0]?.survivedDurationSec).toBe(812);
     expect(runs[0]?.wasNewHighscore).toBe(true);
+    expect(runs[1]?.survivedDurationSec).toBeNull();
     expect(runs[1]?.completionReason).toBe("self_reported_cum");
   });
 

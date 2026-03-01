@@ -26,6 +26,7 @@ export type PlaylistRecord = {
   description: string | null;
   formatVersion: number;
   config: PlaylistConfig;
+  installSourceKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -60,6 +61,7 @@ function rowToRecord(row: {
   description: string | null;
   formatVersion: number;
   configJson: string;
+  installSourceKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): PlaylistRecord {
@@ -69,6 +71,7 @@ function rowToRecord(row: {
     description: row.description,
     formatVersion: row.formatVersion,
     config: parseConfigJson(row.configJson),
+    installSourceKey: row.installSourceKey,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -147,8 +150,8 @@ async function createDefaultConfigFromInstalledRounds(): Promise<PlaylistConfig>
       enabledAntiPerkIds: [],
     },
     probabilityScaling: {
-      initialIntermediaryProbability: 0,
-      initialAntiPerkProbability: 0,
+      initialIntermediaryProbability: 0.1,
+      initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
       maxIntermediaryProbability: 0.85,
@@ -166,17 +169,6 @@ async function createDefaultConfigFromInstalledRounds(): Promise<PlaylistConfig>
   });
 }
 
-async function ensureAtLeastOnePlaylist(): Promise<PlaylistRecord> {
-  const first = await getDb().query.playlist.findFirst({ orderBy: [desc(playlist.updatedAt)] });
-  if (first) return rowToRecord(first);
-
-  const created = await createPlaylist({
-    name: "Default Playlist",
-    description: "Auto-generated default playlist",
-  });
-  return created;
-}
-
 export async function listPlaylists(): Promise<PlaylistRecord[]> {
   const rows = await getDb().query.playlist.findMany({ orderBy: [desc(playlist.updatedAt)] });
   return rows.map(rowToRecord);
@@ -191,6 +183,7 @@ export async function createPlaylist(input: {
   name: string;
   description?: string | null;
   config?: unknown;
+  installSourceKey?: string | null;
 }): Promise<PlaylistRecord> {
   const config = input.config
     ? ZPlaylistConfig.parse(input.config)
@@ -201,6 +194,7 @@ export async function createPlaylist(input: {
     description: input.description?.trim() || null,
     formatVersion: 1,
     configJson: serializeConfig(config),
+    installSourceKey: input.installSourceKey ?? null,
   }).returning();
 
   return rowToRecord(created);
@@ -253,8 +247,7 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
   }
 }
 
-export async function getActivePlaylist(): Promise<PlaylistRecord> {
-  const seeded = await ensureAtLeastOnePlaylist();
+export async function getActivePlaylist(): Promise<PlaylistRecord | null> {
   const activeId = getStore().get(ACTIVE_PLAYLIST_STORE_KEY);
 
   if (typeof activeId === "string" && activeId.length > 0) {
@@ -262,8 +255,15 @@ export async function getActivePlaylist(): Promise<PlaylistRecord> {
     if (active) return active;
   }
 
-  getStore().set(ACTIVE_PLAYLIST_STORE_KEY, seeded.id);
-  return seeded;
+  const fallback = await getDb().query.playlist.findFirst({ orderBy: [desc(playlist.updatedAt)] });
+  if (!fallback) {
+    getStore().set(ACTIVE_PLAYLIST_STORE_KEY, null);
+    return null;
+  }
+
+  const nextActive = rowToRecord(fallback);
+  getStore().set(ACTIVE_PLAYLIST_STORE_KEY, nextActive.id);
+  return nextActive;
 }
 
 export async function setActivePlaylist(playlistId: string): Promise<PlaylistRecord> {
@@ -283,6 +283,7 @@ export async function analyzePlaylistImportFile(filePath: string): Promise<Playl
 export async function importPlaylistFromFile(input: {
   filePath: string;
   manualMappingByRefKey?: Record<string, string | null | undefined>;
+  installSourceKey?: string | null;
 }): Promise<{ playlist: PlaylistRecord; report: PlaylistImportReport }> {
   const analysis = await readPlaylistImportAnalysis(input.filePath);
   const installedRounds = await loadInstalledRounds();
@@ -308,10 +309,35 @@ export async function importPlaylistFromFile(input: {
     installedRounds,
   );
 
+  const installSourceKey = input.installSourceKey ?? null;
+  if (installSourceKey) {
+    const existing = await getDb().query.playlist.findFirst({
+      where: eq(playlist.installSourceKey, installSourceKey),
+    });
+
+    if (existing) {
+      const updated = await updatePlaylist({
+        playlistId: existing.id,
+        name: analysis.metadata.name,
+        description: analysis.metadata.description,
+        config: resolvedConfig,
+      });
+
+      return {
+        playlist: updated,
+        report: {
+          ...analysis.resolution,
+          appliedMapping: combinedMapping,
+        },
+      };
+    }
+  }
+
   const created = await createPlaylist({
     name: analysis.metadata.name,
     description: analysis.metadata.description,
     config: resolvedConfig,
+    installSourceKey,
   });
 
   return {

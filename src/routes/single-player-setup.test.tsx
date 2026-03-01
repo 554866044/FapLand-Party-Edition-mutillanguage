@@ -40,7 +40,7 @@ function makePlaylist(id: string, name: string) {
         scorePerCompletedRound: 100,
         scorePerIntermediary: 30,
         scorePerActiveAntiPerk: 25,
-        scorePerCumRoundSuccess: 120,
+        scorePerCumRoundSuccess: 420,
       },
     },
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   loaderData: {
     availablePlaylists: [] as unknown[],
     activePlaylist: null as unknown,
+    installedRounds: [] as unknown[],
   },
   navigate: vi.fn(),
   playlists: {
@@ -98,23 +99,44 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("SinglePlayerSetupRoute", () => {
+  it("shows a go back button in the header and falls back to home navigation", () => {
+    mocks.loaderData = {
+      availablePlaylists: [],
+      activePlaylist: null,
+      installedRounds: [],
+    };
+
+    render(<SinglePlayerSetupRoute />);
+    fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
   it("uses active playlist as default selection when starting", async () => {
+    vi.useFakeTimers();
     const first = makePlaylist("playlist-1", "First Playlist");
     const second = makePlaylist("playlist-2", "Second Playlist");
     mocks.loaderData = {
       availablePlaylists: [first, second],
       activePlaylist: second,
+      installedRounds: [],
     };
 
     render(<SinglePlayerSetupRoute />);
     fireEvent.click(screen.getByRole("button", { name: "Start Selected Playlist" }));
-
-    await waitFor(() => {
-      expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
-      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/game" });
+    await vi.advanceTimersByTimeAsync(900);
+    await Promise.resolve();
+    expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/game",
+      search: {
+        playlistId: "playlist-2",
+        launchNonce: expect.any(Number),
+      },
     });
   });
 
@@ -124,6 +146,7 @@ describe("SinglePlayerSetupRoute", () => {
     mocks.loaderData = {
       availablePlaylists: [first, second],
       activePlaylist: first,
+      installedRounds: [],
     };
 
     render(<SinglePlayerSetupRoute />);
@@ -137,27 +160,72 @@ describe("SinglePlayerSetupRoute", () => {
   });
 
   it("falls back to active playlist when active is not in list", async () => {
+    vi.useFakeTimers();
     const first = makePlaylist("playlist-1", "First Playlist");
     const active = makePlaylist("playlist-active", "Active Playlist");
     mocks.loaderData = {
       availablePlaylists: [first],
       activePlaylist: active,
+      installedRounds: [],
     };
 
     render(<SinglePlayerSetupRoute />);
     expect(screen.getByTestId("playlist-preview")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Start Selected Playlist" }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(900);
+    await Promise.resolve();
+    expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-active");
+  });
+
+  it("blocks duplicate starts while the launch transition is active", async () => {
+    vi.useFakeTimers();
+    const playlist = makePlaylist("playlist-1", "First Playlist");
+    mocks.loaderData = {
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+      installedRounds: [],
+    };
+
+    render(<SinglePlayerSetupRoute />);
+    const startButton = screen.getByRole("button", { name: "Start Selected Playlist" });
+
+    fireEvent.click(startButton);
+    fireEvent.click(startButton);
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(900);
+    await Promise.resolve();
+    expect(mocks.playlists.setActive).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the launch transition when starting fails", async () => {
+    mocks.playlists.setActive.mockRejectedValueOnce(new Error("boom"));
+    const playlist = makePlaylist("playlist-1", "First Playlist");
+    mocks.loaderData = {
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+      installedRounds: [],
+    };
+
+    render(<SinglePlayerSetupRoute />);
+    fireEvent.click(screen.getByRole("button", { name: "Start Selected Playlist" }));
 
     await waitFor(() => {
-      expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-active");
+      expect(screen.getByText("Failed to start selected playlist.")).toBeDefined();
     });
+    expect(screen.queryByTestId("playlist-launch-transition")).toBeNull();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("shows an empty state when no playlists exist", () => {
     mocks.loaderData = {
       availablePlaylists: [],
       activePlaylist: null,
+      installedRounds: [],
     };
 
     render(<SinglePlayerSetupRoute />);

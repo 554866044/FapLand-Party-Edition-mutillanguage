@@ -167,6 +167,40 @@ afterEach(() => {
 });
 
 describe("ConverterPage", () => {
+  it("shows a go back button in the header and falls back to home navigation", () => {
+    const Component = (Route as unknown as { component: React.FC }).component;
+    render(<Component />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("excludes hero-backed rounds from the installed source dropdown", async () => {
+    mocks.db.round.findInstalled.mockResolvedValue([
+      makeRound("round-standalone", "Standalone Source"),
+      makeRound("round-hero", "Hero Source", {
+        heroId: "hero-1",
+        hero: {
+          id: "hero-1",
+          name: "Existing Hero",
+          author: "Author A",
+          description: "Loaded from library",
+        },
+      }),
+    ]);
+
+    const Component = (Route as unknown as { component: React.FC }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(mocks.db.round.findInstalled).toHaveBeenCalledWith(true);
+    });
+
+    expect(screen.getByRole("option", { name: "Standalone Source" })).toBeDefined();
+    expect(screen.queryByRole("option", { name: "Hero Source [Existing Hero]" })).toBeNull();
+  });
+
   it("loads an attached round source and hero metadata into the converter", async () => {
     mocks.db.round.findInstalled.mockResolvedValue([
       makeRound("round-hero", "Hero Source", {

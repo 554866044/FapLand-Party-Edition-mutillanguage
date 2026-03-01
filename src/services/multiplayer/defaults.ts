@@ -1,7 +1,8 @@
+import { areDevFeaturesEnabled } from "../../utils/devFeatures";
 import type { MultiplayerServerProfile } from "./types";
 
 const nowIso = () => new Date().toISOString();
-const isDevelopmentMode = import.meta.env.DEV;
+const isDevelopmentMode = areDevFeaturesEnabled();
 
 const DEFAULT_SUPABASE_URL =
   typeof import.meta.env.VITE_MULTIPLAYER_DEFAULT_SUPABASE_URL === "string" &&
@@ -36,6 +37,7 @@ export const MULTIPLAYER_DEFAULT_SERVER_PROFILE: MultiplayerServerProfile = {
   url: DEFAULT_SUPABASE_URL,
   anonKey: DEFAULT_SUPABASE_ANON_KEY,
   isDefault: true,
+  isBuiltIn: true,
   createdAtIso: nowIso(),
   updatedAtIso: nowIso(),
 };
@@ -46,6 +48,7 @@ export const MULTIPLAYER_DEVELOPMENT_SERVER_PROFILE: MultiplayerServerProfile = 
   url: DEV_SUPABASE_URL,
   anonKey: DEV_SUPABASE_ANON_KEY,
   isDefault: true,
+  isBuiltIn: true,
   createdAtIso: nowIso(),
   updatedAtIso: nowIso(),
 };

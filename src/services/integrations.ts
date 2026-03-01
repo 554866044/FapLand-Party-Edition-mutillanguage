@@ -10,7 +10,7 @@ export const integrations = {
     name: string;
     enabled?: boolean;
     baseUrl: string;
-    authMode: "apiKey" | "login";
+    authMode: "none" | "apiKey" | "login";
     apiKey?: string | null;
     username?: string | null;
     password?: string | null;
@@ -21,7 +21,7 @@ export const integrations = {
     name?: string;
     enabled?: boolean;
     baseUrl?: string;
-    authMode?: "apiKey" | "login";
+    authMode?: "none" | "apiKey" | "login";
     apiKey?: string | null;
     username?: string | null;
     password?: string | null;

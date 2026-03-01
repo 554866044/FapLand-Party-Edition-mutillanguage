@@ -272,6 +272,15 @@ function dedupe(items: BooruMediaItem[]): BooruMediaItem[] {
   return output;
 }
 
+function shuffle<T>(items: T[]): T[] {
+  const output = [...items];
+  for (let index = output.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [output[index], output[swapIndex]] = [output[swapIndex]!, output[index]!];
+  }
+  return output;
+}
+
 async function searchBooru(prompt: string, limitPerSource: number): Promise<BooruMediaItem[]> {
   const tags = toTagQuery(prompt);
   if (!tags) return [];
@@ -282,7 +291,7 @@ async function searchBooru(prompt: string, limitPerSource: number): Promise<Boor
     fetchDanbooru(tags, limitPerSource),
   ]);
   const rule34 = rule34Dapi.length > 0 ? rule34Dapi : await fetchRule34ViaHtml(tags, limitPerSource);
-  return dedupe([...rule34, ...gelbooru, ...danbooru]);
+  return shuffle(dedupe([...rule34, ...gelbooru, ...danbooru]));
 }
 
 export const booruRouter = router({

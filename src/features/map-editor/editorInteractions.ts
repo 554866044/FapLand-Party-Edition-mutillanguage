@@ -1,4 +1,5 @@
 import type { EditorGraphConfig, EditorNode, EditorSelectionState, ViewportState } from "./EditorState";
+import { getNodeRenderHeight, getNodeRenderWidth } from "./nodeVisuals";
 
 type SelectionRect = {
   startX: number;
@@ -6,14 +7,6 @@ type SelectionRect = {
   endX: number;
   endY: number;
 };
-
-type NodeIntersectionOptions = {
-  nodeMinWidth?: number;
-  nodeMinHeight?: number;
-};
-
-const DEFAULT_NODE_MIN_WIDTH = 160;
-const DEFAULT_NODE_MIN_HEIGHT = 58;
 
 const normalizeRect = (rect: SelectionRect): { left: number; right: number; top: number; bottom: number } => ({
   left: Math.min(rect.startX, rect.endX),
@@ -94,11 +87,8 @@ export const getNodesIntersectingScreenRect = (
   nodes: EditorNode[],
   viewport: ViewportState,
   rect: SelectionRect,
-  options?: NodeIntersectionOptions,
 ): string[] => {
   const normalized = normalizeRect(rect);
-  const minWidth = options?.nodeMinWidth ?? DEFAULT_NODE_MIN_WIDTH;
-  const minHeight = options?.nodeMinHeight ?? DEFAULT_NODE_MIN_HEIGHT;
   const hits: string[] = [];
 
   for (const node of nodes) {
@@ -107,8 +97,8 @@ export const getNodesIntersectingScreenRect = (
     const y = Number(node.styleHint.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
 
-    const width = Math.max(minWidth, Number.isFinite(node.styleHint.width) ? Number(node.styleHint.width) : 180);
-    const height = Math.max(minHeight, Number.isFinite(node.styleHint.height) ? Number(node.styleHint.height) : 78);
+    const width = getNodeRenderWidth(node);
+    const height = getNodeRenderHeight(node);
 
     const left = x * viewport.zoom + viewport.x;
     const top = y * viewport.zoom + viewport.y;

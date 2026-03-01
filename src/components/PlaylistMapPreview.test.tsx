@@ -10,7 +10,7 @@ const baseEconomy = {
   scorePerCompletedRound: 100,
   scorePerIntermediary: 30,
   scorePerActiveAntiPerk: 25,
-  scorePerCumRoundSuccess: 120,
+  scorePerCumRoundSuccess: 420,
 };
 
 const basePerkSelection = {
@@ -96,6 +96,14 @@ describe("PlaylistMapPreview", () => {
     expect(screen.getAllByTestId("playlist-map-edge").length).toBeGreaterThan(3);
   });
 
+  it("adds an explicit end node for linear playlists", () => {
+    render(<PlaylistMapPreview config={linearConfig} />);
+
+    const nodes = screen.getAllByTestId("playlist-map-node");
+    expect(nodes.length).toBe(14);
+    expect(screen.getAllByTestId("playlist-map-edge")).toHaveLength(13);
+  });
+
   it("handles graph nodes without style hints", () => {
     const missingHints: PlaylistConfig = {
       ...graphConfig,
@@ -121,5 +129,26 @@ describe("PlaylistMapPreview", () => {
 
     expect(screen.getByTestId("playlist-map-preview")).toBeDefined();
     expect(screen.getAllByTestId("playlist-map-node").length).toBe(3);
+  });
+
+  it("applies custom node color and size overrides", () => {
+    const config: PlaylistConfig = {
+      ...graphConfig,
+      boardConfig: {
+        ...graphConfig.boardConfig,
+        nodes: graphConfig.boardConfig.nodes.map((node) => (
+          node.id === "path-1"
+            ? { ...node, styleHint: { ...node.styleHint, color: "#10b981", size: 2 } }
+            : node
+        )),
+      },
+    };
+
+    render(<PlaylistMapPreview config={config} />);
+
+    const nodes = screen.getAllByTestId("playlist-map-node");
+    const pathNode = nodes[1];
+    expect(pathNode?.getAttribute("fill")).toBe("#10b981");
+    expect(pathNode?.getAttribute("r")).toBe("8.4");
   });
 });

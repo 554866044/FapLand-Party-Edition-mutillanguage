@@ -1,16 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { exposeElectronTRPC } from "trpc-electron/main";
 import type { AppUpdateState } from "./services/updater";
 
-contextBridge.exposeInMainWorld("electronTRPC", {
-    sendMessage: (args: unknown) => {
-        ipcRenderer.send("electron-trpc", args);
-    },
-    onMessage: (callback: (args: unknown) => void) => {
-        ipcRenderer.on("electron-trpc", (_event, args) => callback(args));
-    },
+process.once("loaded", () => {
+    exposeElectronTRPC();
 });
 
-// Keep the file:// protocol helper (pure URL transform, not IPC)
+// Keep the app:// media URL helper separate from the tRPC bridge.
 contextBridge.exposeInMainWorld("electronAPI", {
     file: {
         convertFileSrc: (filePath: string): string =>
@@ -22,7 +18,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
         selectPlaylistImportFile: () => ipcRenderer.invoke("dialog:selectPlaylistImportFile") as Promise<string | null>,
         selectPlaylistExportPath: (defaultName: string) =>
             ipcRenderer.invoke("dialog:selectPlaylistExportPath", defaultName) as Promise<string | null>,
+        selectPlaylistExportDirectory: (defaultName?: string) =>
+            ipcRenderer.invoke("dialog:selectPlaylistExportDirectory", defaultName) as Promise<string | null>,
         selectConverterVideoFile: () => ipcRenderer.invoke("dialog:selectConverterVideoFile") as Promise<string | null>,
+        selectMusicFiles: () => ipcRenderer.invoke("dialog:selectMusicFiles") as Promise<string[]>,
         selectConverterFunscriptFile: () =>
             ipcRenderer.invoke("dialog:selectConverterFunscriptFile") as Promise<string | null>,
     },
@@ -30,6 +29,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         isFullscreen: () => ipcRenderer.invoke("window:isFullscreen") as Promise<boolean>,
         setFullscreen: (value: boolean) => ipcRenderer.invoke("window:setFullscreen", value) as Promise<boolean>,
         toggleFullscreen: () => ipcRenderer.invoke("window:toggleFullscreen") as Promise<boolean>,
+        close: () => ipcRenderer.invoke("window:close") as Promise<boolean>,
     },
     updates: {
         subscribe: (callback: (state: AppUpdateState) => void) => {
@@ -51,6 +51,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
             ipcRenderer.on("app-open:files", listener);
             return () => {
                 ipcRenderer.off("app-open:files", listener);
+            };
+        },
+    },
+    auth: {
+        consumePendingCallback: () => ipcRenderer.invoke("auth:consumePendingCallback") as Promise<string | null>,
+        subscribe: (callback: (url: string) => void) => {
+            const listener = (_event: unknown, url: string) => {
+                callback(url);
+            };
+            ipcRenderer.on("auth:callback", listener);
+            return () => {
+                ipcRenderer.off("auth:callback", listener);
             };
         },
     },

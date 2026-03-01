@@ -134,20 +134,6 @@ const FALLBACK_TILES: TileCatalogTile[] = [
     size: 1,
     tags: ["event", "core"],
   },
-  {
-    id: "event-node",
-    kind: "event",
-    visualId: "event",
-    label: "Event",
-    description: "Custom gameplay event node.",
-    category: "events",
-    color: "#a855f7",
-    defaultName: "Event",
-    width: 190,
-    height: 84,
-    size: 1,
-    tags: ["event", "core"],
-  },
 ];
 
 const FALLBACK_CATEGORIES: TileCatalogCategory[] = [
@@ -230,7 +216,7 @@ const parseTile = (raw: unknown): TileCatalogTile | null => {
 };
 
 export function normalizeTileKind(kind: unknown): EditorNodeKind {
-  if (kind === "start" || kind === "end" || kind === "path" || kind === "safePoint" || kind === "round" || kind === "randomRound" || kind === "perk" || kind === "event") {
+  if (kind === "start" || kind === "end" || kind === "path" || kind === "safePoint" || kind === "round" || kind === "randomRound" || kind === "perk") {
     return kind;
   }
   return "path";

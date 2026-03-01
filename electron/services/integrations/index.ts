@@ -46,7 +46,7 @@ type CachedRound = {
   phash: string | null;
   previewImage: string | null;
   installSourceKey: string | null;
-  resourcesByVideoUri: Map<string, { id: string; disabled: boolean }>;
+  resourcesByVideoUri: Map<string, { id: string; disabled: boolean; durationMs: number | null }>;
 };
 
 type SyncMutableContext = {
@@ -59,6 +59,18 @@ type SyncMutableContext = {
   previewByVideoUri: Map<string, string | null>;
   status: IntegrationSyncStatus;
 };
+
+function resolveManagedPreviewImage(item: NormalizedSceneImportItem, source: ExternalSource): string | null {
+  const previewImageUri = normalizeNullableText(item.previewImageUri);
+  if (!previewImageUri) return null;
+
+  const provider = getProviderForKind(source);
+  if (!provider.canHandleUri(previewImageUri, source)) {
+    return null;
+  }
+
+  return provider.resolvePlayableUri(previewImageUri, source, "image");
+}
 
 function getProviderForKind(source: ExternalSource): ExternalProvider {
   const provider = providers.find((entry) => entry.kind === source.kind);
@@ -73,6 +85,55 @@ function normalizeNullableText(value: string | null | undefined): string | null 
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+async function hasNonEmptyFunscript(source: ExternalSource, funscriptUri: string | null): Promise<boolean> {
+  const normalizedUri = normalizeNullableText(funscriptUri);
+  if (!normalizedUri) return true;
+
+  try {
+    const response = await fetchStashMediaWithAuth(
+      source,
+      normalizedUri,
+      new Request(normalizedUri, {
+        method: "GET",
+        headers: {
+          Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+        },
+      }),
+    );
+
+    if (!response.ok) {
+      return true;
+    }
+
+    const body = await response.text();
+    const normalizedBody = body.charCodeAt(0) === 0xfeff ? body.slice(1) : body;
+    const raw = JSON.parse(normalizedBody) as {
+      actions?: Array<{ at?: unknown; pos?: unknown }>;
+    };
+
+    const actions = (raw.actions ?? []).filter((action) => {
+      const at = toNumber(action.at);
+      const pos = toNumber(action.pos);
+      return at !== null && pos !== null;
+    });
+
+    return actions.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 function isMissingText(value: string | null | undefined): boolean {
@@ -145,6 +206,10 @@ async function appendResourceIfMissing(
 ): Promise<number> {
   const existing = cachedRound.resourcesByVideoUri.get(item.videoUri);
   if (existing) {
+    if (existing.durationMs === null && item.durationMs !== null) {
+      await context.db.update(resource).set({ durationMs: item.durationMs }).where(eq(resource.id, existing.id));
+      existing.durationMs = item.durationMs;
+    }
     if (existing.disabled) {
       await context.db.update(resource).set({ disabled: false }).where(eq(resource.id, existing.id));
       existing.disabled = false;
@@ -157,10 +222,15 @@ async function appendResourceIfMissing(
     videoUri: item.videoUri,
     funscriptUri: item.funscriptUri,
     phash: item.phash,
+    durationMs: item.durationMs,
     disabled: false,
   }).returning();
 
-  cachedRound.resourcesByVideoUri.set(item.videoUri, { id: created.id, disabled: false });
+  cachedRound.resourcesByVideoUri.set(item.videoUri, {
+    id: created.id,
+    disabled: false,
+    durationMs: created.durationMs,
+  });
 
   const phash = toNormalizedPhash(item.phash);
   if (phash && !context.roundIdByPhash.has(phash)) {
@@ -191,10 +261,12 @@ function rememberRound(context: SyncMutableContext, cachedRound: CachedRound): v
 
 async function createManagedRound(
   context: SyncMutableContext,
+  source: ExternalSource,
   item: NormalizedSceneImportItem,
   heroId: string | null,
 ): Promise<{ round: CachedRound; resourcesAdded: number }> {
-  const previewImage = await resolvePreviewImageForVideo(context, item.videoUri);
+  const previewImage = resolveManagedPreviewImage(item, source)
+    ?? await resolvePreviewImageForVideo(context, item.videoUri);
 
   const [createdRound] = await context.db.insert(round).values({
     name: item.name,
@@ -212,6 +284,7 @@ async function createManagedRound(
     videoUri: item.videoUri,
     funscriptUri: item.funscriptUri,
     phash: item.phash,
+    durationMs: item.durationMs,
     disabled: false,
   }).returning();
 
@@ -224,7 +297,11 @@ async function createManagedRound(
     previewImage: createdRound.previewImage,
     installSourceKey: createdRound.installSourceKey,
     resourcesByVideoUri: new Map([
-      [createdResource.videoUri, { id: createdResource.id, disabled: createdResource.disabled }],
+      [createdResource.videoUri, {
+        id: createdResource.id,
+        disabled: createdResource.disabled,
+        durationMs: createdResource.durationMs,
+      }],
     ]),
   };
 
@@ -236,7 +313,11 @@ async function createManagedRound(
   };
 }
 
-async function ingestScene(context: SyncMutableContext, item: NormalizedSceneImportItem): Promise<SceneIngestResult> {
+async function ingestScene(
+  context: SyncMutableContext,
+  source: ExternalSource,
+  item: NormalizedSceneImportItem,
+): Promise<SceneIngestResult> {
   const existingManagedRoundId = context.roundIdByInstallSourceKey.get(item.installSourceKey);
   if (existingManagedRoundId) {
     const existingRound = context.roundById.get(existingManagedRoundId);
@@ -246,10 +327,11 @@ async function ingestScene(context: SyncMutableContext, item: NormalizedSceneImp
 
     const updateData = mergeRoundUpdateData(existingRound, item);
     if (!existingRound.previewImage) {
-      const generatedPreview = await resolvePreviewImageForVideo(context, item.videoUri);
-      if (generatedPreview) {
-        updateData.previewImage = generatedPreview;
-        existingRound.previewImage = generatedPreview;
+      const previewImage = resolveManagedPreviewImage(item, source)
+        ?? await resolvePreviewImageForVideo(context, item.videoUri);
+      if (previewImage) {
+        updateData.previewImage = previewImage;
+        existingRound.previewImage = previewImage;
       }
     }
     if (Object.keys(updateData).length > 0) {
@@ -272,7 +354,7 @@ async function ingestScene(context: SyncMutableContext, item: NormalizedSceneImp
   if (phash) {
     const heroId = context.heroIdByPhash.get(phash) ?? null;
     if (heroId) {
-      const created = await createManagedRound(context, item, heroId);
+      const created = await createManagedRound(context, source, item, heroId);
       return {
         created: 1,
         updated: 0,
@@ -290,10 +372,11 @@ async function ingestScene(context: SyncMutableContext, item: NormalizedSceneImp
       if (matchedRound) {
         const updateData = mergeRoundUpdateData(matchedRound, item);
         if (!matchedRound.previewImage) {
-          const generatedPreview = await resolvePreviewImageForVideo(context, item.videoUri);
-          if (generatedPreview) {
-            updateData.previewImage = generatedPreview;
-            matchedRound.previewImage = generatedPreview;
+          const previewImage = resolveManagedPreviewImage(item, source)
+            ?? await resolvePreviewImageForVideo(context, item.videoUri);
+          if (previewImage) {
+            updateData.previewImage = previewImage;
+            matchedRound.previewImage = previewImage;
           }
         }
         if (Object.keys(updateData).length > 0) {
@@ -313,7 +396,7 @@ async function ingestScene(context: SyncMutableContext, item: NormalizedSceneImp
     }
   }
 
-  const created = await createManagedRound(context, item, null);
+  const created = await createManagedRound(context, source, item, null);
   return {
     created: 1,
     updated: 0,
@@ -349,6 +432,7 @@ async function buildSyncContext(status: IntegrationSyncStatus): Promise<SyncMuta
             id: true,
             videoUri: true,
             phash: true,
+            durationMs: true,
             disabled: true,
           },
         },
@@ -378,7 +462,7 @@ async function buildSyncContext(status: IntegrationSyncStatus): Promise<SyncMuta
       previewImage: row.previewImage,
       installSourceKey: row.installSourceKey,
       resourcesByVideoUri: new Map(
-        row.resources.map((res) => [res.videoUri, { id: res.id, disabled: res.disabled }]),
+        row.resources.map((res) => [res.videoUri, { id: res.id, disabled: res.disabled, durationMs: res.durationMs }]),
       ),
     };
 
@@ -467,7 +551,18 @@ async function runSync(triggeredBy: "startup" | "manual"): Promise<IntegrationSy
     try {
       const syncContext: ExternalSyncContext = {
         ingestScene: async (item: NormalizedSceneImportItem) => {
-          const result = await ingestScene(context, {
+          const hasScript = await hasNonEmptyFunscript(source, item.funscriptUri);
+          if (!hasScript) {
+            return {
+              created: 0,
+              updated: 0,
+              linked: 0,
+              resourcesAdded: 0,
+              managedRoundId: null,
+            };
+          }
+
+          const result = await ingestScene(context, source, {
             ...item,
             installSourceKey: toStashInstallSourceKey(source.baseUrl, item.sceneId),
           });
@@ -646,15 +741,54 @@ export function resolveResourceUris(resource: {
   };
 }
 
+function toAllowedSourceBaseUrl(source: ExternalSource): string {
+  const normalized = normalizeBaseUrl(source.baseUrl);
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.pathname = parsed.pathname.replace(/\/api$/i, "");
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return normalized;
+  }
+}
+
+function pathMatchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+function isAllowedStashMediaPath(pathname: string, source: ExternalSource): boolean {
+  const normalizedBasePath = new URL(normalizeBaseUrl(source.baseUrl)).pathname.replace(/\/+$/, "");
+  const rootBasePath = normalizedBasePath.replace(/\/api$/i, "");
+
+  const allowedPrefixes = new Set<string>();
+
+  if (rootBasePath) {
+    allowedPrefixes.add(`${rootBasePath}/scene`);
+  } else {
+    allowedPrefixes.add("/scene");
+  }
+
+  if (normalizedBasePath) {
+    allowedPrefixes.add(`${normalizedBasePath}/scene`);
+  }
+
+  for (const prefix of allowedPrefixes) {
+    if (pathMatchesPrefix(pathname, prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function isTargetUrlAllowedForSource(targetUrl: string, source: ExternalSource): boolean {
   try {
     const target = new URL(targetUrl);
-    const base = new URL(normalizeBaseUrl(source.baseUrl));
+    const base = new URL(toAllowedSourceBaseUrl(source));
 
     if (target.origin !== base.origin) return false;
-
-    const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
-    return target.pathname === base.pathname || target.pathname.startsWith(basePath);
+    return isAllowedStashMediaPath(target.pathname, source);
   } catch {
     return false;
   }

@@ -22,7 +22,6 @@ const KIND_COLOR_MAP: Record<string, string> = {
     round: "bg-cyan-500",
     randomRound: "bg-purple-500",
     perk: "bg-violet-500",
-    event: "bg-pink-500",
 };
 
 export const TileSidebar: React.FC<TileSidebarProps> = React.memo(({
