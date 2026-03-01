@@ -45,6 +45,7 @@ const baseConfig: EditorGraphConfig = {
   },
   economy: { startingMoney: 120, scorePerCumRoundSuccess: 420 },
   dice: { min: 1, max: 6 },
+  disableDiceAnimation: false,
   saveMode: "none",
   style: {},
   music: { tracks: [], loop: true },

@@ -7,6 +7,7 @@ describe("playlistStats", () => {
   const baseConfig = {
     playlistVersion: 1,
     roundStartDelayMs: 0,
+    disableDiceAnimation: false,
     perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
     perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
     probabilityScaling: {

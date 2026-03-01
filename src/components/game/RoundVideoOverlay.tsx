@@ -531,6 +531,7 @@ export function RoundVideoOverlay({
   const [missingMediaAutoCloseRemainingSec, setMissingMediaAutoCloseRemainingSec] = useState<
     number | null
   >(null);
+  const [awaitingPlaybackUnmute, setAwaitingPlaybackUnmute] = useState(false);
   const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
 
   const applyHandyOffsetMs = useCallback(
@@ -585,6 +586,10 @@ export function RoundVideoOverlay({
 
   useEffect(() => {
     setAllowUnsafeMediaOnce(false);
+  }, [activeRound?.fieldId, activeRound?.roundId]);
+
+  useEffect(() => {
+    setAwaitingPlaybackUnmute(false);
   }, [activeRound?.fieldId, activeRound?.roundId]);
 
   const resolvedRound = useMemo(() => {
@@ -719,14 +724,33 @@ export function RoundVideoOverlay({
   const activeResolvedVideoSrc = activeSegmentResource
     ? (getVideoSrc(activeSegmentResource.videoUri) ?? null)
     : null;
-  const isRemoteVideoUri = useMemo(
+  const isResolvedMainVideoRemote = useMemo(
     () =>
       Boolean(
-        activeVideoUri &&
-        (/^https?:\/\//i.test(activeVideoUri) || activeVideoUri.startsWith("app://external/"))
+        resolvedMainVideoSrc &&
+        (/^https?:\/\//i.test(resolvedMainVideoSrc) ||
+          resolvedMainVideoSrc.startsWith("app://external/"))
       ),
-    [activeVideoUri]
+    [resolvedMainVideoSrc]
   );
+  const isResolvedIntermediaryVideoRemote = useMemo(
+    () =>
+      Boolean(
+        resolvedIntermediaryVideoSrc &&
+        (/^https?:\/\//i.test(resolvedIntermediaryVideoSrc) ||
+          resolvedIntermediaryVideoSrc.startsWith("app://external/"))
+      ),
+    [resolvedIntermediaryVideoSrc]
+  );
+  const isActiveResolvedVideoRemote = useMemo(
+    () => (segment.kind === "main" ? isResolvedMainVideoRemote : isResolvedIntermediaryVideoRemote),
+    [isResolvedIntermediaryVideoRemote, isResolvedMainVideoRemote, segment.kind]
+  );
+
+  useEffect(() => {
+    if (isActiveResolvedVideoRemote) return;
+    setIsRemoteVideoLoading(false);
+  }, [activeResolvedVideoSrc, isActiveResolvedVideoRemote]);
 
   const hasUsableActiveTimeline =
     Boolean(activeSegmentResource?.funscriptUri) &&
@@ -1330,6 +1354,17 @@ export function RoundVideoOverlay({
         if (isIgnorableVideoPlayError(error)) {
           return;
         }
+        if (error instanceof DOMException && error.name === "NotAllowedError" && !video.muted) {
+          video.muted = true;
+          video.defaultMuted = true;
+          setAwaitingPlaybackUnmute(true);
+          void video.play().catch((mutedError) => {
+            if (!isIgnorableVideoPlayError(mutedError)) {
+              console.warn("Video autoplay failed", mutedError);
+            }
+          });
+          return;
+        }
         console.warn("Video autoplay failed", error);
       });
   }, [
@@ -1345,6 +1380,19 @@ export function RoundVideoOverlay({
     handySyncState,
     resumeHandyIfNeeded,
   ]);
+
+  const restorePlaybackAudio = useCallback(() => {
+    if (!awaitingPlaybackUnmute) return;
+    const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
+    if (!video) return;
+    video.muted = false;
+    video.defaultMuted = false;
+    video.volume = BOARD_VIDEO_VOLUME;
+    setAwaitingPlaybackUnmute(false);
+    if (video.paused) {
+      tryPlayVideo();
+    }
+  }, [awaitingPlaybackUnmute, segment.kind, tryPlayVideo]);
 
   const finishWithSummary = useCallback(() => {
     if (finishRequestedRef.current) return;
@@ -2986,7 +3034,7 @@ export function RoundVideoOverlay({
     activeRound && activeRound.phaseKind === "normal" && roundControl
   );
   const showRemoteLoadingIndicator =
-    isRemoteVideoUri &&
+    isActiveResolvedVideoRemote &&
     isRemoteVideoLoading &&
     !isIntermediaryScreenActive &&
     !isWaitingForHandyStart;
@@ -3133,11 +3181,27 @@ export function RoundVideoOverlay({
   useEffect(() => {
     for (const video of [mainVideoRef.current, intermediaryVideoRef.current]) {
       if (!video) continue;
-      video.muted = false;
-      video.defaultMuted = false;
+      video.muted = awaitingPlaybackUnmute;
+      video.defaultMuted = awaitingPlaybackUnmute;
       video.volume = BOARD_VIDEO_VOLUME;
     }
-  }, [activeVideoUri, segment.kind]);
+  }, [activeVideoUri, awaitingPlaybackUnmute, segment.kind]);
+
+  useEffect(() => {
+    if (!awaitingPlaybackUnmute) return;
+
+    const handleUserInteraction = () => {
+      restorePlaybackAudio();
+    };
+
+    window.addEventListener("pointerdown", handleUserInteraction, { once: true, capture: true });
+    window.addEventListener("keydown", handleUserInteraction, { once: true, capture: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", handleUserInteraction, true);
+      window.removeEventListener("keydown", handleUserInteraction, true);
+    };
+  }, [awaitingPlaybackUnmute, restorePlaybackAudio]);
 
   const missingMediaCloseLabel =
     missingMediaAutoCloseRemainingSec !== null
@@ -3675,20 +3739,20 @@ export function RoundVideoOverlay({
               }}
               onLoadStart={() => {
                 if (segment.kind !== "main") return;
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onWaiting={() => {
                 if (segment.kind !== "main") return;
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onStalled={() => {
                 if (segment.kind !== "main") return;
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onCanPlay={() => {
                 if (segment.kind !== "main") return;
                 setFailedVideoUri(null);
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(false);
                 const video = mainVideoRef.current;
                 if (video) {
                   const mainWindow = resolveMainWindowForDuration(video.duration);
@@ -3745,12 +3809,12 @@ export function RoundVideoOverlay({
               onPlaying={() => {
                 if (segment.kind !== "main") return;
                 foregroundMainVideo.handlePlay();
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(false);
               }}
               onLoadedData={() => {
                 if (segment.kind !== "main") return;
                 setFailedVideoUri(null);
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedMainVideoRemote) setIsRemoteVideoLoading(false);
               }}
               onPause={() => {
                 if (segment.kind !== "main") return;
@@ -3796,17 +3860,17 @@ export function RoundVideoOverlay({
                 foregroundIntermediaryVideo.handlePause();
               }}
               onLoadStart={() => {
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onWaiting={() => {
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onStalled={() => {
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(true);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(true);
               }}
               onCanPlay={() => {
                 setFailedVideoUri(null);
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(false);
                 const video = intermediaryVideoRef.current;
                 if (video) {
                   const windowBounds = resolvePlaybackWindowForDuration(
@@ -3846,11 +3910,11 @@ export function RoundVideoOverlay({
               }}
               onPlaying={() => {
                 foregroundIntermediaryVideo.handlePlay();
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(false);
               }}
               onLoadedData={() => {
                 setFailedVideoUri(null);
-                if (isRemoteVideoUri) setIsRemoteVideoLoading(false);
+                if (isResolvedIntermediaryVideoRemote) setIsRemoteVideoLoading(false);
               }}
               onPause={() => {
                 foregroundIntermediaryVideo.handlePause();

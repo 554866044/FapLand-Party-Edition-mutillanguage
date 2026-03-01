@@ -51,6 +51,10 @@ type PendingWebsiteVideo = {
   url: string;
 };
 
+type PendingWebsiteVideoDiscoveryError = PendingWebsiteVideo & {
+  reason: string;
+};
+
 type WebsiteRoundPreviewCandidate = {
   roundId: string;
   resourceId: string;
@@ -125,7 +129,10 @@ async function waitForInstallScan(): Promise<void> {
   }
 }
 
-async function findUncachedWebsiteVideos(): Promise<PendingWebsiteVideo[]> {
+async function findUncachedWebsiteVideos(): Promise<{
+  items: PendingWebsiteVideo[];
+  discoveryErrors: PendingWebsiteVideoDiscoveryError[];
+}> {
   const db = getDb();
   const rows = await db
     .select({
@@ -139,22 +146,41 @@ async function findUncachedWebsiteVideos(): Promise<PendingWebsiteVideo[]> {
     .innerJoin(resource, eq(resource.roundId, round.id))
     .where(and(eq(resource.disabled, false)));
 
-  const deduped = new Map<string, PendingWebsiteVideo>();
+  const pendingItemsByUrl = new Map<string, PendingWebsiteVideo>();
+  const seenTargetUrls = new Set<string>();
+  const discoveryErrors: PendingWebsiteVideoDiscoveryError[] = [];
 
   for (const row of rows as WebsiteVideoCandidateRow[]) {
     if (row.installSourceKey?.startsWith("stash:") || isStashProxyUri(row.videoUri)) continue;
 
-    const normalizedTargetUrl = getWebsiteVideoTargetUrl(row.videoUri);
-    if (!normalizedTargetUrl) continue;
-    if (deduped.has(normalizedTargetUrl)) continue;
+    let normalizedTargetUrl: string | null = null;
+    try {
+      normalizedTargetUrl = getWebsiteVideoTargetUrl(row.videoUri);
+      if (!normalizedTargetUrl) continue;
+      if (seenTargetUrls.has(normalizedTargetUrl)) continue;
+      seenTargetUrls.add(normalizedTargetUrl);
 
-    const cachedMetadata = await getCachedWebsiteVideoMetadata(normalizedTargetUrl);
-    if (cachedMetadata) {
-      console.log(`Skipping ${row.videoUri} - already cached`);
+      const cachedMetadata = await getCachedWebsiteVideoMetadata(normalizedTargetUrl);
+      if (cachedMetadata) {
+        console.log(`Skipping ${row.videoUri} - already cached`);
+        continue;
+      }
+    } catch (error) {
+      const reason =
+        error instanceof Error
+          ? error.message
+          : "Unknown website video cache discovery error.";
+      discoveryErrors.push({
+        resourceId: row.resourceId,
+        roundId: row.roundId,
+        roundName: row.roundName,
+        url: normalizedTargetUrl ?? row.videoUri,
+        reason,
+      });
       continue;
     }
 
-    deduped.set(normalizedTargetUrl, {
+    pendingItemsByUrl.set(normalizedTargetUrl, {
       resourceId: row.resourceId,
       roundId: row.roundId,
       roundName: row.roundName,
@@ -162,7 +188,10 @@ async function findUncachedWebsiteVideos(): Promise<PendingWebsiteVideo[]> {
     });
   }
 
-  return [...deduped.values()];
+  return {
+    items: [...pendingItemsByUrl.values()],
+    discoveryErrors,
+  };
 }
 
 function pushScanError(item: PendingWebsiteVideo, reason: string): void {
@@ -219,10 +248,14 @@ async function generateMissingPreviewImagesForCachedWebsiteVideo(
 }
 
 async function runWebsiteVideoScan(): Promise<void> {
-  const items = await findUncachedWebsiteVideos();
-  scanStatus.totalCount = items.length;
+  const { items, discoveryErrors } = await findUncachedWebsiteVideos();
+  for (const discoveryError of discoveryErrors) {
+    pushScanError(discoveryError, discoveryError.reason);
+    scanStatus.skippedCount += 1;
+  }
+  scanStatus.totalCount = items.length + discoveryErrors.length;
 
-  if (items.length === 0) {
+  if (scanStatus.totalCount === 0) {
     scanStatus.state = "done";
     scanStatus.finishedAt = new Date().toISOString();
     return;

@@ -331,6 +331,7 @@ export type GameConfig = {
     scorePerCumRoundSuccess: number;
   };
   roundStartDelayMs: number;
+  disableDiceAnimation?: boolean;
   playlistMusic?: PlaylistMusicConfig;
 };
 

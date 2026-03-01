@@ -847,6 +847,36 @@ describe("playlistSchema", () => {
     expect(invalidDice.success).toBe(false);
   });
 
+  it("defaults disableDiceAnimation to false and accepts true", () => {
+    const parsed = ZPlaylistConfig.parse(
+      buildConfig({
+        mode: "linear",
+        totalIndices: 10,
+        safePointIndices: [],
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [],
+        cumRoundRefs: [],
+      })
+    );
+
+    expect(parsed.disableDiceAnimation).toBe(false);
+
+    const withDisabledAnimation = ZPlaylistConfig.parse({
+      ...buildConfig({
+        mode: "linear",
+        totalIndices: 10,
+        safePointIndices: [],
+        normalRoundRefsByIndex: {},
+        normalRoundOrder: [],
+        cumRoundRefs: [],
+      }),
+      disableDiceAnimation: true,
+    });
+
+    expect(withDisabledAnimation.disableDiceAnimation).toBe(true);
+    expect(toGameConfigFromPlaylist(withDisabledAnimation, []).disableDiceAnimation).toBe(true);
+  });
+
   it("parses playlist config with music tracks and defaults loop to true", () => {
     const parsed = ZPlaylistConfig.parse({
       ...buildConfig({

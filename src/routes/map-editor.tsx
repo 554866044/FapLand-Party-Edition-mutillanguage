@@ -181,6 +181,7 @@ const toEditorConfigFromPlaylist = (playlist: StoredPlaylist): EditorGraphConfig
       scorePerCumRoundSuccess: playlist.config.economy.scorePerCumRoundSuccess,
     },
     dice: { ...playlist.config.dice },
+    disableDiceAnimation: playlist.config.disableDiceAnimation ?? false,
     saveMode: playlist.config.saveMode ?? "none",
     music: {
       tracks: playlist.config.music?.tracks.map((track) => ({ ...track })) ?? [],
@@ -274,6 +275,7 @@ const makeStartingConfig = (): EditorGraphConfig => ({
     min: 1,
     max: 6,
   },
+  disableDiceAnimation: false,
   saveMode: "none",
   style: {},
   music: {
@@ -288,6 +290,7 @@ const createPlaylistConfigFromEditorConfig = (editorConfig: EditorGraphConfig): 
     boardConfig: toGraphBoardConfig(editorConfig),
     saveMode: editorConfig.saveMode,
     roundStartDelayMs: 20000,
+    disableDiceAnimation: editorConfig.disableDiceAnimation,
     perkSelection: {
       ...editorConfig.perkSelection,
     },
@@ -1086,6 +1089,16 @@ function MapEditorPage() {
           ...previous.dice,
           [key]: Math.max(1, Math.min(20, Math.floor(value))),
         },
+      }));
+    },
+    [updateGraphConfig]
+  );
+
+  const setDisableDiceAnimation = useCallback(
+    (value: boolean) => {
+      updateGraphConfig((previous) => ({
+        ...previous,
+        disableDiceAnimation: value,
       }));
     },
     [updateGraphConfig]
@@ -2893,6 +2906,7 @@ function MapEditorPage() {
                       probabilityScaling={config.probabilityScaling}
                       economy={config.economy}
                       dice={config.dice}
+                      disableDiceAnimation={config.disableDiceAnimation}
                       saveMode={config.saveMode}
                       style={config.style}
                       perkOptions={perkOptions}
@@ -2904,6 +2918,7 @@ function MapEditorPage() {
                       onSetPerkTriggerChance={setPerkTriggerChance}
                       onSetProbabilityScaling={setProbabilityScaling}
                       onSetDiceLimit={setDiceLimit}
+                      onSetDisableDiceAnimation={setDisableDiceAnimation}
                       onSetSaveMode={setSaveMode}
                       onSetStartingMoney={setStartingMoney}
                       onSetCumRoundBonusScore={setCumRoundBonusScore}

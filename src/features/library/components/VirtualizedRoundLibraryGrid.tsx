@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { buildRoundLibraryShelves, type RoundLibraryCardItem, type RoundLibraryShelf } from "../roundLibraryShelves";
 import type { RoundRenderRow } from "../../../routes/roundRows";
 
 const GROUP_HEADER_ESTIMATE_PX = 88;
-const CARD_ROW_ESTIMATE_PX = 480;
+const CARD_ROW_CHROME_ESTIMATE_PX = 360;
 const SHELF_GAP_PX = 20;
 const CARD_MIN_WIDTH_PX = 320;
 const MAX_COLUMNS = 2;
@@ -25,7 +25,7 @@ function collectRoundIdsFromShelf(shelf: RoundLibraryShelf | undefined): string[
     return [];
   }
   if (shelf.kind === "group-header") {
-    return shelf.row.rounds.map((round) => round.id);
+    return [];
   }
   return shelf.items.map((item) => item.round.id);
 }
@@ -42,6 +42,18 @@ function collectRoundIdsFromRows(rows: RoundRenderRow[]): string[] {
     }
   }
   return [...new Set(roundIds)];
+}
+
+function estimateCardRowHeightPx(columns: number, containerWidth: number): number {
+  const safeColumns = Math.max(1, columns);
+  const safeWidth = Math.max(CARD_MIN_WIDTH_PX, containerWidth);
+  const totalGapWidth = SHELF_GAP_PX * Math.max(0, safeColumns - 1);
+  const columnWidth = Math.max(
+    CARD_MIN_WIDTH_PX,
+    Math.floor((safeWidth - totalGapWidth) / safeColumns),
+  );
+  const mediaHeight = Math.round((columnWidth * 9) / 16);
+  return mediaHeight + CARD_ROW_CHROME_ESTIMATE_PX + SHELF_GAP_PX;
 }
 
 export function VirtualizedRoundLibraryGrid({
@@ -100,10 +112,10 @@ export function VirtualizedRoundLibraryGrid({
   const preferVirtualization =
     rows.length >= VIRTUALIZATION_MIN_ROWS ||
     (hasGroupedRows && shelves.length >= GROUPED_VIRTUALIZATION_MIN_SHELVES);
-  const canVirtualize = preferVirtualization && scrollContainer != null && !hasGroupedRows;
+  const canVirtualize = preferVirtualization && scrollContainer != null;
 
-  const shelfRenderer = useMemo(
-    () => (shelf: RoundLibraryShelf) => {
+  const shelfRenderer = useCallback(
+    function renderShelf(shelf: RoundLibraryShelf) {
       if (shelf.kind === "group-header") {
         return renderGroupHeader(shelf);
       }
@@ -139,13 +151,14 @@ export function VirtualizedRoundLibraryGrid({
       const shelf = shelves[index];
       return shelf?.kind === "group-header"
         ? GROUP_HEADER_ESTIMATE_PX + SHELF_GAP_PX
-        : CARD_ROW_ESTIMATE_PX + SHELF_GAP_PX;
+        : estimateCardRowHeightPx(columns, containerWidth);
     },
     overscan: 4,
     measureElement: (element) => element.getBoundingClientRect().height,
     useAnimationFrameWithResizeObserver: true,
     enabled: canVirtualize,
   });
+  const virtualItems = virtualizer.getVirtualItems();
   const scheduleMeasure = useCallback(() => {
     if (!canVirtualize) return;
     if (measureFrameRef.current !== null) {
@@ -158,7 +171,7 @@ export function VirtualizedRoundLibraryGrid({
   }, [canVirtualize, virtualizer]);
 
   const handleShelfMediaStateChange = useCallback(
-    (_event: SyntheticEvent<HTMLDivElement>) => {
+    () => {
       if (!canVirtualize) return;
       scheduleMeasure();
     },
@@ -212,9 +225,7 @@ export function VirtualizedRoundLibraryGrid({
     }
     if (canVirtualize) {
       const nextRoundIds = [
-        ...new Set(
-          virtualizer.getVirtualItems().flatMap((item) => collectRoundIdsFromShelf(shelves[item.index]))
-        ),
+        ...new Set(virtualItems.flatMap((item) => collectRoundIdsFromShelf(shelves[item.index]))),
       ];
       const nextKey = nextRoundIds.join("|");
       if (lastVisibleRoundIdsRef.current === nextKey) {
@@ -239,7 +250,7 @@ export function VirtualizedRoundLibraryGrid({
     }
     lastVisibleRoundIdsRef.current = nextKey;
     onVisibleRoundIdsChange(nextRoundIds);
-  }, [canVirtualize, onVisibleRoundIdsChange, preferVirtualization, rows, shelves, virtualizer]);
+  }, [canVirtualize, onVisibleRoundIdsChange, preferVirtualization, rows, scrollContainer, shelves, virtualItems]);
 
   if (preferVirtualization && !scrollContainer) {
     return <div ref={layoutContainerRef} className="relative min-h-px" aria-hidden="true" />;
@@ -269,7 +280,7 @@ export function VirtualizedRoundLibraryGrid({
       className="relative"
       style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
-      {virtualizer.getVirtualItems().map((item) => {
+      {virtualItems.map((item) => {
         const shelf = shelves[item.index];
         if (!shelf) return null;
 

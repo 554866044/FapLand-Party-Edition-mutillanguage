@@ -41,6 +41,7 @@ import {
   invalidateInstalledRoundCaches,
   invalidateInstalledRoundCardAssets,
   invalidateInstalledRoundMedia,
+  peekInstalledRoundCardAssetsCached,
 } from "./installedRoundsCache";
 
 describe("installedRoundsCache", () => {
@@ -148,5 +149,38 @@ describe("installedRoundsCache", () => {
       },
     ]);
     expect(mocks.getInstalledRoundCardAssets).toHaveBeenCalledTimes(2);
+  });
+
+  it("peeks cached installed round card assets without issuing another query", async () => {
+    mocks.getInstalledRoundCardAssets.mockResolvedValue([
+      {
+        roundId: "round-1",
+        previewImage: "data:image/jpeg;base64,preview",
+        previewVideoUri: "app://media/round-1.mp4",
+        websiteVideoCacheStatus: "cached",
+        primaryResourceId: "res-1",
+      },
+    ]);
+
+    await expect(getInstalledRoundCardAssetsCached(["round-1"])).resolves.toEqual([
+      {
+        roundId: "round-1",
+        previewImage: "data:image/jpeg;base64,preview",
+        previewVideoUri: "app://media/round-1.mp4",
+        websiteVideoCacheStatus: "cached",
+        primaryResourceId: "res-1",
+      },
+    ]);
+
+    expect(peekInstalledRoundCardAssetsCached(["round-1"])).toEqual([
+      {
+        roundId: "round-1",
+        previewImage: "data:image/jpeg;base64,preview",
+        previewVideoUri: "app://media/round-1.mp4",
+        websiteVideoCacheStatus: "cached",
+        primaryResourceId: "res-1",
+      },
+    ]);
+    expect(mocks.getInstalledRoundCardAssets).toHaveBeenCalledTimes(1);
   });
 });

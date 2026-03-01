@@ -240,6 +240,7 @@ function buildLinearConfig(
       scorePerCumRoundSuccess: 420,
     },
     roundStartDelayMs: 20000,
+    disableDiceAnimation: false,
   };
 }
 
@@ -388,6 +389,7 @@ export function toGameConfigFromPlaylist(
   return {
     ...config,
     roundStartDelayMs: playlistConfig.roundStartDelayMs,
+    disableDiceAnimation: playlistConfig.disableDiceAnimation,
     dice: playlistConfig.dice,
     perkSelection: playlistConfig.perkSelection,
     perkPool: playlistConfig.perkPool,
@@ -428,6 +430,7 @@ export function createDefaultPlaylistConfig<T extends PlaylistResolutionRoundLik
       cumRoundRefs,
     },
     roundStartDelayMs: 20000,
+    disableDiceAnimation: false,
     perkSelection: {
       optionsPerPick: 3,
       triggerChancePerCompletedRound: 0.35,

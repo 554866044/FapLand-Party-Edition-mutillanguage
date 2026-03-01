@@ -70,6 +70,7 @@ const graphConfig: PlaylistConfig = {
   probabilityScaling: baseProbabilityScaling,
   economy: baseEconomy,
   roundStartDelayMs: 20000,
+  disableDiceAnimation: false,
   dice: { min: 1, max: 6 },
   saveMode: "none",
 };
@@ -90,6 +91,7 @@ const linearConfig: PlaylistConfig = {
   probabilityScaling: baseProbabilityScaling,
   economy: baseEconomy,
   roundStartDelayMs: 20000,
+  disableDiceAnimation: false,
   dice: { min: 1, max: 6 },
   saveMode: "none",
 };

@@ -180,6 +180,7 @@ export interface EditorGraphConfig {
   probabilityScaling: PlaylistConfig["probabilityScaling"];
   economy: Pick<PlaylistConfig["economy"], "startingMoney" | "scorePerCumRoundSuccess">;
   dice: PlaylistConfig["dice"];
+  disableDiceAnimation: boolean;
   saveMode: PlaylistConfig["saveMode"];
   style: EditorGraphStyle;
   music: {
@@ -501,6 +502,7 @@ export const toEditorGraphConfig = (input: GraphBoardConfig): EditorGraphConfig 
       min: 1,
       max: 6,
     },
+    disableDiceAnimation: false,
     saveMode: "none",
     style: normalizeGraphStyle(input.style),
     music: {
@@ -629,6 +631,7 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
       min: 1,
       max: 6,
     },
+    disableDiceAnimation: false,
     saveMode: "none",
     style: {},
     music: {

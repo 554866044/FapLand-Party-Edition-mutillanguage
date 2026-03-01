@@ -182,6 +182,7 @@ const ZGameConfig = z.object({
     scorePerCumRoundSuccess: z.number().int(),
   }),
   roundStartDelayMs: z.number().int(),
+  disableDiceAnimation: z.boolean().optional(),
 });
 
 const ZInventoryItem = z.object({

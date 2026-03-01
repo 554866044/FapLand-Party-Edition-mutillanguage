@@ -292,6 +292,23 @@ describe("useGameAnimation", () => {
     expect(result.current.state.log[0]).toContain("Perk selection timed out");
   });
 
+  it("moves instantly when dice animation is disabled", () => {
+    const initialState = createInitialGameState({
+      ...makeConfig(),
+      disableDiceAnimation: true,
+    });
+    const { result } = renderHook(() => useGameAnimation(initialState, []));
+
+    act(() => {
+      result.current.handleRoll();
+    });
+
+    expect(result.current.animPhase.kind).toBe("roundCountdown");
+    expect(result.current.state.lastRoll).toBeGreaterThanOrEqual(1);
+    expect(result.current.state.players[0]?.position).toBe(1);
+    expect(result.current.state.queuedRound?.roundId).toBe("round-1");
+  });
+
   it("returns to idle and allows rolling after buying a post-round perk", () => {
     const initialState = withPendingPerkSelection(createInitialGameState(makePerkConfig()));
     const perkId = initialState.pendingPerkSelection?.options[0]?.id;

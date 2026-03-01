@@ -440,6 +440,7 @@ export const ZPlaylistConfig = z
     music: ZPlaylistMusic.optional(),
     saveMode: ZPlaylistSaveMode.default("none"),
     roundStartDelayMs: z.number().int().min(0).max(300000).default(20000),
+    disableDiceAnimation: z.boolean().default(false),
     dice: z
       .object({
         min: z.number().int().min(1).max(20).default(1),

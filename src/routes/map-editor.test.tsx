@@ -71,6 +71,7 @@ function makePlaylist(id: string, name: string) {
       },
       perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
       perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
+      disableDiceAnimation: false,
       probabilityScaling: {
         initialIntermediaryProbability: 0,
         initialAntiPerkProbability: 0,
@@ -79,6 +80,7 @@ function makePlaylist(id: string, name: string) {
         maxIntermediaryProbability: 1,
         maxAntiPerkProbability: 0.75,
       },
+      disableDiceAnimation: false,
       economy: {
         startingMoney: 120,
         moneyPerCompletedRound: 50,
@@ -1063,6 +1065,7 @@ describe("MapEditorRoute", () => {
     fireEvent.change(screen.getByLabelText("Anti-perk max"), { target: { value: "77" } });
     fireEvent.change(screen.getByLabelText("Starting Money"), { target: { value: "275" } });
     fireEvent.change(screen.getByLabelText("Cum round bonus score"), { target: { value: "180" } });
+    fireEvent.click(screen.getByRole("button", { name: "Disable dice animation" }));
 
     fireEvent.click(screen.getByRole("button", { name: /Loaded Dice/i }));
     fireEvent.click(screen.getByRole("button", { name: /Jammed Dice/i }));
@@ -1087,6 +1090,7 @@ describe("MapEditorRoute", () => {
     expect(updateCall.config.probabilityScaling.maxAntiPerkProbability).toBe(0.77);
     expect(updateCall.config.economy.startingMoney).toBe(275);
     expect(updateCall.config.economy.scorePerCumRoundSuccess).toBe(180);
+    expect(updateCall.config.disableDiceAnimation).toBe(true);
     expect(updateCall.config.perkPool.enabledPerkIds).toContain("loaded-dice");
     expect(updateCall.config.perkPool.enabledAntiPerkIds).toContain("jammed-dice");
   });

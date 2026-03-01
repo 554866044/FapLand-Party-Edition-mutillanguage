@@ -31,6 +31,11 @@ const LazyGlobalMusicOverlay = lazy(async () => {
   return { default: module.GlobalMusicOverlay };
 });
 
+const LazyGlobalFpsCounter = lazy(async () => {
+  const module = await import("../components/GlobalFpsCounter");
+  return { default: module.GlobalFpsCounter };
+});
+
 type RootErrorBoundaryProps = {
   children: ReactNode;
 };
@@ -148,6 +153,7 @@ function DeferredGlobalOverlayHost() {
 
   return (
     <Suspense fallback={null}>
+      <LazyGlobalFpsCounter />
       <LazyGlobalHandyOverlay />
       <LazyGlobalMusicOverlay />
     </Suspense>

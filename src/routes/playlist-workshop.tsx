@@ -91,6 +91,7 @@ type EditableLinearSetup = {
   scorePerCumRoundSuccess: number;
   diceMin: number;
   diceMax: number;
+  disableDiceAnimation: boolean;
 };
 
 const DEFAULT_SAFE_PRESET = [25, 50, 75];
@@ -535,6 +536,7 @@ function toEditableSetup(
       scorePerCumRoundSuccess: config.economy.scorePerCumRoundSuccess,
       diceMin: config.dice?.min ?? 1,
       diceMax: config.dice?.max ?? 6,
+      disableDiceAnimation: config.disableDiceAnimation ?? false,
     };
   }
 
@@ -579,6 +581,7 @@ function toEditableSetup(
     scorePerCumRoundSuccess: config.economy.scorePerCumRoundSuccess,
     diceMin: config.dice?.min ?? 1,
     diceMax: config.dice?.max ?? 6,
+    disableDiceAnimation: config.disableDiceAnimation ?? false,
   });
 }
 
@@ -1667,6 +1670,7 @@ function PlaylistWorkshopPage() {
           1000,
           Math.min(300000, Math.round(normalizedSetup.roundStartDelaySec * 1000))
         ),
+        disableDiceAnimation: normalizedSetup.disableDiceAnimation,
         dice: {
           min: Math.max(1, Math.min(20, Math.floor(normalizedSetup.diceMin))),
           max: Math.max(1, Math.min(20, Math.floor(normalizedSetup.diceMax))),
@@ -3263,6 +3267,41 @@ function PlaylistWorkshopPage() {
                         Controls the range of the dice used for movement. Default is 1 to 6.
                       </Trans>
                     </p>
+                    <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-white">
+                            <Trans>Disable Dice Animation</Trans>
+                          </div>
+                          <p className="text-xs leading-relaxed text-white/50">
+                            <Trans>
+                              Move the player instantly after each roll instead of playing the dice
+                              and movement animation. Disabled by default.
+                            </Trans>
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={i18n._({
+                            id: "playlist-workshop.disable-dice-animation.toggle",
+                            message: "Disable dice animation toggle",
+                          })}
+                          onClick={() =>
+                            setSetup((prev) => ({
+                              ...prev,
+                              disableDiceAnimation: !prev.disableDiceAnimation,
+                            }))
+                          }
+                          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                            setup.disableDiceAnimation
+                              ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
+                              : "border-white/10 bg-black/30 text-white/70 hover:border-white/20 hover:text-white"
+                          }`}
+                        >
+                          {setup.disableDiceAnimation ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="bg-black/40 border border-white/10 rounded-xl p-6 backdrop-blur-md">

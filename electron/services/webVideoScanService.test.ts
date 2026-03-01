@@ -76,7 +76,12 @@ function buildDbMock(
     update: vi.fn(() => ({
       set: vi.fn((values: { previewImage?: string | null }) => ({
         where: vi.fn((whereClause: unknown) => {
-          const roundId = JSON.stringify(whereClause).match(/"value":"([^"]+)"/)?.[1] ?? "unknown";
+          let roundId = "unknown";
+          try {
+            roundId = JSON.stringify(whereClause).match(/"value":"([^"]+)"/)?.[1] ?? "unknown";
+          } catch {
+            roundId = "unknown";
+          }
           updatedRounds.push({ id: roundId, previewImage: values.previewImage ?? null });
           return Promise.resolve();
         }),
@@ -186,6 +191,51 @@ describe("webVideoScanService", () => {
     expect(result.failedCount).toBe(0);
   });
 
+  it("continues caching other rounds when one cache discovery fails", async () => {
+    getDbMock.mockReturnValue(
+      buildDbMock([
+        {
+          resourceId: "res-1",
+          roundId: "round-1",
+          roundName: "Broken Round",
+          videoUri: "https://page.example/watch/1",
+        },
+        {
+          resourceId: "res-2",
+          roundId: "round-2",
+          roundName: "Working Round",
+          videoUri: "https://page.example/watch/2",
+        },
+      ])
+    );
+    getCachedWebsiteVideoMetadataMock.mockImplementation(async (uri: string) => {
+      if (uri === "https://page.example/watch/1") {
+        throw new Error("Broken cache metadata");
+      }
+      return null;
+    });
+
+    const service = await import("./webVideoScanService");
+    const result = await service.startWebsiteVideoScanManual();
+
+    expect(ensureWebsiteVideoCachedMock).toHaveBeenCalledTimes(1);
+    expect(ensureWebsiteVideoCachedMock).toHaveBeenCalledWith("https://page.example/watch/2");
+    expect(result.state).toBe("done");
+    expect(result.totalCount).toBe(2);
+    expect(result.completedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+    expect(result.errors).toEqual([
+      {
+        resourceId: "res-1",
+        roundId: "round-1",
+        roundName: "Broken Round",
+        url: "https://page.example/watch/1",
+        reason: "Broken cache metadata",
+      },
+    ]);
+  });
+
   it("starts non-manual scans without a user-configurable disable switch", async () => {
     getDbMock.mockReturnValue(
       buildDbMock([
@@ -257,11 +307,11 @@ describe("webVideoScanService", () => {
     let releaseFirst: any = null;
     ensureWebsiteVideoCachedMock.mockImplementation((url: string) => {
       if (url === "https://page.example/watch/1") {
-        return new Promise<void>((resolve) => {
+        return new Promise<{ finalFilePath: string }>((resolve) => {
           releaseFirst = resolve;
         });
       }
-      return Promise.resolve();
+      return Promise.resolve({ finalFilePath: "/tmp/cached-2.mp4" });
     });
 
     const service = await import("./webVideoScanService");
@@ -272,7 +322,7 @@ describe("webVideoScanService", () => {
     });
 
     service.requestWebsiteVideoScanAbort();
-    releaseFirst?.();
+    releaseFirst?.({ finalFilePath: "/tmp/cached-1.mp4" });
     await vi.runAllTimersAsync();
 
     const result = await pending;
@@ -310,8 +360,8 @@ describe("webVideoScanService", () => {
     const releases = new Map<string, () => void>();
     ensureWebsiteVideoCachedMock.mockImplementation(
       (url: string) =>
-        new Promise<void>((resolve) => {
-          releases.set(url, resolve);
+        new Promise<{ finalFilePath: string }>((resolve) => {
+          releases.set(url, () => resolve({ finalFilePath: `/tmp/${encodeURIComponent(url)}.mp4` }));
         })
     );
 
@@ -370,7 +420,7 @@ describe("webVideoScanService", () => {
   it("queues an immediate follow-up scan when new work is requested during an active run", async () => {
     vi.useFakeTimers();
 
-    const rowsByPass = [
+    const queryResults = [
       [
         {
           resourceId: "res-1",
@@ -379,6 +429,7 @@ describe("webVideoScanService", () => {
           videoUri: "https://page.example/watch/1",
         },
       ],
+      [],
       [
         {
           resourceId: "res-2",
@@ -388,13 +439,14 @@ describe("webVideoScanService", () => {
         },
       ],
       [],
+      [],
     ];
 
     getDbMock.mockReturnValue({
       select: vi.fn(() => ({
         from: vi.fn(() => ({
           innerJoin: vi.fn(() => ({
-            where: vi.fn(async () => rowsByPass.shift() ?? []),
+            where: vi.fn(async () => queryResults.shift() ?? []),
           })),
         })),
       })),
@@ -403,8 +455,8 @@ describe("webVideoScanService", () => {
     const releases = new Map<string, () => void>();
     ensureWebsiteVideoCachedMock.mockImplementation(
       (url: string) =>
-        new Promise<void>((resolve) => {
-          releases.set(url, resolve);
+        new Promise<{ finalFilePath: string }>((resolve) => {
+          releases.set(url, () => resolve({ finalFilePath: `/tmp/${encodeURIComponent(url)}.mp4` }));
         })
     );
 

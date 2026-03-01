@@ -32,6 +32,44 @@ type ConverterSourcePickerProps = {
   onSearchEroScripts?: () => void;
 };
 
+function ConverterSourcePickerSkeleton({ section }: { section: Extract<SourceSection, "round" | "hero"> }) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      aria-label={section === "round" ? "Loading rounds" : "Loading heroes"}
+    >
+      {Array.from({ length: 6 }, (_, index) => (
+        <div
+          key={`converter-source-skeleton:${section}:${index}`}
+          className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 p-4 backdrop-blur-xl"
+          aria-hidden="true"
+        >
+          {section === "round" ? (
+            <div className="-m-4 mb-4 aspect-video animate-pulse rounded-t-2xl border-b border-purple-400/20 bg-zinc-800/70" />
+          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-5 w-3/4 animate-pulse rounded bg-violet-300/15" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-zinc-300/10" />
+            </div>
+            {section === "round" ? (
+              <div className="h-5 w-16 animate-pulse rounded-full bg-violet-300/15" />
+            ) : null}
+          </div>
+          <div className="mt-4 space-y-2">
+            <div className="h-3 w-full animate-pulse rounded bg-zinc-300/10" />
+            <div className="h-3 w-5/6 animate-pulse rounded bg-zinc-300/10" />
+          </div>
+          <div className="mt-5 flex gap-2">
+            <div className="h-5 w-16 animate-pulse rounded-md bg-zinc-300/10" />
+            <div className="h-5 w-20 animate-pulse rounded-md bg-zinc-300/10" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function normalizeHttpUrl(value: string): string | null {
   try {
     const parsed = new URL(value.trim());
@@ -377,9 +415,7 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-sm text-zinc-400">{t`Loading...`}</div>
-          </div>
+          <ConverterSourcePickerSkeleton section={section} />
         ) : section === "round" ? (
           filteredRounds.length === 0 ? (
             <div className="rounded-2xl border border-zinc-700/50 bg-black/20 p-8 text-center">

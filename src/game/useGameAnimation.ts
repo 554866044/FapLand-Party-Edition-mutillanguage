@@ -183,6 +183,30 @@ export function useGameAnimation(
     });
   }, []);
 
+  const shouldSkipDiceAnimation = useCallback(
+    (gameState: GameState) => gameState.config.disableDiceAnimation === true,
+    []
+  );
+
+  const resolvePostTraversalPhase = useCallback((nextState: GameState): AnimPhase => {
+    if (nextState.pendingPerkSelection) {
+      return { kind: "perkReveal", elapsed: 0 };
+    }
+    if (nextState.pendingPathChoice) {
+      return { kind: "idle" };
+    }
+    if (nextState.queuedRound) {
+      return createRoundCountdownPhase(nextState.queuedRound);
+    }
+    return { kind: "idle" };
+  }, []);
+
+  const commitAnimPhase = useCallback((nextPhase: AnimPhase): AnimPhase => {
+    animPhaseRef.current = nextPhase;
+    setAnimPhase(nextPhase);
+    return nextPhase;
+  }, []);
+
   const queueRollPhase = useCallback((diceMin = 1, diceMax = 6): AnimPhase => {
     const clampedMin = Math.max(1, Math.floor(diceMin));
     const clampedMax = Math.max(clampedMin, Math.floor(diceMax));
@@ -192,10 +216,8 @@ export function useGameAnimation(
       displayValue: clampedMin,
       finalValue: randomInt(clampedMin, clampedMax),
     };
-    animPhaseRef.current = next;
-    setAnimPhase(next);
-    return next;
-  }, []);
+    return commitAnimPhase(next);
+  }, [commitAnimPhase]);
 
   const handleRoll = useCallback(() => {
     const s = stateRef.current;
@@ -210,12 +232,19 @@ export function useGameAnimation(
     if (animPhaseRef.current.kind !== "idle") return;
     turnTimerElapsedRef.current = 0;
     setNextAutoRollInSec(null);
+    if (shouldSkipDiceAnimation(s)) {
+      const nextState = rollTurn(s, installedRounds);
+      commitState(nextState);
+      playDiceResultSound();
+      commitAnimPhase(resolvePostTraversalPhase(nextState));
+      return;
+    }
     playDiceRollStartSound();
     queueRollPhase(
       s.players[s.currentPlayerIndex]?.stats.diceMin ?? 1,
       s.players[s.currentPlayerIndex]?.stats.diceMax ?? 6
     );
-  }, [queueRollPhase]);
+  }, [commitAnimPhase, commitState, installedRounds, queueRollPhase, resolvePostTraversalPhase, shouldSkipDiceAnimation]);
 
   const handleStartQueuedRound = useCallback(() => {
     const s = stateRef.current;
@@ -277,7 +306,7 @@ export function useGameAnimation(
 
       const path = toPathIndices(nextState);
       const gateStepIndices = toGateStepIndices(nextState);
-      if (path.length > 0) {
+      if (path.length > 0 && !shouldSkipDiceAnimation(nextState)) {
         playTokenStepSound();
         const nextAnim: AnimPhase = {
           kind: "movingToken",
@@ -287,21 +316,21 @@ export function useGameAnimation(
           stepIndex: 0,
           stepElapsed: 0,
         };
-        animPhaseRef.current = nextAnim;
-        setAnimPhase(nextAnim);
+        commitAnimPhase(nextAnim);
         return;
       }
 
-      const nextAnim: AnimPhase =
-        shouldAutoStartQueuedRound(nextState) &&
-          !nextState.pendingPerkSelection &&
-          !nextState.activeRound
-          ? createRoundCountdownPhase(nextState.queuedRound)
-          : { kind: "idle" };
-      animPhaseRef.current = nextAnim;
-      setAnimPhase(nextAnim);
+      commitAnimPhase(resolvePostTraversalPhase(nextState));
     },
-    [applyTransition, installedRounds, toGateStepIndices, toPathIndices]
+    [
+      applyTransition,
+      commitAnimPhase,
+      installedRounds,
+      resolvePostTraversalPhase,
+      shouldSkipDiceAnimation,
+      toGateStepIndices,
+      toPathIndices,
+    ]
   );
 
   const handleResolvePathChoiceTimeout = useCallback(() => {
@@ -320,7 +349,7 @@ export function useGameAnimation(
 
     const path = toPathIndices(nextState);
     const gateStepIndices = toGateStepIndices(nextState);
-    if (path.length > 0) {
+    if (path.length > 0 && !shouldSkipDiceAnimation(nextState)) {
       playTokenStepSound();
       const nextAnim: AnimPhase = {
         kind: "movingToken",
@@ -330,48 +359,46 @@ export function useGameAnimation(
         stepIndex: 0,
         stepElapsed: 0,
       };
-      animPhaseRef.current = nextAnim;
-      setAnimPhase(nextAnim);
+      commitAnimPhase(nextAnim);
       return;
     }
 
-    const nextAnim: AnimPhase =
-      shouldAutoStartQueuedRound(nextState) &&
-        !nextState.pendingPerkSelection &&
-        !nextState.activeRound
-        ? createRoundCountdownPhase(nextState.queuedRound)
-        : { kind: "idle" };
-    animPhaseRef.current = nextAnim;
-    setAnimPhase(nextAnim);
-  }, [applyTransition, installedRounds, toGateStepIndices, toPathIndices]);
+    commitAnimPhase(resolvePostTraversalPhase(nextState));
+  }, [
+    applyTransition,
+    commitAnimPhase,
+    installedRounds,
+    resolvePostTraversalPhase,
+    shouldSkipDiceAnimation,
+    toGateStepIndices,
+    toPathIndices,
+  ]);
 
   const handleSelectPerk = useCallback((perkId: string, options?: { applyDirectly?: boolean }) => {
     const nextState = applyTransition((prev) => selectPerk(prev, perkId, options));
     playPerkActionSound();
 
-    const nextAnim: AnimPhase =
+    commitAnimPhase(
       shouldAutoStartQueuedRound(nextState) &&
         !nextState.pendingPerkSelection &&
         !nextState.activeRound
         ? createRoundCountdownPhase(nextState.queuedRound)
-        : { kind: "idle" };
-    animPhaseRef.current = nextAnim;
-    setAnimPhase(nextAnim);
-  }, [applyTransition]);
+        : { kind: "idle" }
+    );
+  }, [applyTransition, commitAnimPhase]);
 
   const handleSkipPerk = useCallback(() => {
     const nextState = applyTransition((prev) => skipPerkSelection(prev));
     playPerkActionSound();
 
-    const nextAnim: AnimPhase =
+    commitAnimPhase(
       shouldAutoStartQueuedRound(nextState) &&
         !nextState.pendingPerkSelection &&
         !nextState.activeRound
         ? createRoundCountdownPhase(nextState.queuedRound)
-        : { kind: "idle" };
-    animPhaseRef.current = nextAnim;
-    setAnimPhase(nextAnim);
-  }, [applyTransition]);
+        : { kind: "idle" }
+    );
+  }, [applyTransition, commitAnimPhase]);
 
   const handleApplyExternalPerk = useCallback(
     (input: { targetPlayerId: string; perkId: string; sourceLabel?: string }) => {
@@ -461,9 +488,7 @@ export function useGameAnimation(
           ) {
             playRoundStartSound();
             const next = createRoundCountdownPhase(nextState.queuedRound);
-            animPhaseRef.current = next;
-            setAnimPhase(next);
-            return next;
+            return commitAnimPhase(next);
           }
 
           if (
@@ -472,6 +497,12 @@ export function useGameAnimation(
             !nextState.pendingPerkSelection &&
             !nextState.pendingPathChoice
           ) {
+            if (shouldSkipDiceAnimation(nextState)) {
+              const rolledState = rollTurn(nextState, installedRounds);
+              commitState(rolledState);
+              playDiceResultSound();
+              return commitAnimPhase(resolvePostTraversalPhase(rolledState));
+            }
             playDiceRollStartSound();
             return queueRollPhase(
               nextState.players[nextState.currentPlayerIndex]?.stats.diceMin ?? 1,
@@ -516,6 +547,10 @@ export function useGameAnimation(
           commitState(nextState);
           playDiceResultSound();
 
+          if (shouldSkipDiceAnimation(nextState)) {
+            return commitAnimPhase(resolvePostTraversalPhase(nextState));
+          }
+
           const next: AnimPhase = {
             kind: "diceResultReveal",
             elapsed: 0,
@@ -524,9 +559,7 @@ export function useGameAnimation(
             path,
             gateStepIndices,
           };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
-          return next;
+          return commitAnimPhase(next);
         }
 
         const next: AnimPhase = {
@@ -535,9 +568,7 @@ export function useGameAnimation(
           displayValue: newDisplay,
           finalValue: phase.finalValue,
         };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "diceResultReveal") {
@@ -553,20 +584,13 @@ export function useGameAnimation(
               stepIndex: 0,
               stepElapsed: 0,
             };
-            animPhaseRef.current = next;
-            setAnimPhase(next);
-            return next;
+            return commitAnimPhase(next);
           }
 
-          const next: AnimPhase = { kind: "idle" };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
-          return next;
+          return commitAnimPhase({ kind: "idle" });
         }
         const next: AnimPhase = { ...phase, elapsed: newElapsed };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "movingToken") {
@@ -591,9 +615,7 @@ export function useGameAnimation(
             } else {
               next = { kind: "landingEffect", elapsed: 0 };
             }
-            animPhaseRef.current = next;
-            setAnimPhase(next);
-            return next;
+            return commitAnimPhase(next);
           }
 
           playTokenStepSound();
@@ -603,32 +625,23 @@ export function useGameAnimation(
             stepIndex: nextStepIndex,
             stepElapsed: 0,
           };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
-          return next;
+          return commitAnimPhase(next);
         }
 
         const next: AnimPhase = {
           ...phase,
           stepElapsed: newStepElapsed,
         };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "landingEffect") {
         const newElapsed = phase.elapsed + dt;
         if (newElapsed >= LANDING_DURATION) {
-          const next: AnimPhase = { kind: "idle" };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
-          return next;
+          return commitAnimPhase({ kind: "idle" });
         }
         const next: AnimPhase = { kind: "landingEffect", elapsed: newElapsed };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "roundCountdown") {
@@ -637,8 +650,7 @@ export function useGameAnimation(
         if (newElapsed >= phase.duration) {
           applyTransition((prev) => triggerQueuedRound(prev));
           const next: AnimPhase = { kind: "idle" };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
+          commitAnimPhase(next);
           turnTimerElapsedRef.current = 0;
           setNextAutoRollInSec(null);
           return next;
@@ -650,27 +662,20 @@ export function useGameAnimation(
           remaining,
           duration: phase.duration,
         };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "perkReveal") {
         const currentS = stateRef.current;
         if (!currentS.pendingPerkSelection) {
-          const next: AnimPhase = { kind: "idle" };
-          animPhaseRef.current = next;
-          setAnimPhase(next);
-          return next;
+          return commitAnimPhase({ kind: "idle" });
         }
         const newElapsed = phase.elapsed + dt;
         if (newElapsed >= PERK_REVEAL_DURATION) {
           return phase;
         }
         const next: AnimPhase = { kind: "perkReveal", elapsed: newElapsed };
-        animPhaseRef.current = next;
-        setAnimPhase(next);
-        return next;
+        return commitAnimPhase(next);
       }
 
       if (phase.kind === "idle") {
@@ -686,7 +691,9 @@ export function useGameAnimation(
       commitState,
       handleResolvePathChoiceTimeout,
       installedRounds,
+      resolvePostTraversalPhase,
       queueRollPhase,
+      shouldSkipDiceAnimation,
       toPathIndices,
       toGateStepIndices,
     ]

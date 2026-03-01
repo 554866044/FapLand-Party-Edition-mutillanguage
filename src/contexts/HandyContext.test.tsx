@@ -24,6 +24,13 @@ const mocks = vi.hoisted(() => ({
     hspModeActive: false,
   })),
   stopHandyPlayback: vi.fn(async () => undefined),
+  getHandyStroke: vi.fn(async () => ({ min: 0, max: 1, minAbsolute: 0, maxAbsolute: 200 })),
+  updateHandyStroke: vi.fn(async (auth: unknown, input: { min: number; max: number }) => ({
+    min: input.min,
+    max: input.max,
+    minAbsolute: null,
+    maxAbsolute: null,
+  })),
   getQuery: vi.fn(async () => null),
   setMutate: vi.fn(async () => undefined),
 }));
@@ -33,8 +40,10 @@ vi.mock("../services/handyApi", () => ({
 }));
 
 vi.mock("../services/thehandy/runtime", () => ({
+  getHandyStroke: mocks.getHandyStroke,
   issueHandySession: mocks.issueHandySession,
   stopHandyPlayback: mocks.stopHandyPlayback,
+  updateHandyStroke: mocks.updateHandyStroke,
 }));
 
 vi.mock("../services/trpc", () => ({
@@ -58,6 +67,10 @@ function Consumer() {
       <div data-testid="connected">{String(handy.connected)}</div>
       <div data-testid="manually-stopped">{String(handy.manuallyStopped)}</div>
       <div data-testid="synced">{String(handy.synced)}</div>
+      <div data-testid="stroke-percent">{String(handy.strokePercent)}</div>
+      <div data-testid="stroke-min">{String(handy.strokeMin)}</div>
+      <div data-testid="stroke-max">{String(handy.strokeMax)}</div>
+      <div data-testid="stroke-error">{handy.strokeError ?? ""}</div>
       <button
         type="button"
         onClick={() => {
@@ -81,6 +94,22 @@ function Consumer() {
         }}
       >
         toggle-stop
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void handy.setStrokeBounds(20, 80);
+        }}
+      >
+        set-stroke
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void handy.disconnect();
+        }}
+      >
+        disconnect
       </button>
     </div>
   );
@@ -111,6 +140,18 @@ describe("HandyContext", () => {
       hspModeActive: false,
     });
     mocks.stopHandyPlayback.mockResolvedValue(undefined);
+    mocks.getHandyStroke.mockResolvedValue({
+      min: 0,
+      max: 1,
+      minAbsolute: 0,
+      maxAbsolute: 200,
+    });
+    mocks.updateHandyStroke.mockImplementation(async (_auth, input) => ({
+      min: input.min,
+      max: input.max,
+      minAbsolute: null,
+      maxAbsolute: null,
+    }));
     mocks.getQuery.mockResolvedValue(null);
     mocks.setMutate.mockResolvedValue(undefined);
   });
@@ -129,6 +170,7 @@ describe("HandyContext", () => {
     await waitFor(() => {
       expect(screen.getByTestId("connected").textContent).toBe("true");
       expect(screen.getByTestId("manually-stopped").textContent).toBe("false");
+      expect(screen.getByTestId("stroke-percent").textContent).toBe("100");
     });
 
     await act(async () => {
@@ -199,6 +241,95 @@ describe("HandyContext", () => {
     await waitFor(() => {
       expect(screen.getByTestId("manually-stopped").textContent).toBe("false");
       expect(screen.getByTestId("synced").textContent).toBe("false");
+    });
+  });
+
+  it("loads stroke state after connecting", async () => {
+    render(
+      <HandyProvider>
+        <Consumer />
+      </HandyProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "connect" }));
+    });
+
+    await waitFor(() => {
+      expect(mocks.getHandyStroke).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("stroke-min").textContent).toBe("0");
+      expect(screen.getByTestId("stroke-max").textContent).toBe("1");
+      expect(screen.getByTestId("stroke-percent").textContent).toBe("100");
+    });
+  });
+
+  it("updates stroke percent optimistically and commits the device result", async () => {
+    render(
+      <HandyProvider>
+        <Consumer />
+      </HandyProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "connect" }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "set-stroke" }));
+    });
+
+    await waitFor(() => {
+      expect(mocks.updateHandyStroke).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("stroke-percent").textContent).toBe("60");
+      expect(screen.getByTestId("stroke-min").textContent).toBe("0.2");
+      expect(screen.getByTestId("stroke-max").textContent).toBe("0.8");
+    });
+  });
+
+  it("rolls stroke state back if updating the device fails", async () => {
+    mocks.updateHandyStroke.mockRejectedValueOnce(new Error("Failed to update TheHandy stroke settings."));
+
+    render(
+      <HandyProvider>
+        <Consumer />
+      </HandyProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "connect" }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "set-stroke" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("stroke-percent").textContent).toBe("100");
+      expect(screen.getByTestId("stroke-error").textContent).toBe(
+        "Failed to update TheHandy stroke settings."
+      );
+    });
+  });
+
+  it("clears stroke state after disconnecting", async () => {
+    render(
+      <HandyProvider>
+        <Consumer />
+      </HandyProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "connect" }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "disconnect" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("connected").textContent).toBe("false");
+      expect(screen.getByTestId("stroke-percent").textContent).toBe("100");
+      expect(screen.getByTestId("stroke-error").textContent).toBe("");
     });
   });
 });

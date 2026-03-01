@@ -6,6 +6,14 @@ export function normalizeControllerSupportEnabled(value: unknown): boolean {
   return typeof value === "boolean" ? value : DEFAULT_CONTROLLER_SUPPORT_ENABLED;
 }
 
+export const FPS_COUNTER_ENABLED_KEY = "experimental.fpsCounterEnabled";
+export const FPS_COUNTER_ENABLED_EVENT = "fland:experimental-fps-counter-enabled";
+export const DEFAULT_FPS_COUNTER_ENABLED = false;
+
+export function normalizeFpsCounterEnabled(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULT_FPS_COUNTER_ENABLED;
+}
+
 export const CHEAT_MODE_ENABLED_KEY = "experimental.cheatModeEnabled";
 export const CHEAT_MODE_ENABLED_EVENT = "fland:experimental-cheat-mode-enabled";
 export const DEFAULT_CHEAT_MODE_ENABLED = false;

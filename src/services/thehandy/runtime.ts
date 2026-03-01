@@ -1,5 +1,6 @@
 import {
   getDeviceInfo,
+  getStroke,
   getServerTime,
   hspAdd,
   hspFlush,
@@ -13,8 +14,10 @@ import {
   setHspPaybackRate,
   setHspTime,
   setMode,
+  setStroke,
 } from "./index";
 import type { FunscriptAction } from "../../game/media/playback";
+import { normalizeHandyStrokeState, type HandyStrokeState } from "../theHandyConfig";
 
 export type HandyAuthBundle = {
   connectionKey: string;
@@ -180,6 +183,33 @@ function clampMaxBufferPoints(value: unknown): number {
   return DEFAULT_HSP_MAX_POINTS;
 }
 
+function unwrapStrokeResult(
+  payload: unknown,
+  fallback?: Partial<HandyStrokeState>
+): HandyStrokeState {
+  if (!payload || typeof payload !== "object" || !("result" in payload)) {
+    if (fallback) {
+      return normalizeHandyStrokeState(fallback);
+    }
+    throw new Error("Stroke settings unavailable.");
+  }
+
+  const result = (payload as { result?: { min?: unknown; max?: unknown; min_absolute?: unknown; max_absolute?: unknown } })
+    .result;
+  if (!result && !fallback) {
+    throw new Error("Stroke settings unavailable.");
+  }
+
+  return normalizeHandyStrokeState({
+    min: typeof result?.min === "number" ? result.min : fallback?.min,
+    max: typeof result?.max === "number" ? result.max : fallback?.max,
+    minAbsolute:
+      typeof result?.min_absolute === "number" ? result.min_absolute : fallback?.minAbsolute,
+    maxAbsolute:
+      typeof result?.max_absolute === "number" ? result.max_absolute : fallback?.maxAbsolute,
+  });
+}
+
 export function resolveInitialPreloadTargetMs(
   points: Array<{ t: number; x: number }>,
   seededPointIndex: number,
@@ -303,6 +333,54 @@ export async function verifyHandyV3Connection(
     connected,
     firmwareVersion: connected ? (unwrapPayload(infoResponse)?.result?.fw_version ?? null) : null,
   };
+}
+
+export async function getHandyStroke(auth: HandyAuthBundle): Promise<HandyStrokeState> {
+  const connectionRef = requireConnectionRef(auth.connectionKey);
+  const appCredential = requireAppCredential(auth.appApiKey);
+  const session = await issueHandySession(auth);
+  const response = unwrapPayload(
+    await getStroke({
+      auth: createAuthResolver(appCredential, session.clientToken),
+      responseStyle: "data",
+      requestValidator: undefined,
+      responseValidator: undefined,
+      headers: {
+        "X-Connection-Key": connectionRef,
+      },
+      query: { timeout: 5000 },
+    })
+  );
+
+  return unwrapStrokeResult(response);
+}
+
+export async function updateHandyStroke(
+  auth: HandyAuthBundle,
+  input: Pick<HandyStrokeState, "min" | "max">
+): Promise<HandyStrokeState> {
+  const connectionRef = requireConnectionRef(auth.connectionKey);
+  const appCredential = requireAppCredential(auth.appApiKey);
+  const session = await issueHandySession(auth);
+  const normalizedInput = normalizeHandyStrokeState(input);
+  const response = unwrapPayload(
+    await setStroke({
+      auth: createAuthResolver(appCredential, session.clientToken),
+      responseStyle: "data",
+      requestValidator: undefined,
+      responseValidator: undefined,
+      headers: {
+        "X-Connection-Key": connectionRef,
+      },
+      body: {
+        min: normalizedInput.min,
+        max: normalizedInput.max,
+      },
+      query: { timeout: 5000 },
+    })
+  );
+
+  return unwrapStrokeResult(response, normalizedInput);
 }
 
 async function prepareHspMode(auth: HandyAuthBundle, session: HandySession): Promise<void> {

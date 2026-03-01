@@ -46,6 +46,7 @@ function makeLinearPlaylist(id: string, name: string, startingMoney = 120) {
         scorePerActiveAntiPerk: 25,
         scorePerCumRoundSuccess: 420,
       },
+      disableDiceAnimation: false,
       dice: {
         min: 1,
         max: 6,
@@ -232,6 +233,7 @@ vi.mock("../game/playlistRuntime", () => ({
       maxIntermediaryProbability: 0,
       maxAntiPerkProbability: 0,
     },
+    disableDiceAnimation: false,
     economy: {
       startingMoney: 0,
       moneyPerCompletedRound: 0,
@@ -528,6 +530,33 @@ describe("PlaylistWorkshopRoute", () => {
       config: ReturnType<typeof makeLinearPlaylist>["config"];
     };
     expect(updateCall.config.economy.startingMoney).toBe(410);
+  });
+
+  it("saves the disable dice animation option for linear playlists", async () => {
+    const playlist = makeLinearPlaylist("linear-playlist", "Linear Playlist");
+    mocks.loaderData = {
+      installedRounds: [],
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+    };
+    mocks.playlists.list.mockResolvedValue([playlist]);
+    mocks.playlists.getActive.mockResolvedValue(playlist);
+
+    render(<Component />);
+
+    fireEvent.click(screen.getByRole("button", { name: /linear playlist.*open/i }));
+    fireEvent.click(screen.getByRole("button", { name: /timing & probabilities/i }));
+    fireEvent.click(screen.getByRole("button", { name: /disable dice animation toggle/i }));
+    fireEvent.click(screen.getByRole("button", { name: "💾 Save" }));
+
+    await waitFor(() => {
+      expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
+    });
+
+    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as {
+      config: ReturnType<typeof makeLinearPlaylist>["config"];
+    };
+    expect(updateCall.config.disableDiceAnimation).toBe(true);
   });
 
   it("switches the editable playlist when selecting from the active playlist menu", async () => {

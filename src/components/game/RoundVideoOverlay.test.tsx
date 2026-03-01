@@ -8,6 +8,12 @@ import * as booru from "../../services/booru";
 
 const mocks = vi.hoisted(() => ({
   openGlobalHandyOverlay: vi.fn(),
+  playableVideo: {
+    getVideoSrc: vi.fn((uri: string) => uri),
+    ensurePlayableVideo: vi.fn(async (uri: string) => uri),
+    handleVideoError: vi.fn(),
+    isLocalVideoUriForFallback: vi.fn(() => true),
+  },
   handy: {
     connectionKey: "",
     appApiKey: "",
@@ -50,11 +56,11 @@ vi.mock("../../hooks/useForegroundVideoRegistration", () => ({
 }));
 
 vi.mock("../../hooks/usePlayableVideoFallback", () => ({
-  isLocalVideoUriForFallback: () => true,
+  isLocalVideoUriForFallback: (uri: string) => mocks.playableVideo.isLocalVideoUriForFallback(uri),
   usePlayableVideoFallback: () => ({
-    getVideoSrc: (uri: string) => uri,
-    ensurePlayableVideo: vi.fn(async (uri: string) => uri),
-    handleVideoError: vi.fn(),
+    getVideoSrc: (uri: string) => mocks.playableVideo.getVideoSrc(uri),
+    ensurePlayableVideo: (uri: string) => mocks.playableVideo.ensurePlayableVideo(uri),
+    handleVideoError: (uri: string) => mocks.playableVideo.handleVideoError(uri),
   }),
 }));
 
@@ -292,6 +298,14 @@ describe("RoundVideoOverlay", () => {
     mocks.isGameDevelopmentMode.mockReturnValue(false);
     mocks.openGlobalHandyOverlay.mockClear();
     mocks.playAntiPerkBeatSound.mockClear();
+    mocks.playableVideo.getVideoSrc.mockReset();
+    mocks.playableVideo.getVideoSrc.mockImplementation((uri: string) => uri);
+    mocks.playableVideo.ensurePlayableVideo.mockReset();
+    mocks.playableVideo.ensurePlayableVideo.mockImplementation(async (uri: string) => uri);
+    mocks.playableVideo.handleVideoError.mockReset();
+    mocks.playableVideo.handleVideoError.mockResolvedValue(null);
+    mocks.playableVideo.isLocalVideoUriForFallback.mockReset();
+    mocks.playableVideo.isLocalVideoUriForFallback.mockReturnValue(true);
     mocks.handy.connectionKey = "";
     mocks.handy.appApiKey = "";
     mocks.handy.offsetMs = 0;
@@ -349,6 +363,29 @@ describe("RoundVideoOverlay", () => {
 
     await waitFor(() => {
       expect(warnSpy).not.toHaveBeenCalledWith("Video autoplay failed", expect.anything());
+    });
+  });
+
+  it("retries muted when autoplay with sound is blocked and restores audio on interaction", async () => {
+    const playSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new DOMException("Playback blocked", "NotAllowedError"))
+      .mockResolvedValue(undefined);
+
+    const { container } = renderOverlay();
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+
+    await waitFor(() => {
+      expect(playSpy).toHaveBeenCalledTimes(2);
+    });
+    expect(video?.muted).toBe(true);
+
+    fireEvent.pointerDown(window);
+
+    await waitFor(() => {
+      expect(video?.muted).toBe(false);
+      expect(playSpy).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -590,6 +627,37 @@ describe("RoundVideoOverlay", () => {
     expect(screen.queryByRole("button", { name: /Skip/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Options" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Cum/i })).toBeNull();
+  });
+
+  it("does not keep the remote loading spinner when the resolved main src is local", async () => {
+    mocks.playableVideo.getVideoSrc.mockReturnValue("file:///tmp/cached-website.mp4");
+
+    const { container } = render(
+      <RoundVideoOverlay
+        activeRound={createActiveRound()}
+        installedRounds={[
+          createInstalledRound("round-1", null, {
+            videoUri:
+              "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1",
+          }),
+        ]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={vi.fn()}
+        showCloseButton
+        onClose={vi.fn()}
+      />
+    );
+
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+
+    fireEvent.loadStart(video as HTMLVideoElement);
+
+    expect(container.querySelector(".animate-spin")).toBeNull();
   });
 
   it("shows a close button when local main media fails to load", async () => {

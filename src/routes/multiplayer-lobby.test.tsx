@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
             },
             perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
             perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
+            disableDiceAnimation: false,
             probabilityScaling: {
               initialIntermediaryProbability: 0,
               initialAntiPerkProbability: 0,

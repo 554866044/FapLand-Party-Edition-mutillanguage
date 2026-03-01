@@ -67,6 +67,11 @@ const mocks = vi.hoisted(() => {
       isUsingDefaultAppApiKey: true,
       localIp: "",
       offsetMs: 0,
+      strokeMin: 0,
+      strokeMax: 1,
+      strokePercent: 100,
+      strokeLoading: false,
+      strokeError: null as string | null,
       connected: false,
       manuallyStopped: false,
       synced: false,
@@ -79,6 +84,10 @@ const mocks = vi.hoisted(() => {
       forceStop: vi.fn(async () => {}),
       adjustOffset: vi.fn(async (deltaMs: number) => deltaMs),
       resetOffset: vi.fn(async () => {}),
+      refreshStroke: vi.fn(async () => {}),
+      setStrokePercent: vi.fn(async () => {}),
+      setStrokeBounds: vi.fn(async () => {}),
+      resetStroke: vi.fn(async () => {}),
       toggleManualStop: vi.fn(async () => "unavailable" as const),
       setSyncStatus: vi.fn(),
     },
@@ -598,6 +607,9 @@ describe("Settings music section", () => {
 
   it("renders and uses TheHandy offset controls in hardware settings", async () => {
     mocks.handy.offsetMs = 75;
+    mocks.handy.strokeMin = 0.12;
+    mocks.handy.strokeMax = 0.88;
+    mocks.handy.strokePercent = 76;
     render(<SettingsPage />);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Hardware & Sync/ })[0]!);
@@ -625,6 +637,31 @@ describe("Settings music section", () => {
       expect(mocks.handy.resetOffset).toHaveBeenCalledTimes(1);
       expect(mocks.handy.adjustOffset).toHaveBeenNthCalledWith(4, 1);
       expect(mocks.handy.adjustOffset).toHaveBeenNthCalledWith(5, 25);
+    });
+  });
+
+  it("renders and uses TheHandy stroke controls in hardware settings", async () => {
+    mocks.handy.strokeMin = 0.12;
+    mocks.handy.strokeMax = 0.88;
+    mocks.handy.strokePercent = 76;
+    mocks.handy.connected = true;
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Hardware & Sync/ })[0]!);
+
+    expect(screen.getByText("Stroke Adjustment")).toBeDefined();
+    expect(screen.getByText("Current stroke: 12% - 88%")).toBeDefined();
+
+    const minThumb = screen.getByLabelText("TheHandy stroke minimum slider");
+    const maxThumb = screen.getByLabelText("TheHandy stroke maximum slider");
+    fireEvent.keyDown(minThumb, { key: "ArrowRight" });
+    fireEvent.keyDown(maxThumb, { key: "ArrowLeft" });
+    fireEvent.click(screen.getByRole("button", { name: "Reset Stroke" }));
+
+    await waitFor(() => {
+      expect(mocks.handy.setStrokeBounds).toHaveBeenNthCalledWith(1, 13, 88);
+      expect(mocks.handy.setStrokeBounds).toHaveBeenNthCalledWith(2, 13, 87);
+      expect(mocks.handy.resetStroke).toHaveBeenCalledTimes(1);
     });
   });
 

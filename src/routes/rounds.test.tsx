@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     round: {
       findInstalled: vi.fn(),
       findInstalledCatalog: vi.fn(),
+      getPlaybackEntry: vi.fn(),
       findInstalledCardAssets: vi.fn(),
       getMediaResources: vi.fn(),
       getDisabledIds: vi.fn(),
@@ -89,6 +90,8 @@ vi.mock("../services/playlists", () => ({
 vi.mock("../services/installedRoundsCache", () => ({
   getInstalledRoundCardAssetsCached: (roundIds: string[], includeDisabled = false) =>
     mocks.db.round.findInstalledCardAssets(roundIds, includeDisabled),
+  getInstalledRoundPlaybackEntryCached: (roundId: string, includeDisabled = false) =>
+    mocks.db.round.getPlaybackEntry(roundId, includeDisabled),
 }));
 
 vi.mock("../services/trpc", () => ({
@@ -178,6 +181,7 @@ async function renderInstalledRoundsPage() {
 function toCatalogRound(round: InstalledRound): InstalledRoundCatalogEntry {
   return {
     ...round,
+    isDisabled: false,
     resources: round.resources.map((resource) => ({
       id: resource.id,
       disabled: resource.disabled,
@@ -325,6 +329,7 @@ function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlayl
         scorePerActiveAntiPerk: 25,
         scorePerCumRoundSuccess: 420,
       },
+      disableDiceAnimation: false,
       roundStartDelayMs: 20000,
       dice: { min: 1, max: 6 },
     },
@@ -398,6 +403,9 @@ beforeEach(() => {
   mocks.db.round.findInstalledCatalog.mockImplementation(async () =>
     mocks.loaderData.rounds.map(toCatalogRound)
   );
+  mocks.db.round.getPlaybackEntry.mockImplementation(async (roundId: string) => {
+    return mocks.loaderData.rounds.find((candidate) => candidate.id === roundId) ?? null;
+  });
   mocks.db.round.findInstalledCardAssets.mockImplementation(async (roundIds: string[]) =>
     mocks.loaderData.rounds
       .filter((round) => roundIds.includes(round.id))
@@ -1030,7 +1038,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(screen.queryByRole("heading", { name: "Hero Website Round" })).toBeNull();
   });
 
-  it("launches the installed rounds overlay with the canonical installed round list", async () => {
+  it("launches the installed rounds overlay with the selected playback entry", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "main-round",
@@ -1056,19 +1064,17 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     await renderInstalledRoundsPage();
 
-    expect(mocks.db.round.findInstalled).not.toHaveBeenCalled();
+    expect(mocks.db.round.getPlaybackEntry).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByLabelText("Play Main Round"));
 
     await waitFor(() => expect(mocks.roundVideoOverlay).toHaveBeenCalled());
-    expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(1);
+    expect(mocks.db.round.findInstalled).not.toHaveBeenCalled();
+    expect(mocks.db.round.getPlaybackEntry).toHaveBeenCalledTimes(1);
+    expect(mocks.db.round.getPlaybackEntry).toHaveBeenCalledWith("main-round", false);
     const lastCall = mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
       installedRounds: InstalledRound[];
     };
-    expect(lastCall.installedRounds.map((round) => round.id)).toEqual([
-      "main-round",
-      "zelda-interjection",
-      "other-interjection",
-    ]);
+    expect(lastCall.installedRounds.map((round) => round.id)).toEqual(["main-round"]);
   });
 
   it("launches preview rounds through the normal overlay phase with the selected round id", async () => {
@@ -1148,6 +1154,7 @@ describe("InstalledRoundsPage hero grouping", () => {
   });
 
   it("tears down the card preview video before launching the overlay", async () => {
+    vi.useFakeTimers();
     mocks.loaderData.rounds = [
       makeRound({
         id: "main-round",
@@ -1163,6 +1170,9 @@ describe("InstalledRoundsPage hero grouping", () => {
     const card = heading.closest("article");
     expect(card).not.toBeNull();
     fireEvent.mouseEnter(card!);
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
 
     await waitFor(() => expect(container.querySelector("video")).not.toBeNull());
 
@@ -1170,9 +1180,12 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     await waitFor(() => expect(container.querySelector("video")).toBeNull());
     await waitFor(() => expect(mocks.roundVideoOverlay).toHaveBeenCalled());
+
+    vi.useRealTimers();
   });
 
   it("explicitly reloads the card preview video when hover preview activates", async () => {
+    vi.useFakeTimers();
     mocks.loaderData.rounds = [
       makeRound({
         id: "main-round",
@@ -1193,8 +1206,49 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(card).not.toBeNull();
 
     fireEvent.mouseEnter(card!);
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
 
     await waitFor(() => expect(loadSpy).toHaveBeenCalled());
+
+    vi.useRealTimers();
+  });
+
+  it("does not start the card preview video when hover ends before the delay", async () => {
+    vi.useFakeTimers();
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "main-round",
+        name: "Main Round",
+        createdAt: "2026-03-01T10:00:00.000Z",
+        videoUri: "app://media/%2Ftmp%2Fmain-round.mp4",
+      }),
+    ];
+
+    const loadSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "load")
+      .mockImplementation(() => undefined);
+
+    const { container } = await renderInstalledRoundsPage();
+
+    const heading = await screen.findByRole("heading", { name: "Main Round" });
+    const card = heading.closest("article");
+    expect(card).not.toBeNull();
+
+    fireEvent.mouseEnter(card!);
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    fireEvent.mouseLeave(card!);
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(container.querySelector("video")).toBeNull();
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 
   it("shows caching ongoing for website rounds that are still waiting for the cache", async () => {

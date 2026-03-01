@@ -61,6 +61,7 @@ function makeLinearConfig(): PlaylistConfig {
       scorePerCumRoundSuccess: 420,
     },
     roundStartDelayMs: 20000,
+    disableDiceAnimation: false,
     dice: { min: 1, max: 6 },
     saveMode: "none",
   };
@@ -119,6 +120,7 @@ function makeGraphConfig(): PlaylistConfig {
       scorePerCumRoundSuccess: 420,
     },
     roundStartDelayMs: 20000,
+    disableDiceAnimation: false,
     dice: { min: 1, max: 6 },
     saveMode: "none",
   };

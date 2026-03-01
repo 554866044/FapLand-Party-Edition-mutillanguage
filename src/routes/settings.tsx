@@ -1,10 +1,11 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { I18n } from "@lingui/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import ReactMarkdown from "react-markdown";
 import changelogMarkdown from "../content/changelog.md?raw";
 import { AnimatedBackground } from "../components/AnimatedBackground";
+import { HandyStrokeRangeControl } from "../components/HandyStrokeRangeControl";
 import { MenuButton } from "../components/MenuButton";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { GameDropdown } from "../components/ui/GameDropdown";
@@ -29,6 +30,7 @@ import { useGameplayMoaning } from "../hooks/useGameplayMoaning";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { useIdleScreenPerformance } from "../hooks/useIdleScreenPerformance";
 import { useSfwMode } from "../hooks/useSfwMode";
+import { formatHandyStrokeBoundPercent } from "../services/theHandyConfig";
 import { ensureBooruMediaCache } from "../services/booru";
 import { db, type PhashScanStatus, type WebsiteVideoScanStatus } from "../services/db";
 import {
@@ -77,6 +79,10 @@ import {
   CONTROLLER_SUPPORT_ENABLED_KEY,
   DEFAULT_CONTROLLER_SUPPORT_ENABLED,
   normalizeControllerSupportEnabled,
+  FPS_COUNTER_ENABLED_EVENT,
+  FPS_COUNTER_ENABLED_KEY,
+  DEFAULT_FPS_COUNTER_ENABLED,
+  normalizeFpsCounterEnabled,
   CHEAT_MODE_ENABLED_EVENT,
   CHEAT_MODE_ENABLED_KEY,
   DEFAULT_CHEAT_MODE_ENABLED,
@@ -681,6 +687,7 @@ export function SettingsPage() {
   const [controllerSupportEnabled, setControllerSupportEnabled] = useState(
     DEFAULT_CONTROLLER_SUPPORT_ENABLED
   );
+  const [fpsCounterEnabled, setFpsCounterEnabled] = useState(DEFAULT_FPS_COUNTER_ENABLED);
   const [cheatModeEnabled, setCheatModeEnabled] = useState(DEFAULT_CHEAT_MODE_ENABLED);
   const [sfwModeEnabled, setSfwModeEnabled] = useState(DEFAULT_SFW_MODE_ENABLED);
   const [multiplayerSkipRoundsCheck, setMultiplayerSkipRoundsCheck] = useState(
@@ -736,6 +743,7 @@ export function SettingsPage() {
     useState(true);
   const [isLoadingAntiPerkBeatbarEnabled, setIsLoadingAntiPerkBeatbarEnabled] = useState(true);
   const [isLoadingControllerSupportEnabled, setIsLoadingControllerSupportEnabled] = useState(true);
+  const [isLoadingFpsCounterEnabled, setIsLoadingFpsCounterEnabled] = useState(true);
   const [isLoadingCheatModeEnabled, setIsLoadingCheatModeEnabled] = useState(true);
   const [isLoadingStartupSafeModeShortcutEnabled, setIsLoadingStartupSafeModeShortcutEnabled] =
     useState(true);
@@ -818,6 +826,7 @@ export function SettingsPage() {
         ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
         ANTI_PERK_BEATBAR_ENABLED_KEY,
         CONTROLLER_SUPPORT_ENABLED_KEY,
+        FPS_COUNTER_ENABLED_KEY,
         CHEAT_MODE_ENABLED_KEY,
         SFW_MODE_ENABLED_KEY,
         BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
@@ -858,6 +867,7 @@ export function SettingsPage() {
         const rawRoundProgressBarAlwaysVisible = storeValues[ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY];
         const rawAntiPerkBeatbarEnabled = storeValues[ANTI_PERK_BEATBAR_ENABLED_KEY];
         const rawControllerSupportEnabled = storeValues[CONTROLLER_SUPPORT_ENABLED_KEY];
+        const rawFpsCounterEnabled = storeValues[FPS_COUNTER_ENABLED_KEY];
         const rawCheatModeEnabled = storeValues[CHEAT_MODE_ENABLED_KEY];
         const rawSfwModeEnabled = storeValues[SFW_MODE_ENABLED_KEY];
         const rawBackgroundPhashScanningEnabled =
@@ -913,6 +923,7 @@ export function SettingsPage() {
         );
         setAntiPerkBeatbarEnabled(normalizeAntiPerkBeatbarEnabled(rawAntiPerkBeatbarEnabled));
         setControllerSupportEnabled(normalizeControllerSupportEnabled(rawControllerSupportEnabled));
+        setFpsCounterEnabled(normalizeFpsCounterEnabled(rawFpsCounterEnabled));
         setCheatModeEnabled(normalizeCheatModeEnabled(rawCheatModeEnabled));
         setSfwModeEnabled(normalizeSfwModeEnabled(rawSfwModeEnabled));
         setMultiplayerSkipRoundsCheck(
@@ -992,6 +1003,7 @@ export function SettingsPage() {
           setIsLoadingRoundProgressBarAlwaysVisible(false);
           setIsLoadingAntiPerkBeatbarEnabled(false);
           setIsLoadingControllerSupportEnabled(false);
+          setIsLoadingFpsCounterEnabled(false);
           setIsLoadingCheatModeEnabled(false);
           setIsLoadingBackgroundPhashScanningEnabled(false);
           setIsLoadingBackgroundPhashRoundsPerPass(false);
@@ -1355,37 +1367,6 @@ export function SettingsPage() {
                 },
               },
               {
-                id: "strong-hardware",
-                label: t`Apply for strong hardware`,
-                onClick: async () => {
-                  await Promise.all([
-                    trpc.store.set.mutate({
-                      key: BACKGROUND_VIDEO_ENABLED_KEY,
-                      value: true,
-                    }),
-                    trpc.store.set.mutate({
-                      key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
-                      value: true,
-                    }),
-                    trpc.store.set.mutate({
-                      key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
-                      value: MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS,
-                    }),
-                    trpc.store.set.mutate({
-                      key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
-                      value: false,
-                    }),
-                  ]);
-                  setBackgroundVideoEnabled(true);
-                  setBackgroundPhashScanningEnabled(true);
-                  setBackgroundPhashRoundsPerPass(MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS);
-                  setPreviewFfmpegSingleThreadEnabled(false);
-                  window.dispatchEvent(
-                    new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, { detail: true })
-                  );
-                },
-              },
-              {
                 id: "defaults",
                 label: t`Apply defaults`,
                 onClick: async () => {
@@ -1617,6 +1598,21 @@ export function SettingsPage() {
             },
           },
           {
+            id: "fps-counter-enabled",
+            type: "toggle",
+            label: t`FPS Counter`,
+            description: t`Shows a global frames-per-second counter in the top-right corner. The display updates at a low frequency to keep overhead low.`,
+            value: fpsCounterEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: FPS_COUNTER_ENABLED_KEY, value: next });
+              window.localStorage.setItem(FPS_COUNTER_ENABLED_KEY, String(next));
+              setFpsCounterEnabled(next);
+              window.dispatchEvent(
+                new CustomEvent<boolean>(FPS_COUNTER_ENABLED_EVENT, { detail: next })
+              );
+            },
+          },
+          {
             id: "playlist-cache-ongoing-restriction-disabled",
             type: "toggle",
             label: t`Allow Playlist Start During Cache Ongoing`,
@@ -1679,6 +1675,7 @@ export function SettingsPage() {
       isFullscreen,
       roundProgressBarAlwaysVisible,
       controllerSupportEnabled,
+      fpsCounterEnabled,
       cheatModeEnabled,
       sfwModeEnabled,
       multiplayerSkipRoundsCheck,
@@ -2313,6 +2310,7 @@ export function SettingsPage() {
                     isLoadingRoundProgressBarAlwaysVisible ||
                     isLoadingAntiPerkBeatbarEnabled ||
                     isLoadingControllerSupportEnabled ||
+                    isLoadingFpsCounterEnabled ||
                     isLoadingCheatModeEnabled ||
                     isLoadingStartupSafeModeShortcutEnabled ||
                     isLoadingBackgroundPhashScanningEnabled ||
@@ -3369,6 +3367,11 @@ function HardwareSettingsCard({
     appApiKeyOverride,
     isUsingDefaultAppApiKey,
     offsetMs,
+    strokeMin,
+    strokeMax,
+    strokePercent,
+    strokeLoading,
+    strokeError,
     connected,
     synced,
     syncError,
@@ -3379,10 +3382,23 @@ function HardwareSettingsCard({
     forceStop,
     adjustOffset,
     resetOffset,
+    setStrokeBounds,
+    resetStroke,
   } = useHandy();
   const [inputKey, setInputKey] = useState(connectionKey);
   const [inputApiKeyOverride, setInputApiKeyOverride] = useState(appApiKeyOverride);
   const [useCustomApiKey, setUseCustomApiKey] = useState(!isUsingDefaultAppApiKey);
+  const [strokeMinSliderValue, setStrokeMinSliderValue] = useState(
+    formatHandyStrokeBoundPercent(strokeMin)
+  );
+  const [strokeMaxSliderValue, setStrokeMaxSliderValue] = useState(
+    formatHandyStrokeBoundPercent(strokeMax)
+  );
+
+  useEffect(() => {
+    setStrokeMinSliderValue(formatHandyStrokeBoundPercent(strokeMin));
+    setStrokeMaxSliderValue(formatHandyStrokeBoundPercent(strokeMax));
+  }, [strokeMin, strokeMax]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -3707,6 +3723,83 @@ function HardwareSettingsCard({
               <code>\</code> in-game resets to 0ms
             </span>
           </div>
+        </div>
+
+        <div
+          className="rounded-2xl border border-emerald-300/20 bg-[linear-gradient(160deg,rgba(8,24,26,0.72),rgba(12,16,38,0.72))] p-4 shadow-[0_0_32px_rgba(16,185,129,0.08)] transition-colors duration-200 hover:border-emerald-300/35"
+          data-testid="thehandy-stroke-layer"
+          onMouseEnter={playHoverSound}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] text-emerald-200/80">
+                <Trans>Stroke Adjustment</Trans>
+              </p>
+              <p className="mt-1 text-sm text-zinc-200">
+                <Trans>Adjust the device stroke length directly on TheHandy.</Trans>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-100/70">
+                <Trans>Current</Trans>
+              </div>
+              <div className="bg-gradient-to-r from-emerald-100 via-cyan-100 to-sky-100 bg-clip-text text-3xl font-black tracking-tight text-transparent">
+                {strokePercent}%
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-100/70">
+              <span>
+                <Trans>Min</Trans>: {strokeMinSliderValue}%
+              </span>
+              <span>
+                <Trans>Max</Trans>: {strokeMaxSliderValue}%
+              </span>
+            </div>
+            <HandyStrokeRangeControl
+              minValue={strokeMinSliderValue}
+              maxValue={strokeMaxSliderValue}
+              disabled={!connected || isConnecting || strokeLoading}
+              minAriaLabel={t`TheHandy stroke minimum slider`}
+              maxAriaLabel={t`TheHandy stroke maximum slider`}
+              onPreview={(nextMinPercent, nextMaxPercent) => {
+                setStrokeMinSliderValue(nextMinPercent);
+                setStrokeMaxSliderValue(nextMaxPercent);
+              }}
+              onCommit={(nextMinPercent, nextMaxPercent) => {
+                void setStrokeBounds(nextMinPercent, nextMaxPercent);
+              }}
+              trackClassName="bg-[linear-gradient(90deg,rgba(16,185,129,0.12),rgba(34,211,238,0.18))]"
+              activeTrackClassName="bg-emerald-300/70"
+            />
+          </div>
+
+          <div className="mt-3 text-sm text-zinc-200">
+            <Trans>Current stroke</Trans>: {formatHandyStrokeBoundPercent(strokeMin)}% -{" "}
+            {formatHandyStrokeBoundPercent(strokeMax)}%
+          </div>
+
+          {strokeError ? (
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-300">
+              {strokeError}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            disabled={!connected || isConnecting || strokeLoading}
+            onClick={() => {
+              playSelectSound();
+              setStrokeMinSliderValue(0);
+              setStrokeMaxSliderValue(100);
+              void resetStroke();
+            }}
+            className="mt-4 inline-flex rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trans>Reset Stroke</Trans>
+          </button>
         </div>
       </div>
     </section>

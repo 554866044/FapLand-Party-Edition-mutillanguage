@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const handyIndexMocks = vi.hoisted(() => ({
   getDeviceInfo: vi.fn(),
+  getStroke: vi.fn(async () => ({
+    result: { min: 0.1, max: 0.9, min_absolute: 20, max_absolute: 180 },
+  })),
   getServerTime: vi.fn(async () => ({ server_time: 10_250 })),
   hspAdd: vi.fn(async () => ({ result: {} })),
   hspFlush: vi.fn(async () => ({ result: { max_points: 4000 } })),
@@ -15,15 +18,20 @@ const handyIndexMocks = vi.hoisted(() => ({
   setHspPaybackRate: vi.fn(async () => ({ result: {} })),
   setHspTime: vi.fn(async () => ({ result: {} })),
   setMode: vi.fn(async () => ({ result: {} })),
+  setStroke: vi.fn(async ({ body }: { body: { min: number; max: number } }) => ({
+    result: { min: body.min, max: body.max },
+  })),
 }));
 
 vi.mock("./index", () => handyIndexMocks);
 
 import {
+  getHandyStroke,
   issueHandySession,
   preloadHspScript,
   resolveInitialPreloadTargetMs,
   sendHspSync,
+  updateHandyStroke,
   type HandySession,
 } from "./runtime";
 
@@ -129,6 +137,69 @@ describe("resolveInitialPreloadTargetMs", () => {
 
     // start=10000, initial target = max(10000, 9000) + 30000 = 40000; next point 12000 < 40000, stays 40000
     expect(targetMs).toBe(40_000);
+  });
+});
+
+describe("handy stroke helpers", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("reads and normalizes the current stroke settings", async () => {
+    const stroke = await getHandyStroke({
+      connectionKey: "conn-key",
+      appApiKey: "app-key",
+    });
+
+    expect(handyIndexMocks.getStroke).toHaveBeenCalledTimes(1);
+    expect(stroke).toEqual({
+      min: 0.1,
+      max: 0.9,
+      minAbsolute: 20,
+      maxAbsolute: 180,
+    });
+  });
+
+  it("updates stroke settings using the official slider stroke endpoint", async () => {
+    const stroke = await updateHandyStroke(
+      {
+        connectionKey: "conn-key",
+        appApiKey: "app-key",
+      },
+      {
+        min: 0.2,
+        max: 0.8,
+      }
+    );
+
+    expect(handyIndexMocks.setStroke).toHaveBeenCalledTimes(1);
+    expect(handyIndexMocks.setStroke.mock.calls[0]?.[0]).toMatchObject({
+      body: {
+        min: 0.2,
+        max: 0.8,
+      },
+      headers: {
+        "X-Connection-Key": "conn-key",
+      },
+    });
+    expect(stroke).toEqual({
+      min: 0.2,
+      max: 0.8,
+      minAbsolute: null,
+      maxAbsolute: null,
+    });
+  });
+
+  it("throws a meaningful error when stroke settings are unavailable", async () => {
+    handyIndexMocks.getStroke.mockResolvedValueOnce({});
+
+    await expect(
+      getHandyStroke({
+        connectionKey: "conn-key",
+        appApiKey: "app-key",
+      })
+    ).rejects.toThrow("Stroke settings unavailable.");
   });
 });
 

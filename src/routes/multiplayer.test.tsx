@@ -16,6 +16,7 @@ function createLinearPlaylistConfig(totalIndices: number) {
     },
     perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
     perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
+    disableDiceAnimation: false,
     probabilityScaling: {
       initialIntermediaryProbability: 0,
       initialAntiPerkProbability: 0,

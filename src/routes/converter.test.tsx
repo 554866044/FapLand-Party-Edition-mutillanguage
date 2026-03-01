@@ -252,6 +252,16 @@ function makeRound(
   };
 }
 
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   mocks.search.sourceRoundId = "";
   mocks.search.heroName = "";
@@ -328,6 +338,23 @@ describe("ConverterPage", () => {
       });
 
       expect(screen.queryByRole("button", { name: /Hero Source/ })).toBeNull();
+    });
+
+    it("shows a skeleton loader while installed rounds are still loading", async () => {
+      const roundsDeferred = createDeferredPromise<ReturnType<typeof makeRound>[]>();
+      mocks.db.round.findInstalled.mockReturnValue(roundsDeferred.promise);
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      expect(screen.getByLabelText("Loading rounds")).toBeDefined();
+      expect(screen.queryByText("Loading...")).toBeNull();
+
+      roundsDeferred.resolve([makeRound("round-1", "Loaded Round")]);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Loaded Round/ })).toBeDefined();
+      });
     });
 
     it("renders the round media preview in the converter picker", async () => {

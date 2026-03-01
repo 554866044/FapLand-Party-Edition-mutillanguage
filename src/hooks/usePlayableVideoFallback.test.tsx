@@ -89,7 +89,9 @@ describe("usePlayableVideoFallback", () => {
     }));
 
     render(<FallbackHarness resolver={resolver} videoUri="app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1" />);
-    expect(screen.getByTestId("src").textContent).toBe("");
+    expect(screen.getByTestId("src").textContent).toBe(
+      "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1"
+    );
     fireEvent.click(screen.getByRole("button", { name: "trigger" }));
 
     await waitFor(() => {
@@ -124,6 +126,19 @@ describe("usePlayableVideoFallback", () => {
     });
   });
 
+  it("keeps raw stash stream urls unchanged before playback starts", async () => {
+    const resolver = vi.fn(async () => ({
+      videoUri:
+        "app://external/stash?sourceId=source-123&purpose=video&target=http%3A%2F%2Flocalhost%3A9999%2Fscene%2F123%2Fstream",
+      transcoded: false,
+      cacheHit: true,
+    }));
+
+    render(<FallbackHarness resolver={resolver} videoUri="http://localhost:9999/scene/123/stream" />);
+
+    expect(screen.getByTestId("src").textContent).toBe("http://localhost:9999/scene/123/stream");
+  });
+
   it("retries website sources until a cached local replacement becomes available", async () => {
     const resolver = vi.fn()
       .mockResolvedValueOnce({
@@ -138,12 +153,16 @@ describe("usePlayableVideoFallback", () => {
       });
 
     render(<FallbackHarness resolver={resolver} videoUri="app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1" />);
-    expect(screen.getByTestId("src").textContent).toBe("");
+    expect(screen.getByTestId("src").textContent).toBe(
+      "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "ensure" }));
     await waitFor(() => {
       expect(resolver).toHaveBeenCalledTimes(1);
-      expect(screen.getByTestId("src").textContent).toBe("");
+      expect(screen.getByTestId("src").textContent).toBe(
+        "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1"
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "trigger" }));

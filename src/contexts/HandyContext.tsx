@@ -6,10 +6,19 @@ import {
 import { verifyConnection } from "../services/handyApi";
 import {
     normalizeHandyAppApiKeyOverride,
+    getHandyStrokeFromBounds,
+    normalizeHandyStrokeState,
+    getHandyStrokePercent,
     normalizeHandyOffsetMs,
     resolveHandyAppApiKey,
+    type HandyStrokeState,
 } from "../services/theHandyConfig";
-import { issueHandySession, stopHandyPlayback } from "../services/thehandy/runtime";
+import {
+    getHandyStroke,
+    issueHandySession,
+    stopHandyPlayback,
+    updateHandyStroke,
+} from "../services/thehandy/runtime";
 import { trpc } from "../services/trpc";
 
 type HandyContextType = {
@@ -19,6 +28,11 @@ type HandyContextType = {
     isUsingDefaultAppApiKey: boolean;
     localIp: string;
     offsetMs: number;
+    strokeMin: number;
+    strokeMax: number;
+    strokePercent: number;
+    strokeLoading: boolean;
+    strokeError: string | null;
     connected: boolean;
     manuallyStopped: boolean;
     synced: boolean;
@@ -33,12 +47,17 @@ type HandyContextType = {
     setSyncStatus: (next: { synced: boolean; error?: string | null }) => void;
     adjustOffset: (deltaMs: number) => Promise<number>;
     resetOffset: () => Promise<void>;
+    refreshStroke: () => Promise<void>;
+    setStrokePercent: (percent: number) => Promise<void>;
+    setStrokeBounds: (minPercent: number, maxPercent: number) => Promise<void>;
+    resetStroke: () => Promise<void>;
 };
 
 const CONNECTION_KEY_STORE_KEY = "connectionKey";
 const LOCAL_IP_STORE_KEY = "localIp";
 
 const HandyContext = createContext<HandyContextType | undefined>(undefined);
+const DEFAULT_STROKE_STATE = normalizeHandyStrokeState({ min: 0, max: 1 });
 
 async function loadFromStore(): Promise<{ connectionKey: string; appApiKeyOverride: string; localIp: string; offsetMs: number }> {
     try {
@@ -77,6 +96,9 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [appApiKeyOverride, setAppApiKeyOverride] = useState("");
     const [localIp, setLocalIp] = useState("");
     const [offsetMs, setOffsetMs] = useState(0);
+    const [strokeState, setStrokeState] = useState<HandyStrokeState>(DEFAULT_STROKE_STATE);
+    const [strokeLoading, setStrokeLoading] = useState(false);
+    const [strokeError, setStrokeError] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const [manuallyStopped, setManuallyStopped] = useState(false);
     const [synced, setSynced] = useState(false);
@@ -86,6 +108,35 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const appApiKey = resolveHandyAppApiKey(appApiKeyOverride);
     const isUsingDefaultAppApiKey = normalizeHandyAppApiKeyOverride(appApiKeyOverride).length === 0;
+    const strokePercent = getHandyStrokePercent(strokeState);
+
+    const refreshStroke = useCallback(async (
+        authOverride?: { connectionKey?: string; appApiKey?: string }
+    ): Promise<void> => {
+        const effectiveConnectionKey = authOverride?.connectionKey ?? connectionKey;
+        const effectiveAppApiKey = authOverride?.appApiKey ?? appApiKey;
+        const trimmedKey = effectiveConnectionKey.trim();
+        const trimmedApiKey = effectiveAppApiKey.trim();
+
+        if (!trimmedKey || !trimmedApiKey) {
+            setStrokeError("Stroke settings unavailable.");
+            return;
+        }
+
+        setStrokeLoading(true);
+        setStrokeError(null);
+        try {
+            const nextStroke = await getHandyStroke({
+                connectionKey: trimmedKey,
+                appApiKey: trimmedApiKey,
+            });
+            setStrokeState(nextStroke);
+        } catch (err) {
+            setStrokeError(err instanceof Error ? err.message : "Failed to load TheHandy stroke settings.");
+        } finally {
+            setStrokeLoading(false);
+        }
+    }, [appApiKey, connectionKey]);
 
     useEffect(() => {
         loadFromStore().then(async ({ connectionKey: savedKey, appApiKeyOverride: savedOverride, localIp: savedIp, offsetMs: savedOffsetMs }) => {
@@ -112,6 +163,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const result = await verifyConnection(savedKey, savedIp, effectiveAppApiKey);
                 if (result.success) {
                     setConnected(true);
+                    await refreshStroke({
+                        connectionKey: savedKey,
+                        appApiKey: effectiveAppApiKey,
+                    });
                 } else {
                     setConnected(false);
                     setError(result.message ?? "Failed to connect to TheHandy");
@@ -161,6 +216,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (result.success) {
                 setConnected(true);
                 await saveToStore(nextKey, nextOverride, nextIp);
+                await refreshStroke({
+                    connectionKey: nextKey,
+                    appApiKey: nextApiKey,
+                });
                 return true;
             } else {
                 setError(result.message ?? "Failed to connect to TheHandy");
@@ -187,6 +246,9 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSynced(false);
         setError(null);
         setSyncError(null);
+        setStrokeState(DEFAULT_STROKE_STATE);
+        setStrokeLoading(false);
+        setStrokeError(null);
         await saveToStore(connectionKey, appApiKeyOverride, localIp);
     }, [appApiKeyOverride, connectionKey, localIp]);
 
@@ -272,6 +334,51 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         await persistOffset(0);
     }, [persistOffset]);
 
+    const setStrokeBounds = useCallback(async (minPercent: number, maxPercent: number): Promise<void> => {
+        const trimmedKey = connectionKey.trim();
+        const trimmedApiKey = appApiKey.trim();
+        if (!trimmedKey || !trimmedApiKey) {
+            setStrokeError("Stroke settings unavailable.");
+            return;
+        }
+
+        const previousStrokeState = strokeState;
+        const optimisticStrokeState = normalizeHandyStrokeState({
+            ...strokeState,
+            ...getHandyStrokeFromBounds(minPercent, maxPercent),
+        });
+
+        setStrokeState(optimisticStrokeState);
+        setStrokeLoading(true);
+        setStrokeError(null);
+
+        try {
+            const nextStroke = await updateHandyStroke(
+                {
+                    connectionKey: trimmedKey,
+                    appApiKey: trimmedApiKey,
+                },
+                optimisticStrokeState,
+            );
+            setStrokeState(nextStroke);
+        } catch (err) {
+            setStrokeState(previousStrokeState);
+            setStrokeError(err instanceof Error ? err.message : "Failed to update TheHandy stroke settings.");
+        } finally {
+            setStrokeLoading(false);
+        }
+    }, [appApiKey, connectionKey, strokeState]);
+
+    const setStrokePercent = useCallback(async (percent: number): Promise<void> => {
+        const targetSpan = Math.max(0, Math.min(100, Math.round(percent)));
+        const pad = Math.round((100 - targetSpan) / 2);
+        await setStrokeBounds(pad, 100 - pad);
+    }, [setStrokeBounds]);
+
+    const resetStroke = useCallback(async () => {
+        await setStrokeBounds(0, 100);
+    }, [setStrokeBounds]);
+
     const value = useMemo(() => ({
         connectionKey,
         appApiKey,
@@ -279,6 +386,11 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isUsingDefaultAppApiKey,
         localIp,
         offsetMs,
+        strokeMin: strokeState.min,
+        strokeMax: strokeState.max,
+        strokePercent,
+        strokeLoading,
+        strokeError,
         connected,
         manuallyStopped,
         synced,
@@ -293,6 +405,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSyncStatus,
         adjustOffset,
         resetOffset,
+        refreshStroke,
+        setStrokePercent,
+        setStrokeBounds,
+        resetStroke,
     }), [
         connectionKey,
         appApiKey,
@@ -300,6 +416,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isUsingDefaultAppApiKey,
         localIp,
         offsetMs,
+        strokeState,
+        strokePercent,
+        strokeLoading,
+        strokeError,
         connected,
         manuallyStopped,
         synced,
@@ -314,6 +434,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSyncStatus,
         adjustOffset,
         resetOffset,
+        refreshStroke,
+        setStrokePercent,
+        setStrokeBounds,
+        resetStroke,
     ]);
 
     return (
