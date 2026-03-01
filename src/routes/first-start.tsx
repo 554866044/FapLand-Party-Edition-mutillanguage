@@ -516,17 +516,12 @@ function FirstStartPage() {
 
       const result = await importOpenedFile(filePath);
       if (result.kind === "sidecar") {
-        const stats = result.result.status.stats;
-        setRoundMessage(
-          `Imported file. Installed ${stats.installed} rounds, imported ${stats.playlistsImported} playlists, updated ${stats.updated}, and failed ${stats.failed}.`
-        );
+        setRoundMessage(result.feedback.message);
         return;
       }
 
       if (result.kind === "playlist") {
-        setRoundMessage(
-          "A playlist file was imported. You can edit it later in Playlist Workshop."
-        );
+        setRoundMessage(result.feedback.message);
         return;
       }
 

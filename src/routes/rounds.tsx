@@ -1744,15 +1744,18 @@ export function InstalledRoundsPage() {
       const result = await importOpenedFile(filePath);
       if (result.kind === "sidecar") {
         await refreshInstalledRounds();
+        showToast(result.feedback.message, result.feedback.variant);
         return;
       }
 
       if (result.kind === "playlist") {
         await refreshAvailablePlaylists();
+        showToast(result.feedback.message, result.feedback.variant);
         await navigate({ to: "/playlist-workshop" });
       }
     } catch (error) {
       console.error("Failed to import selected file", error);
+      showToast(error instanceof Error ? error.message : "Failed to import selected file.", "error");
     } finally {
       setShowInstallOverlay(false);
       setIsAbortingInstall(false);
@@ -4852,9 +4855,10 @@ function InstallImportOverlay({
 }) {
   const stats = status?.stats;
   const processed = stats
-    ? stats.installed + stats.updated + stats.skipped + stats.failed + stats.sidecarsSeen
+    ? stats.installed + stats.updated + stats.skipped + stats.failed
     : 0;
-  const total = stats?.totalSidecars ?? 0;
+  const total = status?.phaseProgress?.total ?? stats?.totalSidecars ?? 0;
+  const phaseCurrent = status?.phaseProgress?.current ?? processed;
   const progress = total > 0 ? (processed / total) * 100 : 0;
   const eta =
     status?.state === "running"
@@ -4866,6 +4870,11 @@ function InstallImportOverlay({
   const summary = status
     ? `${status.stats.installed} rounds, ${status.stats.playlistsImported} playlists, ${status.stats.updated} updated, ${status.stats.failed} failed`
     : "Preparing import...";
+  const progressLabel =
+    status?.phase === "extracting-pack" && status.phaseProgress
+      ? `Extracting pack ${status.phaseProgress.current} / ${status.phaseProgress.total} files`
+      : status?.lastMessage ?? "Scanning files and preparing imported rounds...";
+  const progressPercent = total > 0 ? (phaseCurrent / total) * 100 : progress;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 px-4 backdrop-blur-md">
@@ -4913,14 +4922,14 @@ function InstallImportOverlay({
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-800/50">
                   <div
                     className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500 ease-out"
-                    style={{ width: `${Math.min(100, progress)}%` }}
+                    style={{ width: `${Math.min(100, progressPercent)}%` }}
                   />
                 </div>
               )}
 
               <p className="mt-3 text-sm text-zinc-100">{summary}</p>
               <p className="mt-2 text-xs font-medium text-zinc-400 truncate">
-                {status?.lastMessage ?? "Scanning files and preparing imported rounds..."}
+                {progressLabel}
               </p>
             </div>
 

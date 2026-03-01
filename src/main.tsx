@@ -4,7 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import "./styles.css";
 import { InstallSidecarTrustModalHost } from "./components/InstallSidecarTrustModalHost";
 import { InstallConfirmationModalHost } from "./components/InstallConfirmationModalHost";
-import { ToastProvider } from "./components/ui/ToastHost";
+import { showGlobalToast, ToastProvider } from "./components/ui/ToastHost";
 import { GameplayMoaningProvider } from "./contexts/GameplayMoaningContext";
 
 import { getRouter } from "./router";
@@ -54,12 +54,18 @@ function registerOpenedFileHandler() {
           await navigateForOpenedFile(filePath);
           const result = await importOpenedFile(filePath);
           if (result.kind === "sidecar") {
+            showGlobalToast(result.feedback.message, result.feedback.variant);
             await router.invalidate();
           } else if (result.kind === "playlist") {
+            showGlobalToast(result.feedback.message, result.feedback.variant);
             await router.invalidate();
           }
         } catch (error) {
           console.error(`Failed to handle opened file: ${filePath}`, error);
+          showGlobalToast(
+            error instanceof Error ? error.message : `Failed to handle opened file: ${filePath}`,
+            "error"
+          );
         }
       }
     });

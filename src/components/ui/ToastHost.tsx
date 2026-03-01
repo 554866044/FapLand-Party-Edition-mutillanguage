@@ -26,6 +26,8 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const TOAST_DURATION_MS = 4000;
 
 let nextToastId = 0;
+let globalToastDispatcher: ((message: string, variant?: ToastVariant) => void) | null = null;
+const pendingGlobalToasts: Array<{ message: string; variant: ToastVariant }> = [];
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
@@ -68,12 +70,34 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ showToast }), [showToast]);
 
+  useEffect(() => {
+    globalToastDispatcher = showToast;
+    if (pendingGlobalToasts.length > 0) {
+      for (const toast of pendingGlobalToasts.splice(0)) {
+        showToast(toast.message, toast.variant);
+      }
+    }
+    return () => {
+      if (globalToastDispatcher === showToast) {
+        globalToastDispatcher = null;
+      }
+    };
+  }, [showToast]);
+
   return (
     <ToastContext value={value}>
       {children}
       <ToastRenderer toasts={toasts} onDismiss={dismiss} />
     </ToastContext>
   );
+}
+
+export function showGlobalToast(message: string, variant: ToastVariant = "error"): void {
+  if (globalToastDispatcher) {
+    globalToastDispatcher(message, variant);
+    return;
+  }
+  pendingGlobalToasts.push({ message, variant });
 }
 
 function ToastRenderer({

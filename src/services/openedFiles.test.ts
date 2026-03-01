@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     addTrustedSite: vi.fn(),
   },
   reviewInstallSidecarTrust: vi.fn(),
+  confirmInstallSidecar: vi.fn(),
 }));
 
 vi.mock("./db", () => ({
@@ -34,7 +35,11 @@ vi.mock("../components/InstallSidecarTrustModalHost", () => ({
   reviewInstallSidecarTrust: mocks.reviewInstallSidecarTrust,
 }));
 
-import { getOpenedFileKind, importOpenedFile } from "./openedFiles";
+vi.mock("../components/InstallConfirmationModalHost", () => ({
+  confirmInstallSidecar: mocks.confirmInstallSidecar,
+}));
+
+import { getOpenedFileKind, importOpenedFile, summarizeImportResult } from "./openedFiles";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,10 +51,22 @@ beforeEach(() => {
   });
   mocks.db.install.inspectSidecarFile.mockResolvedValue({
     filePath: "/tmp/example.hero",
+    contentName: "Example Hero",
     entries: [],
     unknownEntries: [],
   });
-  mocks.db.install.importSidecarFile.mockResolvedValue({ status: { state: "done" } });
+  mocks.confirmInstallSidecar.mockResolvedValue({ action: "install" });
+  mocks.db.install.importSidecarFile.mockResolvedValue({
+    status: {
+      state: "done",
+      stats: {
+        installed: 1,
+        playlistsImported: 0,
+        updated: 0,
+        failed: 0,
+      },
+    },
+  });
   mocks.reviewInstallSidecarTrust.mockResolvedValue({
     action: "import",
     trustedBaseDomains: [],
@@ -87,9 +104,11 @@ describe("importOpenedFile", () => {
     const result = await importOpenedFile("/tmp/example.hero");
 
     expect(mocks.db.install.inspectSidecarFile).toHaveBeenCalledWith("/tmp/example.hero");
+    expect(mocks.confirmInstallSidecar).toHaveBeenCalled();
     expect(mocks.reviewInstallSidecarTrust).not.toHaveBeenCalled();
     expect(mocks.db.install.importSidecarFile).toHaveBeenCalledWith("/tmp/example.hero", []);
     expect(result.kind).toBe("sidecar");
+    expect(result.kind === "sidecar" ? result.feedback.message : "").toContain("Installed");
   });
 
   it("persists newly trusted domains before importing sidecars in prompt mode", async () => {
@@ -101,6 +120,7 @@ describe("importOpenedFile", () => {
     });
     mocks.db.install.inspectSidecarFile.mockResolvedValue({
       filePath: "/tmp/example.hero",
+      contentName: "Example Hero",
       entries: [
         {
           baseDomain: "example.com",
@@ -147,6 +167,7 @@ describe("importOpenedFile", () => {
     });
     mocks.db.install.inspectSidecarFile.mockResolvedValue({
       filePath: "/tmp/example.hero",
+      contentName: "Example Hero",
       entries: [
         {
           baseDomain: "example.com",
@@ -184,5 +205,24 @@ describe("importOpenedFile", () => {
     expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({ filePath: "/tmp/example.fplay" });
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-1");
     expect(result.kind).toBe("playlist");
+  });
+});
+
+describe("summarizeImportResult", () => {
+  it("returns update feedback when only existing content changed", () => {
+    const feedback = summarizeImportResult("/tmp/demo.fpack", {
+      status: {
+        state: "done",
+        stats: {
+          installed: 0,
+          playlistsImported: 0,
+          updated: 2,
+          failed: 0,
+        },
+      },
+    } as never);
+
+    expect(feedback.variant).toBe("info");
+    expect(feedback.message).toContain("Updated existing content");
   });
 });

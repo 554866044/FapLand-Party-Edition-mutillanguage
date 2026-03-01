@@ -144,6 +144,14 @@ vi.mock("../components/ui/ToastHost", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
 
+vi.mock("../components/InstallConfirmationModalHost", () => ({
+  confirmInstallSidecar: vi.fn(async () => ({ action: "install" })),
+}));
+
+vi.mock("../components/InstallSidecarTrustModalHost", () => ({
+  reviewInstallSidecarTrust: vi.fn(async () => ({ action: "import", trustedBaseDomains: [] })),
+}));
+
 import { InstalledRoundsPage } from "./rounds";
 import { buildRoundRenderRows, buildRoundRenderRowsWithOptions } from "./roundRows";
 
@@ -428,15 +436,10 @@ beforeEach(() => {
     sidecarCount: 1,
   });
   mocks.db.install.inspectSidecarFile.mockResolvedValue({
-    trustedSourceHosts: [],
-    videoUrls: [],
-    funscriptUrls: [],
-    warnings: [],
-    sourceSummary: {
-      videoUrlCount: 0,
-      funscriptUrlCount: 0,
-      localFileCount: 0,
-    },
+    filePath: "/tmp/imported.round",
+    contentName: "Imported Round",
+    entries: [],
+    unknownEntries: [],
   });
   mocks.db.install.importLegacyWithPlan.mockResolvedValue({
     status: {

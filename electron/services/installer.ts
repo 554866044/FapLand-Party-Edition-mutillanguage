@@ -16,7 +16,7 @@ import {
   type InstallResource,
   type InstallRound,
 } from "../../src/zod/installSidecar";
-import { extractFpackToPersistent } from "./fpack";
+import { ensureFpackExtracted, inspectFpack, type FpackExtractionManifest } from "./fpack";
 import { approveDialogPath, assertApprovedDialogPath } from "./dialogPathApproval";
 import { getDb } from "./db";
 import { eq, asc, isNotNull } from "drizzle-orm";
@@ -154,7 +154,17 @@ type PreparedRoundWrite = {
 
 type PreparedInstallEntry =
   | { kind: "hero_round"; heroInput: HeroMetadataInput | null; writes: PreparedRoundWrite[] }
-  | { kind: "playlist"; filePath: string };
+  | { kind: "playlist"; filePath: string; installSourceKeyOverride?: string };
+
+type SidecarSourceMetadata = {
+  sourceKind: "filesystem" | "fpack";
+  archiveEntryPath?: string;
+};
+
+type ImportedSidecarDescriptor = {
+  sidecarPath: string;
+  source: SidecarSourceMetadata;
+};
 
 type InstallSessionContext = {
   db: ReturnType<typeof getDb>;
@@ -212,6 +222,22 @@ type PersistedLegacyEntry =
 
 export type InstallScanState = "idle" | "running" | "done" | "aborted" | "error";
 export type InstallScanTrigger = "startup" | "manual";
+export type InstallScanPhase =
+  | "idle"
+  | "inspecting-pack"
+  | "extracting-pack"
+  | "preparing-sidecars"
+  | "persisting"
+  | "syncing"
+  | "done"
+  | "aborted"
+  | "error";
+
+export type InstallScanPhaseProgress = {
+  current: number;
+  total: number;
+  unit: "files" | "bytes";
+};
 
 export type InstallScanStats = {
   scannedFolders: number;
@@ -234,6 +260,8 @@ export type InstallScanStatus = {
   triggeredBy: InstallScanTrigger;
   startedAt: string | null;
   finishedAt: string | null;
+  phase: InstallScanPhase;
+  phaseProgress: InstallScanPhaseProgress | null;
   stats: InstallScanStats;
   lastMessage: string | null;
   lastErrors: InstallScanError[];
@@ -313,6 +341,8 @@ let scanStatus: InstallScanStatus = {
   triggeredBy: "manual",
   startedAt: null,
   finishedAt: null,
+  phase: "idle",
+  phaseProgress: null,
   stats: emptyStats(),
   lastMessage: null,
   lastErrors: [],
@@ -635,6 +665,22 @@ function updateRunningScanMessage(message: string): void {
   };
 }
 
+function updateRunningScanPhase(
+  phase: InstallScanPhase,
+  options?: {
+    message?: string;
+    progress?: InstallScanPhaseProgress | null;
+  }
+): void {
+  if (scanStatus.state !== "running") return;
+  scanStatus = {
+    ...scanStatus,
+    phase,
+    phaseProgress: options?.progress === undefined ? scanStatus.phaseProgress : options.progress,
+    lastMessage: options?.message ?? scanStatus.lastMessage,
+  };
+}
+
 function formatZodError(error: ZodError): string {
   return error.issues
     .map((issue) => {
@@ -657,8 +703,8 @@ function throwIfAbortRequested(): void {
   }
 }
 
-async function collectSidecarFiles(folderPath: string): Promise<string[]> {
-  const output: string[] = [];
+async function collectSidecarFiles(folderPath: string): Promise<ImportedSidecarDescriptor[]> {
+  const output: ImportedSidecarDescriptor[] = [];
   const queue = [folderPath];
 
   while (queue.length > 0) {
@@ -684,21 +730,31 @@ async function collectSidecarFiles(folderPath: string): Promise<string[]> {
       const ext = path.extname(entry.name).toLowerCase();
       if (ext === ".fpack") {
         try {
-          const { dir } = await extractFpackToPersistent(fullPath);
-          const inner = await collectSidecarFiles(dir);
-          output.push(...inner);
+          const { manifest } = await ensureFpackExtracted(fullPath);
+          output.push(
+            ...manifest.sidecarEntries.map((sidecar) => ({
+              sidecarPath: sidecar.extractedPath,
+              source: {
+                sourceKind: "fpack",
+                archiveEntryPath: sidecar.archiveEntryPath,
+              },
+            }))
+          );
         } catch {
           // Skip invalid .fpack files silently.
         }
         continue;
       }
       if (SIDECAR_EXTENSIONS.has(ext)) {
-        output.push(fullPath);
+        output.push({
+          sidecarPath: fullPath,
+          source: { sourceKind: "filesystem" },
+        });
       }
     }
   }
 
-  output.sort((a, b) => a.localeCompare(b));
+  output.sort((a, b) => a.sidecarPath.localeCompare(b.sidecarPath));
   return output;
 }
 
@@ -1375,6 +1431,23 @@ type ParsedSidecarInspectionEntry =
     resources: Array<{ videoUri: string; funscriptUri: string | null }>;
   };
 
+function normalizeFpackInstallEntryPath(entryPath: string): string {
+  const normalized = path.posix.normalize(entryPath.replaceAll("\\", "/")).replace(/^\/+/u, "");
+  if (
+    !normalized ||
+    normalized === "." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../")
+  ) {
+    throw new Error(`Invalid .fpack entry path: ${entryPath}`);
+  }
+  return normalized;
+}
+
+function toFpackInstallSourceKey(entryPath: string, index?: number): string {
+  const normalized = normalizeFpackInstallEntryPath(entryPath);
+  return index === undefined ? `fpack-entry:${normalized}` : `fpack-entry:${normalized}#${index}`;
+}
 
 async function parseSidecarForInspection(
   sidecarPath: string
@@ -1436,7 +1509,8 @@ async function parseSidecarForInspection(
 
 async function prepareRoundSidecar(
   context: InstallSessionContext,
-  sidecarPath: string
+  sidecarPath: string,
+  source: SidecarSourceMetadata = { sourceKind: "filesystem" }
 ): Promise<PreparedInstallEntry> {
   throwIfAbortRequested();
   const content = await fs.readFile(sidecarPath, "utf8");
@@ -1451,14 +1525,21 @@ async function prepareRoundSidecar(
     kind: "hero_round",
     heroInput: parsed.data.hero ?? null,
     writes: [
-      await prepareRoundWrite(context, path.resolve(sidecarPath), sidecarPath, parsed.data, true),
+      await prepareRoundWrite(
+        context,
+        source.archiveEntryPath ? toFpackInstallSourceKey(source.archiveEntryPath) : path.resolve(sidecarPath),
+        sidecarPath,
+        parsed.data,
+        true
+      ),
     ],
   };
 }
 
 async function prepareHeroSidecar(
   context: InstallSessionContext,
-  sidecarPath: string
+  sidecarPath: string,
+  source: SidecarSourceMetadata = { sourceKind: "filesystem" }
 ): Promise<PreparedInstallEntry> {
   throwIfAbortRequested();
   const content = await fs.readFile(sidecarPath, "utf8");
@@ -1477,7 +1558,9 @@ async function prepareHeroSidecar(
         throwIfAbortRequested();
         return await prepareRoundWrite(
           context,
-          `${path.resolve(sidecarPath)}#${index}`,
+          source.archiveEntryPath
+            ? toFpackInstallSourceKey(source.archiveEntryPath, index)
+            : `${path.resolve(sidecarPath)}#${index}`,
           sidecarPath,
           { ...entry, hero: undefined },
           false
@@ -1489,32 +1572,37 @@ async function prepareHeroSidecar(
 
 async function preparePlaylistSidecar(
   _context: InstallSessionContext,
-  sidecarPath: string
+  sidecarPath: string,
+  source: SidecarSourceMetadata = { sourceKind: "filesystem" }
 ): Promise<PreparedInstallEntry> {
   throwIfAbortRequested();
   updateRunningScanMessage(`Preparing playlist ${path.basename(sidecarPath)}...`);
   return {
     kind: "playlist",
     filePath: sidecarPath,
+    installSourceKeyOverride: source.archiveEntryPath
+      ? toFpackInstallSourceKey(source.archiveEntryPath)
+      : undefined,
   };
 }
 
 async function prepareSidecar(
   context: InstallSessionContext,
-  sidecarPath: string
+  sidecarPath: string,
+  source: SidecarSourceMetadata = { sourceKind: "filesystem" }
 ): Promise<PreparedInstallEntry> {
   throwIfAbortRequested();
   const ext = path.extname(sidecarPath).toLowerCase();
   if (ext === ".round") {
-    return await prepareRoundSidecar(context, sidecarPath);
+    return await prepareRoundSidecar(context, sidecarPath, source);
   }
 
   if (ext === ".hero") {
-    return await prepareHeroSidecar(context, sidecarPath);
+    return await prepareHeroSidecar(context, sidecarPath, source);
   }
 
   if (ext === ".fplay") {
-    return await preparePlaylistSidecar(context, sidecarPath);
+    return await preparePlaylistSidecar(context, sidecarPath, source);
   }
 
   return {
@@ -1532,7 +1620,7 @@ async function persistPreparedEntry(
     approveDialogPath("playlistImportFile", entry.filePath);
     await importPlaylistFromFile({
       filePath: entry.filePath,
-      installSourceKey: path.resolve(entry.filePath),
+      installSourceKey: entry.installSourceKeyOverride ?? path.resolve(entry.filePath),
     });
     return {
       installed: 0,
@@ -2475,16 +2563,13 @@ export async function inspectInstallSidecarFile(
   }
 
   if (ext === ".fpack") {
-    const { dir } = await extractFpackToPersistent(normalizedFile);
-    const sidecars = await collectSidecarFiles(dir);
-    const allResources: { videoUri: string; funscriptUri: string | null }[] = [];
-    for (const sidecarPath of sidecars) {
-      const parsed = await parseSidecarForInspection(sidecarPath);
-      allResources.push(...parsed.resources);
-    }
+    const inspection = await inspectFpack(normalizedFile);
+    const allResources = inspection.sidecars.flatMap((sidecar) => sidecar.resources);
     return collectUnknownRemoteSitesFromResources(
       normalizedFile,
-      path.basename(normalizedFile, ".fpack"),
+      inspection.sidecarCount === 1
+        ? (inspection.sidecars[0]?.contentName ?? path.basename(normalizedFile, ".fpack"))
+        : `${path.basename(normalizedFile, ".fpack")} (${inspection.sidecarCount} items)`,
       allResources
     );
   }
@@ -2512,9 +2597,37 @@ export async function importInstallSidecarFile(
     }
 
     if (ext === ".fpack") {
-      const { dir } = await extractFpackToPersistent(normalizedFile);
-      const result = await scanInstallFolderOnceWithLegacySupportResolved(dir);
-      return result;
+      scanStatus = {
+        state: "running",
+        triggeredBy: "manual",
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        phase: "inspecting-pack",
+        phaseProgress: null,
+        stats: emptyStats(),
+        lastMessage: "Inspecting pack contents...",
+        lastErrors: [],
+        etaMs: null,
+        lastPreviewImage: null,
+        securityWarnings: [],
+      };
+
+      const { manifest } = await ensureFpackExtracted(normalizedFile, {
+        onProgress: (progress) => {
+          scanStatus = {
+            ...scanStatus,
+            phase: "extracting-pack",
+            phaseProgress: progress,
+            lastMessage: "Extracting pack files...",
+          };
+        },
+      });
+
+      return await importPreparedSidecars(
+        toImportedSidecarDescriptorsFromManifest(manifest),
+        allowedBaseDomains,
+        `Importing ${path.basename(normalizedFile)}...`
+      );
     }
 
     const nextStatus: InstallScanStatus = {
@@ -2522,6 +2635,8 @@ export async function importInstallSidecarFile(
       triggeredBy: "manual",
       startedAt: new Date().toISOString(),
       finishedAt: null,
+      phase: "preparing-sidecars",
+      phaseProgress: null,
       stats: {
         ...emptyStats(),
         sidecarsSeen: 1,
@@ -2537,7 +2652,13 @@ export async function importInstallSidecarFile(
 
     const context = await createInstallSessionContext(allowedBaseDomains);
     try {
-      const prepared = await prepareSidecar(context, normalizedFile);
+      const prepared = await prepareSidecar(context, normalizedFile, {
+        sourceKind: "filesystem",
+      });
+      updateRunningScanPhase("persisting", {
+        message: `Persisting ${path.basename(normalizedFile)}...`,
+        progress: null,
+      });
       const result = await persistPreparedEntry(context, prepared);
       nextStatus.stats.installed += result.installed;
       nextStatus.stats.playlistsImported += result.playlistsImported;
@@ -2550,6 +2671,10 @@ export async function importInstallSidecarFile(
 
     try {
       throwIfAbortRequested();
+      updateRunningScanPhase("syncing", {
+        message: "Syncing external sources...",
+        progress: null,
+      });
       await syncExternalSources("manual");
     } catch (error) {
       const message = error instanceof Error ? error.message : "External source sync failed.";
@@ -2558,6 +2683,8 @@ export async function importInstallSidecarFile(
 
     nextStatus.state = "done";
     nextStatus.finishedAt = new Date().toISOString();
+    nextStatus.phase = "done";
+    nextStatus.phaseProgress = null;
     nextStatus.lastMessage = `Import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
     scanStatus = nextStatus;
@@ -2571,6 +2698,8 @@ export async function importInstallSidecarFile(
         ...scanStatus,
         state: "aborted",
         finishedAt: new Date().toISOString(),
+        phase: "aborted",
+        phaseProgress: null,
         lastMessage: "Import aborted by user.",
       };
       scanStatus = abortedStatus;
@@ -2650,6 +2779,8 @@ async function runScanWithFolders(
     triggeredBy,
     startedAt: new Date().toISOString(),
     finishedAt: null,
+    phase: "preparing-sidecars",
+    phaseProgress: null,
     stats: emptyStats(),
     lastMessage: "Scanning install folders...",
     lastErrors: [],
@@ -2659,7 +2790,7 @@ async function runScanWithFolders(
   };
 
   scanStatus = nextStatus;
-  const allSidecars: string[] = [];
+  const allSidecars: ImportedSidecarDescriptor[] = [];
 
   for (const folder of folders) {
     nextStatus.stats.scannedFolders += 1;
@@ -2677,7 +2808,7 @@ async function runScanWithFolders(
   nextStatus.stats.sidecarsSeen = allSidecars.length;
 
   const byBasename = new Map<string, Set<string>>();
-  for (const sidecarPath of allSidecars) {
+  for (const { sidecarPath } of allSidecars) {
     const ext = path.extname(sidecarPath).toLowerCase();
     const basePath = sidecarPath.slice(0, -ext.length);
     if (!byBasename.has(basePath)) {
@@ -2704,7 +2835,7 @@ async function runScanWithFolders(
   const preparedSidecars = await mapWithConcurrencyLimit(
     allSidecars,
     context.prepConcurrency,
-    async (sidecarPath) => {
+    async ({ sidecarPath, source }) => {
       throwIfAbortRequested();
       if (blockedSidecars.has(sidecarPath)) {
         return {
@@ -2717,7 +2848,7 @@ async function runScanWithFolders(
       try {
         return {
           sidecarPath,
-          entry: await prepareSidecar(context, sidecarPath),
+          entry: await prepareSidecar(context, sidecarPath, source),
           error: null,
         };
       } catch (error) {
@@ -2780,10 +2911,135 @@ async function runScanWithFolders(
 
   nextStatus.state = "done";
   nextStatus.finishedAt = new Date().toISOString();
+  nextStatus.phase = "done";
+  nextStatus.phaseProgress = null;
   nextStatus.lastMessage = `Scan finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
   scanStatus = nextStatus;
   return cloneStatus(nextStatus);
+}
+
+function toImportedSidecarDescriptorsFromManifest(
+  manifest: FpackExtractionManifest
+): ImportedSidecarDescriptor[] {
+  return manifest.sidecarEntries.map((entry) => ({
+    sidecarPath: entry.extractedPath,
+    source: {
+      sourceKind: "fpack",
+      archiveEntryPath: entry.archiveEntryPath,
+    },
+  }));
+}
+
+async function importPreparedSidecars(
+  sidecars: ImportedSidecarDescriptor[],
+  allowedBaseDomains: string[] = [],
+  initialMessage = "Importing content..."
+): Promise<InstallFolderScanResult> {
+  const nextStatus: InstallScanStatus = {
+    state: "running",
+    triggeredBy: "manual",
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    phase: "preparing-sidecars",
+    phaseProgress: null,
+    stats: {
+      ...emptyStats(),
+      sidecarsSeen: sidecars.length,
+      totalSidecars: sidecars.length,
+    },
+    lastMessage: initialMessage,
+    lastErrors: [],
+    etaMs: null,
+    lastPreviewImage: null,
+    securityWarnings: [],
+  };
+  scanStatus = nextStatus;
+
+  const context = await createInstallSessionContext(allowedBaseDomains);
+  const preparedSidecars = await mapWithConcurrencyLimit(
+    sidecars,
+    context.prepConcurrency,
+    async ({ sidecarPath, source }) => {
+      throwIfAbortRequested();
+      try {
+        updateRunningScanPhase("preparing-sidecars", {
+          message: `Preparing ${path.basename(sidecarPath)}...`,
+          progress: null,
+        });
+        return {
+          sidecarPath,
+          entry: await prepareSidecar(context, sidecarPath, source),
+          error: null,
+        };
+      } catch (error) {
+        if (error instanceof InstallAbortError) {
+          throw error;
+        }
+        return {
+          sidecarPath,
+          entry: null,
+          error,
+        };
+      }
+    }
+  );
+
+  for (const prepared of preparedSidecars) {
+    throwIfAbortRequested();
+    if (!prepared.entry) {
+      if (prepared.error) {
+        recordInstallError(nextStatus, prepared.sidecarPath, prepared.error);
+      }
+      continue;
+    }
+
+    updateRunningScanPhase("persisting", {
+      message: `Persisting ${path.basename(prepared.sidecarPath)}...`,
+      progress: null,
+    });
+    try {
+      const result = await persistPreparedEntry(context, prepared.entry);
+      nextStatus.stats.installed += result.installed;
+      nextStatus.stats.playlistsImported += result.playlistsImported;
+      nextStatus.stats.updated += result.updated;
+    } catch (error) {
+      recordInstallError(nextStatus, prepared.sidecarPath, error);
+    }
+  }
+
+  try {
+    await reconcileTemplateRounds(context);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Template linking failed.";
+    pushScanError(nextStatus, "templates", message);
+  }
+
+  nextStatus.securityWarnings = [...context.securityWarnings];
+
+  try {
+    throwIfAbortRequested();
+    updateRunningScanPhase("syncing", {
+      message: "Syncing external sources...",
+      progress: null,
+    });
+    await syncExternalSources("manual");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "External source sync failed.";
+    pushScanError(nextStatus, "external", message);
+  }
+
+  nextStatus.state = "done";
+  nextStatus.finishedAt = new Date().toISOString();
+  nextStatus.phase = "done";
+  nextStatus.phaseProgress = null;
+  nextStatus.lastMessage = `Import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
+  scanStatus = nextStatus;
+
+  return {
+    status: cloneStatus(nextStatus),
+    securityWarnings: [...context.securityWarnings],
+  };
 }
 
 async function scanInstallFolderOnceWithLegacySupportResolved(
@@ -2810,6 +3066,8 @@ async function scanInstallFolderOnceWithLegacySupportResolved(
       ...cloneStatus(status),
       state: "running",
       finishedAt: null,
+      phase: "preparing-sidecars",
+      phaseProgress: null,
       lastMessage: "No sidecars found. Preparing legacy video import...",
     };
 
@@ -2818,6 +3076,8 @@ async function scanInstallFolderOnceWithLegacySupportResolved(
     const nextStatus: InstallScanStatus = cloneStatus(scanStatus);
     nextStatus.state = "done";
     nextStatus.finishedAt = new Date().toISOString();
+    nextStatus.phase = "done";
+    nextStatus.phaseProgress = null;
     nextStatus.stats.installed += legacy.installed;
     nextStatus.stats.updated += legacy.updated;
     nextStatus.lastMessage = `Legacy import finished. ${formatImportStatsSummary(nextStatus.stats)}`;
@@ -2837,6 +3097,8 @@ async function scanInstallFolderOnceWithLegacySupportResolved(
         ...scanStatus,
         state: "aborted",
         finishedAt: new Date().toISOString(),
+        phase: "aborted",
+        phaseProgress: null,
         lastMessage: "Import aborted by user.",
       };
       scanStatus = abortedStatus;
@@ -2872,6 +3134,8 @@ export async function importLegacyFolderWithPlan(
       triggeredBy: "manual",
       startedAt: new Date().toISOString(),
       finishedAt: null,
+      phase: "preparing-sidecars",
+      phaseProgress: null,
       stats: emptyStats(),
       lastMessage: "Preparing reviewed legacy video import...",
       lastErrors: [],
@@ -2889,6 +3153,8 @@ export async function importLegacyFolderWithPlan(
     );
     nextStatus.state = "done";
     nextStatus.finishedAt = new Date().toISOString();
+    nextStatus.phase = "done";
+    nextStatus.phaseProgress = null;
     nextStatus.stats.scannedFolders = 1;
     nextStatus.stats.installed = legacy.installed;
     nextStatus.stats.updated = legacy.updated;
@@ -2909,6 +3175,8 @@ export async function importLegacyFolderWithPlan(
         ...scanStatus,
         state: "aborted",
         finishedAt: new Date().toISOString(),
+        phase: "aborted",
+        phaseProgress: null,
         lastMessage: "Import aborted by user.",
       };
       scanStatus = abortedStatus;
@@ -2940,6 +3208,8 @@ export async function scanInstallSources(
           ...scanStatus,
           state: "aborted",
           finishedAt: new Date().toISOString(),
+          phase: "aborted",
+          phaseProgress: null,
           lastMessage: "Import aborted by user.",
         };
         scanStatus = abortedStatus;
@@ -2950,6 +3220,8 @@ export async function scanInstallSources(
         ...scanStatus,
         state: "error",
         finishedAt: new Date().toISOString(),
+        phase: "error",
+        phaseProgress: null,
         lastMessage: error instanceof Error ? error.message : "Scan failed.",
       };
 
