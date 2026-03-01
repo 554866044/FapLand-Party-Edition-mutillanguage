@@ -150,12 +150,14 @@ export const dbRouter = router({
   }),
 
   setLocalHighscore: publicProcedure
-    .input(z.object({
-      highscore: z.number().int().min(0),
-      cheatMode: z.boolean().optional(),
-      assisted: z.boolean().optional(),
-      assistedSaveMode: ZPersistablePlaylistSaveMode.nullable().optional(),
-    }))
+    .input(
+      z.object({
+        highscore: z.number().int().min(0),
+        cheatMode: z.boolean().optional(),
+        assisted: z.boolean().optional(),
+        assistedSaveMode: ZPersistablePlaylistSaveMode.nullable().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = getDb();
       const clamped = Math.max(0, Math.floor(input.highscore));
@@ -167,27 +169,27 @@ export const dbRouter = router({
         clamped > existingHighscore
           ? (input.cheatMode ?? false)
           : matchesExistingHighscore
-            ? ((existing?.highscoreCheatMode ?? false) || (input.cheatMode ?? false))
+            ? (existing?.highscoreCheatMode ?? false) || (input.cheatMode ?? false)
             : (existing?.highscoreCheatMode ?? false);
       const nextAssisted =
         clamped > existingHighscore
           ? (input.assisted ?? false)
           : matchesExistingHighscore
-            ? ((existing?.highscoreAssisted ?? false) || (input.assisted ?? false))
+            ? (existing?.highscoreAssisted ?? false) || (input.assisted ?? false)
             : (existing?.highscoreAssisted ?? false);
       const mergedAssistedSaveMode =
         clamped > existingHighscore
-          ? (input.assisted ? (input.assistedSaveMode ?? null) : null)
+          ? input.assisted
+            ? (input.assistedSaveMode ?? null)
+            : null
           : matchesExistingHighscore
-            ? (
-                (existing?.highscoreAssistedSaveMode === "everywhere" ||
-                  input.assistedSaveMode === "everywhere")
-                  ? "everywhere"
-                  : (existing?.highscoreAssistedSaveMode === "checkpoint" ||
-                      input.assistedSaveMode === "checkpoint")
-                    ? "checkpoint"
-                    : null
-              )
+            ? existing?.highscoreAssistedSaveMode === "everywhere" ||
+              input.assistedSaveMode === "everywhere"
+              ? "everywhere"
+              : existing?.highscoreAssistedSaveMode === "checkpoint" ||
+                  input.assistedSaveMode === "checkpoint"
+                ? "checkpoint"
+                : null
             : (existing?.highscoreAssistedSaveMode ?? null);
       const nextAssistedSaveMode = nextAssisted ? mergedAssistedSaveMode : null;
       await db
@@ -283,13 +285,15 @@ export const dbRouter = router({
   }),
 
   upsertSinglePlayerRunSave: publicProcedure
-    .input(z.object({
-      playlistId: z.string().min(1),
-      playlistName: z.string().min(1),
-      playlistFormatVersion: z.number().int().min(1).nullable().optional(),
-      saveMode: ZPersistablePlaylistSaveMode,
-      snapshot: ZSinglePlayerRunSaveSnapshot,
-    }))
+    .input(
+      z.object({
+        playlistId: z.string().min(1),
+        playlistName: z.string().min(1),
+        playlistFormatVersion: z.number().int().min(1).nullable().optional(),
+        saveMode: ZPersistablePlaylistSaveMode,
+        snapshot: ZSinglePlayerRunSaveSnapshot,
+      })
+    )
     .mutation(async ({ input }) => {
       const db = getDb();
       const snapshot = ZSinglePlayerRunSaveSnapshot.parse(input.snapshot);
@@ -374,14 +378,14 @@ export const dbRouter = router({
         limit: 10_000,
       });
       const nextHighscore = remainingRuns.reduce((best, run) => Math.max(best, run.score), 0);
-      const topRuns = nextHighscore > 0
-        ? remainingRuns.filter((run) => run.score === nextHighscore)
-        : [];
-      const nextHighscoreCheatMode =
-        topRuns.some((run) => run.cheatModeActive);
+      const topRuns =
+        nextHighscore > 0 ? remainingRuns.filter((run) => run.score === nextHighscore) : [];
+      const nextHighscoreCheatMode = topRuns.some((run) => run.cheatModeActive);
       const nextHighscoreAssisted = topRuns.some((run) => run.assistedActive);
       const nextHighscoreAssistedSaveMode = nextHighscoreAssisted
-        ? (topRuns.some((run) => run.assistedSaveMode === "everywhere") ? "everywhere" : "checkpoint")
+        ? topRuns.some((run) => run.assistedSaveMode === "everywhere")
+          ? "everywhere"
+          : "checkpoint"
         : null;
 
       await db
@@ -584,7 +588,10 @@ export const dbRouter = router({
       }
 
       await db.transaction(async (tx) => {
-        const attachedRounds = await tx.select({ id: round.id }).from(round).where(eq(round.heroId, input.id));
+        const attachedRounds = await tx
+          .select({ id: round.id })
+          .from(round)
+          .where(eq(round.heroId, input.id));
         const attachedRoundIds = attachedRounds.map((entry) => entry.id);
 
         if (attachedRoundIds.length > 0) {
@@ -665,8 +672,7 @@ export const dbRouter = router({
       }
 
       const needsNewPreview =
-        startTime !== (existing?.startTime ?? null) ||
-        endTime !== (existing?.endTime ?? null);
+        startTime !== (existing?.startTime ?? null) || endTime !== (existing?.endTime ?? null);
 
       let previewImage = existing?.previewImage ?? null;
       if (needsNewPreview && existing.resources[0]) {
@@ -778,7 +784,8 @@ export const dbRouter = router({
         }
       }
 
-      const calculatedDifficulty = await calculateFunscriptDifficultyFromUri(normalizedFunscriptUri);
+      const calculatedDifficulty =
+        await calculateFunscriptDifficultyFromUri(normalizedFunscriptUri);
 
       try {
         const created = await db.transaction(async (tx) => {
@@ -958,8 +965,8 @@ export const dbRouter = router({
           resources: includeDisabled
             ? true
             : {
-              where: (r, { eq }) => eq(r.disabled, false),
-            },
+                where: (r, { eq }) => eq(r.disabled, false),
+              },
         },
         orderBy: [desc(round.createdAt)],
       });
@@ -1275,6 +1282,8 @@ export const dbRouter = router({
         includeMedia: z.boolean().optional(),
         directoryPath: z.string().optional(),
         asFpack: z.boolean().optional(),
+        compressionMode: z.enum(["copy", "av1"]).optional(),
+        compressionStrength: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1285,6 +1294,8 @@ export const dbRouter = router({
           includeMedia: input.includeMedia ?? true,
           directoryPath: input.directoryPath,
           asFpack: input.asFpack ?? false,
+          compressionMode: input.compressionMode,
+          compressionStrength: input.compressionStrength,
         });
       } catch (error) {
         throw new TRPCError({

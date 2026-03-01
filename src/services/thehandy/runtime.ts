@@ -1,4 +1,19 @@
-import { getDeviceInfo, getServerTime, hspAdd, hspFlush, hspPause, hspPlay, hspResume, hspSetup, hspStop, isConnected, issueToken, setHspPaybackRate, setHspTime, setMode } from "./index";
+import {
+  getDeviceInfo,
+  getServerTime,
+  hspAdd,
+  hspFlush,
+  hspPause,
+  hspPlay,
+  hspResume,
+  hspSetup,
+  hspStop,
+  isConnected,
+  issueToken,
+  setHspPaybackRate,
+  setHspTime,
+  setMode,
+} from "./index";
 import type { FunscriptAction } from "../../game/media/playback";
 
 export type HandyAuthBundle = {
@@ -21,11 +36,12 @@ export type HandySession = {
   nextStreamPointIndex: number;
   tailPointStreamIndex: number;
   uploadedUntilMs: number;
+  hspModeActive: boolean;
 };
 
 const HSP_CHUNK_SIZE = 100;
 const DEFAULT_HSP_MAX_POINTS = 4000;
-const HSP_INITIAL_PREFETCH_MS = 15_000;
+const HSP_INITIAL_PREFETCH_MS = 30_000;
 const HSP_PREFETCH_MS = 180_000;
 const HSP_TOPUP_TRIGGER_MS = 45_000;
 const HSP_MAX_POINTS_PER_SYNC = 600;
@@ -86,11 +102,15 @@ function toHspPoints(actions: FunscriptAction[]): Array<{ t: number; x: number }
 
 function extractServerTimeMs(payload: unknown): number | null {
   if (!payload || typeof payload !== "object") return null;
-  const serverTime = "server_time" in payload ? (payload as { server_time?: unknown }).server_time : undefined;
+  const serverTime =
+    "server_time" in payload ? (payload as { server_time?: unknown }).server_time : undefined;
   return typeof serverTime === "number" && Number.isFinite(serverTime) ? serverTime : null;
 }
 
-async function refreshServerTimeOffset(auth: HandyAuthBundle, session: HandySession): Promise<void> {
+async function refreshServerTimeOffset(
+  auth: HandyAuthBundle,
+  session: HandySession
+): Promise<void> {
   const now = Date.now();
   if (
     session.serverTimeOffsetMeasuredAtMs > 0 &&
@@ -111,7 +131,7 @@ async function refreshServerTimeOffset(auth: HandyAuthBundle, session: HandySess
           responseStyle: "data",
           requestValidator: undefined,
           responseValidator: undefined,
-        }),
+        })
       );
       const receivedAtMs = Date.now();
       const serverTimeMs = extractServerTimeMs(response);
@@ -156,7 +176,7 @@ function clampMaxBufferPoints(value: unknown): number {
 export function resolveInitialPreloadTargetMs(
   points: Array<{ t: number; x: number }>,
   seededPointIndex: number,
-  startTimeMs: number,
+  startTimeMs: number
 ): number {
   const normalizedStartTimeMs = Math.max(0, Math.floor(startTimeMs));
   const seededPointTimeMs = points[seededPointIndex]?.t ?? 0;
@@ -187,7 +207,7 @@ export async function issueHandySession(auth: HandyAuthBundle): Promise<HandySes
           ttl: 3600,
           to: connectionRef,
         },
-      }),
+      })
     );
 
     const token = response?.result?.token;
@@ -209,6 +229,7 @@ export async function issueHandySession(auth: HandyAuthBundle): Promise<HandySes
         nextStreamPointIndex: 0,
         tailPointStreamIndex: 0,
         uploadedUntilMs: 0,
+        hspModeActive: false,
       };
       await refreshServerTimeOffset(auth, session);
       return session;
@@ -232,119 +253,99 @@ export async function issueHandySession(auth: HandyAuthBundle): Promise<HandySes
     nextStreamPointIndex: 0,
     tailPointStreamIndex: 0,
     uploadedUntilMs: 0,
+    hspModeActive: false,
   };
   await refreshServerTimeOffset(auth, session);
   return session;
 }
 
-export async function verifyHandyV3Connection(auth: HandyAuthBundle): Promise<{ connected: boolean; firmwareVersion: string | null }> {
+export async function verifyHandyV3Connection(
+  auth: HandyAuthBundle
+): Promise<{ connected: boolean; firmwareVersion: string | null }> {
   const connectionRef = requireConnectionRef(auth.connectionKey);
   const appCredential = requireAppCredential(auth.appApiKey);
   const session = await issueHandySession(auth);
-  const connectionResponse = unwrapPayload(
-    await isConnected({
-      auth: createAuthResolver(appCredential, session.clientToken),
+  const authResolver = createAuthResolver(appCredential, session.clientToken);
+  const headers = { "X-Connection-Key": connectionRef };
+  const query = { timeout: 5000 };
+
+  const [connectionResponse, infoResponse] = await Promise.all([
+    isConnected({
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
-      query: {
-        timeout: 5000,
-      },
+      headers,
+      query,
     }),
-  );
-
-  const connected = Boolean(connectionResponse?.result?.connected);
-  if (!connected) {
-    return {
-      connected: false,
-      firmwareVersion: null,
-    };
-  }
-
-  const infoResponse = unwrapPayload(
-    await getDeviceInfo({
-      auth: createAuthResolver(appCredential, session.clientToken),
+    getDeviceInfo({
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
-      query: {
-        timeout: 5000,
-      },
+      headers,
+      query,
     }),
-  );
+  ]);
 
+  const connected = Boolean(unwrapPayload(connectionResponse)?.result?.connected);
   return {
     connected,
-    firmwareVersion: infoResponse?.result?.fw_version ?? null,
+    firmwareVersion: connected ? (unwrapPayload(infoResponse)?.result?.fw_version ?? null) : null,
   };
 }
 
 async function prepareHspMode(auth: HandyAuthBundle, session: HandySession): Promise<void> {
   const connectionRef = requireConnectionRef(auth.connectionKey);
   const appCredential = requireAppCredential(auth.appApiKey);
+  const authResolver = createAuthResolver(appCredential, session.clientToken);
+  const headers = { "X-Connection-Key": connectionRef };
 
-  await setMode({
-    auth: createAuthResolver(appCredential, session.clientToken),
-    responseStyle: "data",
-    requestValidator: undefined,
-    responseValidator: undefined,
-    headers: {
-      "X-Connection-Key": connectionRef,
-    },
-    body: {
-      mode: 4,
-    },
-  });
-
-  const setupResponse = unwrapPayload(
-    await hspSetup({
-      auth: createAuthResolver(appCredential, session.clientToken),
+  if (!session.hspModeActive) {
+    await setMode({
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
-      body: {
-        stream_id: 1,
-      },
-      query: {
-        timeout: 5000,
-      },
-    }),
+      headers,
+      body: { mode: 4 },
+    });
+  }
+
+  const setupResponse = unwrapPayload(
+    await hspSetup({
+      auth: authResolver,
+      responseStyle: "data",
+      requestValidator: undefined,
+      responseValidator: undefined,
+      headers,
+      body: { stream_id: 1 },
+      query: { timeout: 5000 },
+    })
   ) as { result?: { max_points?: number } } | undefined;
 
   const flushResponse = unwrapPayload(
     await hspFlush({
-      auth: createAuthResolver(appCredential, session.clientToken),
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
-      query: {
-        timeout: 5000,
-      },
-    }),
+      headers,
+      query: { timeout: 5000 },
+    })
   ) as { result?: { max_points?: number } } | undefined;
 
   const maxPoints = clampMaxBufferPoints(
-    flushResponse?.result?.max_points ?? setupResponse?.result?.max_points,
+    flushResponse?.result?.max_points ?? setupResponse?.result?.max_points
   );
   session.maxBufferPoints = maxPoints;
+  session.hspModeActive = true;
 }
 
 async function appendPointsUpToTime(
   auth: HandyAuthBundle,
   session: HandySession,
   targetTimeMs: number,
-  maxPointsToSend: number,
+  maxPointsToSend: number
 ): Promise<number> {
   const points = session.streamedPoints;
   if (!points || points.length === 0) return 0;
@@ -410,7 +411,7 @@ async function preloadScript(
   session: HandySession,
   sourceId: string,
   actions: FunscriptAction[],
-  skipToMs: number = 0,
+  skipToMs: number = 0
 ): Promise<void> {
   const scriptId = toScriptId(sourceId, actions);
   if (session.loadedScriptId === scriptId) return;
@@ -439,7 +440,9 @@ async function preloadScript(
   // Seed enough data for startup to include the first point after the requested
   // start time, even when the script begins inside a long interpolation gap.
   const initialTargetMs = resolveInitialPreloadTargetMs(points, nextIdx, skipToMs);
-  const initialBudget = Math.max(HSP_CHUNK_SIZE, Math.floor(Math.min(300, session.maxBufferPoints * 0.25)));
+  const maxSafeInitialPoints = Math.floor(session.maxBufferPoints * 0.5);
+  const preferredPoints = Math.max(HSP_CHUNK_SIZE, Math.floor(session.maxBufferPoints * 0.25));
+  const initialBudget = Math.min(maxSafeInitialPoints, preferredPoints);
   await appendPointsUpToTime(auth, session, initialTargetMs, initialBudget);
 
   session.loadedScriptId = scriptId;
@@ -453,7 +456,7 @@ export async function preloadHspScript(
   session: HandySession,
   sourceId: string,
   actions: FunscriptAction[],
-  skipToMs: number = 0,
+  skipToMs: number = 0
 ): Promise<void> {
   if (actions.length === 0) return;
   await preloadScript(auth, session, sourceId, actions, skipToMs);
@@ -465,7 +468,7 @@ export async function sendHspSync(
   timeMs: number,
   playbackRate: number,
   sourceId: string,
-  actions: FunscriptAction[],
+  actions: FunscriptAction[]
 ): Promise<void> {
   if (actions.length === 0) return;
 
@@ -477,78 +480,108 @@ export async function sendHspSync(
   }
   await preloadScript(auth, session, sourceId, actions, timeMs);
 
-  // Continuously stream upcoming points into the HSP buffer without dropping points.
   if (session.streamedPoints && session.nextStreamPointIndex < session.streamedPoints.length) {
+    let playingIdx = session.nextStreamPointIndex - 1;
+    while (playingIdx > 0 && session.streamedPoints[playingIdx]!.t > timeMs) {
+      playingIdx -= 1;
+    }
+    const pointsInBuffer = session.nextStreamPointIndex - Math.max(0, playingIdx);
+
     const shouldTopUp = session.uploadedUntilMs - timeMs <= HSP_TOPUP_TRIGGER_MS;
-    if (shouldTopUp) {
+    if (shouldTopUp && pointsInBuffer < session.maxBufferPoints * 0.8) {
       const targetMs = Math.max(timeMs + HSP_PREFETCH_MS, session.uploadedUntilMs);
-      await appendPointsUpToTime(auth, session, targetMs, HSP_MAX_POINTS_PER_SYNC);
+      const budget = Math.floor(session.maxBufferPoints - pointsInBuffer - 10);
+      if (budget > 0) {
+        const fetchBudget = Math.min(HSP_MAX_POINTS_PER_SYNC, budget);
+        if (fetchBudget > 0) {
+          await appendPointsUpToTime(auth, session, targetMs, fetchBudget);
+        }
+      }
     }
   }
 
+  const nextRate = Math.max(0.25, Math.min(3, playbackRate));
+  const authResolver = createAuthResolver(appCredential, session.clientToken);
+  const headers = { "X-Connection-Key": connectionRef };
+
   if (session.activeScriptId !== scriptId) {
     await hspPlay({
-      auth: createAuthResolver(appCredential, session.clientToken),
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
+      headers,
       body: {
         start_time: Math.max(0, Math.floor(timeMs)),
         server_time: Math.round(getEstimatedServerTimeMs(session)),
-        playback_rate: 1,
-        pause_on_starving: true,
+        playback_rate: nextRate,
+        pause_on_starving: false,
         loop: false,
       },
-      query: {
-        timeout: 5000,
-      },
+      query: { timeout: 5000 },
     });
     session.activeScriptId = scriptId;
     session.lastSyncAtMs = 0;
-    session.lastPlaybackRate = 1;
-  }
-
-  const nextRate = Math.max(0.25, Math.min(3, playbackRate));
-  if (Math.abs(nextRate - session.lastPlaybackRate) > 0.02) {
-    await setHspPaybackRate({
-      auth: createAuthResolver(appCredential, session.clientToken),
-      responseStyle: "data",
-      requestValidator: undefined,
-      responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
-      body: {
-        playback_rate: nextRate,
-      },
-      query: {
-        timeout: 5000,
-      },
-    });
     session.lastPlaybackRate = nextRate;
   }
 
   const now = Date.now();
-  if (now - session.lastSyncAtMs >= 45) {
-    await setHspTime({
-      auth: createAuthResolver(appCredential, session.clientToken),
+  const needsRateUpdate = Math.abs(nextRate - session.lastPlaybackRate) > 0.02;
+  const needsTimeSync = now - session.lastSyncAtMs >= 2000;
+
+  if (needsRateUpdate && needsTimeSync) {
+    await Promise.all([
+      setHspPaybackRate({
+        auth: authResolver,
+        responseStyle: "data",
+        requestValidator: undefined,
+        responseValidator: undefined,
+        headers,
+        body: { playback_rate: nextRate },
+        query: { timeout: 5000 },
+      }).then(() => {
+        session.lastPlaybackRate = nextRate;
+      }),
+      setHspTime({
+        auth: authResolver,
+        responseStyle: "data",
+        requestValidator: undefined,
+        responseValidator: undefined,
+        headers,
+        body: {
+          current_time: Math.max(0, Math.floor(timeMs)),
+          server_time: Math.round(getEstimatedServerTimeMs(session)),
+          filter: 0.12,
+        },
+        query: { timeout: 5000 },
+      }).then(() => {
+        session.lastSyncAtMs = now;
+      }),
+    ]);
+  } else if (needsRateUpdate) {
+    await setHspPaybackRate({
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
+      headers,
+      body: { playback_rate: nextRate },
+      query: { timeout: 5000 },
+    });
+    session.lastPlaybackRate = nextRate;
+  } else if (needsTimeSync) {
+    await setHspTime({
+      auth: authResolver,
+      responseStyle: "data",
+      requestValidator: undefined,
+      responseValidator: undefined,
+      headers,
       body: {
         current_time: Math.max(0, Math.floor(timeMs)),
         server_time: Math.round(getEstimatedServerTimeMs(session)),
         filter: 0.12,
       },
-      query: {
-        timeout: 5000,
-      },
+      query: { timeout: 5000 },
     });
     session.lastSyncAtMs = now;
   }
@@ -556,7 +589,7 @@ export async function sendHspSync(
 
 export async function pauseHandyPlayback(
   auth: HandyAuthBundle,
-  session: HandySession | null,
+  session: HandySession | null
 ): Promise<void> {
   if (!session) return;
 
@@ -588,79 +621,71 @@ export async function resumeHandyPlayback(
   auth: HandyAuthBundle,
   session: HandySession,
   resumeAtMs: number,
-  playbackRate: number = 1,
+  playbackRate: number = 1
 ): Promise<void> {
   const connectionRef = requireConnectionRef(auth.connectionKey);
   const appCredential = requireAppCredential(auth.appApiKey);
+  const authResolver = createAuthResolver(appCredential, session.clientToken);
+  const headers = { "X-Connection-Key": connectionRef };
+
   if (Date.now() - session.serverTimeOffsetMeasuredAtMs >= SERVER_TIME_OFFSET_TTL_MS) {
     void refreshServerTimeOffset(auth, session);
   }
 
-  // Use hspResume with pick_up=true to jump to the current 'live' stream
-  // position. This is near-instant because the point buffer was never
-  // flushed — the device already has the script data.
   await hspResume({
-    auth: createAuthResolver(appCredential, session.clientToken),
+    auth: authResolver,
     responseStyle: "data",
     requestValidator: undefined,
     responseValidator: undefined,
-    headers: {
-      "X-Connection-Key": connectionRef,
-    },
-    body: {
-      pick_up: true,
-    },
+    headers,
+    body: { pick_up: true },
   });
 
-  // Immediately sync to the correct video position.
   const now = Date.now();
-  await setHspTime({
-    auth: createAuthResolver(appCredential, session.clientToken),
-    responseStyle: "data",
-    requestValidator: undefined,
-    responseValidator: undefined,
-    headers: {
-      "X-Connection-Key": connectionRef,
-    },
-    body: {
-      current_time: Math.max(0, Math.floor(resumeAtMs)),
-      server_time: Math.round(getEstimatedServerTimeMs(session)),
-      filter: 0.12,
-    },
-    query: {
-      timeout: 5000,
-    },
-  });
-
   const nextRate = Math.max(0.25, Math.min(3, playbackRate));
-  if (Math.abs(nextRate - session.lastPlaybackRate) > 0.02) {
-    await setHspPaybackRate({
-      auth: createAuthResolver(appCredential, session.clientToken),
+  const needsRateUpdate = Math.abs(nextRate - session.lastPlaybackRate) > 0.02;
+
+  const pending: Promise<void>[] = [
+    setHspTime({
+      auth: authResolver,
       responseStyle: "data",
       requestValidator: undefined,
       responseValidator: undefined,
-      headers: {
-        "X-Connection-Key": connectionRef,
-      },
+      headers,
       body: {
-        playback_rate: nextRate,
+        current_time: Math.max(0, Math.floor(resumeAtMs)),
+        server_time: Math.round(getEstimatedServerTimeMs(session)),
+        filter: 0.12,
       },
-      query: {
-        timeout: 5000,
-      },
-    });
-    session.lastPlaybackRate = nextRate;
+      query: { timeout: 5000 },
+    }).then(() => {}),
+  ];
+
+  if (needsRateUpdate) {
+    pending.push(
+      setHspPaybackRate({
+        auth: authResolver,
+        responseStyle: "data",
+        requestValidator: undefined,
+        responseValidator: undefined,
+        headers,
+        body: { playback_rate: nextRate },
+        query: { timeout: 5000 },
+      }).then(() => {
+        session.lastPlaybackRate = nextRate;
+      })
+    );
   }
 
-  // Restore the session's active script tracking so subsequent sendHspSync
-  // calls skip the hspPlay dance and just do time-sync.
+  await Promise.all(pending);
+
   session.activeScriptId = session.loadedScriptId;
   session.lastSyncAtMs = now;
 }
 
 export async function stopHandyPlayback(
   auth: HandyAuthBundle,
-  session: HandySession | null,
+  session: HandySession | null
 ): Promise<void> {
   if (!session) return;
 
@@ -688,4 +713,5 @@ export async function stopHandyPlayback(
   session.nextStreamPointIndex = 0;
   session.tailPointStreamIndex = 0;
   session.uploadedUntilMs = 0;
+  session.hspModeActive = false;
 }

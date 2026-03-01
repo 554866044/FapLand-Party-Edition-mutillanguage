@@ -141,6 +141,8 @@ export const db = {
       includeMedia?: boolean;
       directoryPath?: string;
       asFpack?: boolean;
+      compressionMode?: "copy" | "av1";
+      compressionStrength?: number;
     }) => trpc.db.exportLibraryPackage.mutate(input),
     openExportFolder: () => trpc.db.openInstallExportFolder.mutate(),
     clearAllData: () => trpc.db.clearAllData.mutate(),

@@ -19,7 +19,12 @@ const handyIndexMocks = vi.hoisted(() => ({
 
 vi.mock("./index", () => handyIndexMocks);
 
-import { issueHandySession, resolveInitialPreloadTargetMs, sendHspSync, type HandySession } from "./runtime";
+import {
+  issueHandySession,
+  resolveInitialPreloadTargetMs,
+  sendHspSync,
+  type HandySession,
+} from "./runtime";
 
 describe("resolveInitialPreloadTargetMs", () => {
   beforeEach(() => {
@@ -33,7 +38,7 @@ describe("resolveInitialPreloadTargetMs", () => {
         { t: 30_000, x: 75 },
       ],
       0,
-      0,
+      0
     );
 
     expect(targetMs).toBe(30_000);
@@ -46,23 +51,25 @@ describe("resolveInitialPreloadTargetMs", () => {
         { t: 30_000, x: 75 },
       ],
       0,
-      10_000,
+      10_000
     );
 
-    expect(targetMs).toBe(30_000);
+    // start=10000, initial target = 10000 + 30000 = 40000; next point at 30000 < 40000, stays 40000
+    expect(targetMs).toBe(40_000);
   });
 
-  it("keeps the normal 15s preload window when a future point is already nearby", () => {
+  it("keeps the full 30s preload window when a future point is already nearby", () => {
     const targetMs = resolveInitialPreloadTargetMs(
       [
         { t: 9_000, x: 25 },
         { t: 12_000, x: 75 },
       ],
       0,
-      10_000,
+      10_000
     );
 
-    expect(targetMs).toBe(25_000);
+    // start=10000, initial target = max(10000, 9000) + 30000 = 40000; next point 12000 < 40000, stays 40000
+    expect(targetMs).toBe(40_000);
   });
 });
 
@@ -93,6 +100,7 @@ describe("sendHspSync", () => {
       nextStreamPointIndex: 0,
       tailPointStreamIndex: 0,
       uploadedUntilMs: 0,
+      hspModeActive: false,
     };
 
     await sendHspSync(
@@ -107,7 +115,7 @@ describe("sendHspSync", () => {
       [
         { at: 0, pos: 20 },
         { at: 1000, pos: 80 },
-      ],
+      ]
     );
 
     expect(handyIndexMocks.getServerTime).not.toHaveBeenCalled();
@@ -117,7 +125,7 @@ describe("sendHspSync", () => {
           start_time: 500,
           server_time: 30_180,
         }),
-      }),
+      })
     );
     expect(handyIndexMocks.setHspTime).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -125,7 +133,7 @@ describe("sendHspSync", () => {
           current_time: 500,
           server_time: 50_180,
         }),
-      }),
+      })
     );
   });
 });
@@ -154,7 +162,9 @@ describe("issueHandySession", () => {
     const timestamps = [9_000, 10_000, 10_020, 10_030, 10_050, 10_060, 10_080, 10_090];
     let timestampIndex = 0;
     vi.spyOn(Date, "now").mockImplementation(() => {
-      const value = timestamps[Math.min(timestampIndex, timestamps.length - 1)] ?? timestamps[timestamps.length - 1]!;
+      const value =
+        timestamps[Math.min(timestampIndex, timestamps.length - 1)] ??
+        timestamps[timestamps.length - 1]!;
       timestampIndex += 1;
       return value;
     });

@@ -42,6 +42,7 @@ import {
   type PlaylistExportVideoProbe,
 } from "./playlistExportCompression";
 import { resolvePhashBinaries } from "./phash/binaries";
+import { getCachedWebsiteVideoLocalPath } from "./webVideo";
 
 type ExportPackageInput = {
   playlistId: string;
@@ -585,6 +586,12 @@ function canonicalizeResourceKey(uri: string): string {
   }
 }
 
+async function resolveLocalSourcePath(uri: string): Promise<string | null> {
+  const localPath = fromLocalMediaUri(uri);
+  if (localPath) return localPath;
+  return getCachedWebsiteVideoLocalPath(uri);
+}
+
 function collectPortableRefs(config: PlaylistConfig): PortableRefEntry[] {
   if (config.boardConfig.mode === "linear") {
     const refs: PortableRefEntry[] = [];
@@ -1008,7 +1015,7 @@ async function preparePlaylistExport(
   const { resourceReferences, videoTasks, funscriptTasks } = buildResourceInventory(loaded);
 
   for (const task of videoTasks) {
-    const localPath = fromLocalMediaUri(task.uri);
+    const localPath = await resolveLocalSourcePath(task.uri);
     if (localPath) {
       task.probe = await probeLocalVideo(binaries.ffprobePath, localPath);
       if (task.probe.durationMs === null && resourceReferences.length > 0) {
@@ -1022,7 +1029,7 @@ async function preparePlaylistExport(
     task.probe = await fetchRemoteVideoMetadata(task);
   }
 
-  const localVideos = videoTasks.filter((task) => fromLocalMediaUri(task.uri)).length;
+  const localVideos = videoTasks.filter((task) => task.probe.codecName !== null).length;
   const remoteVideos = videoTasks.length - localVideos;
   const alreadyAv1Videos = videoTasks.filter((task) => isAv1Codec(task.probe.codecName)).length;
   const estimatedReencodeVideos =
@@ -1281,7 +1288,7 @@ async function materializeVideoTask(input: {
     throw new Error("Video output path was not allocated.");
   }
 
-  const localPath = fromLocalMediaUri(input.task.uri);
+  const localPath = await resolveLocalSourcePath(input.task.uri);
   const shouldTryCompression = input.compressionMode === "av1" && input.encoder;
   const knownAv1 = isAv1Codec(input.task.probe.codecName);
   const outputFileName = path.basename(output.absolutePath);
@@ -1465,7 +1472,7 @@ async function materializeFunscriptTask(task: FunscriptTask): Promise<void> {
   }
 
   updateExportPhase("copying", `Exporting funscript ${path.basename(task.output.absolutePath)}...`);
-  const localPath = fromLocalMediaUri(task.uri);
+  const localPath = await resolveLocalSourcePath(task.uri);
   if (localPath) {
     await copyLocalFile(localPath, task.output.absolutePath);
   } else {

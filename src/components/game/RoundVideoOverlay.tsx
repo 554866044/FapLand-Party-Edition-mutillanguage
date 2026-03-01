@@ -143,9 +143,8 @@ const UI_SHOW_AFTER_MOUSEMOVE_MS = 2200;
 const LOADING_MEDIA_ROTATE_MS = 2400;
 const LOADING_MEDIA_FADE_MS = 900;
 const HANDY_PUSH_INTERVAL_MS = 60;
-const HANDY_KEEPALIVE_MS = 150;
 const HANDY_REAUTH_MARGIN_MS = 30_000;
-const HANDY_SYNC_STALE_MS = 2_000;
+const HANDY_SYNC_STALE_MS = 4_000;
 const MAIN_WINDOW_SEEK_EPSILON_SEC = 0.05;
 const MAIN_WINDOW_END_TOLERANCE_SEC = 0.04;
 const MANUAL_PAUSE_DURATION_MS = 15_000;
@@ -2411,12 +2410,6 @@ export function RoundVideoOverlay({
 
       const now = Date.now();
       if (now - handyLastPushAtRef.current < HANDY_PUSH_INTERVAL_MS) return;
-      if (
-        Math.abs((handyLastPushPosRef.current ?? position) - position) < 0.25 &&
-        now - handyLastPushAtRef.current < HANDY_KEEPALIVE_MS
-      ) {
-        return;
-      }
 
       const playbackRate = video.playbackRate ?? 1;
       handyPushInFlightRef.current = true;
@@ -2428,17 +2421,30 @@ export function RoundVideoOverlay({
           const session = await ensureHandySession();
           if (!session) return;
 
-          await sendHspSync(
-            {
-              connectionKey: connectionKey.trim(),
-              appApiKey: appApiKey.trim(),
-            },
-            session,
-            effectiveTimeMs,
-            playbackRate,
-            `${activeVideoUri}:${segment.kind}`,
-            actions
-          );
+          const syncPayload = {
+            connectionKey: connectionKey.trim(),
+            appApiKey: appApiKey.trim(),
+          };
+
+          try {
+            await sendHspSync(
+              syncPayload,
+              session,
+              effectiveTimeMs,
+              playbackRate,
+              `${activeVideoUri}:${segment.kind}`,
+              actions
+            );
+          } catch {
+            await sendHspSync(
+              syncPayload,
+              session,
+              effectiveTimeMs,
+              playbackRate,
+              `${activeVideoUri}:${segment.kind}`,
+              actions
+            );
+          }
 
           const sentAt = Date.now();
           handyLastPushAtRef.current = sentAt;
@@ -2502,7 +2508,7 @@ export function RoundVideoOverlay({
         setStatus("The device reported a sync error. Retrying momentarily...");
         timer = window.setTimeout(() => {
           void bootstrapHandySyncIfReady();
-        }, 3000);
+        }, 1500);
       } else {
         setStatus("Waiting for TheHandy sync before playback...");
         void bootstrapHandySyncIfReady();

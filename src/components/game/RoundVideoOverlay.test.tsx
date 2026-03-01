@@ -19,7 +19,10 @@ const mocks = vi.hoisted(() => ({
   },
   playback: {
     getFunscriptPositionAtMs: vi.fn<
-      (timeline: { actions: Array<{ at: number; pos: number }> } | null, timeMs: number) => number | null
+      (
+        timeline: { actions: Array<{ at: number; pos: number }> } | null,
+        timeMs: number
+      ) => number | null
     >(() => null),
     loadFunscriptTimeline: vi.fn<
       (funscriptUri: string) => Promise<{ actions: Array<{ at: number; pos: number }> } | null>
@@ -101,7 +104,10 @@ vi.mock("../../hooks/useSfwMode", () => ({
 
 import { RoundVideoOverlay } from "./RoundVideoOverlay";
 
-function createInstalledRound(roundId = "round-1", funscriptUri: string | null = null): InstalledRound {
+function createInstalledRound(
+  roundId = "round-1",
+  funscriptUri: string | null = null
+): InstalledRound {
   return {
     id: roundId,
     name: "Round 1",
@@ -147,10 +153,14 @@ function createHandySession(): handyRuntime.HandySession {
     nextStreamPointIndex: 0,
     tailPointStreamIndex: 0,
     uploadedUntilMs: 0,
+    hspModeActive: false,
   };
 }
 
-function primeVideoElement(video: HTMLVideoElement, options?: { duration?: number; currentTime?: number }) {
+function primeVideoElement(
+  video: HTMLVideoElement,
+  options?: { duration?: number; currentTime?: number }
+) {
   Object.defineProperty(video, "readyState", {
     configurable: true,
     get: () => HTMLMediaElement.HAVE_METADATA,
@@ -893,6 +903,7 @@ describe("RoundVideoOverlay", () => {
       nextStreamPointIndex: 0,
       tailPointStreamIndex: 0,
       uploadedUntilMs: 0,
+      hspModeActive: false,
     });
 
     renderOverlay({ activeRound: null, idleBoardSequence: "no-rest" });
@@ -947,6 +958,7 @@ describe("RoundVideoOverlay", () => {
       nextStreamPointIndex: 0,
       tailPointStreamIndex: 0,
       uploadedUntilMs: 0,
+      hspModeActive: false,
     });
 
     const view = renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
@@ -993,6 +1005,7 @@ describe("RoundVideoOverlay", () => {
       nextStreamPointIndex: 0,
       tailPointStreamIndex: 0,
       uploadedUntilMs: 0,
+      hspModeActive: false,
     });
 
     renderOverlay({
@@ -1054,6 +1067,7 @@ describe("RoundVideoOverlay", () => {
       nextStreamPointIndex: 0,
       tailPointStreamIndex: 0,
       uploadedUntilMs: 0,
+      hspModeActive: false,
     });
 
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
