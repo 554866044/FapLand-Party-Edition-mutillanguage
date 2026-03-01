@@ -7,14 +7,26 @@ type ConverterHeaderBaseProps = {
   selectedSourceInfo: SelectedSourceInfo;
   segmentCount: number;
   sourceSummary: string;
+  showHotkeys: boolean;
 };
 
 type ConverterHeaderProps = ConverterHeaderBaseProps & {
   onGoToSelect: () => void;
+  onShowHotkeys: () => void;
+  onHideHotkeys: () => void;
 };
 
 export const ConverterHeader: React.FC<ConverterHeaderProps> = React.memo(
-  ({ step, selectedSourceInfo, segmentCount, sourceSummary, onGoToSelect }) => {
+  ({
+    step,
+    selectedSourceInfo,
+    segmentCount,
+    sourceSummary,
+    showHotkeys,
+    onGoToSelect,
+    onShowHotkeys,
+    onHideHotkeys,
+  }) => {
     if (step === "select") {
       return (
         <header className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-6 backdrop-blur-xl">
@@ -47,6 +59,21 @@ export const ConverterHeader: React.FC<ConverterHeaderProps> = React.memo(
             className="rounded-xl border border-violet-300/55 bg-violet-500/20 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/35"
           >
             Change Source
+          </button>
+          <button
+            type="button"
+            onMouseEnter={playHoverSound}
+            onClick={() => {
+              playSelectSound();
+              if (showHotkeys) {
+                onHideHotkeys();
+                return;
+              }
+              onShowHotkeys();
+            }}
+            className="rounded-xl border border-zinc-500/60 bg-black/35 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-zinc-100 transition-all duration-200 hover:border-zinc-300/80 hover:bg-black/50"
+          >
+            {showHotkeys ? "Hide Shortcuts" : "Show Shortcuts"} <kbd className="converter-kbd ml-1">?</kbd>
           </button>
           <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.45em] text-purple-200/85">
             Conversion Lab
@@ -85,5 +112,6 @@ export function pickConverterHeaderProps(state: ConverterState): ConverterHeader
     selectedSourceInfo: state.selectedSourceInfo,
     segmentCount: state.sortedSegments.length,
     sourceSummary: state.sourceSummary,
+    showHotkeys: state.showHotkeys,
   };
 }

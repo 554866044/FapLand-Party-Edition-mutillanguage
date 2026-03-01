@@ -57,13 +57,17 @@ function cloneStatus(status: PhashScanStatus): PhashScanStatus {
   return { ...status, errors: [...status.errors] };
 }
 
+type RoundWithoutPhashResource = {
+  resourceId: string;
+  videoUri: string;
+};
+
 type RoundWithoutPhash = {
   roundId: string;
   roundName: string;
-  resourceId: string;
-  videoUri: string;
   startTime: number | null;
   endTime: number | null;
+  resources: RoundWithoutPhashResource[];
 };
 
 async function waitForInstallScan(): Promise<void> {
@@ -93,16 +97,33 @@ async function findRoundsWithoutPhash(): Promise<RoundWithoutPhash[]> {
     .innerJoin(resource, eq(resource.roundId, round.id))
     .where(and(isNull(round.phash), isNull(resource.phash), eq(resource.disabled, false)));
 
-  const seen = new Set<string>();
-  const unique: RoundWithoutPhash[] = [];
+  const grouped = new Map<string, RoundWithoutPhash>();
 
   for (const row of rounds) {
-    if (seen.has(row.roundId)) continue;
-    seen.add(row.roundId);
-    unique.push(row);
+    const existing = grouped.get(row.roundId);
+    if (existing) {
+      existing.resources.push({
+        resourceId: row.resourceId,
+        videoUri: row.videoUri,
+      });
+      continue;
+    }
+
+    grouped.set(row.roundId, {
+      roundId: row.roundId,
+      roundName: row.roundName,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      resources: [
+        {
+          resourceId: row.resourceId,
+          videoUri: row.videoUri,
+        },
+      ],
+    });
   }
 
-  return unique;
+  return [...grouped.values()];
 }
 
 function pushScanError(roundId: string, roundName: string, reason: string): void {
@@ -146,9 +167,17 @@ async function runPhashScan(): Promise<void> {
 
     scanStatus.currentRoundName = row.roundName;
 
-    const localVideoPath = await resolvePhashVideoPath(row.videoUri);
+    let localVideoPath: string | null = null;
+    let resolvedResourceId: string | null = null;
 
-    if (!localVideoPath) {
+    for (const candidate of row.resources) {
+      localVideoPath = await resolvePhashVideoPath(candidate.videoUri);
+      if (!localVideoPath) continue;
+      resolvedResourceId = candidate.resourceId;
+      break;
+    }
+
+    if (!localVideoPath || !resolvedResourceId) {
       pushScanError(
         row.roundId,
         row.roundName,
@@ -177,7 +206,7 @@ async function runPhashScan(): Promise<void> {
         .set({ phash: phash.trim(), updatedAt: new Date() })
         .where(eq(round.id, row.roundId));
 
-      await db.update(resource).set({ phash: phash.trim() }).where(eq(resource.id, row.resourceId));
+      await db.update(resource).set({ phash: phash.trim() }).where(eq(resource.id, resolvedResourceId));
 
       scanStatus.completedCount += 1;
     } catch (error) {

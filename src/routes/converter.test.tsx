@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  search: {
+    sourceRoundId: "",
+    heroName: "",
+  },
   db: {
     hero: {
       findMany: vi.fn(),
@@ -22,10 +26,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (config: Record<string, unknown>) => ({
     ...config,
-    useSearch: () => ({
-      sourceRoundId: "",
-      heroName: "",
-    }),
+    useSearch: () => mocks.search,
   }),
   useNavigate: () => mocks.navigate,
 }));
@@ -116,7 +117,9 @@ vi.mock("../features/converter/HeroPanel", () => ({
 }));
 
 vi.mock("../features/converter/VideoPreview", () => ({
-  VideoPreview: () => <div data-testid="video-preview" />,
+  VideoPreview: ({ videoUri }: { videoUri: string }) => (
+    <div data-testid="video-preview" data-video-uri={videoUri} />
+  ),
   pickVideoPreviewProps: (state: unknown) => state,
 }));
 
@@ -233,6 +236,8 @@ function makeRound(
 }
 
 beforeEach(() => {
+  mocks.search.sourceRoundId = "";
+  mocks.search.heroName = "";
   window.electronAPI = {
     file: {
       convertFileSrc: mocks.file.convertFileSrc,
@@ -398,6 +403,31 @@ describe("ConverterPage", () => {
   });
 
   describe("Edit Step - Round Selection", () => {
+    it("loads a preselected website-backed round from search params", async () => {
+      mocks.search.sourceRoundId = "web-round";
+      mocks.search.heroName = "Website Round";
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("web-round", "Website Round", {
+          videoUri: "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D123",
+        }),
+      ]);
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("video-preview").getAttribute("data-video-uri")).toBe(
+          "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D123"
+        );
+      });
+
+      expect(screen.getByDisplayValue("Website Round")).toBeDefined();
+    });
+
     it("transitions to edit mode when clicking a round card", async () => {
       mocks.db.round.findInstalled.mockResolvedValue([
         makeRound("round-1", "Standalone Source", {
@@ -529,6 +559,9 @@ describe("ConverterPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Existing Hero/ }));
 
       await waitFor(() => {
+        expect(screen.getByTestId("video-preview").getAttribute("data-video-uri")).toBe(
+          "file:///tmp/earlier.mp4"
+        );
         expect(screen.getByText("Earlier Source")).toBeDefined();
         expect(screen.getByText("Later Source")).toBeDefined();
       });

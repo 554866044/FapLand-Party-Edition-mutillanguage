@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
+import { getCachedWebsiteVideoLocalPath, getWebsiteVideoTargetUrl } from "./webVideo";
 
 const PREVIEW_IMAGE_WIDTH = 480;
 const PREVIEW_JPEG_QUALITY = 6;
@@ -37,17 +38,12 @@ function resolvePreviewTimestampMs(startTimeMs?: number | null, endTimeMs?: numb
   return 1000;
 }
 
-function toFfmpegInput(videoUri: string): string | null {
+async function toFfmpegInput(videoUri: string): Promise<string | null> {
   try {
     const parsed = new URL(videoUri);
 
     if (parsed.protocol === "app:" && parsed.hostname === "media") {
-      const decoded = decodeURIComponent(parsed.pathname.slice(1));
-      if (!decoded) return null;
-      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)) {
-        return path.normalize(decoded.slice(1));
-      }
-      return path.normalize(decoded);
+      return decodeURIComponent(parsed.pathname.replace(/^\/+/, "/"));
     }
 
     if (parsed.protocol === "file:") {
@@ -57,15 +53,20 @@ function toFfmpegInput(videoUri: string): string | null {
     if (parsed.protocol === "http:" || parsed.protocol === "https:") {
       return parsed.toString();
     }
-
-    return null;
   } catch {
-    return null;
+    // fall through to website cache / proxy resolution below
   }
+
+  const cachedLocalPath = await getCachedWebsiteVideoLocalPath(videoUri);
+  if (cachedLocalPath) {
+    return path.normalize(cachedLocalPath);
+  }
+
+  return getWebsiteVideoTargetUrl(videoUri);
 }
 
 export async function generateRoundPreviewImageDataUri(input: GenerateRoundPreviewImageInput): Promise<string | null> {
-  const ffmpegInput = toFfmpegInput(input.videoUri);
+  const ffmpegInput = await toFfmpegInput(input.videoUri);
   if (!ffmpegInput) return null;
 
   const timestampMs = resolvePreviewTimestampMs(input.startTimeMs, input.endTimeMs);

@@ -17,6 +17,10 @@ import {
 import { buildDetectedSegments } from "./detection";
 import { applyAutoMetadataToSegments } from "./metadata";
 import {
+  CONVERTER_SHORTCUTS,
+  type ConverterShortcutContext,
+} from "./shortcuts";
+import {
   clamp,
   CONVERTER_MIN_ROUND_KEY,
   CONVERTER_PAUSE_GAP_KEY,
@@ -66,6 +70,16 @@ function toWebsiteSourceLabel(videoUri: string): string {
 
 export type ConverterState = ReturnType<typeof useConverterState>;
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
 export function useConverterState(searchParams: ConverterSearchParams) {
   const { sourceRoundId: preselectedSourceRoundId, heroName: prefilledHeroName } = searchParams;
 
@@ -78,8 +92,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const lastZoomSoundAtRef = useRef(0);
   const dragStateRef = useRef<DragState | null>(null);
+  const dragAutoScrollFrameRef = useRef<number | null>(null);
   const pendingInstalledLoadMessageRef = useRef<string | null>(null);
   const pendingInstalledSegmentsRef = useRef<SegmentDraft[] | null>(null);
+  const hasAppliedPreselectedSourceRef = useRef(false);
 
   const [sourceMode, setSourceMode] = useState<"local" | "installed">("installed");
   const [videoUri, setVideoUri] = useState("");
@@ -116,7 +132,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const [isDetecting, setIsDetecting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showHotkeys, setShowHotkeys] = useState(false);
+  const [showHotkeys, setShowHotkeys] = useState(true);
   const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
 
   const [cachingUrl, setCachingUrl] = useState<string | null>(null);
@@ -150,7 +166,10 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setError(null);
   }, []);
 
-  const selectRoundAndEdit = useCallback(async (roundId: string) => {
+  const selectRoundAndEdit = useCallback(async (
+    roundId: string,
+    options?: { silent?: boolean }
+  ) => {
     const rounds = await db.round.findInstalled(true);
     const round = rounds.find((r) => r.id === roundId);
     if (!round) {
@@ -202,7 +221,9 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setDurationMs(0);
     setMessage(null);
     setError(null);
-    playSelectSound();
+    if (!options?.silent) {
+      playSelectSound();
+    }
     setStep("edit");
   }, []);
 
@@ -254,8 +275,11 @@ export function useConverterState(searchParams: ConverterSearchParams) {
         bpmOverride: round.bpm != null,
         difficultyOverride: round.difficulty != null,
       }));
-    setSegments(sortSegments(segmentDrafts));
-    setSelectedSegmentId(segmentDrafts[0]?.id ?? null);
+    const sortedSegmentDrafts = sortSegments(segmentDrafts);
+    pendingInstalledSegmentsRef.current = sortedSegmentDrafts;
+    pendingInstalledLoadMessageRef.current = `Loaded hero "${hero.name}" from installed rounds.`;
+    setSegments(sortedSegmentDrafts);
+    setSelectedSegmentId(sortedSegmentDrafts[0]?.id ?? null);
 
     setDetectedSegments([]);
     setMarkInMs(null);
@@ -662,12 +686,18 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   /* ─── Pointer drag for segment edges ───────────────────────────── */
 
   useEffect(() => {
-    const onPointerMove = (event: PointerEvent) => {
+    const stopAutoScroll = () => {
+      if (dragAutoScrollFrameRef.current === null) return;
+      window.cancelAnimationFrame(dragAutoScrollFrameRef.current);
+      dragAutoScrollFrameRef.current = null;
+    };
+
+    const syncDraggedSegment = () => {
       const drag = dragStateRef.current;
       if (!drag || durationMs <= 0) return;
 
-      event.preventDefault();
-      const deltaPx = event.clientX - drag.pointerX;
+      const scrollLeft = timelineScrollRef.current?.scrollLeft ?? drag.initialScrollLeft;
+      const deltaPx = (drag.currentPointerX - drag.pointerX) + (scrollLeft - drag.initialScrollLeft);
       const deltaMs = Math.round((deltaPx / zoomPxPerSec) * 1000);
 
       setSegments((previous) => {
@@ -701,7 +731,55 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       });
     };
 
+    const stepAutoScroll = () => {
+      const drag = dragStateRef.current;
+      const scrollContainer = timelineScrollRef.current;
+      if (!drag || !scrollContainer || durationMs <= 0) {
+        stopAutoScroll();
+        return;
+      }
+
+      const rect = scrollContainer.getBoundingClientRect();
+      const edgeThresholdPx = 64;
+      const maxStepPx = 18;
+
+      let scrollDelta = 0;
+      if (drag.currentPointerX < rect.left + edgeThresholdPx) {
+        const ratio = (rect.left + edgeThresholdPx - drag.currentPointerX) / edgeThresholdPx;
+        scrollDelta = -Math.ceil(Math.min(1, ratio) * maxStepPx);
+      } else if (drag.currentPointerX > rect.right - edgeThresholdPx) {
+        const ratio = (drag.currentPointerX - (rect.right - edgeThresholdPx)) / edgeThresholdPx;
+        scrollDelta = Math.ceil(Math.min(1, ratio) * maxStepPx);
+      }
+
+      if (scrollDelta !== 0) {
+        const maxScrollLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth);
+        const nextScrollLeft = clamp(scrollContainer.scrollLeft + scrollDelta, 0, maxScrollLeft);
+        if (nextScrollLeft !== scrollContainer.scrollLeft) {
+          scrollContainer.scrollLeft = nextScrollLeft;
+          syncDraggedSegment();
+          dragAutoScrollFrameRef.current = window.requestAnimationFrame(stepAutoScroll);
+          return;
+        }
+      }
+
+      stopAutoScroll();
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag || durationMs <= 0) return;
+
+      event.preventDefault();
+      drag.currentPointerX = event.clientX;
+      syncDraggedSegment();
+      if (dragAutoScrollFrameRef.current === null) {
+        dragAutoScrollFrameRef.current = window.requestAnimationFrame(stepAutoScroll);
+      }
+    };
+
     const onPointerUp = () => {
+      stopAutoScroll();
       dragStateRef.current = null;
     };
 
@@ -709,6 +787,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     window.addEventListener("pointerup", onPointerUp);
 
     return () => {
+      stopAutoScroll();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
@@ -954,6 +1033,40 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     [selectedSegment, updateSegmentTiming]
   );
 
+  const moveSelectedSegmentStartToPlayhead = useCallback(() => {
+    if (!selectedSegment) return;
+
+    const sorted = sortSegments(segments);
+    const index = sorted.findIndex((segment) => segment.id === selectedSegment.id);
+    if (index < 0) return;
+
+    const previousSegment = sorted[index - 1];
+    const nextStartTimeMs = clamp(
+      currentTimeMs,
+      previousSegment?.endTimeMs ?? 0,
+      selectedSegment.endTimeMs - MIN_SEGMENT_MS
+    );
+
+    updateSegmentTiming(selectedSegment.id, nextStartTimeMs, selectedSegment.endTimeMs);
+  }, [currentTimeMs, segments, selectedSegment, updateSegmentTiming]);
+
+  const moveSelectedSegmentEndToPlayhead = useCallback(() => {
+    if (!selectedSegment) return;
+
+    const sorted = sortSegments(segments);
+    const index = sorted.findIndex((segment) => segment.id === selectedSegment.id);
+    if (index < 0) return;
+
+    const nextSegment = sorted[index + 1];
+    const nextEndTimeMs = clamp(
+      currentTimeMs,
+      selectedSegment.startTimeMs + MIN_SEGMENT_MS,
+      nextSegment?.startTimeMs ?? durationMs
+    );
+
+    updateSegmentTiming(selectedSegment.id, selectedSegment.startTimeMs, nextEndTimeMs);
+  }, [currentTimeMs, durationMs, segments, selectedSegment, updateSegmentTiming]);
+
   const mergeSegmentWithNext = useCallback(
     (segmentId: string) => {
       const sorted = sortSegments(segments);
@@ -983,6 +1096,175 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     },
     [applySegments, segments]
   );
+
+  const splitSegmentAtPlayhead = useCallback(() => {
+    const containingSelectedSegment =
+      selectedSegment &&
+      currentTimeMs > selectedSegment.startTimeMs &&
+      currentTimeMs < selectedSegment.endTimeMs
+        ? selectedSegment
+        : null;
+    const segmentToSplit =
+      containingSelectedSegment ??
+      segments.find(
+        (segment) => currentTimeMs > segment.startTimeMs && currentTimeMs < segment.endTimeMs
+      ) ??
+      null;
+
+    if (!segmentToSplit) {
+      setError("Move the playhead inside a segment to split it.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    const leftDurationMs = currentTimeMs - segmentToSplit.startTimeMs;
+    const rightDurationMs = segmentToSplit.endTimeMs - currentTimeMs;
+    if (leftDurationMs < MIN_SEGMENT_MS || rightDurationMs < MIN_SEGMENT_MS) {
+      setError("Both split segments must be at least 100 ms long.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    const splitSegment: SegmentDraft = {
+      ...segmentToSplit,
+      id: createSegmentId(),
+      startTimeMs: currentTimeMs,
+    };
+    const nextSegments = segments.flatMap((segment) =>
+      segment.id === segmentToSplit.id
+        ? [{ ...segment, endTimeMs: currentTimeMs }, splitSegment]
+        : [segment]
+    );
+    if (!applySegments(nextSegments)) return;
+
+    setSelectedSegmentId(splitSegment.id);
+    setMessage(`Split segment at ${formatMs(currentTimeMs)}.`);
+    setError(null);
+    playConverterSegmentAddSound();
+  }, [applySegments, currentTimeMs, segments, selectedSegment]);
+
+  const clearMarks = useCallback(() => {
+    if (markInMs === null && markOutMs === null) return false;
+    setMarkInMs(null);
+    setMarkOutMs(null);
+    setMessage("Cleared IN/OUT marks.");
+    setError(null);
+    return true;
+  }, [markInMs, markOutMs]);
+
+  const clearSelection = useCallback(() => {
+    if (!selectedSegmentId) return false;
+    setSelectedSegmentId(null);
+    setMessage("Cleared selected segment.");
+    setError(null);
+    return true;
+  }, [selectedSegmentId]);
+
+  const toggleHotkeys = useCallback(() => {
+    setShowHotkeys((previous) => {
+      const next = !previous;
+      setMessage(next ? "Shortcut overlay shown." : "Shortcut overlay hidden.");
+      setError(null);
+      return next;
+    });
+  }, []);
+
+  const showHotkeysOverlay = useCallback(() => {
+    setShowHotkeys(true);
+    setMessage("Shortcut overlay shown.");
+    setError(null);
+  }, []);
+
+  const hideHotkeysOverlay = useCallback(() => {
+    setShowHotkeys(false);
+    setMessage("Shortcut overlay hidden.");
+    setError(null);
+  }, []);
+
+  const clearTransientEditorState = useCallback(() => {
+    if (showHotkeys) {
+      hideHotkeysOverlay();
+      return;
+    }
+
+    if (clearMarks()) return;
+    clearSelection();
+  }, [clearMarks, clearSelection, hideHotkeysOverlay, showHotkeys]);
+
+  const selectNextSegment = useCallback(() => {
+    if (sortedSegments.length === 0) {
+      setError("No segments available to select.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    const currentIndex = sortedSegments.findIndex((segment) => segment.id === selectedSegmentId);
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % sortedSegments.length;
+    const nextSegment = sortedSegments[nextIndex];
+    if (!nextSegment) return;
+    setSelectedSegmentId(nextSegment.id);
+    setMessage(`Selected segment ${nextIndex + 1} of ${sortedSegments.length}.`);
+    setError(null);
+  }, [selectedSegmentId, sortedSegments]);
+
+  const selectPreviousSegment = useCallback(() => {
+    if (sortedSegments.length === 0) {
+      setError("No segments available to select.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    const currentIndex = sortedSegments.findIndex((segment) => segment.id === selectedSegmentId);
+    const nextIndex =
+      currentIndex < 0
+        ? sortedSegments.length - 1
+        : (currentIndex - 1 + sortedSegments.length) % sortedSegments.length;
+    const nextSegment = sortedSegments[nextIndex];
+    if (!nextSegment) return;
+    setSelectedSegmentId(nextSegment.id);
+    setMessage(`Selected segment ${nextIndex + 1} of ${sortedSegments.length}.`);
+    setError(null);
+  }, [selectedSegmentId, sortedSegments]);
+
+  const selectSegmentAtPlayhead = useCallback(() => {
+    const segment = sortedSegments.find(
+      (entry) => currentTimeMs >= entry.startTimeMs && currentTimeMs < entry.endTimeMs
+    );
+    if (!segment) {
+      setError("No segment found at the current playhead position.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    const index = sortedSegments.findIndex((entry) => entry.id === segment.id);
+    setSelectedSegmentId(segment.id);
+    setMessage(`Selected segment ${index + 1} at ${formatMs(currentTimeMs)}.`);
+    setError(null);
+  }, [currentTimeMs, sortedSegments]);
+
+  const seekToSelectedSegmentStart = useCallback(() => {
+    if (!selectedSegment) {
+      setError("Select a segment first.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    seekToMs(selectedSegment.startTimeMs);
+    setMessage(`Jumped to selected segment start (${formatMs(selectedSegment.startTimeMs)}).`);
+    setError(null);
+  }, [seekToMs, selectedSegment]);
+
+  const seekToSelectedSegmentEnd = useCallback(() => {
+    if (!selectedSegment) {
+      setError("Select a segment first.");
+      playConverterValidationErrorSound();
+      return;
+    }
+
+    seekToMs(selectedSegment.endTimeMs);
+    setMessage(`Jumped to selected segment end (${formatMs(selectedSegment.endTimeMs)}).`);
+    setError(null);
+  }, [seekToMs, selectedSegment]);
 
   /* ─── Auto-detection ───────────────────────────────────────────── */
 
@@ -1190,8 +1472,8 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     [currentTimeMs, setZoomWithSfx, zoomPxPerSec]
   );
 
-  const onTimelineClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+  const onTimelinePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("button")) return;
       if (durationMs <= 0) return;
@@ -1289,13 +1571,13 @@ export function useConverterState(searchParams: ConverterSearchParams) {
 
   useEffect(() => {
     if (!preselectedSourceRoundId) return;
+    if (hasAppliedPreselectedSourceRef.current) return;
     if (installedSourceOptions.length === 0) return;
     if (!installedSourceOptions.some((option) => option.id === preselectedSourceRoundId)) return;
 
-    setSourceMode("installed");
-    setDeleteSourceRound(true);
-    setSelectedInstalledId(preselectedSourceRoundId);
-  }, [installedSourceOptions, preselectedSourceRoundId]);
+    hasAppliedPreselectedSourceRef.current = true;
+    void selectRoundAndEdit(preselectedSourceRoundId, { silent: true });
+  }, [installedSourceOptions, preselectedSourceRoundId, selectRoundAndEdit]);
 
   /* ─── Timeline auto-scroll ─────────────────────────────────────── */
 
@@ -1317,115 +1599,97 @@ export function useConverterState(searchParams: ConverterSearchParams) {
 
   /* ─── Keyboard shortcuts ───────────────────────────────────────── */
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      ) {
-        return;
-      }
-      if (event.repeat) return;
-
-      const key = event.key;
-
-      if (key === "?") {
-        event.preventDefault();
-        setShowHotkeys((prev) => !prev);
-        return;
-      }
-
-      if (key === " ") {
-        event.preventDefault();
-        void togglePlayback();
-        return;
-      }
-
-      if (key.toLowerCase() === "i") {
-        event.preventDefault();
+  const shortcutContext = useMemo<ConverterShortcutContext>(
+    () => ({
+      showHotkeys,
+      toggleHotkeys,
+      clearTransientEditorState,
+      togglePlayback,
+      setMarkInAtPlayhead: () => {
         setMarkInMs(currentTimeMs);
         playConverterMarkInSound();
-        return;
-      }
-
-      if (key.toLowerCase() === "o") {
-        event.preventDefault();
+      },
+      setMarkOutAtPlayhead: () => {
         setMarkOutMs(currentTimeMs);
         playConverterMarkOutSound();
-        return;
-      }
-
-      if (key === "Enter") {
-        event.preventDefault();
-        addSegmentFromMarks();
-        return;
-      }
-
-      if (key === "Delete" || key === "Backspace") {
+      },
+      addSegmentFromMarks,
+      deleteSelectedSegment: () => {
         if (!selectedSegmentId) return;
-        event.preventDefault();
         removeSegment(selectedSegmentId);
-        return;
-      }
-
-      if (key === "1" || key === "2" || key === "3") {
+      },
+      setSelectedSegmentType: (type) => {
         if (!selectedSegmentId) return;
-        event.preventDefault();
-        const type: SegmentType = key === "1" ? "Normal" : key === "2" ? "Interjection" : "Cum";
         setSegmentType(selectedSegmentId, type);
-        return;
-      }
+      },
+      seekByMs: (amountMs) => seekToMs(currentTimeMs + amountMs),
+      nudgeSelectedSegment,
+      moveSelectedSegmentStartToPlayhead,
+      moveSelectedSegmentEndToPlayhead,
+      zoomByFactor,
+      resetZoom: () => setZoomWithSfx(DEFAULT_ZOOM_PX_PER_SEC),
+      jumpToRandomPoint,
+      splitSegmentAtPlayhead,
+      selectNextSegment,
+      selectPreviousSegment,
+      selectSegmentAtPlayhead,
+      seekToSelectedSegmentStart,
+      seekToSelectedSegmentEnd,
+      mergeSelectedSegmentWithNext: () => {
+        if (!selectedSegmentId) return;
+        mergeSegmentWithNext(selectedSegmentId);
+      },
+      runAutoDetect,
+      applyDetectedSuggestions,
+      saveConvertedRounds,
+    }),
+    [
+      addSegmentFromMarks,
+      applyDetectedSuggestions,
+      clearTransientEditorState,
+      currentTimeMs,
+      jumpToRandomPoint,
+      mergeSegmentWithNext,
+      moveSelectedSegmentEndToPlayhead,
+      moveSelectedSegmentStartToPlayhead,
+      nudgeSelectedSegment,
+      removeSegment,
+      runAutoDetect,
+      saveConvertedRounds,
+      seekToMs,
+      seekToSelectedSegmentEnd,
+      seekToSelectedSegmentStart,
+      selectNextSegment,
+      selectPreviousSegment,
+      selectSegmentAtPlayhead,
+      selectedSegmentId,
+      setSegmentType,
+      setZoomWithSfx,
+      showHotkeys,
+      splitSegmentAtPlayhead,
+      toggleHotkeys,
+      togglePlayback,
+      zoomByFactor,
+    ]
+  );
 
-      if (key === "ArrowLeft" || key === "ArrowRight") {
-        event.preventDefault();
-        const amount = event.shiftKey ? 5000 : 1000;
-        const next = key === "ArrowLeft" ? currentTimeMs - amount : currentTimeMs + amount;
-        seekToMs(next);
-        return;
-      }
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      if (event.repeat) return;
 
-      if (key === ",") {
-        event.preventDefault();
-        nudgeSelectedSegment(-100);
-        return;
-      }
+      const shortcut = CONVERTER_SHORTCUTS.find((candidate) => candidate.matches(event));
+      if (!shortcut) return;
 
-      if (key === ".") {
-        event.preventDefault();
-        nudgeSelectedSegment(100);
-        return;
-      }
-
-      if (key === "=" || key === "+") {
-        event.preventDefault();
-        zoomByFactor(1.1);
-        return;
-      }
-
-      if (key === "-") {
-        event.preventDefault();
-        zoomByFactor(0.9);
-        return;
-      }
-
-      if (key === "0") {
-        event.preventDefault();
-        setZoomWithSfx(DEFAULT_ZOOM_PX_PER_SEC);
-        return;
-      }
-
-      if (key.toLowerCase() === "r") {
-        event.preventDefault();
-        jumpToRandomPoint();
-      }
+      event.preventDefault();
+      shortcut.trigger(shortcutContext);
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  });
+  }, [shortcutContext]);
 
   return {
     // Refs
@@ -1455,6 +1719,8 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setSourceMode,
     videoUri,
     funscriptUri,
+    setVideoUri,
+    setFunscriptUri,
     installedSourceOptions,
     selectedInstalledId,
     setSelectedInstalledId,
@@ -1497,7 +1763,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     jumpToRandomPoint,
     setZoomWithSfx,
     onTimelineWheel,
-    onTimelineClick,
+    onTimelinePointerDown,
 
     // Segments
     sortedSegments,
@@ -1513,7 +1779,19 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setSegmentDifficulty,
     resetSegmentDifficulty,
     updateSegmentTiming,
+    nudgeSelectedSegment,
+    moveSelectedSegmentStartToPlayhead,
+    moveSelectedSegmentEndToPlayhead,
+    selectNextSegment,
+    selectPreviousSegment,
+    selectSegmentAtPlayhead,
+    seekToSelectedSegmentStart,
+    seekToSelectedSegmentEnd,
+    clearMarks,
+    clearSelection,
+    clearTransientEditorState,
     mergeSegmentWithNext,
+    splitSegmentAtPlayhead,
 
     // Detection
     detectedSegments,
@@ -1537,5 +1815,8 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     message,
     error,
     showHotkeys,
+    toggleHotkeys,
+    showHotkeysOverlay,
+    hideHotkeysOverlay,
   };
 }

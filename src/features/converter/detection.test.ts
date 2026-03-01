@@ -62,4 +62,35 @@ describe("buildDetectedSegments", () => {
 
     expect(segments).toEqual([{ startTimeMs: 0, endTimeMs: 2000, type: "Interjection" }]);
   });
+
+  it("ignores an idle gap at the absolute start", () => {
+    const segments = buildDetectedSegments({
+      actions: [
+        { at: 0, pos: 50 },
+        { at: 5000, pos: 50 },
+        { at: 6200, pos: 80 },
+        { at: 7600, pos: 30 },
+      ],
+      durationMs: 12000,
+      pauseGapMs: 3000,
+      minRoundMs: 1000,
+    });
+
+    expect(segments).toEqual([{ startTimeMs: 0, endTimeMs: 12000, type: "Normal" }]);
+  });
+
+  it("ignores an idle gap at the absolute end", () => {
+    const segments = buildDetectedSegments({
+      actions: [
+        { at: 1000, pos: 20 },
+        { at: 2600, pos: 80 },
+        { at: 11000, pos: 80 },
+      ],
+      durationMs: 15000,
+      pauseGapMs: 3000,
+      minRoundMs: 1000,
+    });
+
+    expect(segments).toEqual([{ startTimeMs: 0, endTimeMs: 15000, type: "Normal" }]);
+  });
 });

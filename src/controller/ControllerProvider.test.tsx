@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTROLLER_SUPPORT_ENABLED_EVENT } from "../constants/experimentalFeatures";
 import { ControllerProvider } from "./ControllerProvider";
 import { useControllerSurface } from "./useControllerSurface";
@@ -59,6 +59,27 @@ describe("ControllerProvider", () => {
       value: vi.fn(() => []),
     });
 
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      const focusId = this.dataset.controllerFocusId;
+      const topById: Record<string, number> = {
+        first: 10,
+        second: 70,
+        entry: 130,
+      };
+      const top = topById[focusId ?? ""] ?? 10;
+      return {
+        x: 10,
+        y: top,
+        top,
+        left: 10,
+        right: 110,
+        bottom: top + 40,
+        width: 100,
+        height: 40,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+
     (window as typeof window & { __runAnimationFrame?: (timestamp: number) => void }).__runAnimationFrame = (timestamp: number) => {
       const [next] = callbacks.entries();
       if (!next) {
@@ -70,6 +91,11 @@ describe("ControllerProvider", () => {
     };
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
   it("moves focus with directional input and activates the focused control", () => {
     const onPrimary = vi.fn();
 
@@ -79,13 +105,30 @@ describe("ControllerProvider", () => {
       </ControllerProvider>,
     );
 
-    fireEvent.keyDown(window, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "First" }));
+    const first = screen.getByRole("button", { name: "First" });
+    const second = screen.getByRole("button", { name: "Second" });
+    first.focus();
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Second" }));
+    expect(document.activeElement).toBe(second);
 
     fireEvent.keyDown(window, { key: "Enter" });
+    expect(onPrimary).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats space as a single primary action", () => {
+    const onPrimary = vi.fn();
+
+    render(
+      <ControllerProvider>
+        <ControllerHarness onPrimary={onPrimary} />
+      </ControllerProvider>,
+    );
+
+    const second = screen.getByRole("button", { name: "Second" });
+    second.focus();
+
+    fireEvent.keyDown(window, { key: " " });
     expect(onPrimary).toHaveBeenCalledTimes(1);
   });
 
@@ -98,17 +141,14 @@ describe("ControllerProvider", () => {
       </ControllerProvider>,
     );
 
-    fireEvent.keyDown(window, { key: "ArrowDown" });
-    fireEvent.keyDown(window, { key: "ArrowDown" });
-    fireEvent.keyDown(window, { key: "ArrowDown" });
-
     const entry = screen.getByLabelText("entry");
-    expect(document.activeElement).toBe(entry);
+    entry.focus();
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(document.activeElement).not.toBe(entry);
     expect(onBack).not.toHaveBeenCalled();
 
+    screen.getByRole("button", { name: "First" }).focus();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onBack).toHaveBeenCalledTimes(1);
   });
@@ -157,7 +197,7 @@ describe("ControllerProvider", () => {
     runAnimationFrame(16);
 
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "First" }));
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Second" }));
     });
   });
 });

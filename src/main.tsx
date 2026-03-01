@@ -10,7 +10,7 @@ import { InstallConfirmationModalHost } from "./components/InstallConfirmationMo
 import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
 import { handleMultiplayerAuthCallback } from "./services/multiplayer";
-import { importOpenedFile } from "./services/openedFiles";
+import { getOpenedFileKind, importOpenedFile } from "./services/openedFiles";
 import { initializeSfxVolume } from "./utils/audio";
 import {
     DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED,
@@ -36,16 +36,27 @@ function registerOpenedFileHandler() {
         return;
     }
 
+    const navigateForOpenedFile = async (filePath: string) => {
+        const kind = getOpenedFileKind(filePath);
+        if (kind === "sidecar") {
+            await router.navigate({ to: "/rounds" });
+        } else if (kind === "playlist") {
+            await router.navigate({ to: "/playlist-workshop" });
+        }
+        return kind;
+    };
+
     let queue = Promise.resolve();
     const enqueue = (filePaths: string[]) => {
         queue = queue.then(async () => {
             for (const filePath of filePaths) {
                 try {
+                    await navigateForOpenedFile(filePath);
                     const result = await importOpenedFile(filePath);
                     if (result.kind === "sidecar") {
-                        await router.navigate({ to: "/rounds" });
+                        await router.invalidate();
                     } else if (result.kind === "playlist") {
-                        await router.navigate({ to: "/playlist-workshop" });
+                        await router.invalidate();
                     }
                 } catch (error) {
                     console.error(`Failed to handle opened file: ${filePath}`, error);

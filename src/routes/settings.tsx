@@ -90,6 +90,7 @@ import {
 } from "../constants/phashSettings";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
 import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
+import { CONVERTER_SHORTCUTS } from "../features/converter/shortcuts";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
@@ -124,6 +125,16 @@ type ShortcutGroup = {
   title: string;
   description: string;
   shortcuts: ShortcutDefinition[];
+};
+
+const CONVERTER_SHORTCUT_GROUP: ShortcutGroup = {
+  id: "converter",
+  title: "Converter",
+  description: "Used while trimming and classifying segments in the converter.",
+  shortcuts: CONVERTER_SHORTCUTS.map((shortcut) => ({
+    keys: shortcut.keysLabel,
+    description: shortcut.description,
+  })),
 };
 
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
@@ -180,30 +191,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: "K", description: "Finish the round and jump to the summary screen." },
     ],
   },
-  {
-    id: "converter",
-    title: "Converter",
-    description: "Used while trimming and classifying segments in the converter.",
-    shortcuts: [
-      { keys: "?", description: "Show or hide the converter shortcut overlay." },
-      { keys: "Space", description: "Play or pause the source video." },
-      { keys: "I", description: "Set the IN marker at the current time." },
-      { keys: "O", description: "Set the OUT marker at the current time." },
-      { keys: "Enter", description: "Create a segment from the current IN and OUT markers." },
-      { keys: "Delete or Backspace", description: "Remove the currently selected segment." },
-      {
-        keys: "1 / 2 / 3",
-        description: "Set the selected segment type to Normal, Interjection, or Cum.",
-      },
-      { keys: "Left / Right", description: "Seek backward or forward by 1 second." },
-      { keys: "Shift+Left / Shift+Right", description: "Seek backward or forward by 5 seconds." },
-      { keys: ", / .", description: "Nudge the selected segment earlier or later by 100 ms." },
-      { keys: "= / +", description: "Zoom the converter timeline in." },
-      { keys: "-", description: "Zoom the converter timeline out." },
-      { keys: "0", description: "Reset the converter timeline zoom." },
-      { keys: "R", description: "Jump to a random point in the source video." },
-    ],
-  },
+  CONVERTER_SHORTCUT_GROUP,
   {
     id: "map-editor",
     title: "Map Editor",

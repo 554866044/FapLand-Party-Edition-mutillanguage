@@ -41,6 +41,7 @@ import { importOpenedFile } from "../services/openedFiles";
 import { buildRoundRenderRowsWithOptions, type RoundRenderRow } from "./roundRows";
 import { usePlayableVideoFallback } from "../hooks/usePlayableVideoFallback";
 import { playHoverSound, playSelectSound } from "../utils/audio";
+import { formatDurationLabel, getRoundDurationSec } from "../utils/duration";
 import { VirtualizedRoundLibraryGrid } from "../features/library/components/VirtualizedRoundLibraryGrid";
 import {
   buildPlaylistWebsiteCacheSummary,
@@ -62,7 +63,7 @@ import {
 
 type TypeFilter = "all" | NonNullable<InstalledRound["type"]>;
 type ScriptFilter = "all" | "installed" | "missing";
-type SortMode = "newest" | "oldest" | "difficulty" | "bpm" | "name";
+type SortMode = "newest" | "oldest" | "difficulty" | "bpm" | "length" | "name";
 type GroupMode = "hero" | "playlist";
 type EditableRoundType = "Normal" | "Interjection" | "Cum";
 type RoundEditDraft = {
@@ -83,6 +84,17 @@ type HeroEditDraft = {
   name: string;
   author: string;
   description: string;
+};
+type HeroGroupRoundConversionState = {
+  groupKey: string;
+  heroId: string | null;
+  heroName: string;
+  roundIds: string[];
+  keepRoundId: string;
+  keepRoundName: string;
+  roundsToDeleteCount: number;
+  confirmationText: string;
+  error: string | null;
 };
 type WebsiteRoundVideoValidationState =
   | { state: "idle"; message: null }
@@ -351,6 +363,7 @@ type IndexedRound = {
   createdAtMs: number;
   difficultyValue: number;
   bpmValue: number;
+  lengthSec: number;
 };
 
 type PlaylistMembership = {
@@ -431,6 +444,18 @@ function pickHeroGroupRoundToKeep(rounds: InstalledRound[]): InstalledRound | nu
   }, first);
 }
 
+function reloadUiAfterHeroGroupConversion() {
+  if (typeof window === "undefined") return;
+  if (/jsdom/i.test(window.navigator.userAgent)) return;
+  window.location.reload();
+}
+
+async function refreshUiAfterHeroGroupConversion(refreshInstalledRounds: () => Promise<void>) {
+  // First reconcile route-local state, then force a full refresh so derived UI catches up.
+  await refreshInstalledRounds();
+  reloadUiAfterHeroGroupConversion();
+}
+
 function toRoundEditDraft(round: InstalledRound): RoundEditDraft {
   const primaryResource = round.resources[0] ?? null;
   return {
@@ -485,6 +510,7 @@ function toIndexedRound(round: InstalledRound): IndexedRound {
     createdAtMs: Date.parse(String(round.createdAt)) || 0,
     difficultyValue: round.difficulty ?? 0,
     bpmValue: round.bpm ?? 0,
+    lengthSec: getRoundDurationSec(round),
   };
 }
 
@@ -667,6 +693,8 @@ export function InstalledRoundsPage() {
   const [expandedHeroGroups, setExpandedHeroGroups] = useState<Record<string, boolean>>({});
   const [activePreviewRound, setActivePreviewRound] = useState<InstalledRound | null>(null);
   const [convertingHeroGroupKey, setConvertingHeroGroupKey] = useState<string | null>(null);
+  const [heroGroupRoundConversion, setHeroGroupRoundConversion] =
+    useState<HeroGroupRoundConversionState | null>(null);
   const [editingRound, setEditingRound] = useState<RoundEditDraft | null>(null);
   const [editingHero, setEditingHero] = useState<HeroEditDraft | null>(null);
   const [repairingTemplateRound, setRepairingTemplateRound] =
@@ -698,6 +726,14 @@ export function InstalledRoundsPage() {
   const [websiteRoundVideoValidation, setWebsiteRoundVideoValidation] =
     useState<WebsiteRoundVideoValidationState>({ state: "idle", message: null });
   const [websiteRoundDialogOpen, setWebsiteRoundDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setRounds(initialRounds);
+  }, [initialRounds]);
+
+  useEffect(() => {
+    setAvailablePlaylists(initialPlaylists);
+  }, [initialPlaylists]);
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const deferredQuery = useDeferredValue(query);
@@ -923,11 +959,12 @@ export function InstalledRoundsPage() {
     const oldest = [...indexedRounds].sort((a, b) => a.createdAtMs - b.createdAtMs);
     const difficulty = [...indexedRounds].sort((a, b) => b.difficultyValue - a.difficultyValue);
     const bpm = [...indexedRounds].sort((a, b) => b.bpmValue - a.bpmValue);
+    const length = [...indexedRounds].sort((a, b) => b.lengthSec - a.lengthSec);
     const name = [...indexedRounds].sort((a, b) =>
       roundNameCollator.compare(a.round.name, b.round.name)
     );
 
-    return { newest, oldest, difficulty, bpm, name };
+    return { newest, oldest, difficulty, bpm, length, name };
   }, [indexedRounds]);
   const filteredRounds = useMemo(() => {
     const normalized = deferredQuery.trim().toLowerCase();
@@ -1034,9 +1071,11 @@ export function InstalledRoundsPage() {
         ? "Difficulty"
         : sortMode === "bpm"
           ? "BPM"
-          : sortMode === "name"
-            ? "Name"
-            : "Newest";
+          : sortMode === "length"
+            ? "Length"
+            : sortMode === "name"
+              ? "Name"
+              : "Newest";
   const groupModeLabel = groupMode === "playlist" ? "Playlist" : "Hero";
   const highestFilteredDifficulty = useMemo(
     () => filteredRounds.reduce((max, round) => Math.max(max, round.difficulty ?? 0), 0),
@@ -1506,43 +1545,49 @@ export function InstalledRoundsPage() {
     [selectedRoundIds, selectedHeroIds]
   );
 
-  const convertHeroGroupToRound = async (
+  const openHeroGroupRoundConversion = (
     group: Extract<RoundRenderRow, { kind: "hero-group" }>
   ) => {
     const roundToKeep = pickHeroGroupRoundToKeep(group.rounds);
     if (!roundToKeep) return;
 
-    const roundsToDeleteCount = Math.max(0, group.rounds.length - 1);
-    const firstWarning = window.confirm(
-      `Convert "${group.heroName}" back to a standalone round?\n\n` +
-      `This will keep "${roundToKeep.name}" and permanently delete ${roundsToDeleteCount} attached round(s).`
-    );
-    if (!firstWarning) return;
+    setHeroGroupRoundConversion({
+      groupKey: group.groupKey,
+      heroId: group.rounds[0]?.heroId ?? null,
+      heroName: group.heroName,
+      roundIds: group.rounds.map((round) => round.id),
+      keepRoundId: roundToKeep.id,
+      keepRoundName: roundToKeep.name,
+      roundsToDeleteCount: Math.max(0, group.rounds.length - 1),
+      confirmationText: "",
+      error: null,
+    });
+  };
 
-    const typedConfirmation = window.prompt(
-      `Type "${group.heroName}" to confirm this destructive action.`,
-      ""
-    );
-    if (typedConfirmation === null) return;
-    if (typedConfirmation.trim() !== group.heroName) {
-      window.alert("Confirmation text did not match. No changes were made.");
+  const confirmHeroGroupRoundConversion = async () => {
+    if (!heroGroupRoundConversion) return;
+    if (
+      heroGroupRoundConversion.confirmationText.trim().toLocaleLowerCase() !==
+      heroGroupRoundConversion.heroName.trim().toLocaleLowerCase()
+    ) {
+      setHeroGroupRoundConversion((current) =>
+        current
+          ? { ...current, error: "Confirmation text did not match. No changes were made." }
+          : current
+      );
       return;
     }
 
-    const finalWarning = window.confirm(
-      "Final confirmation: this cannot be undone in-app. Continue?"
-    );
-    if (!finalWarning) return;
-
-    setConvertingHeroGroupKey(group.groupKey);
+    setConvertingHeroGroupKey(heroGroupRoundConversion.groupKey);
     try {
       await db.round.convertHeroGroupToRound({
-        keepRoundId: roundToKeep.id,
-        roundIds: group.rounds.map((round) => round.id),
-        heroId: group.rounds[0]?.heroId ?? null,
-        roundName: group.heroName,
+        keepRoundId: heroGroupRoundConversion.keepRoundId,
+        roundIds: heroGroupRoundConversion.roundIds,
+        heroId: heroGroupRoundConversion.heroId,
+        roundName: heroGroupRoundConversion.heroName,
       });
-      await refreshInstalledRounds();
+      setHeroGroupRoundConversion(null);
+      await refreshUiAfterHeroGroupConversion(refreshInstalledRounds);
     } catch (error) {
       console.error("Failed to convert hero group back to a round", error);
       window.alert(
@@ -1632,19 +1677,19 @@ export function InstalledRoundsPage() {
     }
   };
 
-  const deleteHeroEntry = async () => {
-    if (!editingHero || isSavingEdit) return;
+  const deleteHeroEntry = async (heroDraft: HeroEditDraft | null = editingHero) => {
+    if (!heroDraft || isSavingEdit) return;
 
     const confirmed = window.confirm(
-      `Delete hero entry "${editingHero.name}" from the database?\n\n` +
-      "This removes only the hero database entry. Files on disk will be left untouched, and attached rounds will remain installed."
+      `Delete hero entry "${heroDraft.name}" from the database?\n\n` +
+      "This also permanently deletes all attached rounds from the database. Files on disk will be left untouched."
     );
     if (!confirmed) return;
 
     setIsSavingEdit(true);
     try {
-      await db.hero.delete(editingHero.id);
-      setEditingHero(null);
+      await db.hero.delete(heroDraft.id);
+      setEditingHero((current) => (current?.id === heroDraft.id ? null : current));
       await refreshInstalledRounds();
     } catch (error) {
       console.error("Failed to delete hero", error);
@@ -2144,6 +2189,7 @@ export function InstalledRoundsPage() {
                           { value: "oldest", label: "Oldest" },
                           { value: "difficulty", label: "Difficulty" },
                           { value: "bpm", label: "BPM" },
+                          { value: "length", label: "Length" },
                           { value: "name", label: "Name" },
                         ]}
                         onChange={(value) => {
@@ -2344,10 +2390,17 @@ export function InstalledRoundsPage() {
                                 const heroSelected = heroId ? selectedHeroIds.has(heroId) : false;
                                 const isGroupSelected =
                                   groupRoundIds.length > 0 && allRoundsSelected && heroSelected;
+                                const { pendingCacheCount, pendingPreviewCount } =
+                                  summarizeHeroGroupPreviewState(
+                                    row.rounds,
+                                    websiteVideoScanStatus?.state === "running"
+                                  );
                                 return (
                                   <HeroGroupHeader
                                     heroName={row.heroName}
                                     roundCount={row.rounds.length}
+                                    pendingCacheCount={pendingCacheCount}
+                                    pendingPreviewCount={pendingPreviewCount}
                                     expanded={isExpanded}
                                     onHoverSfx={handleHoverSfx}
                                     converting={convertingHeroGroupKey === row.groupKey}
@@ -2369,13 +2422,19 @@ export function InstalledRoundsPage() {
                                     }}
                                     onConvertToRound={() => {
                                       handleSelectSfx();
-                                      void convertHeroGroupToRound(row);
+                                      openHeroGroupRoundConversion(row);
                                     }}
                                     onEditHero={() => {
                                       const draft = toHeroEditDraft(row.rounds[0]);
                                       if (!draft) return;
                                       handleSelectSfx();
                                       setEditingHero(draft);
+                                    }}
+                                    onDeleteHero={() => {
+                                      const draft = toHeroEditDraft(row.rounds[0]);
+                                      if (!draft) return;
+                                      handleSelectSfx();
+                                      void deleteHeroEntry(draft);
                                     }}
                                     onRetryTemplateLinking={() => {
                                       const heroId = row.rounds[0]?.heroId;
@@ -2822,6 +2881,59 @@ export function InstalledRoundsPage() {
           </div>
         </EditDialog>
       )}
+      {heroGroupRoundConversion && (
+        <EditDialog
+          title="Convert Hero to Round"
+          onClose={() => {
+            if (convertingHeroGroupKey === heroGroupRoundConversion.groupKey) return;
+            setHeroGroupRoundConversion(null);
+          }}
+          onSubmit={() => {
+            void confirmHeroGroupRoundConversion();
+          }}
+          submitLabel={
+            convertingHeroGroupKey === heroGroupRoundConversion.groupKey
+              ? "Converting..."
+              : "Confirm Conversion"
+          }
+          disabled={convertingHeroGroupKey === heroGroupRoundConversion.groupKey}
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-rose-300/25 bg-rose-500/10 p-4 text-sm text-zinc-200">
+              <p className="font-semibold text-rose-100">
+                This keeps "{heroGroupRoundConversion.keepRoundName}" and permanently deletes{" "}
+                {heroGroupRoundConversion.roundsToDeleteCount} attached round(s).
+              </p>
+              <p className="mt-2 text-zinc-300">
+                The hero will be removed and the kept round will become a standalone entry. This
+                cannot be undone in-app.
+              </p>
+            </div>
+            <ModalField label={`Type "${heroGroupRoundConversion.heroName}" to confirm`}>
+              <input
+                value={heroGroupRoundConversion.confirmationText}
+                onChange={(event) =>
+                  setHeroGroupRoundConversion((current) =>
+                    current
+                      ? {
+                          ...current,
+                          confirmationText: event.target.value,
+                          error: null,
+                        }
+                      : current
+                  )
+                }
+                className="w-full rounded-xl border border-rose-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-rose-200/70"
+              />
+            </ModalField>
+            {heroGroupRoundConversion.error ? (
+              <p className="rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                {heroGroupRoundConversion.error}
+              </p>
+            ) : null}
+          </div>
+        </EditDialog>
+      )}
       {editingHero && (
         <EditDialog
           title="Edit Hero"
@@ -3192,11 +3304,12 @@ const RoundCard = memo(function RoundCard({
   const canPreview = Boolean(previewUri) && !showWebsiteCachingState;
   const difficulty = round.difficulty ?? 1;
   const sourceLabel = getRoundInstallSourceLabel(round.installSourceKey);
+  const durationLabel = formatDurationLabel(getRoundDurationSec(round));
   const animationDelay = index < 12 ? `${0.14 + index * 0.04}s` : undefined;
 
   return (
     <article
-      className={`group relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(14,10,25,0.94),rgba(5,7,14,0.98))] shadow-[0_22px_60px_rgba(2,6,23,0.44)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-violet-300/55 hover:shadow-[0_28px_72px_rgba(76,29,149,0.34)] ${index < 12 ? "animate-entrance" : ""}`}
+      className={`group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(14,10,25,0.94),rgba(5,7,14,0.98))] shadow-[0_22px_60px_rgba(2,6,23,0.44)] backdrop-blur-xl transition-all duration-300 hover:border-violet-300/55 hover:shadow-[0_28px_72px_rgba(76,29,149,0.34)] ${index < 12 ? "animate-entrance" : ""}`}
       style={animationDelay ? { animationDelay } : undefined}
       onMouseEnter={() => {
         onHoverSfx();
@@ -3234,7 +3347,7 @@ const RoundCard = memo(function RoundCard({
         </button>
       )}
 
-      <div className="group/video relative aspect-video overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#1b1130] via-[#120a25] to-[#0d1a33]">
+      <div className="group/video relative aspect-video shrink-0 overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#1b1130] via-[#120a25] to-[#0d1a33]">
         {previewImage && (
           <SfwGuard>
             <img
@@ -3401,22 +3514,22 @@ const RoundCard = memo(function RoundCard({
         )}
       </div>
 
-      <div className="relative space-y-3 p-3.5">
+      <div className="relative grid flex-1 grid-rows-[auto_minmax(4.5rem,4.5rem)_auto] gap-3 p-3.5">
         <div className="space-y-1.5">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="min-w-0 flex-1 truncate text-[1.15rem] font-black tracking-tight text-zinc-100">
+            <h2 className="min-h-[2.4rem] min-w-0 flex-1 text-[1.15rem] font-black leading-tight tracking-tight text-zinc-100 line-clamp-2">
               {round.name}
             </h2>
-            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-zinc-200/80">
+            <span className="shrink-0 self-start rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.24em] text-zinc-200/80">
               {formatDate(round.createdAt)}
             </span>
           </div>
-          <p className="text-sm leading-5 text-zinc-300/85 line-clamp-2">
+          <p className="min-h-10 text-sm leading-5 text-zinc-300/85 line-clamp-2">
             {round.description ?? "No description"}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-zinc-400">
+        <div className="flex min-h-[4.5rem] flex-wrap content-start items-start gap-x-4 gap-y-1.5 overflow-hidden text-xs text-zinc-400">
           <span>
             <strong className="font-medium text-zinc-300">BPM:</strong>{" "}
             {round.bpm ? Math.round(round.bpm) : "N/A"}
@@ -3444,13 +3557,16 @@ const RoundCard = memo(function RoundCard({
             {formatWindow(round.startTime, round.endTime)}
           </span>
           <span>
+            <strong className="font-medium text-zinc-300">Length:</strong> {durationLabel}
+          </span>
+          <span>
             <strong className="font-medium text-zinc-300">Source:</strong> {sourceLabel}
           </span>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] auto-rows-auto content-start gap-1.5 self-end">
           <button
-            className="min-w-0 rounded-2xl border border-cyan-300/35 bg-cyan-500/14 px-4 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/75 hover:bg-cyan-500/28"
+            className="min-w-0 rounded-[1.6rem] border border-cyan-300/35 bg-cyan-500/14 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/75 hover:bg-cyan-500/28"
             onClick={() => onEdit(round)}
             onMouseEnter={onHoverSfx}
             type="button"
@@ -3458,7 +3574,7 @@ const RoundCard = memo(function RoundCard({
             Edit Round
           </button>
           <button
-            className="rounded-2xl border border-violet-300/35 bg-violet-500/12 px-3 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.2em] text-violet-100 transition-all duration-200 hover:border-violet-200/75 hover:bg-violet-500/24"
+            className="rounded-[1.6rem] border border-violet-300/35 bg-violet-500/12 px-2.5 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.16em] text-violet-100 transition-all duration-200 hover:border-violet-200/75 hover:bg-violet-500/24"
             onClick={() => setShowTechnicalDetails((prev) => !prev)}
             onMouseEnter={onHoverSfx}
             type="button"
@@ -3470,7 +3586,7 @@ const RoundCard = memo(function RoundCard({
           {isTemplate && (
             <>
               <button
-                className="col-span-2 rounded-2xl border border-amber-300/35 bg-amber-500/14 px-4 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-amber-100 transition-all duration-200 hover:border-amber-200/75 hover:bg-amber-500/28"
+                className="col-span-2 rounded-[1.6rem] border border-amber-300/35 bg-amber-500/14 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-amber-100 transition-all duration-200 hover:border-amber-200/75 hover:bg-amber-500/28"
                 onClick={() => onRepairTemplate(round)}
                 onMouseEnter={onHoverSfx}
                 type="button"
@@ -3478,7 +3594,7 @@ const RoundCard = memo(function RoundCard({
                 Repair Template
               </button>
               <button
-                className="col-span-2 rounded-2xl border border-fuchsia-300/35 bg-fuchsia-500/14 px-4 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-fuchsia-100 transition-all duration-200 hover:border-fuchsia-200/75 hover:bg-fuchsia-500/28"
+                className="col-span-2 rounded-[1.6rem] border border-fuchsia-300/35 bg-fuchsia-500/14 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-fuchsia-100 transition-all duration-200 hover:border-fuchsia-200/75 hover:bg-fuchsia-500/28"
                 onClick={() => onRetryTemplateLinking(round)}
                 onMouseEnter={onHoverSfx}
                 type="button"
@@ -3489,7 +3605,7 @@ const RoundCard = memo(function RoundCard({
           )}
           {!round.heroId && !round.hero && (
             <button
-              className="col-span-2 rounded-2xl border border-emerald-300/35 bg-emerald-500/14 px-4 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-emerald-100 transition-all duration-200 hover:border-emerald-200/75 hover:bg-emerald-500/28"
+              className="col-span-2 rounded-[1.6rem] border border-emerald-300/35 bg-emerald-500/14 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-emerald-100 transition-all duration-200 hover:border-emerald-200/75 hover:bg-emerald-500/28"
               onClick={() => onConvertToHero(round)}
               onMouseEnter={onHoverSfx}
               type="button"
@@ -3632,12 +3748,15 @@ const RoundCardPreviewVideo = memo(function RoundCardPreviewVideo({
 function HeroGroupHeader({
   heroName,
   roundCount,
+  pendingCacheCount,
+  pendingPreviewCount,
   expanded,
   converting,
   hasTemplateRounds,
   onToggle,
   onConvertToRound,
   onEditHero,
+  onDeleteHero,
   onRetryTemplateLinking,
   onRepairTemplate,
   onHoverSfx,
@@ -3647,12 +3766,15 @@ function HeroGroupHeader({
 }: {
   heroName: string;
   roundCount: number;
+  pendingCacheCount: number;
+  pendingPreviewCount: number;
   expanded: boolean;
   converting: boolean;
   hasTemplateRounds: boolean;
   onToggle: () => void;
   onConvertToRound: () => void;
   onEditHero: () => void;
+  onDeleteHero: () => void;
   onRetryTemplateLinking: () => void;
   onRepairTemplate: () => void;
   onHoverSfx: () => void;
@@ -3710,6 +3832,18 @@ function HeroGroupHeader({
           </h2>
         </div>
         <div className="flex items-center gap-3 pl-3">
+          {pendingCacheCount > 0 && (
+            <span className="rounded-md border border-amber-300/40 bg-amber-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-amber-100">
+              {pendingCacheCount > 1 ? `${pendingCacheCount} Caching` : "Caching Ongoing"}
+            </span>
+          )}
+          {pendingPreviewCount > 0 && (
+            <span className="rounded-md border border-cyan-300/40 bg-cyan-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-cyan-100">
+              {pendingPreviewCount > 1
+                ? `${pendingPreviewCount} Previews Generating`
+                : "Preview Is Being Generated"}
+            </span>
+          )}
           <span className="rounded-md border border-violet-300/40 bg-violet-500/15 px-2 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-violet-100">
             {roundCount} Rounds
           </span>
@@ -3741,6 +3875,17 @@ function HeroGroupHeader({
               className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-cyan-100 transition-colors hover:bg-cyan-500/15"
             >
               Edit Hero
+            </button>
+            <button
+              type="button"
+              onMouseEnter={onHoverSfx}
+              onClick={() => {
+                setShowActions(false);
+                onDeleteHero();
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-rose-100 transition-colors hover:bg-rose-500/15"
+            >
+              Delete Hero
             </button>
             {hasTemplateRounds && (
               <>
@@ -4783,6 +4928,32 @@ function getRoundInstallSourceLabel(
   }
 
   return "Local";
+}
+
+function summarizeHeroGroupPreviewState(
+  rounds: InstalledRound[],
+  isWebsiteVideoCaching: boolean,
+): {
+  pendingCacheCount: number;
+  pendingPreviewCount: number;
+} {
+  let pendingCacheCount = 0;
+  let pendingPreviewCount = 0;
+
+  for (const round of rounds) {
+    const cacheStatus = getInstalledRoundWebsiteVideoCacheStatus(round);
+    if (cacheStatus === "pending") {
+      pendingCacheCount += 1;
+      continue;
+    }
+
+    const isWebsiteRound = round.installSourceKey?.startsWith("website:") ?? false;
+    if (isWebsiteVideoCaching && isWebsiteRound && !round.previewImage) {
+      pendingPreviewCount += 1;
+    }
+  }
+
+  return { pendingCacheCount, pendingPreviewCount };
 }
 
 function formatDate(value: Date | string): string {

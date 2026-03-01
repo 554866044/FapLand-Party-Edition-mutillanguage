@@ -52,6 +52,10 @@ export function buildDetectedSegments(input: BuildDetectedSegmentsInput): Detect
     const gap = current.at - prev.at;
     if (gap < pauseGapMs) continue;
 
+    const isLeadingIdleGap = prev.at === 0 && prev.pos === current.pos;
+    const isTrailingIdleGap = index === actions.length - 1 && prev.pos === current.pos;
+    if (isLeadingIdleGap || isTrailingIdleGap) continue;
+
     const midpoint = prev.at + Math.floor(gap / 2);
     boundaries.add(clamp(midpoint, 0, durationMs));
   }
@@ -72,4 +76,3 @@ export function buildDetectedSegments(input: BuildDetectedSegmentsInput): Detect
 
   return segments;
 }
-

@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateRoundPreviewImageDataUri } from "./roundPreview";
 
-const { resolvePhashBinariesMock, runCommandMock } = vi.hoisted(() => ({
+const {
+  resolvePhashBinariesMock,
+  runCommandMock,
+  getCachedWebsiteVideoLocalPathMock,
+  getWebsiteVideoTargetUrlMock,
+} = vi.hoisted(() => ({
   resolvePhashBinariesMock: vi.fn(),
   runCommandMock: vi.fn(),
+  getCachedWebsiteVideoLocalPathMock: vi.fn(),
+  getWebsiteVideoTargetUrlMock: vi.fn(),
 }));
 
 vi.mock("./phash/binaries", () => ({
@@ -14,6 +21,11 @@ vi.mock("./phash/extract", () => ({
   runCommand: runCommandMock,
 }));
 
+vi.mock("./webVideo", () => ({
+  getCachedWebsiteVideoLocalPath: getCachedWebsiteVideoLocalPathMock,
+  getWebsiteVideoTargetUrl: getWebsiteVideoTargetUrlMock,
+}));
+
 describe("generateRoundPreviewImageDataUri", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -21,6 +33,8 @@ describe("generateRoundPreviewImageDataUri", () => {
       ffmpegPath: "/tmp/ffmpeg",
       ffprobePath: "/tmp/ffprobe",
     });
+    getCachedWebsiteVideoLocalPathMock.mockResolvedValue(null);
+    getWebsiteVideoTargetUrlMock.mockReturnValue(null);
   });
 
   it("extracts a compact jpeg preview sized for the UI", async () => {
@@ -66,5 +80,46 @@ describe("generateRoundPreviewImageDataUri", () => {
 
     expect(result).toBeNull();
     expect(runCommandMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a cached website video file for proxied website uris", async () => {
+    getCachedWebsiteVideoLocalPathMock.mockResolvedValue("/tmp/cached-video.mp4");
+    runCommandMock.mockResolvedValue({
+      stdout: Buffer.from("preview-bytes"),
+      stderr: Buffer.alloc(0),
+    });
+
+    const result = await generateRoundPreviewImageDataUri({
+      videoUri: "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1",
+      startTimeMs: 2_000,
+      endTimeMs: 6_000,
+    });
+
+    expect(result).toBe(`data:image/jpeg;base64,${Buffer.from("preview-bytes").toString("base64")}`);
+    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith(
+      "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1"
+    );
+    expect(runCommandMock).toHaveBeenCalledWith("/tmp/ffmpeg", expect.arrayContaining([
+      "-i",
+      "/tmp/cached-video.mp4",
+    ]));
+  });
+
+  it("falls back to the underlying website target url when no cached file exists", async () => {
+    getWebsiteVideoTargetUrlMock.mockReturnValue("https://example.com/watch?v=1");
+    runCommandMock.mockResolvedValue({
+      stdout: Buffer.from("preview-bytes"),
+      stderr: Buffer.alloc(0),
+    });
+
+    const result = await generateRoundPreviewImageDataUri({
+      videoUri: "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1",
+    });
+
+    expect(result).toBe(`data:image/jpeg;base64,${Buffer.from("preview-bytes").toString("base64")}`);
+    expect(runCommandMock).toHaveBeenCalledWith("/tmp/ffmpeg", expect.arrayContaining([
+      "-i",
+      "https://example.com/watch?v=1",
+    ]));
   });
 });

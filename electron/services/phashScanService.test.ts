@@ -104,6 +104,52 @@ describe("phashScanService", () => {
     expect(result.completedCount).toBe(1);
   });
 
+  it("falls back to another resource on the same round when the first website video is not cached", async () => {
+    const dbMock = buildDbMock([
+      {
+        roundId: "round-1",
+        roundName: "Round One",
+        resourceId: "res-1",
+        videoUri: "https://page.example/watch/uncached",
+        startTime: 1000,
+        endTime: 5000,
+      },
+      {
+        roundId: "round-1",
+        roundName: "Round One",
+        resourceId: "res-2",
+        videoUri: "https://page.example/watch/cached",
+        startTime: 1000,
+        endTime: 5000,
+      },
+    ]);
+    getDbMock.mockReturnValue(dbMock);
+    getCachedWebsiteVideoLocalPathMock.mockImplementation(async (videoUri: string) => {
+      if (videoUri.endsWith("/cached")) {
+        return "/tmp/cached-website.mp4";
+      }
+      return null;
+    });
+
+    const service = await import("./phashScanService");
+    const result = await service.startPhashScanManual();
+
+    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith(
+      "https://page.example/watch/uncached"
+    );
+    expect(getCachedWebsiteVideoLocalPathMock).toHaveBeenCalledWith(
+      "https://page.example/watch/cached"
+    );
+    expect(generateVideoPhashMock).toHaveBeenCalledWith("/tmp/cached-website.mp4", 1000, 5000, {
+      lowPriority: true,
+    });
+    expect(dbMock.roundUpdates).toHaveLength(1);
+    expect(dbMock.resourceUpdates).toEqual([{ phash: "phash-1" }]);
+    expect(result.state).toBe("done");
+    expect(result.completedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+  });
+
   it("queues a rerun when another phash scan is requested during an active scan", async () => {
     vi.useFakeTimers();
 

@@ -86,7 +86,8 @@ export const HeroPanel: React.FC<HeroPanelProps> = React.memo(
             : "border-emerald-300/60 bg-emerald-500/30 text-emerald-100 hover:bg-emerald-500/45"
         }`}
       >
-        {isSaving ? "Saving..." : "Save Rounds to Hero"}
+        {isSaving ? "Saving..." : "Save Rounds to Hero "}
+        {!isSaving && <kbd className="converter-kbd ml-1">Ctrl/Cmd+S</kbd>}
       </button>
     </div>
   )

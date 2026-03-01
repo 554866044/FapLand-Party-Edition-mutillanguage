@@ -89,7 +89,8 @@ export const AutoDetectionPanel: React.FC<AutoDetectionPanelProps> = React.memo(
                                 : "border-cyan-300/60 bg-cyan-500/25 text-cyan-100 hover:bg-cyan-500/40"
                             }`}
                     >
-                        {isDetecting ? "Detecting..." : "Detect Pauses"}
+                        {isDetecting ? "Detecting..." : "Detect Pauses "}
+                        {!isDetecting && <kbd className="converter-kbd ml-1">A</kbd>}
                     </button>
 
                     <button
@@ -102,7 +103,7 @@ export const AutoDetectionPanel: React.FC<AutoDetectionPanelProps> = React.memo(
                                 : "border-violet-300/60 bg-violet-500/25 text-violet-100 hover:bg-violet-500/40"
                             }`}
                     >
-                        Apply {detectedSegmentCount || 0}
+                        Apply {detectedSegmentCount || 0} <kbd className="converter-kbd ml-1">Shift+A</kbd>
                     </button>
                 </div>
             </div>

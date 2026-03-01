@@ -10,6 +10,7 @@ import { exportLibraryPackage } from "../../services/libraryExportPackage";
 import { getDisabledRoundIdSet, resolveResourceUris } from "../../services/integrations";
 import { getStore } from "../../services/store";
 import { resolveVideoDurationMsForUri } from "../../services/videoDuration";
+import { calculateFunscriptDifficultyFromUri } from "../../services/funscript";
 import {
   addAutoScanFolder,
   addAutoScanFolderAndScan,
@@ -39,6 +40,7 @@ import {
   startWebsiteVideoScan,
   startWebsiteVideoScanManual,
 } from "../../services/webVideoScanService";
+import { generateRoundPreviewImageDataUri } from "../../services/roundPreview";
 import { clearPlayableVideoCache } from "../../services/playableVideo";
 import {
   clearWebsiteVideoCache,
@@ -444,7 +446,16 @@ export const dbRouter = router({
         });
       }
 
-      await db.delete(hero).where(eq(hero.id, input.id));
+      await db.transaction(async (tx) => {
+        const attachedRounds = await tx.select({ id: round.id }).from(round).where(eq(round.heroId, input.id));
+        const attachedRoundIds = attachedRounds.map((entry) => entry.id);
+
+        if (attachedRoundIds.length > 0) {
+          await tx.delete(round).where(inArray(round.id, attachedRoundIds));
+        }
+
+        await tx.delete(hero).where(eq(hero.id, input.id));
+      });
       return { deleted: true };
     }),
 
@@ -474,7 +485,7 @@ export const dbRouter = router({
       const db = getDb();
       const existing = await db.query.round.findFirst({
         where: eq(round.id, input.id),
-        columns: { id: true },
+        columns: { id: true, startTime: true, endTime: true, previewImage: true },
         with: {
           resources: {
             orderBy: [asc(resource.createdAt), asc(resource.id)],
@@ -516,6 +527,24 @@ export const dbRouter = router({
           .where(eq(resource.id, primaryResource.id));
       }
 
+      const needsNewPreview =
+        startTime !== (existing?.startTime ?? null) ||
+        endTime !== (existing?.endTime ?? null);
+
+      let previewImage = existing?.previewImage ?? null;
+      if (needsNewPreview && existing.resources[0]) {
+        const r = await db.query.resource.findFirst({
+          where: (res, { eq }) => eq(res.roundId, input.id),
+        });
+        if (r) {
+          previewImage = await generateRoundPreviewImageDataUri({
+            videoUri: r.videoUri,
+            startTimeMs: startTime,
+            endTimeMs: endTime,
+          });
+        }
+      }
+
       const [updated] = await db
         .update(round)
         .set({
@@ -526,12 +555,59 @@ export const dbRouter = router({
           difficulty: input.difficulty ?? null,
           startTime,
           endTime,
+          previewImage,
           type: input.type,
           updatedAt: new Date(),
         })
         .where(eq(round.id, input.id))
         .returning();
       return updated;
+    }),
+
+  deleteRound: publicProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const existing = await db.query.round.findFirst({
+        where: eq(round.id, input.id),
+        columns: { id: true },
+        with: {
+          resources: {
+            columns: {
+              videoUri: true,
+            },
+          },
+        },
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Round not found.",
+        });
+      }
+
+      const deletedRoundWebsiteUrls = collectWebsiteVideoTargetUrls(
+        existing.resources.map((entry) => entry.videoUri)
+      );
+      await db.delete(round).where(eq(round.id, input.id));
+
+      if (deletedRoundWebsiteUrls.length > 0) {
+        const remainingResources = await db.query.resource.findMany({
+          columns: {
+            videoUri: true,
+          },
+        });
+        const remainingWebsiteUrls = new Set(
+          collectWebsiteVideoTargetUrls(remainingResources.map((entry) => entry.videoUri))
+        );
+        await Promise.all(
+          deletedRoundWebsiteUrls
+            .filter((targetUrl) => !remainingWebsiteUrls.has(targetUrl))
+            .map((targetUrl) => removeCachedWebsiteVideo(targetUrl))
+        );
+      }
+
+      return { deleted: true };
     }),
 
   createWebsiteRound: publicProcedure
@@ -565,6 +641,8 @@ export const dbRouter = router({
         }
       }
 
+      const calculatedDifficulty = await calculateFunscriptDifficultyFromUri(normalizedFunscriptUri);
+
       try {
         const created = await db.transaction(async (tx) => {
           const [createdRound] = await tx
@@ -574,7 +652,7 @@ export const dbRouter = router({
               author: null,
               description: null,
               bpm: null,
-              difficulty: null,
+              difficulty: calculatedDifficulty,
               phash: null,
               startTime: null,
               endTime: null,
@@ -664,90 +742,52 @@ export const dbRouter = router({
       }
     }),
 
-  deleteRound: publicProcedure
-    .input(z.object({ id: z.string().min(1) }))
-    .mutation(async ({ input }) => {
+  getResource: publicProcedure
+    .input(
+      z.object({
+        roundId: z.string().min(1),
+      })
+    )
+    .query(async ({ input }) => {
       const db = getDb();
-      const existing = await db.query.round.findFirst({
-        where: eq(round.id, input.id),
-        columns: { id: true },
-        with: {
-          resources: {
-            columns: {
-              videoUri: true,
-            },
-          },
-        },
+      const r = await db.query.resource.findFirst({
+        where: eq(resource.roundId, input.roundId),
       });
-      if (!existing) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Round not found.",
-        });
-      }
-
-      const deletedRoundWebsiteUrls = collectWebsiteVideoTargetUrls(
-        existing.resources.map((entry) => entry.videoUri)
-      );
-      await db.delete(round).where(eq(round.id, input.id));
-
-      if (deletedRoundWebsiteUrls.length > 0) {
-        const remainingResources = await db.query.resource.findMany({
-          columns: {
-            videoUri: true,
-          },
-        });
-        const remainingWebsiteUrls = new Set(
-          collectWebsiteVideoTargetUrls(remainingResources.map((entry) => entry.videoUri))
-        );
-        await Promise.all(
-          deletedRoundWebsiteUrls
-            .filter((targetUrl) => !remainingWebsiteUrls.has(targetUrl))
-            .map((targetUrl) => removeCachedWebsiteVideo(targetUrl))
-        );
-      }
-
-      return { deleted: true };
+      if (!r) return null;
+      await hydrateResourceDurationMs(db, [r]);
+      return {
+        ...r,
+        ...resolveResourceUris({
+          videoUri: r.videoUri,
+          funscriptUri: r.funscriptUri,
+        }),
+        websiteVideoCacheStatus: await getWebsiteVideoCacheState(r.videoUri),
+      };
     }),
-
-  getResource: publicProcedure.input(z.object({ roundId: z.string() })).query(async ({ input }) => {
-    const disabledRoundIds = getDisabledRoundIdSet();
-    if (disabledRoundIds.has(input.roundId)) {
-      return null;
-    }
-
-    const db = getDb();
-    const firstResource = await db.query.resource.findFirst({
-      where: (r, { and, eq }) => and(eq(r.roundId, input.roundId), eq(r.disabled, false)),
-    });
-
-    if (!firstResource) return null;
-    await hydrateResourceDurationMs(db, [firstResource]);
-    return {
-      ...firstResource,
-      ...resolveResourceUris({
-        videoUri: firstResource.videoUri,
-        funscriptUri: firstResource.funscriptUri,
-      }),
-    };
-  }),
 
   getResources: publicProcedure.query(async () => {
     const disabledRoundIds = [...getDisabledRoundIdSet()];
     const db = getDb();
 
     const resources = await db.query.resource.findMany({
-      where: (r, { and, eq, notInArray }) => {
-        if (disabledRoundIds.length > 0) {
-          return and(eq(r.disabled, false), notInArray(r.roundId, disabledRoundIds));
-        }
-        return eq(r.disabled, false);
-      },
-      limit: 5,
+      where: (res, { notInArray }) =>
+        disabledRoundIds.length > 0 ? notInArray(res.roundId, disabledRoundIds) : undefined,
     });
 
-    await hydrateResourceDurationMs(db, resources);
-    return resources.map((r) => ({
+    const withStatus = await Promise.all(
+      resources.map(async (r) => ({
+        resource: r,
+        status: await getWebsiteVideoCacheState(r.videoUri),
+      }))
+    );
+
+    // Only include resources that are fully cached or not applicable (local/stash)
+    const filtered = withStatus
+      .filter((entry) => entry.status !== "pending")
+      .map((entry) => entry.resource);
+
+    await hydrateResourceDurationMs(db, filtered);
+    return filtered.map((r) => ({
       ...r,
       ...resolveResourceUris({
         videoUri: r.videoUri,
@@ -781,8 +821,8 @@ export const dbRouter = router({
           resources: includeDisabled
             ? true
             : {
-                where: (r, { eq }) => eq(r.disabled, false),
-              },
+              where: (r, { eq }) => eq(r.disabled, false),
+            },
         },
         orderBy: [desc(round.createdAt)],
       });
@@ -1209,7 +1249,7 @@ export const dbRouter = router({
       return db.transaction(async (tx) => {
         const rounds = await tx.query.round.findMany({
           where: inArray(round.id, input.roundIds),
-          columns: { id: true, heroId: true },
+          columns: { id: true, heroId: true, previewImage: true },
         });
         if (rounds.length !== input.roundIds.length) {
           throw new TRPCError({
@@ -1242,6 +1282,19 @@ export const dbRouter = router({
           await tx.delete(round).where(inArray(round.id, deleteRoundIds));
         }
 
+        const primaryResource = await tx.query.resource.findFirst({
+          where: (res, { eq }) => eq(res.roundId, input.keepRoundId),
+        });
+
+        let previewImage = keepRound?.previewImage ?? null;
+        if (primaryResource) {
+          previewImage = await generateRoundPreviewImageDataUri({
+            videoUri: primaryResource.videoUri,
+            startTimeMs: null,
+            endTimeMs: null,
+          });
+        }
+
         await tx
           .update(round)
           .set({
@@ -1249,6 +1302,7 @@ export const dbRouter = router({
             name: input.roundName,
             startTime: null,
             endTime: null,
+            previewImage,
           })
           .where(eq(round.id, input.keepRoundId));
 

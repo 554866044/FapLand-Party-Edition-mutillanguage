@@ -43,6 +43,8 @@ export type DragState = {
     segmentId: string;
     edge: "start" | "end";
     pointerX: number;
+    currentPointerX: number;
+    initialScrollLeft: number;
     initialStartTimeMs: number;
     initialEndTimeMs: number;
 };
@@ -54,7 +56,7 @@ export const CONVERTER_PAUSE_GAP_KEY = "converter.autodetect.pauseGapMs";
 export const CONVERTER_MIN_ROUND_KEY = "converter.autodetect.minRoundMs";
 
 export const DEFAULT_ZOOM_PX_PER_SEC = 80;
-export const MIN_ZOOM_PX_PER_SEC = 20;
+export const MIN_ZOOM_PX_PER_SEC = 1;
 export const MAX_ZOOM_PX_PER_SEC = 480;
 export const DEFAULT_PAUSE_GAP_MS = 900;
 export const DEFAULT_MIN_ROUND_MS = 15_000;

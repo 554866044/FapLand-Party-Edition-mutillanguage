@@ -74,6 +74,7 @@ describe("buildRoundLibraryShelves", () => {
     expect(expandedShelves).toEqual([
       expect.objectContaining({ kind: "group-header", key: "hero:one:header" }),
       expect.objectContaining({
+        key: "hero:one:row:0",
         kind: "card-row",
         items: [
           expect.objectContaining({ key: "hero:one:r1", renderIndex: 0 }),
@@ -81,9 +82,32 @@ describe("buildRoundLibraryShelves", () => {
         ],
       }),
       expect.objectContaining({
+        key: "standalone:row:0",
         kind: "card-row",
         items: [expect.objectContaining({ key: "solo", renderIndex: 2 })],
       }),
+    ]);
+  });
+
+  it("keeps standalone shelf keys unique across multiple standalone batches", () => {
+    const rows: RoundRenderRow[] = [
+      { kind: "standalone", round: makeRound("solo-a") },
+      {
+        kind: "hero-group",
+        groupKey: "hero:one",
+        heroName: "Hero One",
+        rounds: [makeRound("r1")],
+      },
+      { kind: "standalone", round: makeRound("solo-b") },
+    ];
+
+    const shelves = buildRoundLibraryShelves(rows, 1, new Set(["hero:one"]));
+
+    expect(shelves.map((shelf) => shelf.key)).toEqual([
+      "standalone:row:0",
+      "hero:one:header",
+      "hero:one:row:0",
+      "standalone:row:1",
     ]);
   });
 

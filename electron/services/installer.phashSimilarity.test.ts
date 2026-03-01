@@ -11,6 +11,7 @@ type RoundRow = {
   id: string;
   installSourceKey: string | null;
   previewImage: string | null;
+  difficulty: number | null;
 };
 
 type HeroRow = {
@@ -44,6 +45,7 @@ const {
   getNormalizedVideoHashRangeMock,
   toVideoHashRangeCacheKeyMock,
   generateRoundPreviewImageDataUriMock,
+  calculateFunscriptDifficultyFromUriMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   syncExternalSourcesMock: vi.fn(async () => undefined),
@@ -52,6 +54,7 @@ const {
   getNormalizedVideoHashRangeMock: vi.fn(),
   toVideoHashRangeCacheKeyMock: vi.fn((input: string) => input),
   generateRoundPreviewImageDataUriMock: vi.fn(async () => null),
+  calculateFunscriptDifficultyFromUriMock: vi.fn(async () => null),
 }));
 
 vi.mock("./dialogPathApproval", () => ({
@@ -75,6 +78,10 @@ vi.mock("./phash", () => ({
   generateVideoPhashForNormalizedRange: generateVideoPhashForNormalizedRangeMock,
   getNormalizedVideoHashRange: getNormalizedVideoHashRangeMock,
   toVideoHashRangeCacheKey: toVideoHashRangeCacheKeyMock,
+}));
+
+vi.mock("./funscript", () => ({
+  calculateFunscriptDifficultyFromUri: calculateFunscriptDifficultyFromUriMock,
 }));
 
 function resetState(): void {
@@ -190,12 +197,14 @@ function buildDbMock() {
               const payload = input as {
                 installSourceKey: string | null;
                 previewImage: string | null;
+                difficulty: number | null;
               };
               const id = `round-${state.nextRoundId++}`;
               state.roundsById.set(id, {
                 id,
                 installSourceKey: payload.installSourceKey,
                 previewImage: payload.previewImage,
+                difficulty: payload.difficulty ?? null,
               });
               if (payload.installSourceKey) {
                 state.roundIdByInstallSourceKey.set(payload.installSourceKey, id);
@@ -268,6 +277,7 @@ function buildDbMock() {
               ...existing,
               installSourceKey: (input as { installSourceKey: string | null }).installSourceKey,
               previewImage: (input as { previewImage: string | null }).previewImage,
+              difficulty: (input as { difficulty?: number | null }).difficulty ?? existing.difficulty,
             });
             return [{ id }];
           }),
@@ -301,6 +311,7 @@ describe("installer phash similarity", () => {
       throw new Error("no normalized range");
     });
     toVideoHashRangeCacheKeyMock.mockImplementation((input: string) => input);
+    calculateFunscriptDifficultyFromUriMock.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -446,6 +457,58 @@ describe("installer phash similarity", () => {
     expect(result.status.stats.installed).toBe(1);
     expect(state.resourceRows[0]?.videoUri).toBe(toLocalMediaUri(videoPath));
     expect(state.resourceRows[0]?.funscriptUri).toBe(toLocalMediaUri(funscriptPath));
+  });
+
+  it("calculates missing difficulty from an attached funscript during import", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-installer-difficulty-"));
+    const mediaDir = path.join(root, "media");
+    await fs.mkdir(mediaDir, { recursive: true });
+    const videoPath = path.join(mediaDir, "portable.mp4");
+    const funscriptPath = path.join(mediaDir, "portable.funscript");
+    const roundPath = path.join(root, "portable.round");
+    await fs.writeFile(videoPath, "video");
+    await fs.writeFile(funscriptPath, '{"actions":[{"at":0,"pos":0},{"at":1000,"pos":100}]}');
+    await fs.writeFile(
+      roundPath,
+      JSON.stringify({
+        name: "Portable Round",
+        resources: [{ videoUri: "./media/portable.mp4", funscriptUri: "./media/portable.funscript" }],
+      })
+    );
+    calculateFunscriptDifficultyFromUriMock.mockResolvedValue(4);
+
+    const { importInstallSidecarFile } = await import("./installer");
+    const result = await importInstallSidecarFile(roundPath);
+
+    expect(result.status.stats.installed).toBe(1);
+    expect(calculateFunscriptDifficultyFromUriMock).toHaveBeenCalledWith(toLocalMediaUri(funscriptPath));
+    expect(state.roundsById.get("round-1")?.difficulty).toBe(4);
+  });
+
+  it("keeps explicit difficulty when the sidecar already provides it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-installer-explicit-difficulty-"));
+    const mediaDir = path.join(root, "media");
+    await fs.mkdir(mediaDir, { recursive: true });
+    const videoPath = path.join(mediaDir, "portable.mp4");
+    const funscriptPath = path.join(mediaDir, "portable.funscript");
+    const roundPath = path.join(root, "portable.round");
+    await fs.writeFile(videoPath, "video");
+    await fs.writeFile(funscriptPath, '{"actions":[{"at":0,"pos":0},{"at":1000,"pos":100}]}');
+    await fs.writeFile(
+      roundPath,
+      JSON.stringify({
+        name: "Portable Round",
+        difficulty: 2,
+        resources: [{ videoUri: "./media/portable.mp4", funscriptUri: "./media/portable.funscript" }],
+      })
+    );
+
+    const { importInstallSidecarFile } = await import("./installer");
+    const result = await importInstallSidecarFile(roundPath);
+
+    expect(result.status.stats.installed).toBe(1);
+    expect(calculateFunscriptDifficultyFromUriMock).not.toHaveBeenCalled();
+    expect(state.roundsById.get("round-1")?.difficulty).toBe(2);
   });
 
   it("resolves relative .hero resource paths against nested sidecar locations", async () => {

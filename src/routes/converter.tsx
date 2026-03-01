@@ -205,6 +205,8 @@ function ConverterPage() {
           <ConverterHeader
             {...pickConverterHeaderProps(state)}
             onGoToSelect={() => state.goToSelectStep()}
+            onShowHotkeys={state.showHotkeysOverlay}
+            onHideHotkeys={state.hideHotkeysOverlay}
           />
 
           <section className="animate-entrance">

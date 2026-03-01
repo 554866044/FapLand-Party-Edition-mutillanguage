@@ -45,21 +45,29 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
     }) => (
         <div>
             <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-violet-100">
-                    Segments
-                    {sortedSegments.length > 0 && (
-                        <span className="ml-2 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-normal text-violet-200">
-                            {sortedSegments.length}
-                        </span>
-                    )}
-                </h3>
+                <div>
+                    <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-violet-100">
+                        Segments
+                        {sortedSegments.length > 0 && (
+                            <span className="ml-2 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-normal text-violet-200">
+                                {sortedSegments.length}
+                            </span>
+                        )}
+                    </h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-400">
+                        <span><kbd className="converter-kbd">N</kbd> / <kbd className="converter-kbd">Shift+N</kbd> Next/Prev</span>
+                        <span><kbd className="converter-kbd">M</kbd> Merge</span>
+                        <span><kbd className="converter-kbd">Ctrl/Cmd+S</kbd> Save</span>
+                        <span><kbd className="converter-kbd">?</kbd> All shortcuts</span>
+                    </div>
+                </div>
                 {selectedSegment && (
                     <button
                         type="button"
                         onClick={() => onRemoveSegment(selectedSegment.id)}
                         className="text-[10px] text-rose-300 hover:text-rose-200"
                     >
-                        Delete selected
+                        Delete selected <kbd className="converter-kbd ml-1">Delete</kbd>
                     </button>
                 )}
             </div>

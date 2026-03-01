@@ -19,6 +19,10 @@ const { clearWebsiteVideoCacheMock, clearPlayableVideoCacheMock } = vi.hoisted((
   clearPlayableVideoCacheMock: vi.fn(),
 }));
 
+const { calculateFunscriptDifficultyFromUriMock } = vi.hoisted(() => ({
+  calculateFunscriptDifficultyFromUriMock: vi.fn(async () => null),
+}));
+
 vi.mock("../../services/db", () => ({
   getDb: getDbMock,
 }));
@@ -49,7 +53,19 @@ vi.mock("../../services/playableVideo", () => ({
   clearPlayableVideoCache: clearPlayableVideoCacheMock,
 }));
 
+vi.mock("../../services/funscript", () => ({
+  calculateFunscriptDifficultyFromUri: calculateFunscriptDifficultyFromUriMock,
+}));
+
 import { dbRouter } from "./db";
+
+function createRendererCaller() {
+  return dbRouter.createCaller({
+    event: {
+      sender: {},
+    },
+  } as never);
+}
 
 type CacheRow = {
   lobbyId: string;
@@ -134,6 +150,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     vi.clearAllMocks();
     clearWebsiteVideoCacheMock.mockResolvedValue(undefined);
     clearPlayableVideoCacheMock.mockResolvedValue(undefined);
+    calculateFunscriptDifficultyFromUriMock.mockResolvedValue(null);
     exportInstalledDatabaseMock.mockResolvedValue({
       exportDir: "/tmp/f-land/export/2026-03-05T20-00-00.000Z",
       heroFiles: 1,
@@ -527,16 +544,29 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             }
             if (tableName === "Hero") {
               if (values.length === 0) {
+                const heroIds = Array.from(heroesByIdRef.keys());
                 heroesByIdRef.clear();
-                for (const entry of roundsByIdRef.values()) {
-                  entry.heroId = null;
+                for (const heroId of heroIds) {
+                  for (const [roundId, entry] of roundsByIdRef.entries()) {
+                    if (entry.heroId !== heroId) continue;
+                    roundsByIdRef.delete(roundId);
+                    for (const [resourceId, resourceEntry] of resourcesByIdRef.entries()) {
+                      if (resourceEntry.roundId === roundId) {
+                        resourcesByIdRef.delete(resourceId);
+                      }
+                    }
+                  }
                 }
               } else {
                 for (const heroId of values) {
                   heroesByIdRef.delete(heroId);
-                  for (const entry of roundsByIdRef.values()) {
-                    if (entry.heroId === heroId) {
-                      entry.heroId = null;
+                  for (const [roundId, entry] of roundsByIdRef.entries()) {
+                    if (entry.heroId !== heroId) continue;
+                    roundsByIdRef.delete(roundId);
+                    for (const [resourceId, resourceEntry] of resourcesByIdRef.entries()) {
+                      if (resourceEntry.roundId === roundId) {
+                        resourcesByIdRef.delete(resourceId);
+                      }
                     }
                   }
                 }
@@ -606,7 +636,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("stores and returns max local highscore", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     expect(await caller.getLocalHighscore()).toMatchObject({ highscore: 0, highscoreCheatMode: false });
     expect(await caller.setLocalHighscore({ highscore: 120 })).toMatchObject({ highscore: 120, highscoreCheatMode: false });
@@ -615,7 +645,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("supports multiplayer match cache CRUD and sync queue lifecycle", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await caller.upsertMultiplayerMatchCache({
       lobbyId: "lobby-1",
@@ -651,7 +681,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("stores and lists single-player run history with playlist metadata", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await caller.recordSinglePlayerRun({
       finishedAtIso: "2026-03-05T10:00:00.000Z",
@@ -692,7 +722,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("counts extracted cum loads from single-player run history", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await caller.recordSinglePlayerRun({
       finishedAtIso: "2026-03-05T10:00:00.000Z",
@@ -738,7 +768,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("deletes a single-player run and recomputes local highscore", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await caller.recordSinglePlayerRun({
       finishedAtIso: "2026-03-05T10:00:00.000Z",
@@ -783,7 +813,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("updates hero metadata with unique-name protection", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await expect(caller.updateHero({
       id: "hero-1",
@@ -798,8 +828,8 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     });
   });
 
-  it("deletes a hero entry and detaches attached rounds", async () => {
-    const caller = dbRouter.createCaller({} as never);
+  it("deletes a hero entry and all attached rounds", async () => {
+    const caller = createRendererCaller();
 
     roundsByIdRef.set("round-hero", {
       id: "round-hero",
@@ -813,15 +843,27 @@ describe("dbRouter local highscore and multiplayer cache", () => {
       type: "Normal",
       heroId: "hero-1",
     });
+    resourcesByIdRef.set("resource-hero", {
+      id: "resource-hero",
+      roundId: "round-hero",
+      videoUri: "file:///tmp/hero.mp4",
+      funscriptUri: "file:///tmp/hero.funscript",
+      phash: null,
+      durationMs: 4000,
+      disabled: false,
+      createdAt: new Date("2026-03-06T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-06T00:00:00.000Z"),
+    });
 
     await expect(caller.deleteHero({ id: "hero-1" })).resolves.toEqual({ deleted: true });
 
     expect(heroesByIdRef.has("hero-1")).toBe(false);
-    expect(roundsByIdRef.get("round-hero")?.heroId).toBeNull();
+    expect(roundsByIdRef.has("round-hero")).toBe(false);
+    expect(resourcesByIdRef.has("resource-hero")).toBe(false);
   });
 
   it("updates round metadata and validates time order", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await expect(caller.updateRound({
       id: "round-1",
@@ -855,7 +897,8 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("creates a website-backed installed round with an attached resource", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
+    calculateFunscriptDifficultyFromUriMock.mockResolvedValue(3);
 
     const created = await caller.createWebsiteRound({
       name: "Website Round",
@@ -869,6 +912,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     expect(installedRound).toMatchObject({
       name: "Website Round",
       type: "Normal",
+      difficulty: 3,
     });
     expect(installedRound?.installSourceKey).toMatch(/^website:/);
     expect(installedResource).toMatchObject({
@@ -877,11 +921,14 @@ describe("dbRouter local highscore and multiplayer cache", () => {
       funscriptUri: "app://media/tmp/demo.funscript",
       disabled: false,
     });
+    expect(calculateFunscriptDifficultyFromUriMock).toHaveBeenCalledWith(
+      "app://media/tmp/demo.funscript"
+    );
     expect(dbMockRef.transaction).toHaveBeenCalledTimes(1);
   });
 
   it("rejects invalid website round video URLs", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await expect(
       caller.createWebsiteRound({
@@ -893,14 +940,14 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("deletes a round entry", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await expect(caller.deleteRound({ id: "round-1" })).resolves.toEqual({ deleted: true });
     expect(roundsByIdRef.has("round-1")).toBe(false);
   });
 
   it("converts a hero group back to a standalone round by renaming the kept round and clearing timing", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     roundsByIdRef.set("round-1", {
       id: "round-1",
@@ -948,7 +995,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("exports installed database with default URI mode disabled and supports explicit enable", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     const defaultResult = await caller.exportInstalledDatabase();
     expect(defaultResult.includeResourceUris).toBe(false);
@@ -959,7 +1006,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("clears persisted database rows and store state", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await caller.recordSinglePlayerRun({
       finishedAtIso: "2026-03-05T10:00:00.000Z",
@@ -996,7 +1043,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   });
 
   it("can clear only video caches without clearing the store", async () => {
-    const caller = dbRouter.createCaller({} as never);
+    const caller = createRendererCaller();
 
     await expect(caller.clearAllData({
       rounds: false,

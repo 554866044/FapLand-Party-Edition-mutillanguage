@@ -16,6 +16,7 @@ type VideoPreviewProps = {
   currentTimeMs: number;
   markInMs: number | null;
   markOutMs: number | null;
+  hasSelectedSegment: boolean;
   getVideoSrc: (uri: string) => string | undefined;
   onLoadedMetadata: (video: HTMLVideoElement) => void;
   onTimeUpdate: (currentTimeMs: number) => void;
@@ -24,6 +25,8 @@ type VideoPreviewProps = {
   onSetMarkIn: () => void;
   onSetMarkOut: () => void;
   onAddSegment: () => void;
+  onMoveSelectedStartToPlayhead: () => void;
+  onMoveSelectedEndToPlayhead: () => void;
   onRandomJump: () => void;
 };
 
@@ -35,6 +38,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
     currentTimeMs,
     markInMs,
     markOutMs,
+    hasSelectedSegment,
     getVideoSrc,
     onLoadedMetadata,
     onTimeUpdate,
@@ -43,6 +47,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
     onSetMarkIn,
     onSetMarkOut,
     onAddSegment,
+    onMoveSelectedStartToPlayhead,
+    onMoveSelectedEndToPlayhead,
     onRandomJump,
   }) => {
     const foregroundVideoId = useId();
@@ -135,6 +141,32 @@ export const VideoPreview: React.FC<VideoPreviewProps> = React.memo(
           </button>
           <button
             type="button"
+            disabled={!hasSelectedSegment}
+            onMouseEnter={playHoverSound}
+            onClick={onMoveSelectedStartToPlayhead}
+            className={`converter-action-button ${
+              !hasSelectedSegment
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-cyan-300/60 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
+            }`}
+          >
+            Move Start Here <kbd className="converter-kbd">S</kbd>
+          </button>
+          <button
+            type="button"
+            disabled={!hasSelectedSegment}
+            onMouseEnter={playHoverSound}
+            onClick={onMoveSelectedEndToPlayhead}
+            className={`converter-action-button ${
+              !hasSelectedSegment
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-indigo-300/60 bg-indigo-500/15 text-indigo-100 hover:bg-indigo-500/25"
+            }`}
+          >
+            Move End Here <kbd className="converter-kbd">E</kbd>
+          </button>
+          <button
+            type="button"
             disabled={durationMs <= 0}
             onMouseEnter={playHoverSound}
             onClick={onRandomJump}
@@ -162,6 +194,7 @@ export function pickVideoPreviewProps(state: ConverterState): VideoPreviewProps 
     currentTimeMs: state.currentTimeMs,
     markInMs: state.markInMs,
     markOutMs: state.markOutMs,
+    hasSelectedSegment: state.selectedSegment !== null,
     getVideoSrc: (uri: string) => state.getVideoSrc(uri),
     onLoadedMetadata: (video: HTMLVideoElement) => {
       const nextDuration = Number.isFinite(video.duration) ? Math.floor(video.duration * 1000) : 0;
@@ -175,6 +208,8 @@ export function pickVideoPreviewProps(state: ConverterState): VideoPreviewProps 
     onSetMarkIn: () => state.setMarkInMs(state.currentTimeMs),
     onSetMarkOut: () => state.setMarkOutMs(state.currentTimeMs),
     onAddSegment: state.addSegmentFromMarks,
+    onMoveSelectedStartToPlayhead: state.moveSelectedSegmentStartToPlayhead,
+    onMoveSelectedEndToPlayhead: state.moveSelectedSegmentEndToPlayhead,
     onRandomJump: state.jumpToRandomPoint,
   };
 }

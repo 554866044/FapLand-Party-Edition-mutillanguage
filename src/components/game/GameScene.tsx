@@ -1666,12 +1666,7 @@ export const GameScene = memo(function GameScene({
   }, [animPhase.kind, onStateChange, state]);
 
   useEffect(() => {
-    const optionCount = state.pendingPerkSelection?.options.length ?? 0;
-    if (optionCount <= 0) {
-      setControllerPerkSelectionIndex(0);
-      return;
-    }
-    setControllerPerkSelectionIndex((previous) => Math.max(0, Math.min(optionCount, previous)));
+    setControllerPerkSelectionIndex(0);
   }, [state.pendingPerkSelection]);
 
   useEffect(() => {
@@ -1981,11 +1976,6 @@ export const GameScene = memo(function GameScene({
           return;
         }
         setShowOptionsMenu(true);
-        return;
-      }
-      if (event.code === "Space" || event.key === " " || event.key === "Spacebar") {
-        event.preventDefault();
-        handleRollRef.current();
         return;
       }
       if (["1", "2", "3"].includes(event.key)) {

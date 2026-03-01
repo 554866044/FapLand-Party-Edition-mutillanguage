@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
     },
     webVideoCache: {
       getScanStatus: vi.fn(),
+      getDownloadProgresses: vi.fn(),
     },
   },
   playlists: {
@@ -116,9 +117,12 @@ function makeRound({
   createdAt,
   hero,
   startTime,
+  endTime,
+  durationMs,
   template = false,
   funscriptUri = null,
   installSourceKey = null,
+  previewImage = null,
   websiteVideoCacheStatus = "not_applicable",
 }: {
   id: string;
@@ -126,9 +130,12 @@ function makeRound({
   createdAt: string;
   hero?: { id?: string | null; name?: string | null } | null;
   startTime?: number | null;
+  endTime?: number | null;
+  durationMs?: number | null;
   template?: boolean;
   funscriptUri?: string | null;
   installSourceKey?: string | null;
+  previewImage?: string | null;
   websiteVideoCacheStatus?: "not_applicable" | "cached" | "pending";
 }): InstalledRound {
   const heroId = hero?.id ?? (hero?.name ? `hero-${hero.name}` : null);
@@ -141,7 +148,7 @@ function makeRound({
     difficulty: 2,
     bpm: 120,
     startTime: startTime ?? null,
-    endTime: null,
+    endTime: endTime ?? null,
     createdAt,
     heroId,
     hero: hero
@@ -164,6 +171,7 @@ function makeRound({
             funscriptUri,
             phash: null,
             disabled: false,
+            durationMs: durationMs ?? null,
             createdAt,
             updatedAt: createdAt,
             websiteVideoCacheStatus,
@@ -171,6 +179,7 @@ function makeRound({
         ],
     installSourceKey,
     phash: null,
+    previewImage,
     heroSourceType: null,
     sourceType: null,
     updatedAt: createdAt,
@@ -280,6 +289,7 @@ beforeEach(() => {
     currentUrl: null,
     errors: [],
   });
+  mocks.db.webVideoCache.getDownloadProgresses.mockResolvedValue([]);
   mocks.loaderData.installWebFunscriptUrlEnabled = false;
   mocks.db.round.findInstalled.mockImplementation(async () => mocks.loaderData.rounds);
   mocks.db.round.getDisabledIds.mockResolvedValue([]);
@@ -735,6 +745,35 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(await screen.findByText("Preview Is Being Generated")).toBeDefined();
   });
 
+  it("shows preview generation text on collapsed hero groups while grouped website rounds are processing", async () => {
+    mocks.db.webVideoCache.getScanStatus.mockResolvedValue({
+      state: "running",
+      startedAt: "2026-03-30T00:00:00.000Z",
+      finishedAt: null,
+      totalCount: 1,
+      completedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      currentRoundName: "Hero Website Round",
+      currentUrl: "https://example.com/watch?v=hero",
+      errors: [],
+    });
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "hero-web-round",
+        name: "Hero Website Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        hero: { id: "hero-1", name: "Hero One" },
+        installSourceKey: "website:https://example.com/watch?v=hero",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(await screen.findByText("Preview Is Being Generated")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Hero Website Round" })).toBeNull();
+  });
+
   it("shows caching ongoing for website rounds that are still waiting for the cache", () => {
     mocks.loaderData.rounds = [
       makeRound({
@@ -750,6 +789,24 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     expect(screen.getAllByText("Caching Ongoing").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Play Website Round" })).toBeNull();
+  });
+
+  it("shows caching state on collapsed hero groups when grouped website rounds are pending", () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "hero-web-round",
+        name: "Hero Website Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        hero: { id: "hero-1", name: "Hero One" },
+        installSourceKey: "website:https://example.com/watch?v=hero",
+        websiteVideoCacheStatus: "pending",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getAllByText("Caching Ongoing").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "Hero Website Round" })).toBeNull();
   });
 
   it("converts a hero group back to a standalone round after explicit confirmation", async () => {
@@ -768,14 +825,14 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    const confirmSpy = vi.spyOn(window, "confirm");
-    const promptSpy = vi.spyOn(window, "prompt");
-    confirmSpy.mockReturnValueOnce(true).mockReturnValueOnce(true);
-    promptSpy.mockReturnValue("Hero One");
-
     render(<InstalledRoundsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Convert Hero One to round" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Round" }));
+    fireEvent.change(screen.getByLabelText('Type "Hero One" to confirm'), {
+      target: { value: "hero one" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Conversion" }));
 
     await waitFor(() => {
       expect(mocks.db.round.convertHeroGroupToRound).toHaveBeenCalledWith({
@@ -785,9 +842,67 @@ describe("InstalledRoundsPage hero grouping", () => {
         roundName: "Hero One",
       });
     });
+  });
 
-    confirmSpy.mockRestore();
-    promptSpy.mockRestore();
+  it("refreshes installed rounds after converting a hero group so the kept round becomes standalone", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+        startTime: 1000,
+        endTime: 5000,
+      }),
+      makeRound({
+        id: "r2",
+        name: "Hero Round 2",
+        createdAt: "2026-03-03T13:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+        startTime: 6000,
+        endTime: 9000,
+      }),
+    ];
+
+    mocks.db.round.convertHeroGroupToRound.mockImplementation(async () => {
+      mocks.loaderData.rounds = [
+        makeRound({
+          id: "r1",
+          name: "Hero One",
+          createdAt: "2026-03-03T12:00:00.000Z",
+          hero: null,
+          startTime: null,
+          endTime: null,
+        }),
+      ];
+
+      return {
+        keptRoundId: "r1",
+        removedRoundCount: 1,
+        deletedHero: true,
+      };
+    });
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getByRole("button", { name: "Hero One (2 rounds)" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Round" }));
+    fireEvent.change(screen.getByLabelText('Type "Hero One" to confirm'), {
+      target: { value: "Hero One" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Conversion" }));
+
+    await waitFor(() => {
+      expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Hero One (2 rounds)" })).toBeNull();
+      expect(screen.getByText("Hero One")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Edit Round" })).toBeDefined();
+    });
   });
 
   it("converts a hero group back to the first attached round instead of the earliest start time", async () => {
@@ -808,14 +923,14 @@ describe("InstalledRoundsPage hero grouping", () => {
       }),
     ];
 
-    const confirmSpy = vi.spyOn(window, "confirm");
-    const promptSpy = vi.spyOn(window, "prompt");
-    confirmSpy.mockReturnValueOnce(true).mockReturnValueOnce(true);
-    promptSpy.mockReturnValue("Hero One");
-
     render(<InstalledRoundsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Convert Hero One to round" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Round" }));
+    fireEvent.change(screen.getByLabelText('Type "Hero One" to confirm'), {
+      target: { value: "Hero One" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Conversion" }));
 
     await waitFor(() => {
       expect(mocks.db.round.convertHeroGroupToRound).toHaveBeenCalledWith({
@@ -825,9 +940,6 @@ describe("InstalledRoundsPage hero grouping", () => {
         roundName: "Hero One",
       });
     });
-
-    confirmSpy.mockRestore();
-    promptSpy.mockRestore();
   });
 
   it("edits a standalone round inside a popup", async () => {
@@ -919,6 +1031,7 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     render(<InstalledRoundsPage />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit Hero" }));
     fireEvent.change(screen.getByDisplayValue("Hero One"), {
       target: { value: "Hero Prime" },
@@ -958,7 +1071,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     confirmSpy.mockRestore();
   });
 
-  it("deletes a hero from the edit dialog and leaves attached rounds installed", async () => {
+  it("deletes a hero from the edit dialog together with attached rounds", async () => {
     mocks.loaderData.rounds = [
       makeRound({
         id: "r1",
@@ -972,6 +1085,7 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     render(<InstalledRoundsPage />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit Hero" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete Hero" }));
 
@@ -980,7 +1094,34 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
 
     expect(confirmSpy).toHaveBeenCalledWith(
-      expect.stringContaining("attached rounds will remain installed")
+      expect.stringContaining("permanently deletes all attached rounds")
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("deletes a hero directly from the installed rounds hero-group actions", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
+    ];
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Hero" }));
+
+    await waitFor(() => {
+      expect(mocks.db.hero.delete).toHaveBeenCalledWith("h1");
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("permanently deletes all attached rounds")
     );
     confirmSpy.mockRestore();
   });
@@ -1402,19 +1543,56 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     render(<InstalledRoundsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Newest" }));
+    fireEvent.click(screen.getByRole("button", { name: /Newest/i }));
     fireEvent.click(screen.getByRole("button", { name: "Oldest" }));
 
     await waitFor(() => {
       expect(screen.getByText("Sort: Oldest")).toBeDefined();
     });
 
-    const headings = screen.getAllByRole("heading", { level: 3 });
-    expect(headings.slice(0, 3).map((heading) => heading.textContent)).toEqual([
-      "Oldest Round",
-      "Middle Round",
-      "Newest Round",
-    ]);
+    const oldestHeading = screen.getByRole("heading", { name: "Oldest Round" });
+    const middleHeading = screen.getByRole("heading", { name: "Middle Round" });
+    const newestHeading = screen.getByRole("heading", { name: "Newest Round" });
+    expect(oldestHeading.compareDocumentPosition(middleHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(middleHeading.compareDocumentPosition(newestHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("sorts installed rounds by length", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "medium",
+        name: "Medium Round",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        endTime: 180_000,
+      }),
+      makeRound({
+        id: "long",
+        name: "Long Round",
+        createdAt: "2026-03-02T12:00:00.000Z",
+        endTime: 300_000,
+      }),
+      makeRound({
+        id: "short",
+        name: "Short Round",
+        createdAt: "2026-03-01T12:00:00.000Z",
+        endTime: 60_000,
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Newest/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Length" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Sort: Length")).toBeDefined();
+    });
+
+    const longHeading = screen.getByRole("heading", { name: "Long Round" });
+    const mediumHeading = screen.getByRole("heading", { name: "Medium Round" });
+    const shortHeading = screen.getByRole("heading", { name: "Short Round" });
+    expect(longHeading.compareDocumentPosition(mediumHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(mediumHeading.compareDocumentPosition(shortHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("shows template actions and repairs a template round from installed content", async () => {

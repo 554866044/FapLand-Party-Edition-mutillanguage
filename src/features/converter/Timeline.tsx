@@ -1,4 +1,4 @@
-import React, { useMemo, type RefObject } from "react";
+import React, { useEffect, useMemo, useState, type RefObject } from "react";
 import { playHoverSound } from "../../utils/audio";
 import { DEFAULT_ZOOM_PX_PER_SEC, formatMs, type DragState, type SegmentDraft } from "./types";
 import type { FunscriptAction } from "../../game/media/playback";
@@ -16,7 +16,7 @@ type TimelineProps = {
     selectedSegmentId: string | null;
     funscriptActions: FunscriptAction[];
     onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
-    onTimelineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+    onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
     onSelectSegment: (id: string) => void;
     onZoomChange: (next: number) => void;
 };
@@ -67,7 +67,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
         selectedSegmentId,
         funscriptActions,
         onTimelineWheel,
-        onTimelineClick,
+        onTimelinePointerDown,
         onSelectSegment,
         onZoomChange,
     }) => {
@@ -75,6 +75,20 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
             () => buildWaveformPath(funscriptActions, durationMs, timelineWidthPx),
             [funscriptActions, durationMs, timelineWidthPx],
         );
+        const [zoomDraft, setZoomDraft] = useState(() => `${zoomPxPerSec}`);
+
+        useEffect(() => {
+            setZoomDraft(`${zoomPxPerSec}`);
+        }, [zoomPxPerSec]);
+
+        const commitZoomDraft = () => {
+            const parsed = Number(zoomDraft.trim());
+            if (!Number.isFinite(parsed)) {
+                setZoomDraft(`${zoomPxPerSec}`);
+                return;
+            }
+            onZoomChange(parsed);
+        };
 
         const zoomPercent = Math.round((zoomPxPerSec / DEFAULT_ZOOM_PX_PER_SEC) * 100);
 
@@ -92,6 +106,34 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
                         >
                             −
                         </button>
+                        <label className="flex items-center gap-2 rounded-full border border-violet-300/20 bg-black/35 px-3 py-1.5 text-xs text-zinc-300">
+                            <span className="uppercase tracking-[0.2em] text-zinc-400">Zoom</span>
+                            <input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={480}
+                                step={1}
+                                value={zoomDraft}
+                                onChange={(event) => setZoomDraft(event.currentTarget.value)}
+                                onBlur={commitZoomDraft}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        commitZoomDraft();
+                                        event.currentTarget.blur();
+                                    }
+                                    if (event.key === "Escape") {
+                                        event.preventDefault();
+                                        setZoomDraft(`${zoomPxPerSec}`);
+                                        event.currentTarget.blur();
+                                    }
+                                }}
+                                aria-label="Timeline zoom"
+                                className="w-16 border-0 bg-transparent text-right font-medium text-zinc-100 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <span className="text-zinc-500">px/s</span>
+                        </label>
                         <span className="converter-zoom-badge">
                             {zoomPercent}%
                         </span>
@@ -115,7 +157,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
                     <div
                         className="relative h-36"
                         style={{ width: `${timelineWidthPx}px` }}
-                        onClick={onTimelineClick}
+                        onPointerDown={onTimelinePointerDown}
                     >
                         {/* Track bar */}
                         <div className="absolute left-0 right-0 top-16 h-4 rounded-full bg-zinc-800/90" />
@@ -200,6 +242,8 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
                                                         segmentId: segment.id,
                                                         edge: "start",
                                                         pointerX: event.clientX,
+                                                        currentPointerX: event.clientX,
+                                                        initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
                                                         initialStartTimeMs: segment.startTimeMs,
                                                         initialEndTimeMs: segment.endTimeMs,
                                                     };
@@ -214,6 +258,8 @@ export const Timeline: React.FC<TimelineProps> = React.memo(
                                                         segmentId: segment.id,
                                                         edge: "end",
                                                         pointerX: event.clientX,
+                                                        currentPointerX: event.clientX,
+                                                        initialScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
                                                         initialStartTimeMs: segment.startTimeMs,
                                                         initialEndTimeMs: segment.endTimeMs,
                                                     };
@@ -257,7 +303,7 @@ export function pickTimelineProps(state: {
     selectedSegmentId: string | null;
     funscriptActions: FunscriptAction[];
     onTimelineWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
-    onTimelineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+    onTimelinePointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
     setSelectedSegmentId: (id: string) => void;
     setZoomWithSfx: (next: number) => void;
 }): TimelineProps {
@@ -274,7 +320,7 @@ export function pickTimelineProps(state: {
         selectedSegmentId: state.selectedSegmentId,
         funscriptActions: state.funscriptActions,
         onTimelineWheel: state.onTimelineWheel,
-        onTimelineClick: state.onTimelineClick,
+        onTimelinePointerDown: state.onTimelinePointerDown,
         onSelectSegment: state.setSelectedSegmentId,
         onZoomChange: state.setZoomWithSfx,
     };

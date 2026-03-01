@@ -520,6 +520,17 @@ export function PlaylistWorkshopRoute() {
   const [activeSectionId, setActiveSectionId] = useState<WorkshopSectionId>("playlist");
 
   useEffect(() => {
+    const nextList = withActivePlaylist(availablePlaylists, loaderActivePlaylist);
+    setPlaylistList(nextList);
+    setActivePlaylistId((current) => {
+      if (current && nextList.some((playlist) => playlist.id === current)) {
+        return current;
+      }
+      return loaderActivePlaylist?.id ?? nextList[0]?.id ?? "";
+    });
+  }, [availablePlaylists, loaderActivePlaylist]);
+
+  useEffect(() => {
     if (!activePlaylist) return;
     const next = toEditableSetup(activePlaylist, installedRounds);
     setSetup(next);

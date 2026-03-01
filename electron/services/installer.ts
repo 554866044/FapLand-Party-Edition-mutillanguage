@@ -41,6 +41,7 @@ import { syncExternalSources } from "./integrations";
 import { importPlaylistFromFile } from "./playlists";
 import { generateRoundPreviewImageDataUri } from "./roundPreview";
 import { resolveVideoDurationMsForLocalPath } from "./videoDuration";
+import { calculateFunscriptDifficultyFromUri } from "./funscript";
 import {
   classifyTrustedUrl,
   collectUnknownRemoteSitesFromResources,
@@ -1316,6 +1317,9 @@ async function prepareRoundWrite(
     allowLocalFallback,
     deferPhash
   );
+  const calculatedDifficulty =
+    normalizedRound.difficulty ??
+    (await calculateMissingDifficultyFromResources(prepared.resources));
 
   let resolvedInstallSourceKey = installSourceKey;
   if (prepared.resources.length > 0 && prepared.resources.every((res) => isWebUri(res.videoUri))) {
@@ -1331,12 +1335,28 @@ async function prepareRoundWrite(
     installSourceKey: resolvedInstallSourceKey,
     round:
       normalizedRound.phash || !prepared.computedRoundPhash
-        ? normalizedRound
-        : { ...normalizedRound, phash: prepared.computedRoundPhash },
+        ? { ...normalizedRound, difficulty: calculatedDifficulty }
+        : {
+          ...normalizedRound,
+          difficulty: calculatedDifficulty,
+          phash: prepared.computedRoundPhash,
+        },
     resources: prepared.resources,
     previewImage: prepared.previewImage,
     unresolved: prepared.resources.length === 0,
   };
+}
+
+async function calculateMissingDifficultyFromResources(
+  resources: PreparedResource[]
+): Promise<number | null> {
+  for (const resource of resources) {
+    const difficulty = await calculateFunscriptDifficultyFromUri(resource.funscriptUri);
+    if (difficulty !== null) {
+      return difficulty;
+    }
+  }
+  return null;
 }
 
 type ParsedSidecarInspectionEntry =
