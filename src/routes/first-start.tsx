@@ -2,6 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
+import {
+  BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
+  normalizeBackgroundPhashScanningEnabled,
+} from "../constants/phashSettings";
 import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
 import { useSfwMode } from "../hooks/useSfwMode";
@@ -28,7 +33,7 @@ type StepDefinition = {
   title: string;
   description: string;
   details: string[];
-  interactive?: "music" | "round-packs" | "booru" | "handy";
+  interactive?: "music" | "round-packs" | "booru" | "handy" | "phash";
 };
 
 const STEPS: StepDefinition[] = [
@@ -110,6 +115,21 @@ const STEPS: StepDefinition[] = [
     ],
   },
   {
+    id: "phash",
+    icon: "🐢",
+    shortLabel: "Performance",
+    eyebrow: "Performance",
+    title: "Do you have an old slow computer? Consider turning off background hashing",
+    description:
+      "The app can compute visual fingerprints in the background to improve round matching. On slower machines, that extra work can be worth disabling.",
+    details: [
+      "Background pHash scanning helps the app recognize visually similar rounds and imported content more accurately.",
+      "If your computer is older or already struggles during startup, disabling background hashing can reduce background load.",
+      "You can change this later in Settings under Data & Storage.",
+    ],
+    interactive: "phash",
+  },
+  {
     id: "handy",
     icon: "🔌",
     shortLabel: "Hardware",
@@ -170,6 +190,11 @@ function FirstStartPage() {
   const [roundMessage, setRoundMessage] = useState<string | null>(null);
   const [booruPrompt, setBooruPrompt] = useState(DEFAULT_INTERMEDIARY_LOADING_PROMPT);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+  const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
+    DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
+  );
+  const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
+    useState(true);
   const [isSkipping, setIsSkipping] = useState(false);
   const [contentKey, setContentKey] = useState(0);
   const [handyInputKey, setHandyInputKey] = useState("");
@@ -182,7 +207,10 @@ function FirstStartPage() {
     abbreviateNsfwText(detail, sfwMode)
   );
   const isLastStep = stepIndex >= STEPS.length - 1;
-  const isContinueDisabled = isBusy || (currentStep.id === "booru" && isLoadingPrompt);
+  const isContinueDisabled =
+    isBusy ||
+    (currentStep.id === "booru" && isLoadingPrompt) ||
+    (currentStep.id === "phash" && isLoadingBackgroundPhashScanningEnabled);
   const progressPercent = ((stepIndex + 1) / STEPS.length) * 100;
 
   useEffect(() => {
@@ -203,6 +231,28 @@ function FirstStartPage() {
       .finally(() => {
         if (!cancelled) {
           setIsLoadingPrompt(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void trpc.store.get
+      .query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY })
+      .then((value) => {
+        if (cancelled) return;
+        setBackgroundPhashScanningEnabled(normalizeBackgroundPhashScanningEnabled(value));
+      })
+      .catch((error) => {
+        console.error("Failed to load onboarding background phash scanning setting", error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingBackgroundPhashScanningEnabled(false);
         }
       });
 
@@ -825,6 +875,54 @@ function FirstStartPage() {
                       className="mt-3 min-h-24 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-pink-400/50 focus:ring-2 focus:ring-pink-400/20 disabled:opacity-60"
                       placeholder="Enter search prompt..."
                     />
+                  </div>
+                )}
+
+                {/* Background Phash Section */}
+                {currentStep.interactive === "phash" && (
+                  <div
+                    className="mt-3 rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-yellow-500/10 p-4 animate-entrance"
+                    style={{ animationDelay: "0.3s" }}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-amber-300">🐢</span>
+                      <p className="text-sm font-semibold text-amber-100">
+                        Background Hashing
+                      </p>
+                    </div>
+                    <p className="text-sm text-zinc-400">
+                      Do you have an old slow computer? Consider turning off background hashing.
+                    </p>
+                    <label
+                      htmlFor="first-start-background-phash-scanning"
+                      className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <input
+                        id="first-start-background-phash-scanning"
+                        type="checkbox"
+                        role="switch"
+                        checked={backgroundPhashScanningEnabled}
+                        disabled={isLoadingBackgroundPhashScanningEnabled}
+                        onChange={(event) => {
+                          const next = event.target.checked;
+                          setBackgroundPhashScanningEnabled(next);
+                          void trpc.store.set.mutate({
+                            key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                            value: next,
+                          });
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
+                      />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-white">
+                          Enable background pHash scanning
+                        </p>
+                        <p className="text-xs leading-relaxed text-zinc-400">
+                          Recommended on faster machines. Disable this if startup work or
+                          background CPU load feels too heavy.
+                        </p>
+                      </div>
+                    </label>
                   </div>
                 )}
 
