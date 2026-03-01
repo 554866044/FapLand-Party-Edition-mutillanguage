@@ -1,9 +1,17 @@
-import type { InstalledRound } from "../services/db";
+import type { InstalledRound, InstalledRoundCatalogEntry } from "../services/db";
 
-export type RoundRenderRow =
-  | { kind: "standalone"; round: InstalledRound }
-  | { kind: "hero-group"; groupKey: string; heroName: string; rounds: InstalledRound[] }
-  | { kind: "playlist-group"; groupKey: string; playlistId: string; playlistName: string; rounds: InstalledRound[] };
+export type RoundLibraryEntry = InstalledRound | InstalledRoundCatalogEntry;
+
+export type RoundRenderRow<TRound extends RoundLibraryEntry = RoundLibraryEntry> =
+  | { kind: "standalone"; round: TRound }
+  | { kind: "hero-group"; groupKey: string; heroName: string; rounds: TRound[] }
+  | {
+      kind: "playlist-group";
+      groupKey: string;
+      playlistId: string;
+      playlistName: string;
+      rounds: TRound[];
+    };
 
 type BuildRoundRenderRowsOptions =
   | { mode?: "hero" }
@@ -12,7 +20,7 @@ type BuildRoundRenderRowsOptions =
       playlistsByRoundId: Map<string, Array<{ playlistId: string; playlistName: string }>>;
     };
 
-function toHeroGroupKey(round: InstalledRound): string | null {
+function toHeroGroupKey(round: RoundLibraryEntry): string | null {
   if (!round.hero && !round.heroId) return null;
   const heroName = (round.hero?.name ?? "").trim();
   if (round.heroId) return `id:${round.heroId}`;
@@ -20,22 +28,27 @@ function toHeroGroupKey(round: InstalledRound): string | null {
   return "name:unknown-hero";
 }
 
-function toHeroDisplayName(round: InstalledRound): string {
+function toHeroDisplayName(round: RoundLibraryEntry): string {
   const heroName = (round.hero?.name ?? "").trim();
   return heroName.length > 0 ? heroName : "Unknown Hero";
 }
 
-export function buildRoundRenderRows(visibleRounds: InstalledRound[]): RoundRenderRow[] {
+export function buildRoundRenderRows<TRound extends RoundLibraryEntry>(
+  visibleRounds: TRound[]
+): RoundRenderRow<TRound>[] {
   return buildRoundRenderRowsWithOptions(visibleRounds, { mode: "hero" });
 }
 
-export function buildRoundRenderRowsWithOptions(
-  visibleRounds: InstalledRound[],
+export function buildRoundRenderRowsWithOptions<TRound extends RoundLibraryEntry>(
+  visibleRounds: TRound[],
   options: BuildRoundRenderRowsOptions,
-): RoundRenderRow[] {
+): RoundRenderRow<TRound>[] {
   if (options.mode === "playlist") {
-    const rows: RoundRenderRow[] = [];
-    const playlistGroupByKey = new Map<string, Extract<RoundRenderRow, { kind: "playlist-group" }>>();
+    const rows: RoundRenderRow<TRound>[] = [];
+    const playlistGroupByKey = new Map<
+      string,
+      Extract<RoundRenderRow<TRound>, { kind: "playlist-group" }>
+    >();
 
     for (const round of visibleRounds) {
       const memberships = options.playlistsByRoundId.get(round.id) ?? [];
@@ -52,7 +65,7 @@ export function buildRoundRenderRowsWithOptions(
           continue;
         }
 
-        const nextGroup: Extract<RoundRenderRow, { kind: "playlist-group" }> = {
+        const nextGroup: Extract<RoundRenderRow<TRound>, { kind: "playlist-group" }> = {
           kind: "playlist-group",
           groupKey,
           playlistId: membership.playlistId,
@@ -67,8 +80,11 @@ export function buildRoundRenderRowsWithOptions(
     return rows;
   }
 
-  const rows: RoundRenderRow[] = [];
-  const heroGroupByKey = new Map<string, Extract<RoundRenderRow, { kind: "hero-group" }>>();
+  const rows: RoundRenderRow<TRound>[] = [];
+  const heroGroupByKey = new Map<
+    string,
+    Extract<RoundRenderRow<TRound>, { kind: "hero-group" }>
+  >();
 
   for (const round of visibleRounds) {
     const groupKey = toHeroGroupKey(round);
@@ -83,7 +99,7 @@ export function buildRoundRenderRowsWithOptions(
       continue;
     }
 
-    const nextGroup: Extract<RoundRenderRow, { kind: "hero-group" }> = {
+    const nextGroup: Extract<RoundRenderRow<TRound>, { kind: "hero-group" }> = {
       kind: "hero-group",
       groupKey,
       heroName: toHeroDisplayName(round),

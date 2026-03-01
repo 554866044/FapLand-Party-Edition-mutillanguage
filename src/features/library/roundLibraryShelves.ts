@@ -1,9 +1,8 @@
-import type { InstalledRound } from "../../services/db";
-import type { RoundRenderRow } from "../../routes/roundRows";
+import type { RoundLibraryEntry, RoundRenderRow } from "../../routes/roundRows";
 
 export type RoundLibraryCardItem = {
   key: string;
-  round: InstalledRound;
+  round: RoundLibraryEntry;
   renderIndex: number;
 };
 

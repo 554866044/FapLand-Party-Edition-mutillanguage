@@ -1,17 +1,22 @@
 import { collectPlaylistRefs, createPortableRoundRefResolver } from "../game/playlistResolution";
-import type { InstalledRound, VideoDownloadProgress } from "../services/db";
+import type {
+  InstalledRound,
+  InstalledRoundCatalogEntry,
+  VideoDownloadProgress,
+} from "../services/db";
 import type { StoredPlaylist } from "../services/playlists";
 import { getRoundDurationSec } from "../utils/duration";
 import type { PlaylistWebsiteCacheSummary } from "../features/webVideo/cacheStatus";
 
-export type TypeFilter = "all" | NonNullable<InstalledRound["type"]>;
+export type RoundLibraryEntry = InstalledRound | InstalledRoundCatalogEntry;
+export type TypeFilter = "all" | NonNullable<RoundLibraryEntry["type"]>;
 export type ScriptFilter = "all" | "installed" | "missing";
 export type SortMode = "newest" | "oldest" | "difficulty" | "bpm" | "length" | "name" | "excluded";
 
 export type IndexedRound = {
-  round: InstalledRound;
+  round: RoundLibraryEntry;
   searchText: string;
-  roundType: NonNullable<InstalledRound["type"]>;
+  roundType: NonNullable<RoundLibraryEntry["type"]>;
   hasScript: boolean;
   createdAtMs: number;
   difficultyValue: number;
@@ -27,7 +32,7 @@ export type PlaylistMembership = {
 export type SourceHeroOption = {
   heroId: string;
   heroName: string;
-  rounds: InstalledRound[];
+  rounds: RoundLibraryEntry[];
 };
 
 export type PlaylistGroupingData = {
@@ -37,14 +42,22 @@ export type PlaylistGroupingData = {
 
 const roundNameCollator = new Intl.Collator();
 
-export function toIndexedRound(round: InstalledRound): IndexedRound {
+function resourceHasFunscript(
+  resource: RoundLibraryEntry["resources"][number] | undefined
+): boolean {
+  if (!resource) return false;
+  if ("funscriptUri" in resource && Boolean(resource.funscriptUri)) return true;
+  return "hasFunscript" in resource && resource.hasFunscript === true;
+}
+
+export function toIndexedRound(round: RoundLibraryEntry): IndexedRound {
   return {
     round,
     searchText: [round.name, round.author ?? "", round.hero?.name ?? "", round.description ?? ""]
       .join("\n")
       .toLowerCase(),
     roundType: round.type ?? "Normal",
-    hasScript: Boolean(round.resources[0]?.funscriptUri),
+    hasScript: resourceHasFunscript(round.resources[0]),
     createdAtMs: Date.parse(String(round.createdAt)) || 0,
     difficultyValue: round.difficulty ?? 0,
     bpmValue: round.bpm ?? 0,
@@ -95,7 +108,7 @@ export function filterAndSortRounds({
   typeFilter: TypeFilter;
   scriptFilter: ScriptFilter;
   sortMode: SortMode;
-}): InstalledRound[] {
+}): RoundLibraryEntry[] {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered =
     normalizedQuery.length === 0 && typeFilter === "all" && scriptFilter === "all"
@@ -140,14 +153,14 @@ export function filterAndSortRounds({
 
 export function buildPlaylistsByRoundId(
   playlists: StoredPlaylist[],
-  rounds: InstalledRound[]
+  rounds: RoundLibraryEntry[]
 ): Map<string, PlaylistMembership[]> {
   return buildPlaylistGroupingData(playlists, rounds).playlistsByRoundId;
 }
 
 export function buildPlaylistGroupingData(
   playlists: StoredPlaylist[],
-  rounds: InstalledRound[]
+  rounds: RoundLibraryEntry[]
 ): PlaylistGroupingData {
   const roundResolver = createPortableRoundRefResolver(rounds);
   const memberships = new Map<string, PlaylistMembership[]>();
@@ -195,7 +208,7 @@ export function buildPlaylistGroupingData(
   };
 }
 
-export function buildSourceHeroOptions(rounds: InstalledRound[]): SourceHeroOption[] {
+export function buildSourceHeroOptions(rounds: RoundLibraryEntry[]): SourceHeroOption[] {
   const groups = new Map<string, SourceHeroOption>();
 
   for (const round of rounds) {

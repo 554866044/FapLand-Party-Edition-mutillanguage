@@ -1716,10 +1716,14 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     expect(result[0]).toMatchObject({
       id: "round-1",
       name: "Round One",
+      createdAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+      excludeFromRandom: false,
       resources: [
         {
           id: "resource-1",
           disabled: false,
+          hasFunscript: false,
           websiteVideoCacheStatus: "cached",
         },
       ],

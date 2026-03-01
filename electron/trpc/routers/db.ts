@@ -224,6 +224,7 @@ type CatalogRoundResource = {
   phash: string | null;
   durationMs: number | null;
   videoUri: string;
+  funscriptUri: string | null;
 };
 
 async function toInstalledRoundCatalogEntry(
@@ -237,10 +238,13 @@ async function toInstalledRoundCatalogEntry(
     phash: string | null;
     startTime: number | null;
     endTime: number | null;
+    createdAt: Date;
+    updatedAt: Date;
     type: "Normal" | "Interjection" | "Cum";
     installSourceKey: string | null;
     previewImage: string | null;
     heroId: string | null;
+    excludeFromRandom: boolean;
     hero: {
       id: string;
       name: string;
@@ -260,10 +264,13 @@ async function toInstalledRoundCatalogEntry(
   phash: string | null;
   startTime: number | null;
   endTime: number | null;
+  createdAt: Date;
+  updatedAt: Date;
   type: "Normal" | "Interjection" | "Cum" | null;
   installSourceKey: string | null;
   previewImage: string | null;
   heroId: string | null;
+  excludeFromRandom: boolean;
   hero: {
     id: string;
     name: string;
@@ -288,10 +295,13 @@ async function toInstalledRoundCatalogEntry(
     phash: entry.phash,
     startTime: entry.startTime,
     endTime: entry.endTime,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
     type: entry.type ?? null,
     installSourceKey: entry.installSourceKey,
     previewImage: entry.previewImage,
     heroId: entry.heroId,
+    excludeFromRandom: entry.excludeFromRandom,
     hero: entry.hero,
     resources: await Promise.all(
       entry.resources.map(async (resourceEntry) => ({
@@ -299,6 +309,7 @@ async function toInstalledRoundCatalogEntry(
         disabled: resourceEntry.disabled,
         phash: resourceEntry.phash,
         durationMs: resourceEntry.durationMs,
+        hasFunscript: Boolean(resourceEntry.funscriptUri),
         websiteVideoCacheStatus: await getCachedStateForUri(resourceEntry.videoUri),
       }))
     ),
@@ -1373,6 +1384,8 @@ export const dbRouter = router({
           phash: true,
           startTime: true,
           endTime: true,
+          createdAt: true,
+          updatedAt: true,
           type: true,
           installSourceKey: true,
           previewImage: true,
@@ -1395,6 +1408,7 @@ export const dbRouter = router({
               phash: true,
               durationMs: true,
               videoUri: true,
+              funscriptUri: true,
             },
           },
         },

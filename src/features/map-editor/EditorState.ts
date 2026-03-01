@@ -186,6 +186,14 @@ export interface EditorGraphConfig {
   };
 }
 
+export interface GraphToLinearConversionResult {
+  boardConfig: LinearBoardConfig;
+  keptNodeIds: string[];
+  droppedNodeIds: string[];
+  droppedEdgeIds: string[];
+  warnings: string[];
+}
+
 export interface ViewportState {
   x: number;
   y: number;
@@ -193,6 +201,7 @@ export interface ViewportState {
 }
 
 export type MapEditorTool = "select" | "place" | "connect" | "text";
+export type MapRoundBulkAction = "order" | "random" | "progressive" | "difficulty";
 
 export interface EditorSelectionState {
   selectedNodeIds: string[];
@@ -270,9 +279,9 @@ export const normalizeGraphBackgroundMedia = (
       : "cover";
   const position: GraphBackgroundPosition =
     input.position === "top" ||
-      input.position === "bottom" ||
-      input.position === "left" ||
-      input.position === "right"
+    input.position === "bottom" ||
+    input.position === "left" ||
+    input.position === "right"
       ? input.position
       : "center";
   return {
@@ -624,6 +633,128 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
     },
   };
 };
+
+const isLinearConvertibleNodeKind = (
+  kind: EditorNodeKind
+): kind is "path" | "round" | "safePoint" =>
+  kind === "path" || kind === "round" || kind === "safePoint";
+
+export function convertEditorGraphToLinearBoardConfig(
+  input: EditorGraphConfig
+): GraphToLinearConversionResult {
+  const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
+  const usedEdgeIds = new Set<string>();
+  const visitedNodeIds = new Set<string>();
+  const representedNodeIds = new Set<string>();
+  const reachedEndNodeIds = new Set<string>();
+  const warnings = new Set<string>();
+  const safePointIndices: number[] = [];
+  const safePointRestMsByIndex: Record<string, number> = {};
+  const normalRoundRefsByIndex: Record<string, PortableRoundRef> = {};
+  let totalIndices = 0;
+  let currentNode = nodeById.get(input.startNodeId) ?? null;
+
+  if (!currentNode) {
+    warnings.add("Missing start node.");
+  }
+
+  while (currentNode) {
+    if (visitedNodeIds.has(currentNode.id)) {
+      warnings.add("Cycle detected while following the first path from Start.");
+      break;
+    }
+
+    visitedNodeIds.add(currentNode.id);
+
+    if (currentNode.kind === "end") {
+      reachedEndNodeIds.add(currentNode.id);
+      break;
+    }
+
+    if (isLinearConvertibleNodeKind(currentNode.kind)) {
+      if (totalIndices < 500) {
+        totalIndices += 1;
+        representedNodeIds.add(currentNode.id);
+
+        if (currentNode.kind === "round" && currentNode.roundRef) {
+          normalRoundRefsByIndex[String(totalIndices)] = { ...currentNode.roundRef };
+        }
+
+        if (currentNode.kind === "safePoint") {
+          safePointIndices.push(totalIndices);
+          if (typeof currentNode.checkpointRestMs === "number") {
+            safePointRestMsByIndex[String(totalIndices)] = Math.max(
+              0,
+              Math.floor(currentNode.checkpointRestMs)
+            );
+          }
+        }
+      } else {
+        warnings.add("Linear playlists support at most 500 fields; extra path nodes were dropped.");
+      }
+    } else if (currentNode.kind !== "start") {
+      warnings.add("Graph-only nodes were dropped during conversion.");
+    }
+
+    const outgoingEdges = input.edges.filter((edge) => edge.fromNodeId === currentNode?.id);
+    if (outgoingEdges.length > 1) {
+      warnings.add("Branches were dropped; conversion followed the first outgoing edge.");
+    }
+
+    const nextEdge = outgoingEdges[0];
+    if (!nextEdge) {
+      warnings.add("Path ended before reaching an end node.");
+      break;
+    }
+
+    usedEdgeIds.add(nextEdge.id);
+    const nextNode = nodeById.get(nextEdge.toNodeId);
+    if (!nextNode) {
+      warnings.add("Path references a missing node.");
+      break;
+    }
+
+    currentNode = nextNode;
+  }
+
+  const keptNodeIds = [...representedNodeIds];
+  const droppedNodeIds = input.nodes
+    .filter((node) => {
+      if (representedNodeIds.has(node.id)) return false;
+      if (node.kind === "start") return false;
+      if (node.kind === "end" && reachedEndNodeIds.has(node.id)) return false;
+      return true;
+    })
+    .map((node) => node.id);
+  const droppedEdgeIds = input.edges
+    .filter((edge) => !usedEdgeIds.has(edge.id))
+    .map((edge) => edge.id);
+
+  if (
+    droppedNodeIds.some((nodeId) => {
+      const node = nodeById.get(nodeId);
+      return node ? !isLinearConvertibleNodeKind(node.kind) && node.kind !== "end" : false;
+    })
+  ) {
+    warnings.add("Graph-only nodes were dropped during conversion.");
+  }
+
+  return {
+    boardConfig: {
+      mode: "linear",
+      totalIndices: Math.max(1, totalIndices),
+      safePointIndices,
+      safePointRestMsByIndex,
+      normalRoundRefsByIndex,
+      normalRoundOrder: [],
+      cumRoundRefs: input.cumRoundRefs.map((ref) => ({ ...ref })),
+    },
+    keptNodeIds,
+    droppedNodeIds,
+    droppedEdgeIds,
+    warnings: [...warnings],
+  };
+}
 
 export const toGraphBoardConfig = (input: EditorGraphConfig): GraphBoardConfig => {
   const style = normalizeGraphStyle(input.style);

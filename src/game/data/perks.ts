@@ -1,3 +1,5 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import type { PerkDefinition } from "../types";
 import { i18n } from "../../i18n";
 
@@ -453,6 +455,249 @@ export const PERK_LIBRARY: PerkDefinition[] = [
   },
 ];
 
+type PerkMessageDescriptors = {
+  name: MessageDescriptor;
+  description: MessageDescriptor;
+};
+
+const PERK_MESSAGES: Record<string, PerkMessageDescriptors> = {
+  "loaded-dice": {
+    name: msg({ id: "perk.name.loaded-dice", message: "Loaded Dice" }),
+    description: msg({
+      id: "perk.description.loaded-dice",
+      message: "Increase max dice roll by 2 for 3 rounds.",
+    }),
+  },
+  "steady-steps": {
+    name: msg({ id: "perk.name.steady-steps", message: "Steady Steps" }),
+    description: msg({
+      id: "perk.description.steady-steps",
+      message: "Increase minimum dice roll by 1 permanently.",
+    }),
+  },
+  "long-interlude": {
+    name: msg({ id: "perk.name.long-interlude", message: "Long Interlude" }),
+    description: msg({
+      id: "perk.description.long-interlude",
+      message: "Increase resting period by 1500ms for 2 rounds.",
+    }),
+  },
+  pause: {
+    name: msg({ id: "perk.name.pause", message: "Pause" }),
+    description: msg({
+      id: "perk.description.pause",
+      message: "Gain one 15-second pause you can trigger during a round.",
+    }),
+  },
+  skip: {
+    name: msg({ id: "perk.name.skip", message: "Skip" }),
+    description: msg({
+      id: "perk.description.skip",
+      message: "Gain one skip charge that immediately ends an active normal round.",
+    }),
+  },
+  heal: {
+    name: msg({ id: "perk.name.heal", message: "Heal" }),
+    description: msg({
+      id: "perk.description.heal",
+      message:
+        "Reduce intermediary chance by 10%; in singleplayer also reduce anti-perk chance by 10%.",
+    }),
+  },
+  shield: {
+    name: msg({ id: "perk.name.shield", message: "Shield" }),
+    description: msg({
+      id: "perk.description.shield",
+      message: "Block incoming anti-perks for 2 rounds.",
+    }),
+  },
+  cleaner: {
+    name: msg({ id: "perk.name.cleaner", message: "Cleaner" }),
+    description: msg({
+      id: "perk.description.cleaner",
+      message: "Remove all anti-perks currently affecting you.",
+    }),
+  },
+  doubler: {
+    name: msg({ id: "perk.name.doubler", message: "Doubler" }),
+    description: msg({
+      id: "perk.description.doubler",
+      message: "Double your next dice roll.",
+    }),
+  },
+  "lazy-hero": {
+    name: msg({ id: "perk.name.lazy-hero", message: "Lazy Hero" }),
+    description: msg({
+      id: "perk.description.lazy-hero",
+      message: "Permanently increase between-round pause by 5000ms.",
+    }),
+  },
+  gooooal: {
+    name: msg({ id: "perk.name.gooooal", message: "Gooooal" }),
+    description: msg({
+      id: "perk.description.gooooal",
+      message: "Instantly gain 150 score.",
+    }),
+  },
+  "be-gentle": {
+    name: msg({ id: "perk.name.be-gentle", message: "Be Gentle" }),
+    description: msg({
+      id: "perk.description.be-gentle",
+      message: "Cap the next round intensity to 50%.",
+    }),
+  },
+  "treasure-magnet": {
+    name: msg({ id: "perk.name.treasure-magnet", message: "Treasure Magnet" }),
+    description: msg({
+      id: "perk.description.treasure-magnet",
+      message: "Increase random perk offer chance by 15%.",
+    }),
+  },
+  "lucky-star": {
+    name: msg({ id: "perk.name.lucky-star", message: "Lucky Star" }),
+    description: msg({
+      id: "perk.description.lucky-star",
+      message: "Increase luck, making rare perks more likely to appear.",
+    }),
+  },
+  "no-rest": {
+    name: msg({ id: "perk.name.no-rest", message: "No Rest" }),
+    description: msg({
+      id: "perk.description.no-rest",
+      message:
+        "Handy performs a low-intensity filler sequence while you are on the board. Persistent until a round or another intermediary starts.",
+    }),
+  },
+  "coupon-clipper": {
+    name: msg({ id: "perk.name.coupon-clipper", message: "Coupon Clipper" }),
+    description: msg({
+      id: "perk.description.coupon-clipper",
+      message: "Increase random perk offer chance by 20%, but reduce luck.",
+    }),
+  },
+  highspeed: {
+    name: msg({ id: "perk.name.highspeed", message: "Highspeed" }),
+    description: msg({
+      id: "perk.description.highspeed",
+      message: "Increase round playback speed to 1.2x for one round.",
+    }),
+  },
+  virus: {
+    name: msg({ id: "perk.name.virus", message: "Virus" }),
+    description: msg({
+      id: "perk.description.virus",
+      message: "Increase interjection probability by 10%.",
+    }),
+  },
+  "virus-max": {
+    name: msg({ id: "perk.name.virus-max", message: "Virus Max" }),
+    description: msg({
+      id: "perk.description.virus-max",
+      message: "Set interjection probability to the configured maximum.",
+    }),
+  },
+  succubus: {
+    name: msg({ id: "perk.name.succubus", message: "Succubus" }),
+    description: msg({
+      id: "perk.description.succubus",
+      message: "Next round becomes a random high-difficulty installed round.",
+    }),
+  },
+  milker: {
+    name: msg({ id: "perk.name.milker", message: "Milker" }),
+    description: msg({
+      id: "perk.description.milker",
+      message: "Trigger a 30s booru sequence with generated Handy motion.",
+    }),
+  },
+  jackhammer: {
+    name: msg({ id: "perk.name.jackhammer", message: "Jackhammer" }),
+    description: msg({
+      id: "perk.description.jackhammer",
+      message: "Trigger a 15s high-speed booru sequence with generated Handy motion.",
+    }),
+  },
+  "cold-streak": {
+    name: msg({ id: "perk.name.cold-streak", message: "Cold Streak" }),
+    description: msg({
+      id: "perk.description.cold-streak",
+      message: "Anti-perk: reduce minimum dice roll by 1 for 2 rounds.",
+    }),
+  },
+  "jammed-dice": {
+    name: msg({ id: "perk.name.jammed-dice", message: "Jammed Dice" }),
+    description: msg({
+      id: "perk.description.jammed-dice",
+      message:
+        "Anti-perk: reduce max dice, increase resting period, and spawn intermediary clips for 2 rounds.",
+    }),
+  },
+  "score-leech": {
+    name: msg({ id: "perk.name.score-leech", message: "Score Leech" }),
+    description: msg({
+      id: "perk.description.score-leech",
+      message: "Anti-perk: drain 125 score immediately.",
+    }),
+  },
+  "cement-boots": {
+    name: msg({ id: "perk.name.cement-boots", message: "Cement Boots" }),
+    description: msg({
+      id: "perk.description.cement-boots",
+      message: "Anti-perk: reduce max dice roll by 2 for 3 rounds.",
+    }),
+  },
+  "panic-loop": {
+    name: msg({ id: "perk.name.panic-loop", message: "Panic Loop" }),
+    description: msg({
+      id: "perk.description.panic-loop",
+      message: "Anti-perk: increase interjection probability by 20%.",
+    }),
+  },
+  "moaning-loop": {
+    name: msg({ id: "perk.name.moaning-loop", message: "Moaning Loop" }),
+    description: msg({
+      id: "perk.description.moaning-loop",
+      message:
+        "Anti-perk: next round plays continuous random moaning during the round, intermediary, and interjection.",
+    }),
+  },
+  "dry-spell": {
+    name: msg({ id: "perk.name.dry-spell", message: "Dry Spell" }),
+    description: msg({
+      id: "perk.description.dry-spell",
+      message: "Anti-perk: decrease random perk offer chance by 15%.",
+    }),
+  },
+  "bad-omen": {
+    name: msg({ id: "perk.name.bad-omen", message: "Bad Omen" }),
+    description: msg({
+      id: "perk.description.bad-omen",
+      message: "Anti-perk: reduce luck, making common perks more likely to appear.",
+    }),
+  },
+  "sticky-fingers": {
+    name: msg({ id: "perk.name.sticky-fingers", message: "Sticky Fingers" }),
+    description: msg({
+      id: "perk.description.sticky-fingers",
+      message: "Anti-perk: remove one pause charge and one skip charge.",
+    }),
+  },
+  "snake-eyes": {
+    name: msg({ id: "perk.name.snake-eyes", message: "Snake Eyes" }),
+    description: msg({
+      id: "perk.description.snake-eyes",
+      message: "Anti-perk: cap the next dice roll to 2.",
+    }),
+  },
+  "im-close": {
+    name: msg({ id: "perk.name.im-close", message: "I'm close" }),
+    description: msg({
+      id: "perk.description.im-close",
+      message: "For two rounds, minimum dice roll increases to 9 and max to 15.",
+    }),
+  },
+};
+
 export function getPerkPool(includeAntiPerks = false): PerkDefinition[] {
   return PERK_LIBRARY.filter((perk) => includeAntiPerks || perk.kind === "perk");
 }
@@ -481,13 +726,15 @@ export function getPerkById(perkId: string): PerkDefinition | undefined {
 export function getPerkDisplayName(perkId: string): string {
   const perk = getPerkById(perkId);
   if (!perk) return perkId;
-  return i18n._({ id: `perk.name.${perk.id}`, message: perk.name });
+  const descriptor = PERK_MESSAGES[perk.id]?.name;
+  return descriptor ? i18n._(descriptor) : perk.name;
 }
 
 export function getPerkDescription(perkId: string): string {
   const perk = getPerkById(perkId);
   if (!perk) return "";
-  return i18n._({ id: `perk.description.${perk.id}`, message: perk.description });
+  const descriptor = PERK_MESSAGES[perk.id]?.description;
+  return descriptor ? i18n._(descriptor) : perk.description;
 }
 
 export function getPerksRequiringHandy(): Set<string> {

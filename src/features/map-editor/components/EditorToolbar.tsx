@@ -2,7 +2,7 @@ import React from "react";
 import { useLingui } from "@lingui/react/macro";
 import { playHoverSound, playSelectSound } from "../../../utils/audio";
 import { GameDropdown } from "../../../components/ui/GameDropdown";
-import type { MapEditorTool } from "../EditorState";
+import type { MapEditorTool, MapRoundBulkAction } from "../EditorState";
 import type { GraphAlignmentStrategy } from "../graphAlignment";
 
 const TOOL_ITEMS: ReadonlyArray<{
@@ -10,11 +10,11 @@ const TOOL_ITEMS: ReadonlyArray<{
   shortcut: string;
   icon: string;
 }> = [
-    { id: "select", shortcut: "V", icon: "⊹" },
-    { id: "place", shortcut: "P", icon: "◆" },
-    { id: "connect", shortcut: "C", icon: "⤳" },
-    { id: "text", shortcut: "T", icon: "T" },
-  ];
+  { id: "select", shortcut: "V", icon: "⊹" },
+  { id: "place", shortcut: "P", icon: "◆" },
+  { id: "connect", shortcut: "C", icon: "⤳" },
+  { id: "text", shortcut: "T", icon: "T" },
+];
 
 interface EditorToolbarProps {
   tool: MapEditorTool;
@@ -26,15 +26,18 @@ interface EditorToolbarProps {
   testMapPending: boolean;
   canUndo: boolean;
   canRedo: boolean;
+  canBulkEditRounds: boolean;
   onSetTool: (tool: MapEditorTool) => void;
   onAlignmentStrategyChange: (strategy: GraphAlignmentStrategy) => void;
   onRealignGraph: () => void;
+  onRequestRoundBulkAction: (action: MapRoundBulkAction) => void;
   onToggleGrid: () => void;
   onResetView: () => void;
   onDelete: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onResetGraph: () => void;
+  onConvertToLinear: () => void;
   onSave: () => void;
   onTestMap: () => void;
 }
@@ -50,15 +53,18 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
     testMapPending,
     canUndo,
     canRedo,
+    canBulkEditRounds,
     onSetTool,
     onAlignmentStrategyChange,
     onRealignGraph,
+    onRequestRoundBulkAction,
     onToggleGrid,
     onResetView,
     onDelete,
     onUndo,
     onRedo,
     onResetGraph,
+    onConvertToLinear,
     onSave,
     onTestMap,
   }) => {
@@ -83,10 +89,11 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
                 key={item.id}
                 type="button"
                 title={t`${label} (${item.shortcut})`}
-                className={`editor-tool-button flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all ${isActive
+                className={`editor-tool-button flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                  isActive
                     ? "is-active border-cyan-400/65 bg-cyan-500/18 text-cyan-100 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
                     : "border-transparent bg-transparent text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-                  }`}
+                }`}
                 onMouseEnter={playHoverSound}
                 onClick={() => {
                   playSelectSound();
@@ -164,10 +171,45 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = React.memo(
           />
         </div>
 
+        <div className="mx-1.5 h-5 w-px bg-zinc-700/60" />
+
+        {/* ── Round bulk actions ─────────────────── */}
+        <div className="flex items-center gap-1">
+          <span className="hidden rounded-md border border-transparent px-2 py-1 text-xs text-zinc-400 sm:inline">
+            {t`Rounds`}
+          </span>
+          <RoundBulkButton
+            label={t`Order`}
+            disabled={!canBulkEditRounds}
+            onClick={() => onRequestRoundBulkAction("order")}
+          />
+          <RoundBulkButton
+            label={t`Random`}
+            disabled={!canBulkEditRounds}
+            onClick={() => onRequestRoundBulkAction("random")}
+          />
+          <RoundBulkButton
+            label={t`Progressive`}
+            disabled={!canBulkEditRounds}
+            onClick={() => onRequestRoundBulkAction("progressive")}
+          />
+          <RoundBulkButton
+            label={t`Difficulty`}
+            disabled={!canBulkEditRounds}
+            onClick={() => onRequestRoundBulkAction("difficulty")}
+          />
+        </div>
+
         <div className="flex-grow" />
 
         {/* ── Persist actions ─────────────────── */}
         <div className="flex items-center gap-1.5">
+          <ToolbarIconButton
+            label={t`Convert to Linear`}
+            icon="⇄"
+            onClick={onConvertToLinear}
+            disabled={savePending || testMapPending}
+          />
           <button
             type="button"
             aria-label={t`Map editor help`}
@@ -257,3 +299,30 @@ const ToolbarIconButton: React.FC<ToolbarIconButtonProps> = React.memo(
 );
 
 ToolbarIconButton.displayName = "ToolbarIconButton";
+
+interface RoundBulkButtonProps {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+const RoundBulkButton: React.FC<RoundBulkButtonProps> = React.memo(
+  ({ label, disabled, onClick }) => (
+    <button
+      type="button"
+      title={label}
+      disabled={disabled}
+      className="editor-tool-button rounded-md border border-amber-500/30 bg-amber-500/8 px-2 py-1.5 text-[11px] font-semibold text-amber-200 transition-all hover:border-amber-400/60 hover:bg-amber-500/15 disabled:opacity-40"
+      onMouseEnter={playHoverSound}
+      onClick={() => {
+        playSelectSound();
+        onClick();
+      }}
+      data-controller-focus-id={`map-editor-toolbar-rounds-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+    >
+      {label}
+    </button>
+  )
+);
+
+RoundBulkButton.displayName = "RoundBulkButton";

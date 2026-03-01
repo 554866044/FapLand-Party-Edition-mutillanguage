@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
-import type { InstalledRound } from "../services/db";
+import type { InstalledRound, InstalledRoundCatalogEntry } from "../services/db";
 import type { StoredPlaylist } from "../services/playlists";
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
     },
     round: {
       findInstalled: vi.fn(),
+      findInstalledCatalog: vi.fn(),
+      getMediaResources: vi.fn(),
       getDisabledIds: vi.fn(),
       update: vi.fn(),
       createWebsiteRound: vi.fn(),
@@ -154,6 +156,7 @@ vi.mock("../components/InstallSidecarTrustModalHost", () => ({
 
 import { InstalledRoundsPage } from "./rounds";
 import { buildRoundRenderRows, buildRoundRenderRowsWithOptions } from "./roundRows";
+import { filterAndSortRounds, toIndexedRound } from "./roundsSelectors";
 
 async function renderInstalledRoundsPage() {
   const view = render(<InstalledRoundsPage />);
@@ -161,9 +164,23 @@ async function renderInstalledRoundsPage() {
     await Promise.resolve();
   });
   await waitFor(() => {
-    expect(mocks.db.round.findInstalled).toHaveBeenCalled();
+    expect(mocks.db.round.findInstalledCatalog).toHaveBeenCalled();
   });
   return view;
+}
+
+function toCatalogRound(round: InstalledRound): InstalledRoundCatalogEntry {
+  return {
+    ...round,
+    resources: round.resources.map((resource) => ({
+      id: resource.id,
+      disabled: resource.disabled,
+      phash: resource.phash,
+      durationMs: resource.durationMs,
+      websiteVideoCacheStatus: resource.websiteVideoCacheStatus,
+      hasFunscript: Boolean(resource.funscriptUri),
+    })),
+  } as InstalledRoundCatalogEntry;
 }
 
 function makeRound({
@@ -362,6 +379,13 @@ beforeEach(() => {
   mocks.db.webVideoCache.getDownloadProgresses.mockResolvedValue([]);
   mocks.loaderData.installWebFunscriptUrlEnabled = false;
   mocks.db.round.findInstalled.mockImplementation(async () => mocks.loaderData.rounds);
+  mocks.db.round.findInstalledCatalog.mockImplementation(async () =>
+    mocks.loaderData.rounds.map(toCatalogRound)
+  );
+  mocks.db.round.getMediaResources.mockImplementation(async (roundId: string) => {
+    const round = mocks.loaderData.rounds.find((candidate) => candidate.id === roundId);
+    return round ? { roundId, resources: round.resources } : null;
+  });
   mocks.db.round.getDisabledIds.mockResolvedValue([]);
   mocks.db.round.update.mockResolvedValue({});
   mocks.db.round.createWebsiteRound.mockResolvedValue({
@@ -691,6 +715,36 @@ describe("buildRoundRenderRows", () => {
   });
 });
 
+describe("roundsSelectors", () => {
+  it("treats catalog hasFunscript resources as scripted rounds", () => {
+    const scripted = toCatalogRound(
+      makeRound({
+        id: "scripted",
+        name: "Scripted",
+        createdAt: "2026-03-03T10:00:00.000Z",
+        funscriptUri: "app://media/%2Ftmp%2Fscripted.funscript",
+      })
+    );
+    const missing = toCatalogRound(
+      makeRound({
+        id: "missing",
+        name: "Missing",
+        createdAt: "2026-03-03T09:00:00.000Z",
+      })
+    );
+
+    const result = filterAndSortRounds({
+      indexedRounds: [scripted, missing].map(toIndexedRound),
+      query: "",
+      typeFilter: "all",
+      scriptFilter: "installed",
+      sortMode: "newest",
+    });
+
+    expect(result.map((round) => round.id)).toEqual(["scripted"]);
+  });
+});
+
 describe("InstalledRoundsPage hero grouping", () => {
   it("shows a go back button in the header and falls back to home navigation", async () => {
     await renderInstalledRoundsPage();
@@ -981,9 +1035,11 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     await renderInstalledRoundsPage();
 
+    expect(mocks.db.round.findInstalled).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByLabelText("Play Main Round"));
 
     await waitFor(() => expect(mocks.roundVideoOverlay).toHaveBeenCalled());
+    expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(1);
     const lastCall = mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
       installedRounds: InstalledRound[];
     };
@@ -1237,7 +1293,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm Conversion" }));
 
     await waitFor(() => {
-      expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(2);
+      expect(mocks.db.round.findInstalledCatalog).toHaveBeenCalledTimes(2);
     });
 
     await waitFor(() => {
@@ -1292,6 +1348,10 @@ describe("InstalledRoundsPage hero grouping", () => {
     await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    await waitFor(() => {
+      expect(mocks.db.round.getMediaResources).toHaveBeenCalledWith("solo", false);
+    });
+    await screen.findByDisplayValue("Solo Round");
     fireEvent.change(screen.getByDisplayValue("Solo Round"), {
       target: { value: "Solo Round Updated" },
     });
@@ -1319,6 +1379,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    await screen.findByDisplayValue("Solo Round");
     fireEvent.click(screen.getByRole("button", { name: "Attach Funscript" }));
     await waitFor(() => {
       expect(screen.getByText("app://media/%2Ftmp%2Fsolo.funscript")).toBeDefined();
@@ -1348,6 +1409,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    await screen.findByDisplayValue("Solo Round");
     fireEvent.click(screen.getByRole("button", { name: "Detach Funscript" }));
     fireEvent.click(screen.getByRole("button", { name: "Save Round" }));
 
@@ -1399,6 +1461,7 @@ describe("InstalledRoundsPage hero grouping", () => {
     await renderInstalledRoundsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    await screen.findByDisplayValue("Solo Round");
     fireEvent.change(screen.getByDisplayValue("Solo Round"), {
       target: { value: "" },
     });
@@ -1508,6 +1571,37 @@ describe("InstalledRoundsPage hero grouping", () => {
       );
     });
     expect(mocks.db.install.exportPackage).not.toHaveBeenCalled();
+  });
+
+  it("selects library items without loading full installed rounds and exports selected ids", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
+      makeRound({
+        id: "hero-round",
+        name: "Hero Target",
+        createdAt: "2026-03-03T10:00:00.000Z",
+        hero: { id: "hero-1", name: "Hero One" },
+      }),
+    ];
+
+    await renderInstalledRoundsPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select Items" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Solo Target" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Hero One" }));
+
+    expect(mocks.db.round.findInstalled).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Selected" }));
+
+    await waitFor(() => {
+      expect(mocks.db.install.analyzeExportPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roundIds: ["solo", "hero-round"],
+          heroIds: ["hero-1"],
+        })
+      );
+    });
   });
 
   it("shows AV1 analysis controls for library export and hides them when media is disabled", async () => {
@@ -1865,16 +1959,17 @@ describe("InstalledRoundsPage hero grouping", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Round One" })).toBeDefined();
     });
-    expect(mocks.db.round.findInstalled).toHaveBeenCalledTimes(1);
+    expect(mocks.db.round.findInstalledCatalog).toHaveBeenCalledTimes(1);
+    expect(mocks.db.round.findInstalled).not.toHaveBeenCalled();
   });
 
   it("shows a section-scoped retry state when the first rounds fetch fails", async () => {
     mocks.loaderData.rounds = [
       makeRound({ id: "r1", name: "Round One", createdAt: "2026-03-03T12:00:00.000Z" }),
     ];
-    mocks.db.round.findInstalled
+    mocks.db.round.findInstalledCatalog
       .mockRejectedValueOnce(new Error("Library load failed."))
-      .mockImplementation(async () => mocks.loaderData.rounds);
+      .mockImplementation(async () => mocks.loaderData.rounds.map(toCatalogRound));
 
     render(<InstalledRoundsPage />);
 

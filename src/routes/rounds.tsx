@@ -46,11 +46,17 @@ import {
   type LibraryPackageExportResult,
   type VideoDownloadProgress,
   type WebsiteVideoScanStatus,
+  type InstalledRoundCatalogEntry,
+  type InstalledRoundMediaResources,
 } from "../services/db";
 import { playlists, type StoredPlaylist } from "../services/playlists";
 import { trpc } from "../services/trpc";
 import { importOpenedFile } from "../services/openedFiles";
-import { buildRoundRenderRowsWithOptions, type RoundRenderRow } from "./roundRows";
+import {
+  buildRoundRenderRowsWithOptions,
+  type RoundLibraryEntry,
+  type RoundRenderRow,
+} from "./roundRows";
 import {
   buildAggregateDownloadProgress,
   buildDownloadProgressByUri,
@@ -611,7 +617,9 @@ function toLegacyPlaylistConfig(orderedSlots: LegacyImportedSlot[]): PlaylistCon
   };
 }
 
-function pickHeroGroupRoundToKeep(rounds: InstalledRound[]): InstalledRound | null {
+function pickHeroGroupRoundToKeep<TRound extends RoundLibraryEntry>(
+  rounds: TRound[]
+): TRound | null {
   if (rounds.length === 0) return null;
   const [first, ...rest] = rounds;
   if (!first) return null;
@@ -638,8 +646,35 @@ async function refreshUiAfterHeroGroupConversion(refreshInstalledRounds: () => P
   reloadUiAfterHeroGroupConversion();
 }
 
-function toRoundEditDraft(round: InstalledRound): RoundEditDraft {
-  const primaryResource = round.resources[0] ?? null;
+function getResourceFunscriptState(
+  resource: { funscriptUri?: string | null; hasFunscript?: boolean } | undefined
+) {
+  if (!resource) return { hasFunscript: false, funscriptUri: null as string | null };
+  const funscriptUri =
+    "funscriptUri" in resource && typeof resource.funscriptUri === "string"
+      ? resource.funscriptUri
+      : null;
+  return {
+    hasFunscript:
+      Boolean(funscriptUri) || ("hasFunscript" in resource && resource.hasFunscript === true),
+    funscriptUri,
+  };
+}
+
+function roundHasPlayableResource(round: RoundLibraryEntry): boolean {
+  return round.resources.length > 0;
+}
+
+function roundHasFunscript(round: RoundLibraryEntry): boolean {
+  return getResourceFunscriptState(round.resources[0]).hasFunscript;
+}
+
+function toRoundEditDraft(
+  round: RoundLibraryEntry,
+  mediaResources?: InstalledRoundMediaResources | null
+): RoundEditDraft {
+  const primaryResource = mediaResources?.resources[0] ?? round.resources[0] ?? null;
+  const { funscriptUri } = getResourceFunscriptState(primaryResource ?? undefined);
   return {
     id: round.id,
     name: round.name,
@@ -651,12 +686,12 @@ function toRoundEditDraft(round: InstalledRound): RoundEditDraft {
     endTime: round.endTime == null ? "" : `${round.endTime}`,
     type: round.type ?? "Normal",
     resourceId: primaryResource?.id ?? null,
-    funscriptUri: primaryResource?.funscriptUri ?? null,
+    funscriptUri,
     excludeFromRandom: round.excludeFromRandom ?? false,
   };
 }
 
-function toHeroEditDraft(round: InstalledRound): HeroEditDraft | null {
+function toHeroEditDraft(round: RoundLibraryEntry): HeroEditDraft | null {
   if (!round.heroId || !round.hero) return null;
   return {
     id: round.heroId,
@@ -682,7 +717,7 @@ function parseOptionalFloat(value: string): number | null {
   return parsed;
 }
 
-function isTemplateRound(round: InstalledRound): boolean {
+function isTemplateRound(round: RoundLibraryEntry): boolean {
   return round.resources.length === 0;
 }
 
@@ -701,7 +736,8 @@ function normalizeHttpUrl(value: string): string | null {
 const getInstalledRounds = async (
   includeDisabled = false,
   includeTemplates = true
-): Promise<InstalledRound[]> => db.round.findInstalled(includeDisabled, includeTemplates);
+): Promise<InstalledRoundCatalogEntry[]> =>
+  db.round.findInstalledCatalog(includeDisabled, includeTemplates);
 
 const getAvailablePlaylists = async (): Promise<StoredPlaylist[]> => playlists.list();
 
@@ -787,8 +823,10 @@ export function InstalledRoundsPage() {
   const [deleteRoundDialog, setDeleteRoundDialog] = useState<DeleteRoundDialogState | null>(null);
   const [deleteHeroDialog, setDeleteHeroDialog] = useState<DeleteHeroDialogState | null>(null);
   const [showDisabledRounds, setShowDisabledRounds] = useState(false);
-  const [roundsResource, setRoundsResource] = useState<AsyncResource<InstalledRound[]>>(() =>
-    createAsyncResource<InstalledRound[]>([])
+  const [roundsResource, setRoundsResource] = useState<
+    AsyncResource<InstalledRoundCatalogEntry[]>
+  >(() =>
+    createAsyncResource<InstalledRoundCatalogEntry[]>([])
   );
   const [playlistsResource, setPlaylistsResource] = useState<AsyncResource<StoredPlaylist[]>>(() =>
     createAsyncResource<StoredPlaylist[]>([])
@@ -831,6 +869,7 @@ export function InstalledRoundsPage() {
   const [groupMode, setGroupMode] = useState<GroupMode>("hero");
   const [expandedHeroGroups, setExpandedHeroGroups] = useState<Record<string, boolean>>({});
   const [activePreviewRound, setActivePreviewRound] = useState<InstalledRound | null>(null);
+  const [previewInstalledRounds, setPreviewInstalledRounds] = useState<InstalledRound[]>([]);
   const [convertingHeroGroupKey, setConvertingHeroGroupKey] = useState<string | null>(null);
   const [heroGroupRoundConversion, setHeroGroupRoundConversion] =
     useState<HeroGroupRoundConversionState | null>(null);
@@ -949,8 +988,12 @@ export function InstalledRoundsPage() {
   const deferredQuery = useDeferredValue(query);
   const websiteRoundVideoValidationRequestIdRef = useRef(0);
   const consumedPaletteOpenRef = useRef<typeof search.open | null>(null);
-  const roundsRequestRef = useRef<Promise<InstalledRound[]> | null>(null);
+  const roundsRequestRef = useRef<Promise<InstalledRoundCatalogEntry[]> | null>(null);
   const roundsRequestIncludeDisabledRef = useRef<boolean | null>(null);
+  const fullRoundsRequestRef = useRef<Promise<InstalledRound[]> | null>(null);
+  const fullRoundsRequestIncludeDisabledRef = useRef<boolean | null>(null);
+  const fullRoundsCacheRef = useRef<InstalledRound[] | null>(null);
+  const fullRoundsCacheIncludeDisabledRef = useRef<boolean | null>(null);
   const disabledIdsRequestRef = useRef<Promise<Set<string>> | null>(null);
   const playlistsRequestRef = useRef<Promise<StoredPlaylist[]> | null>(null);
   const previewSettingsRequestRef = useRef<Promise<PreviewSettings> | null>(null);
@@ -1053,6 +1096,42 @@ export function InstalledRoundsPage() {
       return request;
     },
     [roundsResource.data, roundsResource.hasLoadedOnce, showDisabledRounds]
+  );
+
+  const loadFullInstalledRoundsForPreview = useCallback(
+    async (includeDisabled = showDisabledRounds) => {
+      if (
+        fullRoundsCacheRef.current &&
+        fullRoundsCacheIncludeDisabledRef.current === includeDisabled
+      ) {
+        return fullRoundsCacheRef.current;
+      }
+      if (
+        fullRoundsRequestRef.current &&
+        fullRoundsRequestIncludeDisabledRef.current === includeDisabled
+      ) {
+        return fullRoundsRequestRef.current;
+      }
+
+      const request = db.round
+        .findInstalled(includeDisabled)
+        .then((nextRounds) => {
+          fullRoundsCacheRef.current = nextRounds;
+          fullRoundsCacheIncludeDisabledRef.current = includeDisabled;
+          return nextRounds;
+        })
+        .finally(() => {
+          if (fullRoundsRequestRef.current === request) {
+            fullRoundsRequestRef.current = null;
+            fullRoundsRequestIncludeDisabledRef.current = null;
+          }
+        });
+
+      fullRoundsRequestRef.current = request;
+      fullRoundsRequestIncludeDisabledRef.current = includeDisabled;
+      return request;
+    },
+    [showDisabledRounds]
   );
 
   const loadDisabledRoundIds = useCallback(
@@ -1270,6 +1349,11 @@ export function InstalledRoundsPage() {
   );
 
   const refreshInstalledRounds = useCallback(async () => {
+    fullRoundsCacheRef.current = null;
+    fullRoundsCacheIncludeDisabledRef.current = null;
+    fullRoundsRequestRef.current = null;
+    fullRoundsRequestIncludeDisabledRef.current = null;
+    setPreviewInstalledRounds([]);
     if (!roundsResource.hasLoadedOnce && activeSectionId !== "library") {
       return;
     }
@@ -1367,7 +1451,7 @@ export function InstalledRoundsPage() {
     () =>
       buildPreviewRoundVideoOverlayProps({
         activeRound: activePreview,
-        installedRounds: rounds,
+        installedRounds: previewInstalledRounds,
         intermediaryProbability: 1,
         booruSearchPrompt: intermediaryLoadingPrompt,
         intermediaryLoadingDurationSec,
@@ -1386,7 +1470,7 @@ export function InstalledRoundsPage() {
       intermediaryLoadingPrompt,
       intermediaryReturnPauseSec,
       roundProgressBarAlwaysVisible,
-      rounds,
+      previewInstalledRounds,
     ]
   );
 
@@ -1582,7 +1666,7 @@ export function InstalledRoundsPage() {
     return groupKeys.size;
   }, [rounds]);
   const roundsWithScriptCount = useMemo(
-    () => rounds.filter((round) => Boolean(round.resources[0]?.funscriptUri)).length,
+    () => rounds.filter((round) => roundHasFunscript(round)).length,
     [rounds]
   );
   const sourceHeroOptions = useMemo<SourceHeroOption[]>(
@@ -1659,7 +1743,7 @@ export function InstalledRoundsPage() {
     [expandedHeroGroups, visibleGroupKeys]
   );
   const handleConvertRoundToHero = useCallback(
-    (round: InstalledRound) => {
+    (round: RoundLibraryEntry) => {
       handleSelectSfx();
       void navigate({
         to: "/converter",
@@ -1672,22 +1756,60 @@ export function InstalledRoundsPage() {
     [handleSelectSfx, navigate]
   );
   const handlePlayRound = useCallback(
-    (round: InstalledRound) => {
+    (round: RoundLibraryEntry) => {
       if (getInstalledRoundWebsiteVideoCacheStatus(round) === "pending") {
         return;
       }
       handleSelectSfx();
       void loadPreviewSettings().catch(() => undefined);
-      setActivePreviewRound(round);
+      void loadFullInstalledRoundsForPreview(showDisabledRounds)
+        .then((fullRounds) => {
+          const fullRound = fullRounds.find((candidate) => candidate.id === round.id);
+          if (!fullRound) {
+            showToast(t`Failed to load selected round media.`, "error");
+            return;
+          }
+          setPreviewInstalledRounds(fullRounds);
+          setActivePreviewRound(fullRound);
+        })
+        .catch((error) => {
+          console.error("Failed to load installed rounds for preview", error);
+          showToast(
+            error instanceof Error ? error.message : t`Failed to load selected round media.`,
+            "error"
+          );
+        });
     },
-    [handleSelectSfx, loadPreviewSettings, rounds.length]
+    [
+      handleSelectSfx,
+      loadFullInstalledRoundsForPreview,
+      loadPreviewSettings,
+      showDisabledRounds,
+      showToast,
+      t,
+    ]
   );
   const handleEditRound = useCallback(
-    (round: InstalledRound) => {
+    (round: RoundLibraryEntry) => {
       handleSelectSfx();
-      setEditingRound(toRoundEditDraft(round));
+      void db.round
+        .getMediaResources(round.id, showDisabledRounds)
+        .then((mediaResources) => {
+          if (!mediaResources || mediaResources.resources.length === 0) {
+            showToast(t`Failed to load selected round media.`, "error");
+            return;
+          }
+          setEditingRound(toRoundEditDraft(round, mediaResources));
+        })
+        .catch((error) => {
+          console.error("Failed to load round media resources for editing", error);
+          showToast(
+            error instanceof Error ? error.message : t`Failed to load selected round media.`,
+            "error"
+          );
+        });
     },
-    [handleSelectSfx]
+    [handleSelectSfx, showDisabledRounds, showToast, t]
   );
 
   useEffect(() => {
@@ -2392,7 +2514,7 @@ export function InstalledRoundsPage() {
     });
   };
 
-  const retryTemplateLinkingForRound = async (round: InstalledRound) => {
+  const retryTemplateLinkingForRound = async (round: RoundLibraryEntry) => {
     if (isSavingEdit) return;
     setIsSavingEdit(true);
     try {
@@ -3167,7 +3289,11 @@ export function InstalledRoundsPage() {
                                   }
                                   downloadProgress={
                                     item.round.resources
-                                      .map((r) => getDownloadProgressForVideoUri(r.videoUri))
+                                      .map((r) =>
+                                        "videoUri" in r
+                                          ? getDownloadProgressForVideoUri(r.videoUri)
+                                          : null
+                                      )
                                       .find((p): p is VideoDownloadProgress => p != null) ?? null
                                   }
                                   selectionMode={selectionMode}
@@ -4218,14 +4344,14 @@ const RoundCard = memo(function RoundCard({
   selected,
   onToggleSelection,
 }: {
-  round: InstalledRound;
+  round: RoundLibraryEntry;
   index: number;
   onHoverSfx: () => void;
-  onConvertToHero: (round: InstalledRound) => void;
-  onPlay: (round: InstalledRound) => void;
-  onEdit: (round: InstalledRound) => void;
-  onRetryTemplateLinking: (round: InstalledRound) => void;
-  onRepairTemplate: (round: InstalledRound) => void;
+  onConvertToHero: (round: RoundLibraryEntry) => void;
+  onPlay: (round: RoundLibraryEntry) => void;
+  onEdit: (round: RoundLibraryEntry) => void;
+  onRetryTemplateLinking: (round: RoundLibraryEntry) => void;
+  onRepairTemplate: (round: RoundLibraryEntry) => void;
   animateDifficulty: boolean;
   showDisabledBadge: boolean;
   isWebsiteVideoCaching?: boolean;
@@ -4233,7 +4359,7 @@ const RoundCard = memo(function RoundCard({
   downloadProgress?: VideoDownloadProgress | null;
   selectionMode?: boolean;
   selected?: boolean;
-  onToggleSelection?: (round: InstalledRound) => void;
+  onToggleSelection?: (round: RoundLibraryEntry) => void;
 }) {
   const sfwMode = useSfwMode();
   const { t } = useLingui();
@@ -4241,15 +4367,18 @@ const RoundCard = memo(function RoundCard({
   const [hasActivatedPreview, setHasActivatedPreview] = useState(false);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
-  const previewUri = round.resources[0]?.videoUri;
+  const firstResource = round.resources[0];
+  const previewUri =
+    firstResource && "videoUri" in firstResource ? firstResource.videoUri : undefined;
   const previewImage = round.previewImage;
-  const primaryResource = round.resources[0];
-  const hasFunscript = Boolean(round.resources[0]?.funscriptUri);
+  const primaryResource = firstResource;
+  const hasFunscript = roundHasFunscript(round);
   const isTemplate = isTemplateRound(round);
   const isWebsiteRound = round.installSourceKey?.startsWith("website:") ?? false;
   const isPreviewBeingGenerated = isWebsiteVideoCaching && isWebsiteRound && !previewImage;
   const showWebsiteCachingState = isWebsiteRound && websiteVideoCachePending;
   const canPreview = Boolean(previewUri) && !showWebsiteCachingState;
+  const canPlay = roundHasPlayableResource(round) && !showWebsiteCachingState;
   const difficulty = round.difficulty ?? 1;
   const sourceLabel = abbreviateNsfwText(
     getRoundInstallSourceLabel(round.installSourceKey, {
@@ -4307,6 +4436,7 @@ const RoundCard = memo(function RoundCard({
       {selectionMode && (
         <button
           type="button"
+          aria-label={selected ? t`Deselect ${displayName}` : t`Select ${displayName}`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelection?.(round);
@@ -4333,7 +4463,7 @@ const RoundCard = memo(function RoundCard({
             />
           </SfwGuard>
         )}
-        {canPreview && hasActivatedPreview ? (
+        {previewUri && canPreview && hasActivatedPreview ? (
           <RoundCardPreviewVideo
             videoRef={previewVideoRef}
             previewUri={previewUri}
@@ -4389,7 +4519,7 @@ const RoundCard = memo(function RoundCard({
               <span className="h-7 w-7 animate-spin rounded-full border-2 border-amber-200/80 border-t-transparent" />
             )}
           </div>
-        ) : previewUri ? (
+        ) : canPlay ? (
           <button
             type="button"
             aria-label={t`Play ${displayName}`}
@@ -4799,6 +4929,7 @@ function HeroGroupHeader({
       {selectionMode && (
         <button
           type="button"
+          aria-label={selected ? t`Deselect ${heroName}` : t`Select ${heroName}`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelection?.();
@@ -6206,7 +6337,7 @@ function getRoundDisplayType(type: string | null | undefined, normalLabel: strin
 }
 
 function summarizeHeroGroupPreviewState(
-  rounds: InstalledRound[],
+  rounds: RoundLibraryEntry[],
   isWebsiteVideoCaching: boolean
 ): {
   pendingCacheCount: number;

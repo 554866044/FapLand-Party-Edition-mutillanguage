@@ -22,6 +22,7 @@ import { EditorCanvas } from "../features/map-editor/EditorCanvas";
 import {
   createEditorId,
   EMPTY_EDITOR_SELECTION,
+  convertEditorGraphToLinearBoardConfig,
   layoutLinearGraphFromPlaylist,
   normalizeGraphBackgroundMedia,
   normalizeRoadPalette,
@@ -33,7 +34,9 @@ import {
   type EditorNode,
   type EditorSelectionState,
   type EditorTextAnnotation,
+  type GraphToLinearConversionResult,
   type MapEditorTool,
+  type MapRoundBulkAction,
   type ViewportState,
 } from "../features/map-editor/EditorState";
 import { UndoManager } from "../features/map-editor/UndoManager";
@@ -70,6 +73,7 @@ import {
   playMapUndoRedoSound,
   playSelectSound,
 } from "../utils/audio";
+import { getRoundDurationSec } from "../utils/duration";
 import { PlaylistPickerView } from "../features/map-editor/components/PlaylistPickerView";
 import { EditorToolbar } from "../features/map-editor/components/EditorToolbar";
 import { TileSidebar } from "../features/map-editor/components/TileSidebar";
@@ -332,6 +336,109 @@ const selectionsEqual = (left: EditorSelectionState, right: EditorSelectionState
   left.selectedTextAnnotationId === right.selectedTextAnnotationId &&
   idsEqual(left.selectedNodeIds, right.selectedNodeIds);
 
+const mapRoundCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
+const sortMapRoundsByName = (
+  rounds: ReadonlyArray<MapEditorInstalledRound>
+): MapEditorInstalledRound[] =>
+  [...rounds].sort((a, b) => {
+    const nameDiff = mapRoundCollator.compare(a.name, b.name);
+    if (nameDiff !== 0) return nameDiff;
+    return mapRoundCollator.compare(a.author ?? "", b.author ?? "");
+  });
+
+const sortMapRoundsByDifficulty = (
+  rounds: ReadonlyArray<MapEditorInstalledRound>
+): MapEditorInstalledRound[] =>
+  [...rounds]
+    .map((round, index) => ({ round, index }))
+    .sort((a, b) => {
+      const difficultyDiff = (a.round.difficulty ?? 0) - (b.round.difficulty ?? 0);
+      if (difficultyDiff !== 0) return difficultyDiff;
+
+      const nameDiff = mapRoundCollator.compare(a.round.name, b.round.name);
+      if (nameDiff !== 0) return nameDiff;
+
+      return a.index - b.index;
+    })
+    .map(({ round }) => round);
+
+const shuffleMapRounds = (
+  rounds: ReadonlyArray<MapEditorInstalledRound>
+): MapEditorInstalledRound[] => {
+  const next = [...rounds];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j]!, next[i]!];
+  }
+  return next;
+};
+
+const buildProgressiveMapRoundOrder = (
+  rounds: ReadonlyArray<MapEditorInstalledRound>
+): MapEditorInstalledRound[] => {
+  if (rounds.length <= 1) return [...rounds];
+
+  const difficultyValues = rounds.map((round) => round.difficulty ?? 1);
+  const durationValues = rounds.map((round) => getRoundDurationSec(round));
+  const minDifficulty = Math.min(...difficultyValues);
+  const maxDifficulty = Math.max(...difficultyValues);
+  const minDuration = Math.min(...durationValues);
+  const maxDuration = Math.max(...durationValues);
+  const normalize = (value: number, min: number, max: number): number =>
+    max <= min ? 0.5 : (value - min) / (max - min);
+
+  const pool = [...rounds];
+  const picked: MapEditorInstalledRound[] = [];
+  while (pool.length > 0) {
+    const progress = picked.length / Math.max(1, rounds.length - 1);
+    const biasStrength = progress * 2.5;
+    const weighted = pool.map((round) => {
+      const diffNorm = normalize(round.difficulty ?? 1, minDifficulty, maxDifficulty);
+      const durationNorm = normalize(getRoundDurationSec(round), minDuration, maxDuration);
+      const score = diffNorm * 0.7 + durationNorm * 0.3;
+      return {
+        round,
+        weight: Math.max(0.01, 0.2 + Math.random() * 0.35 + score * biasStrength),
+      };
+    });
+
+    const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    let cursor = Math.random() * total;
+    let chosenIndex = weighted.length - 1;
+    for (let index = 0; index < weighted.length; index += 1) {
+      cursor -= weighted[index]!.weight;
+      if (cursor <= 0) {
+        chosenIndex = index;
+        break;
+      }
+    }
+
+    const [chosen] = pool.splice(chosenIndex, 1);
+    if (chosen) picked.push(chosen);
+  }
+
+  return picked;
+};
+
+const buildRepeatedRoundAssignment = (
+  sourceRounds: ReadonlyArray<MapEditorInstalledRound>,
+  targetCount: number,
+  action: Exclude<MapRoundBulkAction, "difficulty">
+): MapEditorInstalledRound[] => {
+  const assigned: MapEditorInstalledRound[] = [];
+  while (assigned.length < targetCount) {
+    const ordered =
+      action === "order"
+        ? sortMapRoundsByName(sourceRounds)
+        : action === "random"
+          ? shuffleMapRounds(sourceRounds)
+          : buildProgressiveMapRoundOrder(sourceRounds);
+    assigned.push(...ordered.slice(0, targetCount - assigned.length));
+  }
+  return assigned;
+};
+
 type GraphUpdateFn = (previous: EditorGraphConfig) => EditorGraphConfig;
 
 function MapEditorPage() {
@@ -368,6 +475,10 @@ function MapEditorPage() {
     useState<ImportedPlaylistReview | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [roundBulkConfirmAction, setRoundBulkConfirmAction] = useState<MapRoundBulkAction | null>(
+    null
+  );
+  const [linearConversionDialogOpen, setLinearConversionDialogOpen] = useState(false);
   const [discardPlaylistDialogOpen, setDiscardPlaylistDialogOpen] = useState(false);
   const [discardImportDialogOpen, setDiscardImportDialogOpen] = useState(false);
   const [config, setConfig] = useState<EditorGraphConfig>(makeStartingConfig);
@@ -646,6 +757,13 @@ function MapEditorPage() {
 
   const perkOptions = useMemo(() => getSinglePlayerPerkPool(), []);
   const antiPerkOptions = useMemo(() => getSinglePlayerAntiPerkPool(), []);
+  const normalRounds = useMemo(
+    () =>
+      installedRounds.filter(
+        (round: MapEditorInstalledRound) => (round.type ?? "Normal") === "Normal"
+      ),
+    [installedRounds]
+  );
   const cumRounds = useMemo(
     () => installedRounds.filter((round) => round.type === "Cum"),
     [installedRounds]
@@ -694,6 +812,24 @@ function MapEditorPage() {
       : selectedImportReview
         ? "Review Auto-Resolve"
         : null;
+  const linearConversionPreview = useMemo<GraphToLinearConversionResult>(
+    () => convertEditorGraphToLinearBoardConfig(config),
+    [config]
+  );
+  const linearConversionDialogMessage = useMemo(() => {
+    const droppedNodeCount = linearConversionPreview.droppedNodeIds.length;
+    const droppedEdgeCount = linearConversionPreview.droppedEdgeIds.length;
+    const base = t`This conversion follows the first path from Start. Branches, graph-only nodes, text, gates, labels, and map styling may be lost if the map is complicated.`;
+    const counts =
+      droppedNodeCount > 0 || droppedEdgeCount > 0
+        ? t`This conversion would drop ${droppedNodeCount} nodes and ${droppedEdgeCount} edges.`
+        : "";
+    return counts ? `${base}\n\n${counts}` : base;
+  }, [
+    linearConversionPreview.droppedEdgeIds.length,
+    linearConversionPreview.droppedNodeIds.length,
+    t,
+  ]);
 
   const selectedNode = useMemo(
     () =>
@@ -725,6 +861,11 @@ function MapEditorPage() {
     if (!selectedNode) return [];
     return config.edges.filter((edge) => edge.fromNodeId === selectedNode.id);
   }, [config.edges, selectedNode]);
+  const fixedRoundNodeCount = useMemo(
+    () => config.nodes.filter((node) => node.kind === "round").length,
+    [config.nodes]
+  );
+  const canBulkEditRounds = fixedRoundNodeCount > 0 && normalRounds.length > 0;
 
   const tilesByKind = useMemo(() => {
     const map = new Map<EditorNode["kind"], TileCatalogTile & { kind: EditorNode["kind"] }>();
@@ -1601,6 +1742,82 @@ function MapEditorPage() {
     playSelectSound();
   }, [alignmentStrategy, updateGraphConfig]);
 
+  const requestRoundBulkAction = useCallback(
+    (action: MapRoundBulkAction) => {
+      if (!canBulkEditRounds) {
+        playMapInvalidActionSound();
+        return;
+      }
+      setRoundBulkConfirmAction(action);
+    },
+    [canBulkEditRounds]
+  );
+
+  const confirmRoundBulkAction = useCallback(() => {
+    const action = roundBulkConfirmAction;
+    setRoundBulkConfirmAction(null);
+    if (!action) return;
+
+    const changed = updateGraphConfig((previous) => {
+      const roundNodes = previous.nodes.filter((node) => node.kind === "round");
+      if (roundNodes.length === 0 || normalRounds.length === 0) return previous;
+
+      const assignments =
+        action === "difficulty"
+          ? sortMapRoundsByDifficulty(
+              roundNodes
+                .map((node) =>
+                  node.roundRef ? resolvePortableRoundRef(node.roundRef, normalRounds) : null
+                )
+                .filter((round): round is MapEditorInstalledRound => Boolean(round))
+            )
+          : buildRepeatedRoundAssignment(normalRounds, roundNodes.length, action);
+
+      if (assignments.length === 0) return previous;
+
+      let assignmentIndex = 0;
+      const nextNodes = previous.nodes.map((node) => {
+        if (node.kind !== "round") return node;
+        const assignedRound = assignments[assignmentIndex];
+        if (!assignedRound) return node;
+        assignmentIndex += 1;
+        return {
+          ...node,
+          roundRef: toPortableRoundRef(assignedRound),
+        };
+      });
+
+      return {
+        ...previous,
+        nodes: nextNodes,
+      };
+    });
+
+    if (!changed) {
+      playMapInvalidActionSound();
+      return;
+    }
+
+    playSelectSound();
+  }, [normalRounds, roundBulkConfirmAction, updateGraphConfig]);
+
+  const roundBulkConfirmTitle =
+    roundBulkConfirmAction === "order"
+      ? t`Reroll rounds in order?`
+      : roundBulkConfirmAction === "random"
+        ? t`Reroll rounds randomly?`
+        : roundBulkConfirmAction === "progressive"
+          ? t`Reroll rounds progressively?`
+          : t`Reorder rounds by difficulty?`;
+  const roundBulkConfirmLabel =
+    roundBulkConfirmAction === "order"
+      ? t`Apply Order`
+      : roundBulkConfirmAction === "random"
+        ? t`Reroll Random`
+        : roundBulkConfirmAction === "progressive"
+          ? t`Apply Progressive`
+          : t`Sort by Difficulty`;
+
   const resetView = useCallback(() => {
     setViewport(DEFAULT_EDITOR_VIEWPORT);
     setSpacePanActive(false);
@@ -1988,6 +2205,63 @@ function MapEditorPage() {
       setSavePending(false);
     }
   }, [importPending, persistEditedPlaylist, savePending, selectedPlaylist, testMapPending]);
+
+  const handleConfirmLinearConversion = useCallback(async () => {
+    setLinearConversionDialogOpen(false);
+    if (!selectedPlaylist) {
+      setSaveNotice(t`Failed to convert playlist to linear.`);
+      playMapInvalidActionSound();
+      return;
+    }
+    if (importPending || savePending || testMapPending) return;
+
+    setSavePending(true);
+    setSaveNotice(null);
+    try {
+      const conversion = convertEditorGraphToLinearBoardConfig(configRef.current);
+      const parsedConfig = ZPlaylistConfig.parse({
+        ...selectedPlaylist.config,
+        boardConfig: conversion.boardConfig,
+      });
+      const nextName = playlistNameDraft.trim() || selectedPlaylist.name;
+      const updated = await playlists.update({
+        playlistId: selectedPlaylist.id,
+        name: nextName,
+        config: parsedConfig,
+      });
+      await playlists.setActive(updated.id);
+      updatePlaylistListEntry(updated);
+      setActivePlaylistId(updated.id);
+      setPlaylistNameDraft(updated.name);
+      if (importedPlaylistReview?.playlistId === selectedPlaylist.id) {
+        setImportedPlaylistReview(null);
+      }
+      setIsDirty(false);
+      setSaveNotice(t`Converted "${updated.name}" to a linear playlist.`);
+      playSelectSound();
+      await navigate({
+        to: "/playlist-workshop",
+      });
+    } catch (error) {
+      console.error("Failed to convert playlist to linear", error);
+      setSaveNotice(
+        error instanceof Error ? error.message : t`Failed to convert playlist to linear.`
+      );
+      playMapInvalidActionSound();
+    } finally {
+      setSavePending(false);
+    }
+  }, [
+    importedPlaylistReview?.playlistId,
+    importPending,
+    navigate,
+    playlistNameDraft,
+    savePending,
+    selectedPlaylist,
+    t,
+    testMapPending,
+    updatePlaylistListEntry,
+  ]);
 
   const handleTestMap = useCallback(async () => {
     if (!selectedPlaylist) return;
@@ -2442,15 +2716,18 @@ function MapEditorPage() {
                 testMapPending={testMapPending}
                 canUndo={historyState.canUndo}
                 canRedo={historyState.canRedo}
+                canBulkEditRounds={canBulkEditRounds}
                 onSetTool={setTool}
                 onAlignmentStrategyChange={setAlignmentStrategy}
                 onRealignGraph={handleRealignGraph}
+                onRequestRoundBulkAction={requestRoundBulkAction}
                 onToggleGrid={handleToggleGrid}
                 onResetView={resetView}
                 onDelete={deleteSelection}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 onResetGraph={resetGraph}
+                onConvertToLinear={() => setLinearConversionDialogOpen(true)}
                 onSave={() => {
                   void handleSavePlaylist();
                 }}
@@ -2773,6 +3050,27 @@ function MapEditorPage() {
         variant="danger"
         onConfirm={confirmResetGraph}
         onCancel={() => setResetDialogOpen(false)}
+      />
+      <ConfirmDialog
+        isOpen={roundBulkConfirmAction !== null}
+        title={roundBulkConfirmTitle}
+        message={t`This changes every fixed round node in the current map. Continue?`}
+        confirmLabel={roundBulkConfirmLabel}
+        variant="warning"
+        onConfirm={confirmRoundBulkAction}
+        onCancel={() => setRoundBulkConfirmAction(null)}
+      />
+      <ConfirmDialog
+        isOpen={linearConversionDialogOpen}
+        title={t`Convert to Linear Playlist?`}
+        message={linearConversionDialogMessage}
+        confirmLabel={t`Convert to Linear`}
+        variant="warning"
+        isPending={savePending}
+        onConfirm={() => {
+          void handleConfirmLinearConversion();
+        }}
+        onCancel={() => setLinearConversionDialogOpen(false)}
       />
       <ConfirmDialog
         isOpen={discardPlaylistDialogOpen}

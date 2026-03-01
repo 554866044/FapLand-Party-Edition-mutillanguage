@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
+import type { PlaylistConfig } from "../game/playlistSchema";
 
 function makePlaylist(id: string, name: string) {
   return {
@@ -278,7 +279,7 @@ beforeEach(() => {
       selectMusicCacheDirectory: vi.fn(),
       selectMoaningCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
-        selectMapBackgroundFile: vi.fn(),
+      selectMapBackgroundFile: vi.fn(),
       selectMusicFiles: vi.fn(),
       selectMoaningFiles: vi.fn(),
       addMusicFromUrl: vi.fn(async () => ({
@@ -762,6 +763,130 @@ describe("MapEditorRoute", () => {
     await waitFor(() => {
       expect(getCanvasNodePositions()).toEqual(laidOut);
     });
+  });
+
+  it("asks for confirmation before rerolling all fixed round nodes", async () => {
+    mocks.loaderData = {
+      ...mocks.loaderData,
+      installedRounds: [
+        {
+          id: "round-beta",
+          name: "Beta Round",
+          author: "Beta Author",
+          type: "Normal",
+          difficulty: 3,
+          startTime: 0,
+          endTime: 6000,
+          previewImage: null,
+          resources: [],
+        },
+        {
+          id: "round-alpha",
+          name: "Alpha Round",
+          author: "Alpha Author",
+          type: "Normal",
+          difficulty: 1,
+          startTime: 0,
+          endTime: 4000,
+          previewImage: null,
+          resources: [],
+        },
+      ],
+    };
+
+    render(<Component />);
+    await enterEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Order" }));
+    expect(screen.getByText("Reroll rounds in order?")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    let props = mocks.canvasProps as {
+      config: { nodes: Array<{ id: string; roundRef?: { idHint?: string; name: string } }> };
+    } | null;
+    expect(props?.config.nodes.find((node) => node.id === "round-1")?.roundRef).toEqual({
+      name: "Round 1",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Order" }));
+
+    await waitFor(() => {
+      props = mocks.canvasProps as {
+        config: { nodes: Array<{ id: string; roundRef?: { idHint?: string; name: string } }> };
+      } | null;
+      expect(props?.config.nodes.find((node) => node.id === "round-1")?.roundRef).toEqual(
+        expect.objectContaining({
+          idHint: "round-alpha",
+          name: "Alpha Round",
+        })
+      );
+    });
+  });
+
+  it("shows the convert-to-linear action inside the graph editor toolbar", async () => {
+    render(<Component />);
+    await enterEditor();
+
+    expect(screen.getByRole("button", { name: "Convert to Linear" })).toBeDefined();
+  });
+
+  it("opens a lossy conversion warning before converting to linear", async () => {
+    render(<Component />);
+    await enterEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Linear" }));
+
+    expect(screen.getByText("Convert to Linear Playlist?")).toBeDefined();
+    expect(
+      screen.getByText(
+        "This conversion follows the first path from Start. Branches, graph-only nodes, text, gates, labels, and map styling may be lost if the map is complicated."
+      )
+    ).toBeDefined();
+  });
+
+  it("converts the graph playlist to linear, activates it, and opens the playlist workshop", async () => {
+    render(<Component />);
+    await enterEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Linear" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Convert to Linear" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
+    });
+
+    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as {
+      playlistId: string;
+      name: string;
+      config: PlaylistConfig;
+    };
+    expect(updateCall.playlistId).toBe("playlist-1");
+    expect(updateCall.name).toBe("Test Playlist");
+    expect(updateCall.config.boardConfig.mode).toBe("linear");
+    if (updateCall.config.boardConfig.mode !== "linear") {
+      throw new Error("Expected linear board config");
+    }
+    expect(updateCall.config.boardConfig.totalIndices).toBe(2);
+    expect(updateCall.config.boardConfig.normalRoundRefsByIndex["2"]).toEqual({
+      name: "Round 1",
+    });
+    expect(updateCall.config.perkSelection.triggerChancePerCompletedRound).toBe(0.35);
+    expect(updateCall.config.economy.startingMoney).toBe(120);
+
+    expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-1");
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
+  });
+
+  it("does not convert when the linear conversion dialog is cancelled", async () => {
+    render(<Component />);
+    await enterEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Convert to Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mocks.playlists.update).not.toHaveBeenCalled();
+    expect(mocks.playlists.setActive).not.toHaveBeenCalled();
   });
 
   it("tests the map by saving, activating playlist, and navigating to game", async () => {
