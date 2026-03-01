@@ -73,6 +73,9 @@ import {
   INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
   DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
   normalizeInstallWebFunscriptUrlEnabled,
+  STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY,
+  DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED,
+  normalizeStartupSafeModeShortcutEnabled,
 } from "../constants/experimentalFeatures";
 import {
   SFX_VOLUME_CHANGED_EVENT,
@@ -86,6 +89,7 @@ import {
   normalizeBackgroundPhashScanningEnabled,
 } from "../constants/phashSettings";
 import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
+import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
@@ -158,6 +162,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     description: "Used during active gameplay and round playback.",
     shortcuts: [
       { keys: "Space", description: "Roll the dice or trigger the main gameplay action." },
+      { keys: "1 / 2 / 3", description: "Select a perk during the perk selection phase." },
       { keys: "C", description: "Open the cum confirmation flow." },
       { keys: "Escape", description: "Open the in-game options menu." },
       { keys: "Ctrl/Cmd+W", description: "Toggle TheHandy manual stop state." },
@@ -367,10 +372,14 @@ export function SettingsPage() {
   const [installWebFunscriptUrlEnabled, setInstallWebFunscriptUrlEnabled] = useState(
     DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED
   );
+  const [startupSafeModeShortcutEnabled, setStartupSafeModeShortcutEnabled] = useState(
+    DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED
+  );
   const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
     DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
   );
   const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
+  const [musicCacheRootPath, setMusicCacheRootPath] = useState<string | null>(null);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isLoadingVideoHashPreference, setIsLoadingVideoHashPreference] = useState(true);
   const [isLoadingYtDlpPreference, setIsLoadingYtDlpPreference] = useState(true);
@@ -381,15 +390,19 @@ export function SettingsPage() {
   const [isLoadingAntiPerkBeatbarEnabled, setIsLoadingAntiPerkBeatbarEnabled] = useState(true);
   const [isLoadingControllerSupportEnabled, setIsLoadingControllerSupportEnabled] = useState(true);
   const [isLoadingCheatModeEnabled, setIsLoadingCheatModeEnabled] = useState(true);
+  const [isLoadingStartupSafeModeShortcutEnabled, setIsLoadingStartupSafeModeShortcutEnabled] =
+    useState(true);
   const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
     useState(true);
   const [isLoadingWebsiteVideoCacheRootPath, setIsLoadingWebsiteVideoCacheRootPath] =
     useState(true);
+  const [isLoadingMusicCacheRootPath, setIsLoadingMusicCacheRootPath] = useState(true);
+  const [isUpdatingWebsiteVideoCacheRootPath, setIsUpdatingWebsiteVideoCacheRootPath] =
+    useState(false);
+  const [isUpdatingMusicCacheRootPath, setIsUpdatingMusicCacheRootPath] = useState(false);
   const [autoScanFolders, setAutoScanFolders] = useState<string[]>([]);
   const [isLoadingAutoScanFolders, setIsLoadingAutoScanFolders] = useState(true);
   const [isUpdatingAutoScanFolders, setIsUpdatingAutoScanFolders] = useState(false);
-  const [isUpdatingWebsiteVideoCacheRootPath, setIsUpdatingWebsiteVideoCacheRootPath] =
-    useState(false);
   const [folderImportNotices, setFolderImportNotices] = useState<FolderImportNotice[]>([]);
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false);
   const [isCheatModeConfirmDialogOpen, setIsCheatModeConfirmDialogOpen] = useState(false);
@@ -428,7 +441,9 @@ export function SettingsPage() {
           rawApplyPerkDirectly,
           rawMultiplayerSkipRoundsCheck,
           rawInstallWebFunscriptUrlEnabled,
+          rawStartupSafeModeShortcutEnabled,
           rawWebsiteVideoCacheRootPath,
+          rawMusicCacheRootPath,
           folders,
         ] = await Promise.all([
           window.electronAPI.window.isFullscreen(),
@@ -448,7 +463,9 @@ export function SettingsPage() {
           trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY }),
           trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
           trpc.store.get.query({ key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY }),
+          trpc.store.get.query({ key: STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY }),
           trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
+          trpc.store.get.query({ key: MUSIC_CACHE_ROOT_PATH_KEY }),
           db.install.getAutoScanFolders(),
         ]);
 
@@ -499,10 +516,18 @@ export function SettingsPage() {
           setBackgroundPhashScanningEnabled(
             normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
           );
+          setStartupSafeModeShortcutEnabled(
+            normalizeStartupSafeModeShortcutEnabled(rawStartupSafeModeShortcutEnabled)
+          );
           setWebsiteVideoCacheRootPath(
             typeof rawWebsiteVideoCacheRootPath === "string" &&
               rawWebsiteVideoCacheRootPath.trim().length > 0
               ? rawWebsiteVideoCacheRootPath.trim()
+              : null
+          );
+          setMusicCacheRootPath(
+            typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
+              ? rawMusicCacheRootPath.trim()
               : null
           );
           setApplyPerkDirectly(
@@ -512,7 +537,9 @@ export function SettingsPage() {
                 ? false
                 : DEFAULT_APPLY_PERK_DIRECTLY
           );
-          setAutoScanFolders(folders);
+          if (Array.isArray(folders)) {
+            setAutoScanFolders(folders as string[]);
+          }
         }
       } catch (error) {
         console.error("Failed to read settings state", error);
@@ -530,6 +557,8 @@ export function SettingsPage() {
           setIsLoadingCheatModeEnabled(false);
           setIsLoadingBackgroundPhashScanningEnabled(false);
           setIsLoadingWebsiteVideoCacheRootPath(false);
+          setIsLoadingMusicCacheRootPath(false);
+          setIsLoadingStartupSafeModeShortcutEnabled(false);
           setIsLoadingAutoScanFolders(false);
         }
       }
@@ -811,6 +840,22 @@ export function SettingsPage() {
             },
           },
           {
+            id: "startup-safe-mode-shortcut-enabled",
+            type: "toggle",
+            label: "Safe Mode Startup Shortcut",
+            description:
+              "When enabled, holding 'S' during the first 5 seconds of app startup will automatically enable SFW Mode. Useful for emergency situations.",
+            value: startupSafeModeShortcutEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({
+                key: STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY,
+                value: next,
+              });
+              window.localStorage.setItem(STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY, String(next));
+              setStartupSafeModeShortcutEnabled(next);
+            },
+          },
+          {
             id: "install-web-funscript-url-enabled",
             type: "toggle",
             label: "Show Web Install Funscript URL",
@@ -898,6 +943,7 @@ export function SettingsPage() {
       videoHashFfmpegSourcePreference,
       ytDlpBinaryPreference,
       backgroundPhashScanningEnabled,
+      startupSafeModeShortcutEnabled,
     ]
   );
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(
@@ -1006,6 +1052,35 @@ export function SettingsPage() {
       console.error("Failed to reset website video cache folder", error);
     } finally {
       setIsUpdatingWebsiteVideoCacheRootPath(false);
+    }
+  };
+
+  const chooseMusicCacheFolder = async () => {
+    if (isUpdatingMusicCacheRootPath) return;
+    setIsUpdatingMusicCacheRootPath(true);
+    try {
+      const selected = await window.electronAPI.dialog.selectMusicCacheDirectory();
+      if (!selected) return;
+      const value = selected.trim();
+      await trpc.store.set.mutate({ key: MUSIC_CACHE_ROOT_PATH_KEY, value });
+      setMusicCacheRootPath(value);
+    } catch (error) {
+      console.error("Failed to update music cache folder", error);
+    } finally {
+      setIsUpdatingMusicCacheRootPath(false);
+    }
+  };
+
+  const resetMusicCacheFolder = async () => {
+    if (isUpdatingMusicCacheRootPath) return;
+    setIsUpdatingMusicCacheRootPath(true);
+    try {
+      await trpc.store.set.mutate({ key: MUSIC_CACHE_ROOT_PATH_KEY, value: null });
+      setMusicCacheRootPath(null);
+    } catch (error) {
+      console.error("Failed to reset music cache folder", error);
+    } finally {
+      setIsUpdatingMusicCacheRootPath(false);
     }
   };
 
@@ -1141,6 +1216,7 @@ export function SettingsPage() {
                       isLoadingRoundProgressBarAlwaysVisible ||
                       isLoadingAntiPerkBeatbarEnabled ||
                       isLoadingControllerSupportEnabled ||
+                      isLoadingStartupSafeModeShortcutEnabled ||
                       isLoadingBackgroundPhashScanningEnabled
                     }
                   />
@@ -1162,7 +1238,22 @@ export function SettingsPage() {
                   <OnboardingCard />
                 </>
               ) : activeSection && activeSection.id === "music" ? (
-                <MusicSettingsCard />
+                <>
+                  <MusicSettingsCard />
+                  <MusicCacheLocationCard
+                    configuredPath={musicCacheRootPath}
+                    isLoading={isLoadingMusicCacheRootPath}
+                    isPending={isUpdatingMusicCacheRootPath}
+                    onChooseFolder={() => {
+                      playSelectSound();
+                      void chooseMusicCacheFolder();
+                    }}
+                    onReset={() => {
+                      playSelectSound();
+                      void resetMusicCacheFolder();
+                    }}
+                  />
+                </>
               ) : activeSection && activeSection.id === "security" ? (
                 <SecuritySettingsCard />
               ) : activeSection && activeSection.id === "app" ? (
@@ -1213,6 +1304,7 @@ export function SettingsPage() {
                     isLoadingAntiPerkBeatbarEnabled ||
                     isLoadingControllerSupportEnabled ||
                     isLoadingCheatModeEnabled ||
+                    isLoadingStartupSafeModeShortcutEnabled ||
                     isLoadingBackgroundPhashScanningEnabled
                   }
                 />
@@ -1350,6 +1442,71 @@ function WebsiteVideoCacheLocationCard({
   );
 }
 
+function MusicCacheLocationCard({
+  configuredPath,
+  isLoading,
+  isPending,
+  onChooseFolder,
+  onReset,
+}: {
+  configuredPath: string | null;
+  isLoading: boolean;
+  isPending: boolean;
+  onChooseFolder: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Music Cache Location
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Store downloaded music files in a custom folder, or leave this unset to keep using the
+          built-in default location.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Current Location</div>
+        <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
+          {isLoading
+            ? "Loading..."
+            : (configuredPath ?? "Default app data folder (existing behavior)")}
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          Changing this only affects the music cache path. Existing downloaded files are not moved
+          automatically.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isLoading || isPending}
+            onMouseEnter={playHoverSound}
+            onClick={onChooseFolder}
+            className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? "Updating..." : "Choose Folder"}
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || isPending || configuredPath === null}
+            onMouseEnter={playHoverSound}
+            onClick={onReset}
+            className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Use Default
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PhashScanCard() {
   const [scanStatus, setScanStatus] = useState<PhashScanStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -1460,13 +1617,12 @@ function PhashScanCard() {
             scanStatus.state === "error") && (
             <div className="mb-3 flex items-center gap-2">
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
-                  scanStatus.state === "done"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
                     ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
                     : scanStatus.state === "aborted"
                       ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
                       : "border-rose-300/40 bg-rose-500/15 text-rose-100"
-                }`}
+                  }`}
               >
                 {scanStatus.state === "done"
                   ? "Complete"
@@ -1497,11 +1653,10 @@ function PhashScanCard() {
             type="button"
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isRunning || isStarting
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
             {isStarting ? "Starting..." : isRunning ? "Scanning..." : "Scan Now"}
           </button>
@@ -1632,13 +1787,12 @@ function WebsiteVideoCacheScanCard() {
             scanStatus.state === "error") && (
             <div className="mb-3 flex items-center gap-2">
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
-                  scanStatus.state === "done"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
                     ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
                     : scanStatus.state === "aborted"
                       ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
                       : "border-rose-300/40 bg-rose-500/15 text-rose-100"
-                }`}
+                  }`}
               >
                 {scanStatus.state === "done"
                   ? "Complete"
@@ -1669,11 +1823,10 @@ function WebsiteVideoCacheScanCard() {
             type="button"
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isRunning || isStarting
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
             {isStarting ? "Starting..." : isRunning ? "Caching..." : "Cache Now"}
           </button>
@@ -1745,11 +1898,10 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
               playSelectSound();
               void appUpdate.triggerPrimaryAction();
             }}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              appUpdate.isBusy
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${appUpdate.isBusy
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+              }`}
           >
             {appUpdate.actionLabel}
           </button>
@@ -2023,6 +2175,8 @@ function MusicSettingsCard() {
     loopMode,
     setEnabled,
     addTracks,
+    addTrackFromUrl,
+    addPlaylistFromUrl,
     removeTrack,
     moveTrack,
     clearQueue,
@@ -2035,6 +2189,12 @@ function MusicSettingsCard() {
     setShuffle,
   } = useGlobalMusic();
   const [isAddingTracks, setIsAddingTracks] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isAddingFromUrl, setIsAddingFromUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlMode, setUrlMode] = useState<"track" | "playlist">("track");
+  const [urlResult, setUrlResult] = useState<{ added: number; errors: number } | null>(null);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(DEFAULT_MUSIC_VOLUME * 100));
   const [loopDraft, setLoopDraft] = useState<MusicLoopMode>(DEFAULT_MUSIC_LOOP_MODE);
   const [sfxVolumeDraft, setSfxVolumeDraft] = useState(() => Math.round(DEFAULT_SFX_VOLUME * 100));
@@ -2080,6 +2240,42 @@ function MusicSettingsCard() {
       console.error("Failed to add music tracks", error);
     } finally {
       setIsAddingTracks(false);
+    }
+  };
+
+  const handleAddFromUrl = async () => {
+    if (isAddingFromUrl) return;
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setUrlError("Please enter a URL");
+      return;
+    }
+    try {
+      new URL(trimmed);
+    } catch {
+      setUrlError("Invalid URL format");
+      return;
+    }
+    setUrlError(null);
+    setIsAddingFromUrl(true);
+    setUrlResult(null);
+    try {
+      if (urlMode === "playlist") {
+        const result = await addPlaylistFromUrl(trimmed);
+        setUrlResult({ added: result.addedCount, errors: result.errorCount });
+        if (result.addedCount > 0) {
+          setUrlInput("");
+          setShowUrlInput(false);
+        }
+      } else {
+        await addTrackFromUrl(trimmed);
+        setUrlInput("");
+        setShowUrlInput(false);
+      }
+    } catch (error) {
+      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+    } finally {
+      setIsAddingFromUrl(false);
     }
   };
 
@@ -2243,13 +2439,27 @@ function MusicSettingsCard() {
                   playSelectSound();
                   void addSelectedTracks();
                 }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  isAddingTracks
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingTracks
                     ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                     : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-                }`}
+                  }`}
               >
                 {isAddingTracks ? "Adding..." : "Add Tracks"}
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  setShowUrlInput((current) => !current);
+                  setUrlError(null);
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${showUrlInput
+                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                    : "border-purple-300/60 bg-purple-500/30 text-purple-100 hover:border-purple-200/80 hover:bg-purple-500/45"
+                  }`}
+              >
+                {showUrlInput ? "Cancel" : "Add from URL"}
               </button>
               <button
                 type="button"
@@ -2259,16 +2469,99 @@ function MusicSettingsCard() {
                   playSelectSound();
                   void clearQueue();
                 }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  queue.length === 0
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${queue.length === 0
                     ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                     : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                }`}
+                  }`}
               >
                 Clear
               </button>
             </div>
           </div>
+
+          {showUrlInput && (
+            <div className="mb-3 space-y-2 rounded-lg border border-violet-300/15 bg-black/20 p-3">
+              <p className="text-xs text-zinc-400">
+                Add from YouTube or SoundCloud URL (downloaded as MP3 via yt-dlp)
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setUrlMode("track");
+                    setUrlResult(null);
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "track"
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    }`}
+                >
+                  Single Track
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setUrlMode("playlist");
+                    setUrlResult(null);
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "playlist"
+                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    }`}
+                >
+                  Playlist
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder={
+                    urlMode === "playlist"
+                      ? "https://www.youtube.com/playlist?list=..."
+                      : "https://www.youtube.com/watch?v=..."
+                  }
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    setUrlError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void handleAddFromUrl();
+                    }
+                  }}
+                  disabled={isAddingFromUrl}
+                  className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
+                      ? "border-rose-400/40 focus:border-rose-400/60"
+                      : "border-violet-300/30 focus:border-cyan-400/60"
+                    }`}
+                />
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => void handleAddFromUrl()}
+                  disabled={isAddingFromUrl}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingFromUrl
+                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                      : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
+                    }`}
+                >
+                  {isAddingFromUrl ? "Downloading..." : "Add"}
+                </button>
+              </div>
+              {urlResult && (
+                <p className="text-xs text-emerald-300">
+                  Added {urlResult.added} track{urlResult.added !== 1 ? "s" : ""}
+                  {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
+                </p>
+              )}
+              {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+            </div>
+          )}
 
           <div className="divide-y divide-violet-300/10">
             {queue.length === 0 ? (
@@ -2373,11 +2666,10 @@ function DangerZoneCard({
         disabled={isPending}
         onMouseEnter={playHoverSound}
         onClick={onOpenConfirm}
-        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-          isPending
+        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
             ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
             : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-        }`}
+          }`}
       >
         {isPending ? "Clearing..." : "Manage & Clear Data"}
       </button>
@@ -2464,11 +2756,10 @@ function SelectiveClearDialog({
               type="button"
               disabled={isPending}
               onClick={() => toggle(cat.id as keyof typeof selections)}
-              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${
-                selections[cat.id as keyof typeof selections]
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${selections[cat.id as keyof typeof selections]
                   ? "border-rose-400/40 bg-rose-500/10"
                   : "border-zinc-800 bg-black/20 hover:border-zinc-700"
-              }`}
+                }`}
             >
               <div
                 className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${selections[cat.id as keyof typeof selections] ? "border-rose-400 bg-rose-500 text-white" : "border-zinc-700 bg-zinc-900"}`}
@@ -2501,11 +2792,10 @@ function SelectiveClearDialog({
             disabled={isPending}
             onMouseEnter={playHoverSound}
             onClick={onCancel}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isPending
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
                 ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
                 : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
-            }`}
+              }`}
           >
             Cancel
           </button>
@@ -2514,11 +2804,10 @@ function SelectiveClearDialog({
             disabled={isPending || !hasSelection}
             onMouseEnter={playHoverSound}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-              isPending || !hasSelection
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending || !hasSelection
                 ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                 : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-            }`}
+              }`}
           >
             {isPending ? "Clearing..." : "Confirm Deletion"}
           </button>
@@ -2683,11 +2972,10 @@ function AutoScanFoldersCard({
           {notices.map((notice) => (
             <div
               key={`${notice.folderPath}:${notice.message}`}
-              className={`rounded-xl border px-3 py-2 text-xs ${
-                notice.tone === "error"
+              className={`rounded-xl border px-3 py-2 text-xs ${notice.tone === "error"
                   ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
                   : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
-              }`}
+                }`}
             >
               <div className="truncate font-semibold">{notice.folderPath}</div>
               <div className="mt-1 text-zinc-200">{notice.message}</div>
@@ -2716,11 +3004,10 @@ function AutoScanFoldersCard({
                 type="button"
                 disabled={isPending}
                 onClick={() => onRemoveFolder(folderPath)}
-                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${
-                  isPending
+                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${isPending
                     ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
                     : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                }`}
+                  }`}
               >
                 Remove
               </button>
@@ -2734,11 +3021,10 @@ function AutoScanFoldersCard({
         onMouseEnter={playHoverSound}
         disabled={isPending}
         onClick={onAddFolders}
-        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-          isPending
+        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
             ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
             : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-        }`}
+          }`}
       >
         {isPending ? "Updating..." : "Add Folder"}
       </button>
@@ -3014,11 +3300,10 @@ function SourceIntegrationsCard() {
             playSelectSound();
             void syncNow();
           }}
-          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-            isSyncing
+          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isSyncing
               ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
               : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-          }`}
+            }`}
         >
           {isSyncing ? "Syncing..." : "Sync Now"}
         </button>
@@ -3229,12 +3514,12 @@ function SourceIntegrationsCard() {
                               tagSelections: draft.tagSelections.map((selection) =>
                                 selection.id === entry.id
                                   ? {
-                                      ...selection,
-                                      roundTypeFallback: event.target.value as
-                                        | "Normal"
-                                        | "Interjection"
-                                        | "Cum",
-                                    }
+                                    ...selection,
+                                    roundTypeFallback: event.target.value as
+                                      | "Normal"
+                                      | "Interjection"
+                                      | "Cum",
+                                  }
                                   : selection
                               ),
                             })
@@ -3448,11 +3733,10 @@ function SecuritySettingsCard() {
                   <button
                     key={mode}
                     type="button"
-                    className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                      active
+                    className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${active
                         ? "bg-violet-500/40 text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
                         : "text-zinc-400 hover:text-zinc-200"
-                    }`}
+                      }`}
                     onMouseEnter={playHoverSound}
                     onClick={() => {
                       playSelectSound();

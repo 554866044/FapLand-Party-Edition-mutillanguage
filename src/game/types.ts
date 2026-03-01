@@ -220,6 +220,8 @@ export type ActivePerkEffect = {
   kind: PerkKind;
   remainingRounds: number | null;
   effects: GameEffect[];
+  appliedTurn: number;
+  appliedAfterRoll: boolean;
 };
 
 export type GameConfig = {

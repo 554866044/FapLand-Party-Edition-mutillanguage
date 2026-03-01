@@ -178,12 +178,12 @@ function pickSuccubusRoundId(installedRounds: InstalledRound[]): string | null {
     highDifficulty.length > 0
       ? highDifficulty
       : [...normals]
-          .sort((a, b) => {
-            const diff = resolveRoundDifficulty(b) - resolveRoundDifficulty(a);
-            if (diff !== 0) return diff;
-            return resolveRoundBpm(b) - resolveRoundBpm(a);
-          })
-          .slice(0, Math.max(1, Math.ceil(normals.length * 0.25)));
+        .sort((a, b) => {
+          const diff = resolveRoundDifficulty(b) - resolveRoundDifficulty(a);
+          if (diff !== 0) return diff;
+          return resolveRoundBpm(b) - resolveRoundBpm(a);
+        })
+        .slice(0, Math.max(1, Math.ceil(normals.length * 0.25)));
 
   if (source.length === 0) return null;
   return source[randomInt(0, source.length - 1)]?.id ?? null;
@@ -246,6 +246,11 @@ function tickPerkDurations(state: GameState): GameState {
         continue;
       }
 
+      if (active.appliedTurn === state.turn && active.appliedAfterRoll) {
+        nextActivePerkEffects.push(active);
+        continue;
+      }
+
       const remainingRounds = active.remainingRounds - 1;
       if (remainingRounds > 0) {
         didChange = true;
@@ -295,8 +300,8 @@ function applyEffect(state: GameState, effect: GameEffect, sourcePlayerId: strin
         : target === "all"
           ? state.players.map((player) => player.id)
           : state.players
-              .filter((player) => player.id !== sourcePlayerId)
-              .map((player) => player.id);
+            .filter((player) => player.id !== sourcePlayerId)
+            .map((player) => player.id);
 
     if (targetIds.length === 0) return state;
 
@@ -351,8 +356,8 @@ function applyEffect(state: GameState, effect: GameEffect, sourcePlayerId: strin
         : target === "all"
           ? state.players.map((player) => player.id)
           : state.players
-              .filter((player) => player.id !== sourcePlayerId)
-              .map((player) => player.id);
+            .filter((player) => player.id !== sourcePlayerId)
+            .map((player) => player.id);
 
     if (targetIds.length === 0) return state;
 
@@ -378,13 +383,13 @@ function applyEffect(state: GameState, effect: GameEffect, sourcePlayerId: strin
           roundControl:
             effect.control === "pause"
               ? {
-                  ...controls,
-                  pauseCharges: controls.pauseCharges + Math.max(0, Math.floor(effect.amount)),
-                }
+                ...controls,
+                pauseCharges: controls.pauseCharges + Math.max(0, Math.floor(effect.amount)),
+              }
               : {
-                  ...controls,
-                  skipCharges: controls.skipCharges + Math.max(0, Math.floor(effect.amount)),
-                },
+                ...controls,
+                skipCharges: controls.skipCharges + Math.max(0, Math.floor(effect.amount)),
+              },
         };
       }),
     };
@@ -541,6 +546,8 @@ function applyPerkToPlayer(
           kind,
           remainingRounds,
           effects: effectsToStore,
+          appliedTurn: state.turn,
+          appliedAfterRoll: state.lastRoll !== null,
         },
       ],
     })),
@@ -1387,10 +1394,10 @@ export function triggerQueuedRound(state: GameState): GameState {
   const withResolvedNoRest =
     currentPlayerId && state.players[state.currentPlayerIndex]?.antiPerks.includes("no-rest")
       ? consumeAntiPerkById(state, {
-          playerId: currentPlayerId,
-          perkId: "no-rest",
-          reason: "No-rest ended when the round started.",
-        })
+        playerId: currentPlayerId,
+        perkId: "no-rest",
+        reason: "No-rest ended when the round started.",
+      })
       : state;
   return {
     ...withResolvedNoRest,

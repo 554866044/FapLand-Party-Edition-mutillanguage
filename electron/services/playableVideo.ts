@@ -195,7 +195,8 @@ async function transcodeToPlayableMp4(input: {
   sourcePath: string;
   outputPath: string;
 }): Promise<void> {
-  await fs.rm(input.outputPath, { force: true });
+  const tempPath = `${input.outputPath}.tmp`;
+  await fs.rm(tempPath, { force: true });
 
   await runCommand(input.ffmpegPath, [
     "-hide_banner",
@@ -221,8 +222,14 @@ async function transcodeToPlayableMp4(input: {
     "aac",
     "-b:a",
     "192k",
-    input.outputPath,
+    tempPath,
   ]);
+
+  if (!(await isNonEmptyFile(tempPath))) {
+    throw new Error("Transcode did not produce an output file.");
+  }
+
+  await fs.rename(tempPath, input.outputPath);
 }
 
 export async function resolvePlayableVideoUri(videoUri: string): Promise<ResolvePlayableVideoUriResult> {
@@ -371,11 +378,6 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
         outputPath,
       });
 
-      if (!(await isNonEmptyFile(outputPath))) {
-        await fs.rm(outputPath, { force: true });
-        throw new Error("Transcode did not produce an output file.");
-      }
-
       return {
         videoUri: toLocalMediaUri(outputPath),
         transcoded: true,
@@ -383,14 +385,21 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
       } satisfies ResolvePlayableVideoUriResult;
     })();
 
-    inFlightByCacheKey.set(cacheKey, transcodePromise);
-    try {
-      const result = await transcodePromise;
-      resolvedBySourceFingerprint.set(sourceFingerprint, result);
-      return result;
-    } finally {
-      inFlightByCacheKey.delete(cacheKey);
-    }
+    // Start the background transcode process so it can eventually use a cached file
+    void transcodePromise.catch((error) => {
+      console.warn("Background transcode failed", error);
+    });
+
+    // Return the live transcode URI immediately for instant playback
+    const liveTranscodeUri = `${videoUri}${videoUri.includes("?") ? "&" : "?"}transcode=1`;
+    const result = {
+      videoUri: liveTranscodeUri,
+      transcoded: true,
+      cacheHit: false,
+    } satisfies ResolvePlayableVideoUriResult;
+
+    resolvedBySourceFingerprint.set(sourceFingerprint, result);
+    return result;
   })();
 
   inFlightBySourceFingerprint.set(sourceFingerprint, pending);

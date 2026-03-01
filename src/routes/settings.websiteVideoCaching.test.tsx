@@ -185,8 +185,11 @@ describe("Settings website video caching", () => {
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => []),
+        addMusicFromUrl: vi.fn(),
+        addMusicPlaylistFromUrl: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {

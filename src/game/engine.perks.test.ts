@@ -49,7 +49,6 @@ function makeConfig(): GameConfig {
         "be-gentle",
         "treasure-magnet",
         "lucky-star",
-        "high-roller",
         "coupon-clipper",
       ],
       enabledAntiPerkIds: [
@@ -87,6 +86,7 @@ function makeConfig(): GameConfig {
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
@@ -138,11 +138,6 @@ describe("engine new perks", () => {
     const lucky = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "lucky-star"), "lucky-star", { applyDirectly: true });
     const luckyPlayer = lucky.players[lucky.currentPlayerIndex]!;
     expect(luckyPlayer.stats.perkLuck).toBeCloseTo(0.4);
-
-    const highRoller = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "high-roller"), "high-roller", { applyDirectly: true });
-    const highRollerPlayer = highRoller.players[highRoller.currentPlayerIndex]!;
-    expect(highRollerPlayer.stats.perkLuck).toBeCloseTo(0.55);
-    expect(highRollerPlayer.stats.perkFrequency).toBeCloseTo(-0.1);
 
     const couponClipper = selectPerk(withPendingSelection(createInitialGameState(makeConfig()), "coupon-clipper"), "coupon-clipper", { applyDirectly: true });
     const couponPlayer = couponClipper.players[couponClipper.currentPlayerIndex]!;

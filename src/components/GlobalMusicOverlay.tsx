@@ -79,6 +79,8 @@ export function GlobalMusicOverlay() {
     duration,
     setEnabled,
     addTracks,
+    addTrackFromUrl,
+    addPlaylistFromUrl,
     clearQueue,
     play,
     pause,
@@ -100,6 +102,12 @@ export function GlobalMusicOverlay() {
     };
   }, []);
   const [isAddingTracks, setIsAddingTracks] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isAddingFromUrl, setIsAddingFromUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlMode, setUrlMode] = useState<"track" | "playlist">("track");
+  const [urlResult, setUrlResult] = useState<{ added: number; errors: number } | null>(null);
   const [showQueue, setShowQueue] = useState(true);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(volume * 100));
   const overlayRef = useRef<HTMLElement | null>(null);
@@ -151,6 +159,42 @@ export function GlobalMusicOverlay() {
       console.error("Failed to add music tracks", error);
     } finally {
       setIsAddingTracks(false);
+    }
+  };
+
+  const handleAddFromUrl = async () => {
+    if (isAddingFromUrl) return;
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setUrlError("Please enter a URL");
+      return;
+    }
+    try {
+      new URL(trimmed);
+    } catch {
+      setUrlError("Invalid URL format");
+      return;
+    }
+    setUrlError(null);
+    setIsAddingFromUrl(true);
+    setUrlResult(null);
+    try {
+      if (urlMode === "playlist") {
+        const result = await addPlaylistFromUrl(trimmed);
+        setUrlResult({ added: result.addedCount, errors: result.errorCount });
+        if (result.addedCount > 0) {
+          setUrlInput("");
+          setShowUrlInput(false);
+        }
+      } else {
+        await addTrackFromUrl(trimmed);
+        setUrlInput("");
+        setShowUrlInput(false);
+      }
+    } catch (error) {
+      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+    } finally {
+      setIsAddingFromUrl(false);
     }
   };
 
@@ -418,7 +462,123 @@ export function GlobalMusicOverlay() {
                   >
                     {isAddingTracks ? "Adding..." : "+ Add Tracks"}
                   </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      setShowUrlInput((current) => !current);
+                      setUrlError(null);
+                    }}
+                    className={`rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+                      showUrlInput
+                        ? "border border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                        : "border border-purple-300/30 bg-purple-400/10 text-purple-100 hover:bg-purple-400/18 hover:border-purple-300/50"
+                    }`}
+                    data-controller-focus-id="music-add-url"
+                  >
+                    {showUrlInput ? "✕ Cancel" : "⊕ Add from URL"}
+                  </button>
                 </div>
+
+                {showUrlInput && (
+                  <div className="space-y-3 rounded-xl border border-white/[0.06] bg-black/20 p-4">
+                    <div>
+                      <p className="text-xs font-semibold text-white">
+                        Add from YouTube or SoundCloud URL
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500">
+                        The audio will be downloaded as MP3 via yt-dlp and added to your queue
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          setUrlMode("track");
+                          setUrlResult(null);
+                        }}
+                        className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                          urlMode === "track"
+                            ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                            : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
+                        }`}
+                      >
+                        Single Track
+                      </button>
+                      <button
+                        type="button"
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          setUrlMode("playlist");
+                          setUrlResult(null);
+                        }}
+                        className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                          urlMode === "playlist"
+                            ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                            : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
+                        }`}
+                      >
+                        Playlist
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        placeholder={
+                          urlMode === "playlist"
+                            ? "https://www.youtube.com/playlist?list=..."
+                            : "https://www.youtube.com/watch?v=..."
+                        }
+                        value={urlInput}
+                        onChange={(e) => {
+                          setUrlInput(e.target.value);
+                          setUrlError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            void handleAddFromUrl();
+                          }
+                        }}
+                        disabled={isAddingFromUrl}
+                        className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
+                          urlError
+                            ? "border-rose-400/40 focus:border-rose-400/60"
+                            : "border-white/10 focus:border-cyan-400/60"
+                        }`}
+                        data-controller-focus-id="music-url-input"
+                      />
+                      <button
+                        type="button"
+                        onMouseEnter={playHoverSound}
+                        onClick={() => void handleAddFromUrl()}
+                        disabled={isAddingFromUrl}
+                        className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                          isAddingFromUrl
+                            ? "cursor-not-allowed border border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                            : "border border-cyan-300/40 bg-cyan-400/15 text-cyan-50 hover:bg-cyan-400/25"
+                        }`}
+                        data-controller-focus-id="music-url-add-button"
+                      >
+                        {isAddingFromUrl
+                          ? urlMode === "playlist"
+                            ? "Downloading..."
+                            : "Downloading..."
+                          : "Add"}
+                      </button>
+                    </div>
+                    {urlResult && (
+                      <p className="text-xs text-emerald-300">
+                        Added {urlResult.added} track{urlResult.added !== 1 ? "s" : ""}
+                        {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
+                      </p>
+                    )}
+                    {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+                  </div>
+                )}
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">

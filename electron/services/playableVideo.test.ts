@@ -14,6 +14,7 @@ vi.mock("node:fs/promises", () => {
     mkdir: vi.fn(),
     access: vi.fn(),
     rm: vi.fn(),
+    rename: vi.fn(),
   };
   return { default: api, ...api };
 });
@@ -258,12 +259,75 @@ describe("playableVideo", () => {
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
     });
 
-    await expect(resolvePlayableVideoUri("app://media/%2Ftmp%2Fvideo.hevc")).rejects.toThrow(
-      "Transcode did not produce an output file."
-    );
+    // The call should succeed and return the live transcode URI,
+    // while the broken file is removed and a new transcode started in background.
+    const result = await resolvePlayableVideoUri("app://media/%2Ftmp%2Fvideo.hevc");
+    expect(result.transcoded).toBe(true);
+    expect(result.cacheHit).toBe(false);
+    expect(result.videoUri).toContain("transcode=1");
 
     expect(ffmpegRuns).toBe(1);
     expect(fs.rm).toHaveBeenCalled();
+  });
+
+  it("uses atomic rename to ensure partial transcodes are not used", async () => {
+    let outputExists = false;
+    let tempFileCreated = false;
+
+    vi.mocked(fs.stat).mockImplementation(async (targetPath?: unknown) => {
+      if (typeof targetPath === "string" && targetPath.includes("video-playback-cache")) {
+        if (targetPath.endsWith(".tmp")) {
+          return { isFile: () => true, size: 500 } as any;
+        }
+        if (outputExists) {
+          return { isFile: () => true, size: 1000 } as any;
+        }
+        throw new Error("File not found");
+      }
+      return { isFile: () => true, size: 1000, mtimeMs: 2000 } as any;
+    });
+
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.rm).mockResolvedValue(undefined);
+    vi.mocked(fs.rename).mockImplementation(async () => {
+      outputExists = true;
+    });
+
+    vi.mocked(runCommand).mockImplementation(async (_command, args) => {
+      if (args.includes("-show_entries")) {
+        return {
+          stdout: Buffer.from(JSON.stringify({ streams: [{ codec_name: "hevc", pix_fmt: "yuv420p" }] }), "utf8"),
+          stderr: Buffer.alloc(0),
+        };
+      }
+      // FFmpeg writes to .tmp
+      if (args[args.length - 1].endsWith(".tmp")) {
+        tempFileCreated = true;
+      }
+      return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+    });
+
+    // 1. First call: Cache miss, starts background transcode
+    const result1 = await resolvePlayableVideoUri("app://media/%2Ftmp%2Fatomic.hevc");
+    expect(result1.transcoded).toBe(true);
+    expect(result1.cacheHit).toBe(false);
+
+    // Wait for the background activity to hit the rename mock
+    await vi.waitFor(() => {
+      expect(fs.rename).toHaveBeenCalled();
+    });
+
+    expect(tempFileCreated).toBe(true);
+    expect(outputExists).toBe(true);
+
+    // 2. Second call: Reset in-memory cache to simulate a "new session" 
+    // where it should pick up the file from disk.
+    __resetPlayableVideoCachesForTests();
+
+    const result2 = await resolvePlayableVideoUri("app://media/%2Ftmp%2Fatomic.hevc");
+    expect(result2.cacheHit).toBe(true);
+    expect(result2.videoUri.endsWith(".mp4")).toBe(true);
+    expect(result2.videoUri.endsWith(".tmp")).toBe(false);
   });
 
   it("deduplicates concurrent transcode requests for same source", async () => {

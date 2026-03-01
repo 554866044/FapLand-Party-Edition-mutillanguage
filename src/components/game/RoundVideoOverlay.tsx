@@ -1549,13 +1549,16 @@ export function RoundVideoOverlay({
     lastShownAntiPerkAlertRef.current = lastLogMessage;
     const alertText = lastLogMessage.replace(/.*applied anti-perk:/, "ANTI-PERK APPLIED:");
     setAntiPerkAlert({ text: alertText, startTime: Date.now() });
+  }, [lastLogMessage]);
 
+  useEffect(() => {
+    if (!antiPerkAlert) return;
     const timer = setTimeout(() => {
       setAntiPerkAlert(null);
     }, 4500);
 
     return () => clearTimeout(timer);
-  }, [lastLogMessage]);
+  }, [antiPerkAlert]);
 
   useEffect(() => {
     if (!activeRound) return;
@@ -2664,8 +2667,8 @@ export function RoundVideoOverlay({
             <span>{status}</span>
             <button
               className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${handyConnected
-                  ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
-                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                ? "border-rose-300/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/40"
+                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
                 }`}
               disabled={!handyConnected}
               onClick={() => {
@@ -2693,8 +2696,8 @@ export function RoundVideoOverlay({
             </button>
             <button
               className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${canResyncHandy
-                  ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
-                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/35"
+                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
                 }`}
               disabled={!canResyncHandy}
               onClick={() => {
@@ -2711,8 +2714,8 @@ export function RoundVideoOverlay({
               <>
                 <button
                   className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.pauseCharges ?? 0) > 0
-                      ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
-                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                    ? "border-violet-300/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/35"
+                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
                     }`}
                   disabled={(roundControl?.pauseCharges ?? 0) <= 0 || isIntermediaryScreenActive}
                   onClick={() => {
@@ -2727,8 +2730,8 @@ export function RoundVideoOverlay({
                 </button>
                 <button
                   className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${(roundControl?.skipCharges ?? 0) > 0
-                      ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
-                      : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
+                    ? "border-amber-300/60 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35"
+                    : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300"
                     }`}
                   disabled={(roundControl?.skipCharges ?? 0) <= 0}
                   onClick={() => {
@@ -2759,8 +2762,8 @@ export function RoundVideoOverlay({
             )}
             <button
               className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${showProgressBarAlways
-                  ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                  : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
+                ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                : "border-zinc-500/40 bg-zinc-700/20 text-zinc-300 hover:bg-zinc-700/35"
                 }`}
               onClick={() => {
                 playSelectSound();
@@ -2817,8 +2820,8 @@ export function RoundVideoOverlay({
                 </button>
                 <button
                   className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${segment.kind === "intermediary"
-                      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
-                      : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
+                    ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35"
+                    : "border-zinc-500/50 bg-zinc-700/20 text-zinc-300"
                     }`}
                   disabled={segment.kind !== "intermediary"}
                   onClick={() => {

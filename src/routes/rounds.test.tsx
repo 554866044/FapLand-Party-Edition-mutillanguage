@@ -161,14 +161,14 @@ function makeRound({
             id: `res-${id}`,
             roundId: id,
             videoUri: null,
-          funscriptUri,
-          phash: null,
-          disabled: false,
-          createdAt,
-          updatedAt: createdAt,
-          websiteVideoCacheStatus,
-        },
-      ],
+            funscriptUri,
+            phash: null,
+            disabled: false,
+            createdAt,
+            updatedAt: createdAt,
+            websiteVideoCacheStatus,
+          },
+        ],
     installSourceKey,
     phash: null,
     heroSourceType: null,
@@ -243,8 +243,11 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
       selectMusicFiles: vi.fn(),
+      addMusicFromUrl: vi.fn(),
+      addMusicPlaylistFromUrl: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
     },
     window: {
@@ -1379,7 +1382,7 @@ describe("InstalledRoundsPage hero grouping", () => {
         id: `round-${index}`,
         name: `Round ${index}`,
         createdAt: `2026-03-${String((index % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
-      }),
+      })
     );
 
     render(<InstalledRoundsPage />);

@@ -13,15 +13,54 @@ function makePlaylist(id: string, name: string) {
         mode: "graph" as const,
         startNodeId: "start",
         nodes: [
-          { id: "start", name: "Start", kind: "start" as const, styleHint: { x: 120, y: 210, width: 190, height: 84 } },
-          { id: "path-1", name: "Path", kind: "path" as const, styleHint: { x: 430, y: 210, width: 190, height: 84 } },
-          { id: "round-1", name: "Round 1", kind: "round" as const, roundRef: { name: "Round 1" }, styleHint: { x: 740, y: 210, width: 190, height: 84 } },
-          { id: "end", name: "End", kind: "end" as const, styleHint: { x: 1050, y: 210, width: 190, height: 84 } },
+          {
+            id: "start",
+            name: "Start",
+            kind: "start" as const,
+            styleHint: { x: 120, y: 210, width: 190, height: 84 },
+          },
+          {
+            id: "path-1",
+            name: "Path",
+            kind: "path" as const,
+            styleHint: { x: 430, y: 210, width: 190, height: 84 },
+          },
+          {
+            id: "round-1",
+            name: "Round 1",
+            kind: "round" as const,
+            roundRef: { name: "Round 1" },
+            styleHint: { x: 740, y: 210, width: 190, height: 84 },
+          },
+          {
+            id: "end",
+            name: "End",
+            kind: "end" as const,
+            styleHint: { x: 1050, y: 210, width: 190, height: 84 },
+          },
         ],
         edges: [
-          { id: "edge-start-path-1", fromNodeId: "start", toNodeId: "path-1", gateCost: 0, weight: 1 },
-          { id: "edge-path-1-round-1", fromNodeId: "path-1", toNodeId: "round-1", gateCost: 0, weight: 1 },
-          { id: "edge-round-1-end", fromNodeId: "round-1", toNodeId: "end", gateCost: 0, weight: 1 },
+          {
+            id: "edge-start-path-1",
+            fromNodeId: "start",
+            toNodeId: "path-1",
+            gateCost: 0,
+            weight: 1,
+          },
+          {
+            id: "edge-path-1-round-1",
+            fromNodeId: "path-1",
+            toNodeId: "round-1",
+            gateCost: 0,
+            weight: 1,
+          },
+          {
+            id: "edge-round-1-end",
+            fromNodeId: "round-1",
+            toNodeId: "end",
+            gateCost: 0,
+            weight: 1,
+          },
         ],
         randomRoundPools: [],
         cumRoundRefs: [],
@@ -115,7 +154,9 @@ vi.mock("../services/trpc", () => ({
 
 vi.mock("../components/MenuButton", () => ({
   MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>{label}</button>
+    <button type="button" onClick={onClick}>
+      {label}
+    </button>
   ),
 }));
 
@@ -131,7 +172,9 @@ vi.mock("../features/map-editor/EditorCanvas", () => ({
         <button
           type="button"
           onClick={() => {
-            const onPlaceNodeAtWorld = props.onPlaceNodeAtWorld as ((kind: string, x: number, y: number) => void) | undefined;
+            const onPlaceNodeAtWorld = props.onPlaceNodeAtWorld as
+              | ((kind: string, x: number, y: number) => void)
+              | undefined;
             const activePlacementKind = props.activePlacementKind as string | undefined;
             onPlaceNodeAtWorld?.(activePlacementKind ?? "path", 320, 220);
           }}
@@ -190,7 +233,9 @@ vi.mock("../utils/audio", () => mocks.audio);
 import { MapEditorRoute } from "./map-editor";
 
 function getCanvasNodePositions() {
-  const props = mocks.canvasProps as { config: { nodes: Array<{ id: string; styleHint?: { x?: number; y?: number } }> } } | null;
+  const props = mocks.canvasProps as {
+    config: { nodes: Array<{ id: string; styleHint?: { x?: number; y?: number } }> };
+  } | null;
   return (props?.config.nodes ?? []).map((node) => ({
     id: node.id,
     x: node.styleHint?.x ?? null,
@@ -217,8 +262,11 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
       selectMusicFiles: vi.fn(),
+      addMusicFromUrl: vi.fn(),
+      addMusicPlaylistFromUrl: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
     },
     window: {
@@ -228,11 +276,11 @@ beforeEach(() => {
       close: vi.fn(),
     },
     updates: {
-      subscribe: vi.fn(() => () => { }),
+      subscribe: vi.fn(() => () => {}),
     },
     appOpen: {
       consumePendingFiles: vi.fn(async () => []),
-      subscribe: vi.fn(() => () => { }),
+      subscribe: vi.fn(() => () => {}),
     },
   };
   const playlist = makePlaylist("playlist-1", "Test Playlist");
@@ -264,7 +312,9 @@ beforeEach(() => {
     error: null,
   });
 
-  mocks.playlists.create.mockImplementation(async ({ name }: { name: string }) => makePlaylist("playlist-new", name));
+  mocks.playlists.create.mockImplementation(async ({ name }: { name: string }) =>
+    makePlaylist("playlist-new", name)
+  );
   mocks.playlists.list.mockResolvedValue(mocks.loaderData.availablePlaylists);
   mocks.playlists.getActive.mockResolvedValue(mocks.loaderData.activePlaylist);
   mocks.playlists.analyzeImportFile.mockImplementation(async () => ({
@@ -337,10 +387,12 @@ beforeEach(() => {
       approximate: false,
     },
   });
-  mocks.playlists.update.mockImplementation(async ({ playlistId, config }: { playlistId: string; config: unknown }) => ({
-    ...makePlaylist(playlistId, "Test Playlist"),
-    config,
-  }));
+  mocks.playlists.update.mockImplementation(
+    async ({ playlistId, config }: { playlistId: string; config: unknown }) => ({
+      ...makePlaylist(playlistId, "Test Playlist"),
+      config,
+    })
+  );
   mocks.playlists.exportToFile.mockResolvedValue(undefined);
   mocks.playlists.exportPackage.mockResolvedValue({
     exportDir: "/tmp/test-playlist",
@@ -480,7 +532,9 @@ describe("MapEditorRoute", () => {
     await enterEditor();
 
     await act(async () => {
-      (mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null)?.onSelectionChange?.({
+      (
+        mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null
+      )?.onSelectionChange?.({
         selectedNodeIds: [],
         primaryNodeId: null,
         selectedEdgeId: "edge-start-path-1",
@@ -503,7 +557,9 @@ describe("MapEditorRoute", () => {
     await enterEditor();
 
     const before = getCanvasNodePositions();
-    fireEvent.change(screen.getByLabelText("Layout strategy"), { target: { value: "layeredVertical" } });
+    fireEvent.change(screen.getByLabelText("Layout strategy"), {
+      target: { value: "layeredVertical" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Apply Layout" }));
 
     await waitFor(() => {
@@ -573,7 +629,9 @@ describe("MapEditorRoute", () => {
   });
 
   it("imports a .fplay playlist into the graph editor", async () => {
-    vi.mocked(window.electronAPI.dialog.selectPlaylistImportFile).mockResolvedValue("/tmp/imported.fplay");
+    vi.mocked(window.electronAPI.dialog.selectPlaylistImportFile).mockResolvedValue(
+      "/tmp/imported.fplay"
+    );
 
     render(<MapEditorRoute />);
 
@@ -581,19 +639,25 @@ describe("MapEditorRoute", () => {
 
     await waitFor(() => {
       expect(mocks.playlists.analyzeImportFile).toHaveBeenCalledWith("/tmp/imported.fplay");
-      expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({ filePath: "/tmp/imported.fplay" });
+      expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({
+        filePath: "/tmp/imported.fplay",
+      });
       expect(screen.getByText("Imported Playlist")).toBeDefined();
       expect(screen.getByTestId("tool-value")).toBeDefined();
     });
   });
 
   it("exports the current graph playlist after persisting dirty changes", async () => {
-    vi.mocked(window.electronAPI.dialog.selectPlaylistExportPath).mockResolvedValue("/tmp/test-playlist.fplay");
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportPath).mockResolvedValue(
+      "/tmp/test-playlist.fplay"
+    );
 
     render(<MapEditorRoute />);
     await enterEditor();
 
-    fireEvent.change(screen.getByLabelText("Layout strategy"), { target: { value: "layeredVertical" } });
+    fireEvent.change(screen.getByLabelText("Layout strategy"), {
+      target: { value: "layeredVertical" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Apply Layout" }));
     await waitFor(() => {
       expect(screen.getByText(/unsaved/i)).toBeDefined();
@@ -603,7 +667,10 @@ describe("MapEditorRoute", () => {
 
     await waitFor(() => {
       expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
-      expect(mocks.playlists.exportToFile).toHaveBeenCalledWith("playlist-1", "/tmp/test-playlist.fplay");
+      expect(mocks.playlists.exportToFile).toHaveBeenCalledWith(
+        "playlist-1",
+        "/tmp/test-playlist.fplay"
+      );
     });
   });
 
@@ -613,7 +680,9 @@ describe("MapEditorRoute", () => {
     render(<MapEditorRoute />);
     await enterEditor();
 
-    fireEvent.change(screen.getByLabelText("Layout strategy"), { target: { value: "layeredVertical" } });
+    fireEvent.change(screen.getByLabelText("Layout strategy"), {
+      target: { value: "layeredVertical" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Apply Layout" }));
     await waitFor(() => {
       expect(screen.getByText(/unsaved/i)).toBeDefined();
@@ -627,7 +696,9 @@ describe("MapEditorRoute", () => {
       compressionStrength: 80,
     });
     await waitFor(() => {
-      const button = screen.getByRole("button", { name: "Choose Folder and Export" }) as HTMLButtonElement;
+      const button = screen.getByRole("button", {
+        name: "Choose Folder and Export",
+      }) as HTMLButtonElement;
       expect(button.disabled).toBe(false);
     });
 
@@ -646,9 +717,7 @@ describe("MapEditorRoute", () => {
 
   it("shows a blocking export overlay with progress and allows aborting the export", async () => {
     vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue("/tmp");
-    mocks.playlists.exportPackage.mockImplementation(
-      () => new Promise(() => { }),
-    );
+    mocks.playlists.exportPackage.mockImplementation(() => new Promise(() => {}));
     mocks.playlists.getExportPackageStatus.mockResolvedValue({
       state: "running",
       phase: "compressing",
@@ -692,7 +761,9 @@ describe("MapEditorRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export Pack" }));
     expect(await screen.findByText("Playlist Pack Export")).toBeDefined();
     await waitFor(() => {
-      const button = screen.getByRole("button", { name: "Choose Folder and Export" }) as HTMLButtonElement;
+      const button = screen.getByRole("button", {
+        name: "Choose Folder and Export",
+      }) as HTMLButtonElement;
       expect(button.disabled).toBe(false);
     });
     fireEvent.click(screen.getByRole("button", { name: "Choose Folder and Export" }));
@@ -718,7 +789,9 @@ describe("MapEditorRoute", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    fireEvent.change(screen.getByLabelText("Random perk selection chance"), { target: { value: "55" } });
+    fireEvent.change(screen.getByLabelText("Random perk selection chance"), {
+      target: { value: "55" },
+    });
     fireEvent.change(screen.getByLabelText("Intermediary initial"), { target: { value: "4" } });
     fireEvent.change(screen.getByLabelText("Intermediary increase"), { target: { value: "7" } });
     fireEvent.change(screen.getByLabelText("Intermediary max"), { target: { value: "88" } });
@@ -736,7 +809,9 @@ describe("MapEditorRoute", () => {
       expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
     });
 
-    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as { config: ReturnType<typeof makePlaylist>["config"] };
+    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as {
+      config: ReturnType<typeof makePlaylist>["config"];
+    };
     expect(updateCall.config.perkSelection.triggerChancePerCompletedRound).toBe(0.55);
     expect(updateCall.config.probabilityScaling.initialIntermediaryProbability).toBe(0.04);
     expect(updateCall.config.probabilityScaling.intermediaryIncreasePerRound).toBe(0.07);
@@ -773,7 +848,9 @@ describe("MapEditorRoute", () => {
     render(<MapEditorRoute />);
     await enterEditor();
 
-    const canvasProps = mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null;
+    const canvasProps = mocks.canvasProps as {
+      onSelectionChange?: (selection: unknown) => void;
+    } | null;
     await act(async () => {
       canvasProps?.onSelectionChange?.({
         selectedNodeIds: ["round-1"],
@@ -795,7 +872,9 @@ describe("MapEditorRoute", () => {
       expect(mocks.playlists.update).toHaveBeenCalledTimes(1);
     });
 
-    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as { config: ReturnType<typeof makePlaylist>["config"] };
+    const updateCall = mocks.playlists.update.mock.calls[0]?.[0] as {
+      config: ReturnType<typeof makePlaylist>["config"];
+    };
     expect(updateCall.config.boardConfig.mode).toBe("graph");
     if (updateCall.config.boardConfig.mode !== "graph") {
       throw new Error("Expected graph board config");
@@ -821,7 +900,9 @@ describe("MapEditorRoute", () => {
     await enterEditor();
 
     await act(async () => {
-      (mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null)?.onSelectionChange?.({
+      (
+        mocks.canvasProps as { onSelectionChange?: (selection: unknown) => void } | null
+      )?.onSelectionChange?.({
         selectedNodeIds: ["start"],
         primaryNodeId: "start",
         selectedEdgeId: null,
@@ -835,17 +916,21 @@ describe("MapEditorRoute", () => {
 
     fireEvent.change(colorInput, { target: { value: "#10b981" } });
     await waitFor(() => {
-      const startNode = (mocks.canvasProps as {
-        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
-      } | null)?.config?.nodes.find((node) => node.id === "start");
+      const startNode = (
+        mocks.canvasProps as {
+          config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+        } | null
+      )?.config?.nodes.find((node) => node.id === "start");
       expect(startNode?.styleHint?.color).toBe("#10b981");
     });
 
     fireEvent.change(sizeInput, { target: { value: "1.8" } });
     await waitFor(() => {
-      const startNode = (mocks.canvasProps as {
-        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
-      } | null)?.config?.nodes.find((node) => node.id === "start");
+      const startNode = (
+        mocks.canvasProps as {
+          config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+        } | null
+      )?.config?.nodes.find((node) => node.id === "start");
       expect(startNode?.styleHint?.size).toBe(1.8);
     });
 
@@ -853,9 +938,11 @@ describe("MapEditorRoute", () => {
     fireEvent.click(resetSizeButton);
 
     await waitFor(() => {
-      const startNode = (mocks.canvasProps as {
-        config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
-      } | null)?.config?.nodes.find((node) => node.id === "start");
+      const startNode = (
+        mocks.canvasProps as {
+          config?: { nodes: Array<{ id: string; styleHint?: { color?: string; size?: number } }> };
+        } | null
+      )?.config?.nodes.find((node) => node.id === "start");
       expect(startNode?.styleHint?.color).toBeUndefined();
       expect(startNode?.styleHint?.size).toBeUndefined();
     });
@@ -876,7 +963,7 @@ describe("MapEditorRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset Graph" }));
 
     expect(confirmSpy).toHaveBeenCalledWith(
-      "Are you sure you want to reset the graph? This will delete all progress made.",
+      "Are you sure you want to reset the graph? This will delete all progress made."
     );
     expect(screen.getByTestId("node-count").textContent).toBe("5");
 

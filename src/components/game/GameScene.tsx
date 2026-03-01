@@ -1988,6 +1988,17 @@ export const GameScene = memo(function GameScene({
         handleRollRef.current();
         return;
       }
+      if (["1", "2", "3"].includes(event.key)) {
+        const index = parseInt(event.key, 10) - 1;
+        const pending = stateRef.current.pendingPerkSelection;
+        if (pending && pending.options[index]) {
+          event.preventDefault();
+          handleSelectPerkRef.current(pending.options[index].id, {
+            applyDirectly: applyPerkDirectlyRef.current,
+          });
+          return;
+        }
+      }
       if (event.key.toLowerCase() !== "c") return;
       event.preventDefault();
       if (showNonCumOutcomeMenuRef.current) {

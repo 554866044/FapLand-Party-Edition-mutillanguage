@@ -16,19 +16,19 @@ const mocks = vi.hoisted(() => ({
     volume: 0.45,
     shuffle: false,
     loopMode: "queue" as const,
-    setEnabled: vi.fn(async () => { }),
-    addTracks: vi.fn(async () => { }),
-    removeTrack: vi.fn(async () => { }),
-    moveTrack: vi.fn(async () => { }),
-    clearQueue: vi.fn(async () => { }),
-    play: vi.fn(async () => { }),
+    setEnabled: vi.fn(async () => {}),
+    addTracks: vi.fn(async () => {}),
+    removeTrack: vi.fn(async () => {}),
+    moveTrack: vi.fn(async () => {}),
+    clearQueue: vi.fn(async () => {}),
+    play: vi.fn(async () => {}),
     pause: vi.fn(),
-    next: vi.fn(async () => { }),
-    previous: vi.fn(async () => { }),
-    setCurrentTrack: vi.fn(async () => { }),
-    setVolume: vi.fn(async () => { }),
-    setShuffle: vi.fn(async () => { }),
-    setLoopMode: vi.fn(async () => { }),
+    next: vi.fn(async () => {}),
+    previous: vi.fn(async () => {}),
+    setCurrentTrack: vi.fn(async () => {}),
+    setVolume: vi.fn(async () => {}),
+    setShuffle: vi.fn(async () => {}),
+    setLoopMode: vi.fn(async () => {}),
   },
   handy: {
     connectionKey: "",
@@ -42,9 +42,9 @@ const mocks = vi.hoisted(() => ({
     syncError: null,
     isConnecting: false,
     error: null,
-    connect: vi.fn(async () => { }),
-    disconnect: vi.fn(async () => { }),
-    forceStop: vi.fn(async () => { }),
+    connect: vi.fn(async () => {}),
+    disconnect: vi.fn(async () => {}),
+    forceStop: vi.fn(async () => {}),
     toggleManualStop: vi.fn(async () => "unavailable" as const),
     setSyncStatus: vi.fn(),
   },
@@ -66,7 +66,7 @@ const mocks = vi.hoisted(() => ({
     menuBadge: undefined,
     menuTone: "success" as const,
     systemMessage: "Installed build is current.",
-    triggerPrimaryAction: vi.fn(async () => { }),
+    triggerPrimaryAction: vi.fn(async () => {}),
   },
 }));
 
@@ -83,7 +83,9 @@ vi.mock("../components/AnimatedBackground", () => ({
 
 vi.mock("../components/MenuButton", () => ({
   MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>{label}</button>
+    <button type="button" onClick={onClick}>
+      {label}
+    </button>
   ),
 }));
 
@@ -100,7 +102,7 @@ vi.mock("../services/db", () => ({
   db: {
     install: {
       getAutoScanFolders: vi.fn(async () => []),
-      clearAllData: vi.fn(async () => { }),
+      clearAllData: vi.fn(async () => {}),
       addAutoScanFolderAndScan: vi.fn(),
       removeAutoScanFolder: vi.fn(),
     },
@@ -142,7 +144,7 @@ vi.mock("../services/trpc", () => ({
         }),
       },
       set: {
-        mutate: vi.fn(async () => { }),
+        mutate: vi.fn(async () => {}),
       },
     },
   },
@@ -185,8 +187,11 @@ describe("Settings music section", () => {
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => ["/music/three.mp3", "/music/four.mp3"]),
+        addMusicFromUrl: vi.fn(),
+        addMusicPlaylistFromUrl: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {
@@ -196,11 +201,11 @@ describe("Settings music section", () => {
         close: vi.fn(),
       },
       updates: {
-        subscribe: vi.fn(() => () => { }),
+        subscribe: vi.fn(() => () => {}),
       },
       appOpen: {
         consumePendingFiles: vi.fn(async () => []),
-        subscribe: vi.fn(() => () => { }),
+        subscribe: vi.fn(() => () => {}),
       },
     };
   });
@@ -213,7 +218,10 @@ describe("Settings music section", () => {
 
     await waitFor(() => {
       expect(window.electronAPI.dialog.selectMusicFiles).toHaveBeenCalled();
-      expect(mocks.globalMusic.addTracks).toHaveBeenCalledWith(["/music/three.mp3", "/music/four.mp3"]);
+      expect(mocks.globalMusic.addTracks).toHaveBeenCalledWith([
+        "/music/three.mp3",
+        "/music/four.mp3",
+      ]);
     });
 
     fireEvent.click(screen.getAllByText("Down")[0]!);
@@ -240,9 +248,7 @@ describe("Settings music section", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          /general minimum round count and any playlist-specific round requirement/i
-        )
+        screen.getByText(/general minimum round count and any playlist-specific round requirement/i)
       ).toBeDefined();
       expect(screen.getAllByText(/bad user experience/i).length).toBeGreaterThan(0);
     });

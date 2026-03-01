@@ -21,9 +21,11 @@ export type ImportRemoteSiteMatch = {
 
 export type InstallSidecarSecurityAnalysis = {
   filePath: string;
+  contentName: string;
   entries: ImportRemoteSiteMatch[];
   unknownEntries: ImportRemoteSiteMatch[];
 };
+
 
 export type ImportSecurityWarning = {
   baseDomain: string;
@@ -230,6 +232,7 @@ export function classifyTrustedUrl(
 
 export function collectUnknownRemoteSitesFromResources(
   filePath: string,
+  contentName: string,
   resources: Iterable<{ videoUri: string; funscriptUri?: string | null }>,
   allowedBaseDomains: Iterable<string> = [],
   securityMode = getSecurityMode()
@@ -272,7 +275,9 @@ export function collectUnknownRemoteSitesFromResources(
 
   return {
     filePath,
+    contentName,
     entries,
     unknownEntries: entries,
   };
 }
+

@@ -2,7 +2,9 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { spawn } from "node:child_process";
 import { getVideoContentTypeByExtension, isVideoExtension } from "../../../src/constants/videoFormats";
+import { resolvePhashBinaries } from "../phash/binaries";
 
 function resolveMediaContentType(filePath: string): string {
   const extension = path.extname(filePath).toLowerCase();
@@ -57,7 +59,79 @@ function parseRangeHeader(rangeHeader: string | null, totalSize: number): Parsed
   return { start, end };
 }
 
-export async function createMediaResponse(filePath: string, request: Request): Promise<Response> {
+export async function createMediaResponse(
+  filePath: string,
+  request: Request,
+  searchParams?: URLSearchParams
+): Promise<Response> {
+  const shouldTranscode = searchParams?.has("transcode");
+  const seekTimeSec = searchParams?.get("t");
+  const startAtMs = searchParams?.get("startAtMs");
+
+  if (shouldTranscode) {
+    const binaries = await resolvePhashBinaries();
+    const ffmpegPath = binaries.ffmpegPath;
+
+    // Build FFmpeg arguments for live transcoding to WebM (VP9 + Opus)
+    // as suggested for modern browsers like Chromium.
+    const ffmpegArgs: string[] = [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-nostdin",
+    ];
+
+    // If seeking is requested (via ?t=... or ?startAtMs=...)
+    const seekRequested = seekTimeSec || startAtMs;
+    if (seekRequested) {
+      const timeOffset = seekTimeSec ? parseFloat(seekTimeSec) : parseInt(startAtMs!) / 1000;
+      if (!isNaN(timeOffset) && timeOffset > 0) {
+        ffmpegArgs.push("-ss", timeOffset.toFixed(3));
+      }
+    }
+
+    ffmpegArgs.push(
+      "-i", filePath,
+      "-c:v", "libvpx-vp9",
+      "-deadline", "realtime",
+      "-cpu-used", "4",
+      "-c:a", "libopus",
+      "-f", "webm",
+      "pipe:1"
+    );
+
+    const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
+
+    // We don't read from stderr here to avoid buffering issues, 
+    // but we should ensure the process is killed on request close.
+    const stream = new ReadableStream({
+      start(controller) {
+        ffmpeg.stdout.on("data", (chunk) => {
+          controller.enqueue(new Uint8Array(chunk));
+        });
+        ffmpeg.stdout.on("end", () => {
+          controller.close();
+        });
+        ffmpeg.on("error", (err) => {
+          controller.error(err);
+        });
+      },
+      cancel() {
+        ffmpeg.kill("SIGKILL");
+      }
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "Content-Type": "video/webm",
+        "Cache-Control": "no-cache",
+        "Access-Control-Allow-Origin": "*",
+        "Transfer-Encoding": "chunked",
+      },
+    });
+  }
+
   let fileStats;
   try {
     fileStats = await stat(filePath);

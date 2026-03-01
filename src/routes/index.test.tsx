@@ -41,7 +41,7 @@ const mocks = vi.hoisted(() => ({
     menuBadge: undefined,
     menuTone: "default",
     systemMessage: "No update check has run yet.",
-    triggerPrimaryAction: vi.fn(async () => { }),
+    triggerPrimaryAction: vi.fn(async () => {}),
   } as MockAppUpdate,
   handy: {
     connected: false,
@@ -162,8 +162,11 @@ describe("Home route update menu", () => {
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(),
+        addMusicFromUrl: vi.fn(),
+        addMusicPlaylistFromUrl: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {
@@ -173,11 +176,11 @@ describe("Home route update menu", () => {
         close: mocks.closeWindow,
       },
       updates: {
-        subscribe: vi.fn(() => () => { }),
+        subscribe: vi.fn(() => () => {}),
       },
       appOpen: {
         consumePendingFiles: vi.fn(async () => []),
-        subscribe: vi.fn(() => () => { }),
+        subscribe: vi.fn(() => () => {}),
       },
     };
   });

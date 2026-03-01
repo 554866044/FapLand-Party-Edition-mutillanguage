@@ -36,7 +36,11 @@ export function approveDialogPath(kind: DialogPathApprovalKind, rawPath: string)
   approvals.set(normalizedPath, Date.now() + APPROVAL_TTL_MS);
 }
 
-export function assertApprovedDialogPath(kind: DialogPathApprovalKind, rawPath: string): string {
+export function assertApprovedDialogPath(
+  kind: DialogPathApprovalKind,
+  rawPath: string,
+  options: { consume?: boolean } = {}
+): string {
   const normalizedPath = normalizeApprovedPath(rawPath);
   if (!normalizedPath) {
     throw new Error("Path must be selected through the system dialog.");
@@ -48,9 +52,12 @@ export function assertApprovedDialogPath(kind: DialogPathApprovalKind, rawPath: 
     throw new Error("Path must be selected through the system dialog.");
   }
 
-  approvals.delete(normalizedPath);
+  if (options.consume ?? true) {
+    approvals.delete(normalizedPath);
+  }
   return normalizedPath;
 }
+
 
 export function clearApprovedDialogPathsForTests(): void {
   approvedPathsByKind.clear();

@@ -45,6 +45,8 @@ export type GlobalMusicState = {
 export type GlobalMusicActions = {
   setEnabled: (next: boolean) => Promise<void>;
   addTracks: (filePaths: string[]) => Promise<void>;
+  addTrackFromUrl: (url: string) => Promise<void>;
+  addPlaylistFromUrl: (url: string) => Promise<{ addedCount: number; errorCount: number }>;
   removeTrack: (id: string) => Promise<void>;
   moveTrack: (id: string, direction: "up" | "down") => Promise<void>;
   clearQueue: () => Promise<void>;
@@ -360,6 +362,54 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
     [currentIndex, queue, setAndPersistQueue]
   );
 
+  const addTrackFromUrl = useCallback(
+    async (url: string) => {
+      const result = await window.electronAPI.dialog.addMusicFromUrl(url);
+      const trimmedUrl = url.trim();
+      const newEntry: MusicQueueEntry = {
+        id: `${Date.now()}-url-${trimmedUrl}`,
+        filePath: result.filePath,
+        name: result.title,
+        sourceUrl: trimmedUrl,
+      };
+      if (
+        queue.some(
+          (existing) => existing.sourceUrl === trimmedUrl || existing.filePath === result.filePath
+        )
+      )
+        return;
+      const nextQueue = [...queue, newEntry];
+      const nextIndex = queue.length === 0 ? 0 : currentIndex;
+      userPausedRef.current = false;
+      await setAndPersistQueue(nextQueue, nextIndex);
+    },
+    [currentIndex, queue, setAndPersistQueue]
+  );
+
+  const addPlaylistFromUrl = useCallback(
+    async (url: string): Promise<{ addedCount: number; errorCount: number }> => {
+      const result = await window.electronAPI.dialog.addMusicPlaylistFromUrl(url);
+      const trimmedUrl = url.trim();
+      const newEntries: MusicQueueEntry[] = result.tracks
+        .filter((track) => !queue.some((existing) => existing.filePath === track.filePath))
+        .map((track, index) => ({
+          id: `${Date.now()}-playlist-${trimmedUrl}-${index}`,
+          filePath: track.filePath,
+          name: track.title,
+          sourceUrl: trimmedUrl,
+        }));
+      if (newEntries.length === 0) {
+        return { addedCount: 0, errorCount: result.errors.length };
+      }
+      const nextQueue = [...queue, ...newEntries];
+      const nextIndex = queue.length === 0 ? 0 : currentIndex;
+      userPausedRef.current = false;
+      await setAndPersistQueue(nextQueue, nextIndex);
+      return { addedCount: newEntries.length, errorCount: result.errors.length };
+    },
+    [currentIndex, queue, setAndPersistQueue]
+  );
+
   const removeTrack = useCallback(
     async (id: string) => {
       const targetIndex = queue.findIndex((entry) => entry.id === id);
@@ -495,6 +545,8 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       duration,
       setEnabled,
       addTracks,
+      addTrackFromUrl,
+      addPlaylistFromUrl,
       removeTrack,
       moveTrack,
       clearQueue,
@@ -509,6 +561,8 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       seek,
     }),
     [
+      addPlaylistFromUrl,
+      addTrackFromUrl,
       addTracks,
       clearQueue,
       currentIndex,

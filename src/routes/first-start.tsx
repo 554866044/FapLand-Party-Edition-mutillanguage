@@ -149,7 +149,7 @@ export const Route = createFileRoute("/first-start")({
 function FirstStartPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const { queue, addTracks } = useGlobalMusic();
+  const { queue, addTracks, addTrackFromUrl, addPlaylistFromUrl } = useGlobalMusic();
   const {
     connectionKey,
     connected: handyConnected,
@@ -161,6 +161,9 @@ function FirstStartPage() {
   const [stepIndex, setStepIndex] = useState(0);
   const [isBusy, setIsBusy] = useState(false);
   const [musicMessage, setMusicMessage] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [roundMessage, setRoundMessage] = useState<string | null>(null);
   const [booruPrompt, setBooruPrompt] = useState(DEFAULT_INTERMEDIARY_LOADING_PROMPT);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
@@ -262,6 +265,47 @@ function FirstStartPage() {
     } catch (error) {
       console.error("Failed to add onboarding music tracks", error);
       setMusicMessage(error instanceof Error ? error.message : "Failed to add music files.");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const addMusicFromUrl = async () => {
+    if (isBusy) return;
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setUrlError("Please enter a URL");
+      return;
+    }
+    try {
+      new URL(trimmed);
+    } catch {
+      setUrlError("Invalid URL format");
+      return;
+    }
+    setUrlError(null);
+    setIsBusy(true);
+    try {
+      const isPlaylist = trimmed.includes("list=") || trimmed.includes("/sets/");
+      if (isPlaylist) {
+        const result = await addPlaylistFromUrl(trimmed);
+        if (result.addedCount > 0) {
+          setMusicMessage(
+            `Added playlist: ${result.addedCount} track${result.addedCount === 1 ? "" : "s"} added${result.errorCount > 0 ? ` (${result.errorCount} failed)` : ""}.`
+          );
+          setUrlInput("");
+          setShowUrlInput(false);
+        } else {
+          setMusicMessage("All tracks from this playlist are already in your queue.");
+        }
+      } else {
+        await addTrackFromUrl(trimmed);
+        setMusicMessage("Track added to the global music queue.");
+        setUrlInput("");
+        setShowUrlInput(false);
+      }
+    } catch (error) {
+      setMusicMessage(error instanceof Error ? error.message : "Failed to add from URL.");
     } finally {
       setIsBusy(false);
     }
@@ -560,34 +604,101 @@ function FirstStartPage() {
                       )}
                     </div>
                     <p className="text-sm text-zinc-400">
-                      Pick music files from your computer to add them to the global queue.
+                      Pick music files from your computer, or add YouTube videos and playlists to
+                      download as MP3.
                     </p>
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        playSelectSound();
-                        void addMusicTracks();
-                      }}
-                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                        isBusy
-                          ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                          : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                      }`}
-                    >
-                      {isBusy ? (
-                        <>
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
-                          <span>Adding...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>📁</span>
-                          <span>Add Music Files</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void addMusicTracks();
+                        }}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                        }`}
+                      >
+                        {isBusy ? (
+                          <>
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
+                            <span>Adding...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>📁</span>
+                            <span>Add Music Files</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          setShowUrlInput((current) => !current);
+                          setUrlError(null);
+                        }}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          showUrlInput
+                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                            : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                        }`}
+                      >
+                        <span>⊕</span>
+                        <span>Add from YouTube</span>
+                      </button>
+                    </div>
+
+                    {showUrlInput && (
+                      <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-xs text-zinc-400">
+                          Paste a YouTube video or playlist URL. Audio is downloaded as MP3 via
+                          yt-dlp.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            placeholder="https://www.youtube.com/watch?v=... or playlist URL"
+                            value={urlInput}
+                            onChange={(e) => {
+                              setUrlInput(e.target.value);
+                              setUrlError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                void addMusicFromUrl();
+                              }
+                            }}
+                            disabled={isBusy}
+                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
+                              urlError
+                                ? "border-rose-400/40 focus:border-rose-400/60"
+                                : "border-white/10 focus:border-violet-400/60"
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onMouseEnter={playHoverSound}
+                            onClick={() => void addMusicFromUrl()}
+                            disabled={isBusy}
+                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                              isBusy
+                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                            }`}
+                          >
+                            {isBusy ? "Downloading..." : "Add"}
+                          </button>
+                        </div>
+                        {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+                      </div>
+                    )}
+
                     {musicMessage && (
                       <div
                         className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${

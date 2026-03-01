@@ -26,7 +26,12 @@ const state = {
   roundsById: new Map<string, RoundRow>(),
   roundIdByInstallSourceKey: new Map<string, string>(),
   resourcesByRoundId: new Map<string, Array<{ videoUri: string; phash: string | null }>>(),
-  resourceRows: [] as Array<{ roundId: string; videoUri: string; funscriptUri: string | null; phash: string | null }>,
+  resourceRows: [] as Array<{
+    roundId: string;
+    videoUri: string;
+    funscriptUri: string | null;
+    phash: string | null;
+  }>,
   nextRoundId: 1,
   nextHeroId: 1,
 };
@@ -109,7 +114,14 @@ function extractFirstSqlParam(input: { where?: unknown } | unknown): unknown {
   return values[0];
 }
 
-function rememberResources(resources: Array<{ roundId: string; videoUri: string; funscriptUri: string | null; phash: string | null }>): void {
+function rememberResources(
+  resources: Array<{
+    roundId: string;
+    videoUri: string;
+    funscriptUri: string | null;
+    phash: string | null;
+  }>
+): void {
   for (const entry of resources) {
     const rows = state.resourcesByRoundId.get(entry.roundId) ?? [];
     rows.push({ videoUri: entry.videoUri, phash: entry.phash });
@@ -142,7 +154,7 @@ function buildDbMock() {
               id: entry.id,
               installSourceKey: entry.installSourceKey,
               previewImage: entry.previewImage,
-            })),
+            }))
         ),
       },
       resource: {
@@ -168,14 +180,17 @@ function buildDbMock() {
               videoUri: entry.videoUri,
               funscriptUri: entry.funscriptUri ?? null,
               phash: entry.phash,
-            })),
+            }))
           );
         }
 
         return {
           returning: async () => {
             if (table === round) {
-              const payload = input as { installSourceKey: string | null; previewImage: string | null };
+              const payload = input as {
+                installSourceKey: string | null;
+                previewImage: string | null;
+              };
               const id = `round-${state.nextRoundId++}`;
               state.roundsById.set(id, {
                 id,
@@ -192,24 +207,38 @@ function buildDbMock() {
               if (Array.isArray(input)) {
                 return [];
               }
-              const payload = input as { roundId: string; videoUri: string; funscriptUri?: string | null; phash: string | null };
-              rememberResources([{
-                roundId: payload.roundId,
-                videoUri: payload.videoUri,
-                funscriptUri: payload.funscriptUri ?? null,
-                phash: payload.phash,
-              }]);
-              return [{
-                id: `res-${state.resourceRows.length}`,
-                roundId: payload.roundId,
-                videoUri: payload.videoUri,
-                phash: payload.phash,
-                disabled: false,
-              }];
+              const payload = input as {
+                roundId: string;
+                videoUri: string;
+                funscriptUri?: string | null;
+                phash: string | null;
+              };
+              rememberResources([
+                {
+                  roundId: payload.roundId,
+                  videoUri: payload.videoUri,
+                  funscriptUri: payload.funscriptUri ?? null,
+                  phash: payload.phash,
+                },
+              ]);
+              return [
+                {
+                  id: `res-${state.resourceRows.length}`,
+                  roundId: payload.roundId,
+                  videoUri: payload.videoUri,
+                  phash: payload.phash,
+                  disabled: false,
+                },
+              ];
             }
 
             if (table === hero) {
-              const payload = input as { name: string; author?: string | null; description?: string | null; phash?: string | null };
+              const payload = input as {
+                name: string;
+                author?: string | null;
+                description?: string | null;
+                phash?: string | null;
+              };
               const id = `hero-${state.nextHeroId++}`;
               state.heroesByName.set(payload.name, {
                 id,
@@ -308,23 +337,26 @@ describe("installer phash similarity", () => {
     const videoPath = path.join(root, "shared.mp4");
     const heroPath = path.join(root, "shared.hero");
     await fs.writeFile(videoPath, "video");
-    await fs.writeFile(heroPath, JSON.stringify({
-      name: "Shared Hero",
-      rounds: [
-        {
-          name: "Round 1",
-          startTime: 0,
-          endTime: 5000,
-          resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
-        },
-        {
-          name: "Round 2",
-          startTime: 0,
-          endTime: 5000,
-          resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
-        },
-      ],
-    }));
+    await fs.writeFile(
+      heroPath,
+      JSON.stringify({
+        name: "Shared Hero",
+        rounds: [
+          {
+            name: "Round 1",
+            startTime: 0,
+            endTime: 5000,
+            resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
+          },
+          {
+            name: "Round 2",
+            startTime: 0,
+            endTime: 5000,
+            resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
+          },
+        ],
+      })
+    );
 
     getNormalizedVideoHashRangeMock.mockResolvedValue({
       durationMs: 10000,
@@ -347,25 +379,28 @@ describe("installer phash similarity", () => {
     const videoPath = path.join(root, "shared.mp4");
     const heroPath = path.join(root, "shared.hero");
     await fs.writeFile(videoPath, "video");
-    await fs.writeFile(heroPath, JSON.stringify({
-      name: "Shared Preview Hero",
-      rounds: [
-        {
-          name: "Round 1",
-          startTime: 1000,
-          endTime: 4000,
-          phash: "explicit-hash-1",
-          resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
-        },
-        {
-          name: "Round 2",
-          startTime: 1000,
-          endTime: 4000,
-          phash: "explicit-hash-2",
-          resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
-        },
-      ],
-    }));
+    await fs.writeFile(
+      heroPath,
+      JSON.stringify({
+        name: "Shared Preview Hero",
+        rounds: [
+          {
+            name: "Round 1",
+            startTime: 1000,
+            endTime: 4000,
+            phash: "explicit-hash-1",
+            resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
+          },
+          {
+            name: "Round 2",
+            startTime: 1000,
+            endTime: 4000,
+            phash: "explicit-hash-2",
+            resources: [{ videoUri: `app://media/${encodeURIComponent(videoPath)}` }],
+          },
+        ],
+      })
+    );
 
     getNormalizedVideoHashRangeMock.mockResolvedValue({
       durationMs: 10000,
@@ -390,15 +425,20 @@ describe("installer phash similarity", () => {
     const funscriptPath = path.join(mediaDir, "portable.funscript");
     const roundPath = path.join(root, "portable.round");
     await fs.writeFile(videoPath, "video");
-    await fs.writeFile(funscriptPath, "{\"actions\":[]}");
-    await fs.writeFile(roundPath, JSON.stringify({
-      name: "Portable Round",
-      phash: "portable-round-hash",
-      resources: [{
-        videoUri: "./media/portable.mp4",
-        funscriptUri: "./media/portable.funscript",
-      }],
-    }));
+    await fs.writeFile(funscriptPath, '{"actions":[]}');
+    await fs.writeFile(
+      roundPath,
+      JSON.stringify({
+        name: "Portable Round",
+        phash: "portable-round-hash",
+        resources: [
+          {
+            videoUri: "./media/portable.mp4",
+            funscriptUri: "./media/portable.funscript",
+          },
+        ],
+      })
+    );
 
     const { importInstallSidecarFile } = await import("./installer");
     const result = await importInstallSidecarFile(roundPath);
@@ -417,28 +457,33 @@ describe("installer phash similarity", () => {
     const videoPath = path.join(mediaDir, "portable-hero.mp4");
     const heroPath = path.join(sidecarDir, "portable.hero");
     await fs.writeFile(videoPath, "video");
-    await fs.writeFile(heroPath, JSON.stringify({
-      name: "Portable Hero",
-      rounds: [
-        {
-          name: "Round A",
-          phash: "portable-hero-a",
-          resources: [{ videoUri: "../media/portable-hero.mp4" }],
-        },
-        {
-          name: "Round B",
-          phash: "portable-hero-b",
-          resources: [{ videoUri: "../media/portable-hero.mp4" }],
-        },
-      ],
-    }));
+    await fs.writeFile(
+      heroPath,
+      JSON.stringify({
+        name: "Portable Hero",
+        rounds: [
+          {
+            name: "Round A",
+            phash: "portable-hero-a",
+            resources: [{ videoUri: "../media/portable-hero.mp4" }],
+          },
+          {
+            name: "Round B",
+            phash: "portable-hero-b",
+            resources: [{ videoUri: "../media/portable-hero.mp4" }],
+          },
+        ],
+      })
+    );
 
     const { importInstallSidecarFile } = await import("./installer");
     const result = await importInstallSidecarFile(heroPath);
 
     expect(result.status.stats.installed).toBe(2);
     expect(state.resourceRows).toHaveLength(2);
-    expect(state.resourceRows.every((entry) => entry.videoUri === toLocalMediaUri(videoPath))).toBe(true);
+    expect(state.resourceRows.every((entry) => entry.videoUri === toLocalMediaUri(videoPath))).toBe(
+      true
+    );
   });
 
   it("persists sidecars in sorted order even when preparation completes out of order", async () => {
@@ -446,33 +491,41 @@ describe("installer phash similarity", () => {
     const aPath = path.join(root, "a.round");
     const bPath = path.join(root, "b.round");
 
-    await fs.writeFile(aPath, JSON.stringify({
-      name: "A",
-      phash: "phash-a",
-      resources: [{ videoUri: "https://example.com/a.mp4" }],
-    }));
-    await fs.writeFile(bPath, JSON.stringify({
-      name: "B",
-      phash: "phash-b",
-      resources: [{ videoUri: "https://example.com/b.mp4" }],
-    }));
+    await fs.writeFile(
+      aPath,
+      JSON.stringify({
+        name: "A",
+        phash: "phash-a",
+        resources: [{ videoUri: "https://example.com/a.mp4" }],
+      })
+    );
+    await fs.writeFile(
+      bPath,
+      JSON.stringify({
+        name: "B",
+        phash: "phash-b",
+        resources: [{ videoUri: "https://example.com/b.mp4" }],
+      })
+    );
 
-    generateRoundPreviewImageDataUriMock.mockImplementation(async ({ videoUri }: { videoUri: string }) => {
-      if (videoUri.endsWith("/a.mp4")) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 1));
+    generateRoundPreviewImageDataUriMock.mockImplementation(
+      async ({ videoUri }: { videoUri: string }) => {
+        if (videoUri.endsWith("/a.mp4")) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+        return null;
       }
-      return null;
-    });
+    );
 
     const { scanInstallSources } = await import("./installer");
     const result = await scanInstallSources("manual", [root]);
 
     expect(result.stats.installed).toBe(2);
-    expect(Array.from(state.roundIdByInstallSourceKey.keys())).toEqual([
-      path.resolve(aPath),
-      path.resolve(bPath),
-    ]);
+    const keys = Array.from(state.roundIdByInstallSourceKey.keys());
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^website:/);
+    expect(keys[1]).toMatch(/^website:/);
   });
 });

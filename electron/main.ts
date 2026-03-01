@@ -6,14 +6,13 @@ import {
   dialog,
   Menu,
   shell,
-  net,
   type OpenDialogOptions,
 } from "electron";
 import path from "node:path";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { createIPCHandler } from "trpc-electron/main";
 import { config as loadDotenv } from "dotenv";
 import { appRouter } from "./trpc/router";
@@ -28,6 +27,11 @@ import { startContinuousPhashScan } from "./services/phashScanService";
 import { startContinuousWebsiteVideoScan } from "./services/webVideoScanService";
 import { createMediaResponse } from "./services/protocol/mediaResponse";
 import { initializeAppUpdater, subscribeToUpdateState } from "./services/updater";
+import {
+  downloadMusicFromUrl,
+  downloadPlaylistFromUrl,
+  isSupportedMusicUrl,
+} from "./services/musicDownload";
 
 const OPENABLE_FILE_EXTENSIONS = new Set([".hero", ".round", ".fplay", ".fpack"]);
 const pendingOpenedFiles: string[] = [];
@@ -320,7 +324,7 @@ function registerFileProtocol(): void {
           ? path.normalize(decoded.slice(1))
           : path.normalize(decoded);
 
-      return createMediaResponse(normalizedPath, request);
+      return createMediaResponse(normalizedPath, request, url.searchParams);
     }
 
     return new Response("Not found", { status: 404 });
@@ -650,6 +654,23 @@ function registerDialogIpc() {
     return result.filePaths[0] ?? null;
   });
 
+  ipcMain.handle("dialog:selectMusicCacheDirectory", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose music cache folder",
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.handle("dialog:selectConverterVideoFile", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -682,6 +703,35 @@ function registerDialogIpc() {
       : await dialog.showOpenDialog(options);
     if (result.canceled) return [] as string[];
     return result.filePaths;
+  });
+
+  ipcMain.handle("music:addFromUrl", async (_event, url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      throw new Error("URL is required.");
+    }
+    if (!isSupportedMusicUrl(trimmedUrl)) {
+      throw new Error("Unsupported URL. Only YouTube and SoundCloud URLs are supported.");
+    }
+    const result = await downloadMusicFromUrl(trimmedUrl);
+    return { filePath: result.filePath, title: result.title };
+  });
+
+  ipcMain.handle("music:addPlaylistFromUrl", async (_event, url: string) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      throw new Error("URL is required.");
+    }
+    if (!isSupportedMusicUrl(trimmedUrl)) {
+      throw new Error("Unsupported URL. Only YouTube and SoundCloud URLs are supported.");
+    }
+    const result = await downloadPlaylistFromUrl(trimmedUrl);
+    return {
+      playlistTitle: result.playlistTitle,
+      totalTracks: result.totalTracks,
+      tracks: result.tracks,
+      errors: result.errors,
+    };
   });
 
   ipcMain.handle("dialog:selectConverterFunscriptFile", async (event) => {

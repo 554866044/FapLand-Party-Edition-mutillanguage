@@ -40,3 +40,10 @@ export function normalizeInstallWebFunscriptUrlEnabled(value: unknown): boolean 
 }
 
 export const MULTIPLAYER_MINIMUM_ROUNDS = 100;
+
+export const STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY = "experimental.startupSafeModeShortcutEnabled";
+export const DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED = true;
+
+export function normalizeStartupSafeModeShortcutEnabled(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED;
+}

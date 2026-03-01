@@ -75,8 +75,22 @@ describe("GlobalMusicOverlay", () => {
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
         selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectMusicCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => ["/music/three.mp3"]),
+        addMusicFromUrl: vi.fn(async () => ({
+          filePath: "/music-cache/test/audio.mp3",
+          title: "Test Track",
+        })),
+        addMusicPlaylistFromUrl: vi.fn(async () => ({
+          playlistTitle: "Test Playlist",
+          totalTracks: 2,
+          tracks: [
+            { filePath: "/music-cache/test/track1.mp3", title: "Track 1" },
+            { filePath: "/music-cache/test/track2.mp3", title: "Track 2" },
+          ],
+          errors: [],
+        })),
         selectConverterFunscriptFile: vi.fn(),
       },
       window: {

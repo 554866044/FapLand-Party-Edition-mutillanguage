@@ -5,11 +5,21 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import "./styles.css";
 import { InstallSidecarTrustModalHost } from "./components/InstallSidecarTrustModalHost";
+import { InstallConfirmationModalHost } from "./components/InstallConfirmationModalHost";
+
 import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
 import { handleMultiplayerAuthCallback } from "./services/multiplayer";
 import { importOpenedFile } from "./services/openedFiles";
 import { initializeSfxVolume } from "./utils/audio";
+import {
+    DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED,
+    normalizeStartupSafeModeShortcutEnabled,
+    SFW_MODE_ENABLED_EVENT,
+    SFW_MODE_ENABLED_KEY,
+    STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY,
+} from "./constants/experimentalFeatures";
+import { trpc } from "./services/trpc";
 
 const router = getRouter();
 const rootElement = document.getElementById("root");
@@ -78,9 +88,38 @@ function registerMultiplayerAuthCallbackHandler() {
 
 registerMultiplayerAuthCallbackHandler();
 
+function registerSafeModeStartupShortcut() {
+    if (typeof window === "undefined") return;
+
+    const rawShortcutEnabled = window.localStorage.getItem(STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY);
+    const shortcutEnabled =
+        rawShortcutEnabled !== null
+            ? normalizeStartupSafeModeShortcutEnabled(rawShortcutEnabled === "true")
+            : DEFAULT_STARTUP_SAFE_MODE_SHORTCUT_ENABLED;
+
+    if (!shortcutEnabled) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key.toLowerCase() === "s") {
+            window.localStorage.setItem(SFW_MODE_ENABLED_KEY, "true");
+            window.dispatchEvent(new CustomEvent(SFW_MODE_ENABLED_EVENT, { detail: true }));
+            void trpc.store.set.mutate({ key: SFW_MODE_ENABLED_KEY, value: true }).catch(() => { });
+        }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    setTimeout(() => {
+        window.removeEventListener("keydown", handleKeyDown);
+    }, 5000);
+}
+
+registerSafeModeStartupShortcut();
+
 createRoot(rootElement).render(
     <StrictMode>
+        <InstallConfirmationModalHost />
         <InstallSidecarTrustModalHost />
         <RouterProvider router={router} />
     </StrictMode>
+
 );
