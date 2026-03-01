@@ -228,6 +228,9 @@ describe("Home route update menu", () => {
         consumePendingFiles: vi.fn(async () => []),
         subscribe: vi.fn(() => () => {}),
       },
+      eroscripts: {
+        subscribeToLoginStatus: vi.fn(() => () => {}),
+      },
     };
   });
 

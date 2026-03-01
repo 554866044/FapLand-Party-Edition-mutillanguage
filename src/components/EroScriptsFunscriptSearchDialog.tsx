@@ -118,14 +118,17 @@ export function EroScriptsFunscriptSearchDialog({
     }
   }, [t]);
 
-  const handleOpenInBrowser = useCallback(async (url: string) => {
-    playSelectSound();
-    try {
-      await security.openExternal(url);
-    } catch (openError) {
-      setError(toErrorMessage(openError, t`Failed to open URL in browser.`));
-    }
-  }, [t]);
+  const handleOpenInBrowser = useCallback(
+    async (url: string) => {
+      playSelectSound();
+      try {
+        await security.openExternal(url);
+      } catch (openError) {
+        setError(toErrorMessage(openError, t`Failed to open URL in browser.`));
+      }
+    },
+    [t]
+  );
 
   const performSearch = useCallback(
     async (searchQuery: string, tags: string[]) => {
@@ -177,6 +180,14 @@ export function EroScriptsFunscriptSearchDialog({
       window.removeEventListener("focus", handleFocus);
     };
   }, [open, refreshLoginStatus]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.eroscripts.subscribeToLoginStatus((status) => {
+      setLoginStatus(status);
+      setIsLoadingLogin(false);
+    });
+    return unsubscribe;
+  }, []);
 
   const canInstallRounds = Boolean(onInstallRound);
   const canAttachFunscript = Boolean(onAttachFunscript);
@@ -289,10 +300,11 @@ export function EroScriptsFunscriptSearchDialog({
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <div
-                className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 transition ${loginStatus?.loggedIn
-                  ? "border-emerald-500/30 bg-emerald-500/10"
-                  : "border-zinc-700 bg-zinc-900/40"
-                  }`}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 transition ${
+                  loginStatus?.loggedIn
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : "border-zinc-700 bg-zinc-900/40"
+                }`}
               >
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
@@ -302,7 +314,7 @@ export function EroScriptsFunscriptSearchDialog({
                     {isLoadingLogin ? (
                       <Trans>Checking...</Trans>
                     ) : loginStatus?.loggedIn ? (
-                      loginStatus.username ?? <Trans>Logged In</Trans>
+                      (loginStatus.username ?? <Trans>Logged In</Trans>)
                     ) : (
                       <Trans>Not Logged In</Trans>
                     )}
@@ -421,10 +433,11 @@ export function EroScriptsFunscriptSearchDialog({
                         playSelectSound();
                         void loadTopic(result);
                       }}
-                      className={`w-full rounded-2xl border p-4 text-left transition ${selected
-                        ? "border-cyan-200/70 bg-cyan-500/15"
-                        : "border-white/10 bg-black/30 hover:border-cyan-300/40"
-                        }`}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        selected
+                          ? "border-cyan-200/70 bg-cyan-500/15"
+                          : "border-white/10 bg-black/30 hover:border-cyan-300/40"
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="text-sm font-bold text-zinc-100">{result.title}</h3>

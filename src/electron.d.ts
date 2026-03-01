@@ -55,6 +55,13 @@ declare global {
         consumePendingCallback: () => Promise<string | null>;
         subscribe: (callback: (url: string) => void) => UpdateUnsubscribe;
       };
+      eroscripts: {
+        subscribeToLoginStatus: (
+          callback: (
+            status: import("../electron/services/eroscripts").EroScriptsLoginStatus
+          ) => void
+        ) => UpdateUnsubscribe;
+      };
     };
   }
 }

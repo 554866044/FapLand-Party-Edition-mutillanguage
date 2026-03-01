@@ -31,6 +31,7 @@ import { startContinuousPhashScan } from "./services/phashScanService";
 import { startContinuousWebsiteVideoScan } from "./services/webVideoScanService";
 import { createMediaResponse } from "./services/protocol/mediaResponse";
 import { initializeAppUpdater, subscribeToUpdateState } from "./services/updater";
+import { subscribeToEroScriptsLoginStatus } from "./services/eroscripts";
 import {
   downloadMusicFromUrl,
   downloadPlaylistFromUrl,
@@ -751,6 +752,14 @@ function broadcastUpdateState() {
   });
 }
 
+function broadcastEroScriptsLoginStatus() {
+  subscribeToEroScriptsLoginStatus((status) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send("eroscripts:login-status", status);
+    }
+  });
+}
+
 function registerWindowControlsIpc() {
   ipcMain.handle("window:isFullscreen", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -1147,6 +1156,7 @@ app
     registerAppOpenIpc();
     registerAuthCallbackIpc();
     broadcastUpdateState();
+    broadcastEroScriptsLoginStatus();
     Menu.setApplicationMenu(null);
     await createWindow();
     void initializeAppUpdater().catch((error) => {

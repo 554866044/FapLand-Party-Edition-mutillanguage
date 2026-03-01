@@ -266,6 +266,9 @@ describe("Settings music section", () => {
         consumePendingFiles: vi.fn(async () => []),
         subscribe: vi.fn(() => () => {}),
       },
+      eroscripts: {
+        subscribeToLoginStatus: vi.fn(() => () => {}),
+      },
     };
   });
 

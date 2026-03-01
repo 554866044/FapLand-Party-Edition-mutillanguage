@@ -251,6 +251,9 @@ describe("Settings website video caching", () => {
         consumePendingFiles: vi.fn(async () => []),
         subscribe: vi.fn(() => () => {}),
       },
+      eroscripts: {
+        subscribeToLoginStatus: vi.fn(() => () => {}),
+      },
     };
   });
 

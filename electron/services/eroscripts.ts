@@ -45,6 +45,8 @@ const ytDlpDomainSet = new Set(
 const inFlightFunscriptDownloads = new Map<string, Promise<EroScriptsFunscriptDownloadResult>>();
 const inFlightVideoDownloads = new Map<string, Promise<EroScriptsVideoDownloadResult>>();
 let eroscriptsLoginWindow: BrowserWindow | null = null;
+let loginPollTimer: ReturnType<typeof setInterval> | null = null;
+const eroscriptsLoginListeners = new Set<(status: EroScriptsLoginStatus) => void>();
 
 export type EroScriptsLoginStatus = {
   loggedIn: boolean;
@@ -270,6 +272,39 @@ export async function getEroScriptsLoginStatus(): Promise<EroScriptsLoginStatus>
   }
 }
 
+export function subscribeToEroScriptsLoginStatus(
+  listener: (status: EroScriptsLoginStatus) => void
+): () => void {
+  eroscriptsLoginListeners.add(listener);
+  return () => {
+    eroscriptsLoginListeners.delete(listener);
+  };
+}
+
+function stopLoginPoll(): void {
+  if (loginPollTimer !== null) {
+    clearInterval(loginPollTimer);
+    loginPollTimer = null;
+  }
+}
+
+async function pollEroScriptsLogin(): Promise<void> {
+  const status = await getEroScriptsLoginStatus();
+  for (const listener of eroscriptsLoginListeners) {
+    listener(status);
+  }
+  if (status.loggedIn) {
+    stopLoginPoll();
+    closeEroScriptsLoginWindow();
+  }
+}
+
+function startLoginPoll(): void {
+  stopLoginPoll();
+  void pollEroScriptsLogin();
+  loginPollTimer = setInterval(() => void pollEroScriptsLogin(), 3000);
+}
+
 export async function openEroScriptsLoginWindow(): Promise<{ opened: true }> {
   clearDeprecatedEroScriptsApiCredentials();
   if (eroscriptsLoginWindow && !eroscriptsLoginWindow.isDestroyed()) {
@@ -291,6 +326,7 @@ export async function openEroScriptsLoginWindow(): Promise<{ opened: true }> {
   });
   eroscriptsLoginWindow = loginWindow;
   loginWindow.on("closed", () => {
+    stopLoginPoll();
     if (eroscriptsLoginWindow === loginWindow) {
       eroscriptsLoginWindow = null;
     }
@@ -299,7 +335,14 @@ export async function openEroScriptsLoginWindow(): Promise<{ opened: true }> {
   void loginWindow.loadURL(EROSCRIPTS_LOGIN_URL).catch((error: unknown) => {
     console.error("Failed to open EroScripts login window", error);
   });
+  startLoginPoll();
   return { opened: true };
+}
+
+function closeEroScriptsLoginWindow(): void {
+  if (eroscriptsLoginWindow && !eroscriptsLoginWindow.isDestroyed()) {
+    eroscriptsLoginWindow.close();
+  }
 }
 
 export async function clearEroScriptsLoginCookies(): Promise<EroScriptsLoginStatus> {
@@ -843,5 +886,7 @@ export async function clearEroScriptsCache(): Promise<void> {
 export function __resetEroScriptsForTests(): void {
   inFlightFunscriptDownloads.clear();
   inFlightVideoDownloads.clear();
+  stopLoginPoll();
   eroscriptsLoginWindow = null;
+  eroscriptsLoginListeners.clear();
 }

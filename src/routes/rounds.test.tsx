@@ -311,7 +311,7 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
-        selectEroScriptsCacheDirectory: vi.fn(),
+      selectEroScriptsCacheDirectory: vi.fn(),
       selectMusicCacheDirectory: vi.fn(),
       selectMoaningCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
@@ -322,7 +322,7 @@ beforeEach(() => {
       addMoaningFromUrl: vi.fn(),
       addMoaningPlaylistFromUrl: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
-        selectFpackExtractionDirectory: vi.fn(),
+      selectFpackExtractionDirectory: vi.fn(),
     },
     window: {
       isFullscreen: vi.fn(),
@@ -336,6 +336,9 @@ beforeEach(() => {
     appOpen: {
       consumePendingFiles: vi.fn(async () => []),
       subscribe: vi.fn(() => () => {}),
+    },
+    eroscripts: {
+      subscribeToLoginStatus: vi.fn(() => () => {}),
     },
   };
   mocks.loaderData.rounds = [];
@@ -801,8 +804,12 @@ describe("InstalledRoundsPage hero grouping", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
 
-    const playlistOneHeader = await screen.findByRole("button", { name: "Playlist One (1 rounds)" });
-    const playlistTwoHeader = await screen.findByRole("button", { name: "Playlist Two (2 rounds)" });
+    const playlistOneHeader = await screen.findByRole("button", {
+      name: "Playlist One (1 rounds)",
+    });
+    const playlistTwoHeader = await screen.findByRole("button", {
+      name: "Playlist Two (2 rounds)",
+    });
 
     fireEvent.click(playlistOneHeader);
     fireEvent.click(playlistTwoHeader);
@@ -988,9 +995,11 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(await screen.findByLabelText("Play Preview Round"));
 
     await waitFor(() => expect(mocks.roundVideoOverlay).toHaveBeenCalledTimes(1));
-    const onClose = (mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
-      onClose: () => void;
-    }).onClose;
+    const onClose = (
+      mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
+        onClose: () => void;
+      }
+    ).onClose;
     await act(async () => {
       onClose();
     });
@@ -1000,9 +1009,11 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(await screen.findByLabelText("Play Preview Round"));
 
     await waitFor(() => expect(mocks.roundVideoOverlay).toHaveBeenCalledTimes(2));
-    const onFinishRound = (mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
-      onFinishRound: () => void;
-    }).onFinishRound;
+    const onFinishRound = (
+      mocks.roundVideoOverlay.mock.calls.at(-1)?.[0] as unknown as {
+        onFinishRound: () => void;
+      }
+    ).onFinishRound;
     await act(async () => {
       onFinishRound();
     });
@@ -1473,10 +1484,7 @@ describe("InstalledRoundsPage hero grouping", () => {
   });
 
   it("shows export progress overlay and aborts the library export", async () => {
-    mocks.db.install.exportPackage.mockImplementation(
-      () =>
-        new Promise(() => {})
-    );
+    mocks.db.install.exportPackage.mockImplementation(() => new Promise(() => {}));
     mocks.db.install.getExportPackageStatus.mockResolvedValue({
       state: "running",
       phase: "copying",

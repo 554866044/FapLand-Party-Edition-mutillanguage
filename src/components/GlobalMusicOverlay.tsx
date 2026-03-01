@@ -33,20 +33,6 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function formatPlaybackStatus({
-  enabled,
-  isPlaying,
-  isSuppressedByVideo,
-}: {
-  enabled: boolean;
-  isPlaying: boolean;
-  isSuppressedByVideo: boolean;
-}): string {
-  if (isSuppressedByVideo) return "Blocked by video";
-  if (!enabled) return "Music disabled";
-  return isPlaying ? "Now playing" : "Ready to play";
-}
-
 function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
   return (
     <div className="flex items-end justify-center gap-[3px] h-8">
@@ -142,10 +128,11 @@ export function GlobalMusicOverlay() {
     };
   }, [open]);
 
-  const statusLabel = useMemo(
-    () => formatPlaybackStatus({ enabled, isPlaying, isSuppressedByVideo }),
-    [enabled, isPlaying, isSuppressedByVideo]
-  );
+  const statusLabel = useMemo(() => {
+    if (isSuppressedByVideo) return t`Blocked by video`;
+    if (!enabled) return t`Music disabled`;
+    return isPlaying ? t`Now playing` : t`Ready to play`;
+  }, [enabled, isPlaying, isSuppressedByVideo, t]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -167,13 +154,13 @@ export function GlobalMusicOverlay() {
     if (isAddingFromUrl) return;
     const trimmed = urlInput.trim();
     if (!trimmed) {
-      setUrlError("Please enter a URL");
+      setUrlError(t`Please enter a URL`);
       return;
     }
     try {
       new URL(trimmed);
     } catch {
-      setUrlError("Invalid URL format");
+      setUrlError(t`Invalid URL format`);
       return;
     }
     setUrlError(null);
@@ -193,7 +180,7 @@ export function GlobalMusicOverlay() {
         setShowUrlInput(false);
       }
     } catch (error) {
-      setUrlError(error instanceof Error ? error.message : "Failed to add from URL");
+      setUrlError(error instanceof Error ? error.message : t`Failed to add from URL`);
     } finally {
       setIsAddingFromUrl(false);
     }
@@ -286,7 +273,7 @@ export function GlobalMusicOverlay() {
             className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[linear-gradient(160deg,rgba(18,28,46,0.92),rgba(9,14,24,0.96))] text-zinc-100 shadow-[0_28px_100px_rgba(0,0,0,0.5)] sm:max-h-[calc(100vh-2rem)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Global music controls"
+            aria-label={t`Global music controls`}
           >
             <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
               <div className="absolute -left-20 -top-20 h-48 w-48 rounded-full bg-cyan-400/10 blur-[80px]" />
@@ -296,14 +283,16 @@ export function GlobalMusicOverlay() {
             <header className="relative flex items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-4 sm:px-6">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-300/80">
-                  Global Music
+                  {t`Global Music`}
                 </p>
                 <p className="mt-0.5 text-xs text-zinc-400">
-                  Press{" "}
-                  <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    Ctrl+M
-                  </span>{" "}
-                  to toggle
+                  <Trans>
+                    Press{" "}
+                    <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      Ctrl+M
+                    </span>{" "}
+                    to toggle
+                  </Trans>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -322,7 +311,7 @@ export function GlobalMusicOverlay() {
                   data-controller-focus-id="music-enabled-toggle"
                   data-controller-initial="true"
                 >
-                  {enabled ? "Music On" : "Music Off"}
+                  {enabled ? t`Music On` : t`Music Off`}
                 </button>
                 <button
                   type="button"
@@ -332,11 +321,11 @@ export function GlobalMusicOverlay() {
                     setOpen(false);
                   }}
                   className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/10"
-                  aria-label="Close music overlay"
+                  aria-label={t`Close music overlay`}
                   data-controller-focus-id="music-close"
                   data-controller-back="true"
                 >
-                  Close
+                  {t`Close`}
                 </button>
               </div>
             </header>
@@ -398,7 +387,7 @@ export function GlobalMusicOverlay() {
                       }
                     }}
                     role="slider"
-                    aria-label="Track progress"
+                    aria-label={t`Track progress`}
                     aria-valuemin={0}
                     aria-valuemax={duration}
                     aria-valuenow={currentTime}
@@ -438,7 +427,7 @@ export function GlobalMusicOverlay() {
                     className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:border-white/20"
                     data-controller-focus-id="music-previous"
                   >
-                    ◀◀ Prev
+                    {t`◀◀ Prev`}
                   </button>
                   <button
                     type="button"
@@ -454,7 +443,7 @@ export function GlobalMusicOverlay() {
                     }`}
                     data-controller-focus-id="music-toggle-playback"
                   >
-                    {isPlaying ? "⏸ Pause" : "▶ Play"}
+                    {isPlaying ? t`⏸ Pause` : t`▶ Play`}
                   </button>
                   <button
                     type="button"
@@ -466,7 +455,7 @@ export function GlobalMusicOverlay() {
                     className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:border-white/20"
                     data-controller-focus-id="music-next"
                   >
-                    Next ▶▶
+                    {t`Next ▶▶`}
                   </button>
                   <button
                     type="button"
@@ -480,7 +469,7 @@ export function GlobalMusicOverlay() {
                     }`}
                     data-controller-focus-id="music-add-tracks"
                   >
-                    {isAddingTracks ? "Adding..." : "+ Add Tracks"}
+                    {isAddingTracks ? t`Adding...` : t`+ Add Tracks`}
                   </button>
                   <button
                     type="button"
@@ -497,7 +486,7 @@ export function GlobalMusicOverlay() {
                     }`}
                     data-controller-focus-id="music-add-url"
                   >
-                    {showUrlInput ? "✕ Cancel" : "⊕ Add from URL"}
+                    {showUrlInput ? t`✕ Cancel` : t`⊕ Add from URL`}
                   </button>
                 </div>
 
@@ -505,10 +494,10 @@ export function GlobalMusicOverlay() {
                   <div className="space-y-3 rounded-xl border border-white/[0.06] bg-black/20 p-4">
                     <div>
                       <p className="text-xs font-semibold text-white">
-                        Add from any yt-dlp-supported URL
+                        {t`Add from any yt-dlp-supported URL`}
                       </p>
                       <p className="mt-0.5 text-[10px] text-zinc-500">
-                        The audio will be downloaded as MP3 via yt-dlp and added to your queue
+                        {t`The audio will be downloaded as MP3 via yt-dlp and added to your queue`}
                       </p>
                     </div>
                     <div className="flex gap-1.5">
@@ -526,7 +515,7 @@ export function GlobalMusicOverlay() {
                             : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
                         }`}
                       >
-                        Single Track
+                        <Trans>Single Track</Trans>
                       </button>
                       <button
                         type="button"
@@ -542,7 +531,7 @@ export function GlobalMusicOverlay() {
                             : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
                         }`}
                       >
-                        Playlist
+                        <Trans>Playlist</Trans>
                       </button>
                     </div>
                     <div className="flex gap-2">
@@ -550,8 +539,8 @@ export function GlobalMusicOverlay() {
                         type="url"
                         placeholder={
                           urlMode === "playlist"
-                            ? "https://example.com/playlist-or-collection"
-                            : "https://example.com/video-or-audio"
+                            ? t`https://example.com/playlist-or-collection`
+                            : t`https://example.com/video-or-audio`
                         }
                         value={urlInput}
                         onChange={(e) => {
@@ -583,17 +572,12 @@ export function GlobalMusicOverlay() {
                         }`}
                         data-controller-focus-id="music-url-add-button"
                       >
-                        {isAddingFromUrl
-                          ? urlMode === "playlist"
-                            ? "Downloading..."
-                            : "Downloading..."
-                          : "Add"}
+                        {isAddingFromUrl ? t`Downloading...` : t`Add`}
                       </button>
                     </div>
                     {urlResult && (
                       <p className="text-xs text-emerald-300">
-                        Added {urlResult.added} track{urlResult.added !== 1 ? "s" : ""}
-                        {urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}
+                        {t`Added ${urlResult.added} track${urlResult.added !== 1 ? "s" : ""}${urlResult.errors > 0 ? ` (${urlResult.errors} failed)` : ""}`}
                       </p>
                     )}
                     {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
@@ -609,7 +593,7 @@ export function GlobalMusicOverlay() {
                       <span className="text-xs font-bold text-cyan-300">{volumeDraft}%</span>
                     </div>
                     <input
-                      aria-label="Music volume"
+                      aria-label={t`Music volume`}
                       type="range"
                       min={0}
                       max={100}
@@ -711,7 +695,7 @@ export function GlobalMusicOverlay() {
                         onClick={handleRequestClearQueue}
                         className="rounded-lg border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-400/18"
                       >
-                        Clear
+                        {t`Clear`}
                       </button>
                     )}
                   </div>
@@ -720,7 +704,7 @@ export function GlobalMusicOverlay() {
                     <div className="max-h-[200px] overflow-y-auto border-t border-white/[0.04] px-2 py-2">
                       {queue.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-white/10 px-4 py-6 text-center text-xs text-zinc-500">
-                          Your queue is empty
+                          {t`Your queue is empty`}
                         </div>
                       ) : (
                         <div className="space-y-1">

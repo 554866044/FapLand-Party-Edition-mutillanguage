@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { exposeElectronTRPC } from "trpc-electron/main";
 import type { AppUpdateState } from "./services/updater";
+import type { EroScriptsLoginStatus } from "./services/eroscripts";
 
 process.once("loaded", () => {
   exposeElectronTRPC();
@@ -103,6 +104,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("auth:callback", listener);
       return () => {
         ipcRenderer.off("auth:callback", listener);
+      };
+    },
+  },
+  eroscripts: {
+    subscribeToLoginStatus: (callback: (status: EroScriptsLoginStatus) => void) => {
+      const listener = (_event: unknown, status: EroScriptsLoginStatus) => {
+        callback(status);
+      };
+      ipcRenderer.on("eroscripts:login-status", listener);
+      return () => {
+        ipcRenderer.off("eroscripts:login-status", listener);
       };
     },
   },

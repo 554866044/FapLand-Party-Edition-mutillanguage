@@ -112,6 +112,9 @@ describe("GlobalMusicOverlay", () => {
         consumePendingFiles: vi.fn(),
         subscribe: vi.fn(() => () => {}),
       },
+      eroscripts: {
+        subscribeToLoginStatus: vi.fn(() => () => {}),
+      },
     };
   });
 

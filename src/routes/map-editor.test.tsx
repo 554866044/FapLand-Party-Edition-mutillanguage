@@ -272,7 +272,7 @@ beforeEach(() => {
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
       selectWebsiteVideoCacheDirectory: vi.fn(),
-        selectEroScriptsCacheDirectory: vi.fn(),
+      selectEroScriptsCacheDirectory: vi.fn(),
       selectMusicCacheDirectory: vi.fn(),
       selectMoaningCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
@@ -283,7 +283,7 @@ beforeEach(() => {
       addMoaningFromUrl: vi.fn(),
       addMoaningPlaylistFromUrl: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
-        selectFpackExtractionDirectory: vi.fn(),
+      selectFpackExtractionDirectory: vi.fn(),
     },
     window: {
       isFullscreen: vi.fn(),
@@ -297,6 +297,9 @@ beforeEach(() => {
     appOpen: {
       consumePendingFiles: vi.fn(async () => []),
       subscribe: vi.fn(() => () => {}),
+    },
+    eroscripts: {
+      subscribeToLoginStatus: vi.fn(() => () => {}),
     },
   };
   const playlist = makePlaylist("playlist-1", "Test Playlist");
@@ -330,7 +333,10 @@ beforeEach(() => {
 
   mocks.playlists.create.mockImplementation(async ({ name }: { name: string }) => {
     const created = makePlaylist("playlist-new", name);
-    mocks.loaderData.availablePlaylists = [created, ...(mocks.loaderData.availablePlaylists as typeof mocks.loaderData.availablePlaylists)];
+    mocks.loaderData.availablePlaylists = [
+      created,
+      ...(mocks.loaderData.availablePlaylists as typeof mocks.loaderData.availablePlaylists),
+    ];
     return created;
   });
   mocks.playlists.duplicate.mockImplementation(async (playlistId: string) => {
@@ -422,7 +428,15 @@ beforeEach(() => {
     },
   });
   mocks.playlists.update.mockImplementation(
-    async ({ playlistId, name, config }: { playlistId: string; name?: string; config: unknown }) => ({
+    async ({
+      playlistId,
+      name,
+      config,
+    }: {
+      playlistId: string;
+      name?: string;
+      config: unknown;
+    }) => ({
       ...makePlaylist(playlistId, name ?? "Test Playlist"),
       config,
     })
@@ -1024,7 +1038,11 @@ describe("MapEditorRoute", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Reset Graph" }));
-    expect(await screen.findByText("Are you sure you want to reset the graph? This will delete all progress made.")).toBeDefined();
+    expect(
+      await screen.findByText(
+        "Are you sure you want to reset the graph? This will delete all progress made."
+      )
+    ).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByTestId("node-count").textContent).toBe("5");
   });

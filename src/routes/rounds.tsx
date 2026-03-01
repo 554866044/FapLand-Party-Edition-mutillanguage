@@ -839,6 +839,7 @@ export function InstalledRoundsPage() {
   const [repairingTemplateHero, setRepairingTemplateHero] =
     useState<HeroTemplateRepairState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isAutoDifficultyLoading, setIsAutoDifficultyLoading] = useState(false);
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
   const [isAbortingInstall, setIsAbortingInstall] = useState(false);
   const [legacyPlaylistReview, setLegacyPlaylistReview] =
@@ -3595,6 +3596,34 @@ export function InstalledRoundsPage() {
                     );
                   })}
                 </div>
+                {editingRound.funscriptUri && (
+                  <button
+                    type="button"
+                    disabled={isAutoDifficultyLoading}
+                    onClick={() => {
+                      if (!editingRound.funscriptUri) return;
+                      setIsAutoDifficultyLoading(true);
+                      db.round
+                        .calculateDifficultyFromFunscript(editingRound.funscriptUri)
+                        .then((result) => {
+                          if (result != null) {
+                            setEditingRound((previous) =>
+                              previous ? { ...previous, difficulty: String(result) } : previous
+                            );
+                          } else {
+                            showToast(t`Could not estimate difficulty from funscript.`, "error");
+                          }
+                        })
+                        .catch(() => {
+                          showToast(t`Could not estimate difficulty from funscript.`, "error");
+                        })
+                        .finally(() => setIsAutoDifficultyLoading(false));
+                    }}
+                    className="text-xs text-zinc-500 hover:text-zinc-400 disabled:opacity-50"
+                  >
+                    {isAutoDifficultyLoading ? t`Calculating…` : t`Auto from funscript`}
+                  </button>
+                )}
                 {editingRound.difficulty && (
                   <button
                     type="button"

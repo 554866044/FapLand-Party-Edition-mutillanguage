@@ -13,6 +13,20 @@ export const storeRouter = router({
     }
   }),
 
+  getMany: publicProcedure.input(z.object({ keys: z.array(z.string()) })).query(({ input }) => {
+    const store = getStore();
+    const result: Record<string, unknown> = {};
+    for (const key of input.keys) {
+      try {
+        result[key] = store.get(key);
+      } catch (err) {
+        console.error(`Failed to getStore().get(${key}):`, err);
+        result[key] = undefined;
+      }
+    }
+    return result;
+  }),
+
   set: publicProcedure
     .input(z.object({ key: z.string(), value: z.unknown() }))
     .mutation(({ input }) => {

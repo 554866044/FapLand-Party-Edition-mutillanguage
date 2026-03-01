@@ -872,6 +872,12 @@ export const dbRouter = router({
       return updated;
     }),
 
+  calculateDifficultyFromFunscript: publicProcedure
+    .input(z.object({ funscriptUri: z.string() }))
+    .query(async ({ input }) => {
+      return calculateFunscriptDifficultyFromUri(input.funscriptUri);
+    }),
+
   deleteRound: publicProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ input }) => {

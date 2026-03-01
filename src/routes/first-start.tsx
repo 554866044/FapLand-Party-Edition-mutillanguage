@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
 import { EROSCRIPTS_CACHE_ROOT_PATH_KEY } from "../constants/eroscriptsSettings";
+import type { EroScriptsLoginStatus } from "../services/eroscripts";
 import { FPACK_EXTRACTION_PATH_KEY } from "../constants/fpackSettings";
 import { MUSIC_CACHE_ROOT_PATH_KEY } from "../constants/musicSettings";
 import {
@@ -52,7 +53,8 @@ type StepDefinition = {
     | "storage"
     | "booru"
     | "handy"
-    | "phash";
+    | "phash"
+    | "eroscripts";
 };
 
 function getSteps(): StepDefinition[] {
@@ -80,6 +82,11 @@ function getSteps(): StepDefinition[] {
       id: "round-packs",
       icon: "💿",
       interactive: "round-packs",
+    },
+    {
+      id: "eroscripts",
+      icon: "🔗",
+      interactive: "eroscripts",
     },
     {
       id: "maps",
@@ -120,6 +127,8 @@ function getStepShortLabel(id: string): string {
       return i18n._({ id: "first-start.step.moaning.shortLabel", message: "Moaning" });
     case "round-packs":
       return i18n._({ id: "first-start.step.round-packs.shortLabel", message: "Rounds" });
+    case "eroscripts":
+      return i18n._({ id: "first-start.step.eroscripts.shortLabel", message: "EroScripts" });
     case "maps":
       return i18n._({ id: "first-start.step.maps.shortLabel", message: "Maps" });
     case "storage":
@@ -156,6 +165,7 @@ function getStepEyebrow(id: string): string {
     case "moaning":
     case "round-packs":
     case "storage":
+    case "eroscripts":
       return i18n._({
         id: "first-start.step.optional-setup.eyebrow",
         message: "Optional Setup",
@@ -191,6 +201,11 @@ function getStepTitle(id: string): string {
       return i18n._({
         id: "first-start.step.round-packs.title",
         message: "Install some round packs now",
+      });
+    case "eroscripts":
+      return i18n._({
+        id: "first-start.step.eroscripts.title",
+        message: "Connect your EroScripts account",
       });
     case "maps":
       return i18n._({
@@ -253,6 +268,12 @@ function getStepDescription(id: string): string {
         id: "first-start.step.round-packs.description",
         message:
           "Round packs are the gameplay library. This is the content the board pulls from when a round starts.",
+      });
+    case "eroscripts":
+      return i18n._({
+        id: "first-start.step.eroscripts.description",
+        message:
+          "EroScripts is the community hub for funscripts and interactive content. Sign in to search and download funscripts and videos directly.",
       });
     case "maps":
       return i18n._({
@@ -408,6 +429,24 @@ function getStepDetails(id: string): string[] {
           id: "first-start.step.round-packs.detail.3",
           message:
             "You can install content now, or skip this and manage it later from Installed Rounds or Settings.",
+        }),
+      ];
+    case "eroscripts":
+      return [
+        i18n._({
+          id: "first-start.step.eroscripts.detail.1",
+          message:
+            "EroScripts is where the funscript community shares interactive scripts and videos. Signing in lets you search and download funscripts and videos without leaving the app.",
+        }),
+        i18n._({
+          id: "first-start.step.eroscripts.detail.2",
+          message:
+            "If you do not have an account yet, you can create one for free on the EroScripts website. It only takes a moment.",
+        }),
+        i18n._({
+          id: "first-start.step.eroscripts.detail.3",
+          message:
+            "You can skip this for now and set up the EroScripts connection later in Settings under Sources.",
         }),
       ];
     case "maps":
@@ -584,6 +623,12 @@ function FirstStartPage() {
   const [isSkipping, setIsSkipping] = useState(false);
   const [contentKey, setContentKey] = useState(0);
   const [handyInputKey, setHandyInputKey] = useState("");
+  const [eroscriptsLoginStatus, setEroScriptsLoginStatus] = useState<EroScriptsLoginStatus | null>(
+    null
+  );
+  const [eroscriptsAuthMessage, setEroScriptsAuthMessage] = useState<string | null>(null);
+  const [isEroScriptsAuthLoading, setIsEroScriptsAuthLoading] = useState(true);
+  const [isEroScriptsAuthPending, setIsEroScriptsAuthPending] = useState(false);
   const stepNavRef = useRef<HTMLDivElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const currentStep = STEPS[stepIndex] ?? STEPS[0]!;
@@ -600,7 +645,8 @@ function FirstStartPage() {
     isBusy ||
     (currentStep.id === "booru" && isLoadingPrompt) ||
     (currentStep.id === "phash" && isLoadingBackgroundPhashScanningEnabled) ||
-    (currentStep.id === "storage" && isLoadingStorageSettings);
+    (currentStep.id === "storage" && isLoadingStorageSettings) ||
+    (currentStep.id === "eroscripts" && isEroScriptsAuthLoading);
   const progressPercent = ((stepIndex + 1) / STEPS.length) * 100;
 
   useEffect(() => {
@@ -710,6 +756,38 @@ function FirstStartPage() {
       setHandyInputKey(connectionKey);
     }
   }, [connectionKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void trpc.eroscripts.getLoginStatus
+      .query()
+      .then((status) => {
+        if (cancelled) return;
+        setEroScriptsLoginStatus(status);
+      })
+      .catch((error) => {
+        console.error("Failed to load onboarding EroScripts login status", error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsEroScriptsAuthLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.eroscripts.subscribeToLoginStatus((status) => {
+      setEroScriptsLoginStatus(status);
+      setIsEroScriptsAuthLoading(false);
+      if (status.loggedIn) {
+        setEroScriptsAuthMessage(t`EroScripts login active.`);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const stepNav = stepNavRef.current;
@@ -946,6 +1024,47 @@ function FirstStartPage() {
       return;
     }
     await handyConnect(handyInputKey.trim());
+  };
+
+  const openEroScriptsLogin = async () => {
+    if (isEroScriptsAuthPending) return;
+    setIsEroScriptsAuthPending(true);
+    setEroScriptsAuthMessage(null);
+    try {
+      await trpc.eroscripts.openLoginWindow.mutate();
+      setEroScriptsAuthMessage(
+        t`EroScripts login window opened. Sign in there — login will be detected automatically.`
+      );
+    } catch (error) {
+      setEroScriptsAuthMessage(
+        error instanceof Error ? error.message : t`Failed to open EroScripts login.`
+      );
+    } finally {
+      setIsEroScriptsAuthPending(false);
+    }
+  };
+
+  const refreshEroScriptsLoginStatus = async () => {
+    if (isEroScriptsAuthPending) return;
+    setIsEroScriptsAuthPending(true);
+    setEroScriptsAuthMessage(null);
+    try {
+      const status = await trpc.eroscripts.getLoginStatus.query();
+      setEroScriptsLoginStatus(status);
+      if (status.loggedIn) {
+        setEroScriptsAuthMessage(t`EroScripts login active.`);
+      } else if (status.error) {
+        setEroScriptsAuthMessage(status.error);
+      } else {
+        setEroScriptsAuthMessage(t`EroScripts is not logged in.`);
+      }
+    } catch (error) {
+      setEroScriptsAuthMessage(
+        error instanceof Error ? error.message : t`Failed to refresh EroScripts login.`
+      );
+    } finally {
+      setIsEroScriptsAuthPending(false);
+    }
   };
 
   const updateStoragePath = async (
@@ -1743,6 +1862,116 @@ function FirstStartPage() {
                         <span>{roundMessage}</span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* EroScripts Login Section */}
+                {currentStep.interactive === "eroscripts" && (
+                  <div
+                    className="mt-3 rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-indigo-500/10 p-4 animate-entrance"
+                    style={{ animationDelay: "0.3s" }}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-cyan-300">🔗</span>
+                      <p className="text-sm font-semibold text-cyan-100">
+                        <Trans>EroScripts Account</Trans>
+                      </p>
+                      {eroscriptsLoginStatus?.loggedIn && (
+                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                          <Trans>Connected</Trans>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-zinc-400">
+                      <Trans>
+                        Sign in to your EroScripts account to search and download funscripts and
+                        videos directly from the app. If you do not have one yet, creating an
+                        account is free.
+                      </Trans>
+                    </p>
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                            <Trans>Login Status</Trans>
+                          </div>
+                          <div className="mt-1 text-sm font-semibold text-zinc-100">
+                            {isEroScriptsAuthLoading
+                              ? t`Checking login...`
+                              : eroscriptsLoginStatus?.loggedIn
+                                ? eroscriptsLoginStatus.username
+                                  ? t`Logged in as ${eroscriptsLoginStatus.username}`
+                                  : t`Logged in`
+                                : t`Not logged in`}
+                          </div>
+                        </div>
+                        <div className="rounded-full border border-zinc-600/70 px-3 py-1 text-xs font-semibold text-zinc-300">
+                          <Trans>Cookies stored: {eroscriptsLoginStatus?.cookieCount ?? 0}</Trans>
+                        </div>
+                      </div>
+                      {eroscriptsLoginStatus?.error ? (
+                        <p className="mt-2 text-sm text-amber-200">{eroscriptsLoginStatus.error}</p>
+                      ) : null}
+                    </div>
+                    {eroscriptsAuthMessage && (
+                      <div
+                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                          eroscriptsLoginStatus?.loggedIn
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                        }`}
+                      >
+                        <span>{eroscriptsLoginStatus?.loggedIn ? "✓" : "ℹ"}</span>
+                        <span>{eroscriptsAuthMessage}</span>
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void openEroScriptsLogin();
+                        }}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                          isEroScriptsAuthPending
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                        }`}
+                      >
+                        {isEroScriptsAuthPending ? (
+                          <>
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+                            <span>
+                              <Trans>Opening...</Trans>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span>🔑</span>
+                            <span>
+                              <Trans>Sign In / Create Account</Trans>
+                            </span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void refreshEroScriptsLoginStatus();
+                        }}
+                        className="flex items-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-all hover:border-emerald-300/70 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span>🔄</span>
+                        <span>
+                          <Trans>Check Login</Trans>
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 )}
 

@@ -25,140 +25,201 @@ type CommandItem = {
   keywords?: string[];
 };
 
-function buildNavigationCommands(
-  msg: (id: string, message: string) => string
-): CommandItem[] {
+function buildNavigationCommands(): CommandItem[] {
   return [
     {
       id: "home",
-      label: msg("command-palette.home", "Home"),
-      description: msg("command-palette.home.description", "Main menu"),
-      category: msg("command-palette.category.navigation", "Navigation"),
+      label: i18n._({ id: "command-palette.home", message: "Home" }),
+      description: i18n._({ id: "command-palette.home.description", message: "Main menu" }),
+      category: i18n._({ id: "command-palette.category.navigation", message: "Navigation" }),
       to: "/",
     },
     {
       id: "single-player",
-      label: msg("command-palette.single-player", "Single Player"),
-      description: msg("command-palette.single-player.description", "Start a single-player game"),
-      category: msg("command-palette.category.play", "Play"),
+      label: i18n._({ id: "command-palette.single-player", message: "Single Player" }),
+      description: i18n._({
+        id: "command-palette.single-player.description",
+        message: "Start a single-player game",
+      }),
+      category: i18n._({ id: "command-palette.category.play", message: "Play" }),
       to: "/single-player-setup",
     },
     {
       id: "multiplayer",
-      label: msg("command-palette.multiplayer", "Multiplayer"),
-      description: msg("command-palette.multiplayer.description", "Join or host a multiplayer lobby"),
-      category: msg("command-palette.category.play", "Play"),
+      label: i18n._({ id: "command-palette.multiplayer", message: "Multiplayer" }),
+      description: i18n._({
+        id: "command-palette.multiplayer.description",
+        message: "Join or host a multiplayer lobby",
+      }),
+      category: i18n._({ id: "command-palette.category.play", message: "Play" }),
       to: "/multiplayer",
     },
     {
       id: "rounds",
-      label: msg("command-palette.rounds", "Installed Rounds"),
-      description: msg("command-palette.rounds.description", "Manage your round library"),
-      category: msg("command-palette.category.workshop", "Workshop"),
+      label: i18n._({ id: "command-palette.rounds", message: "Installed Rounds" }),
+      description: i18n._({
+        id: "command-palette.rounds.description",
+        message: "Manage your round library",
+      }),
+      category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
       to: "/rounds",
     },
     {
       id: "converter",
-      label: msg("command-palette.converter", "Round Converter"),
-      description: msg("command-palette.converter.description", "Convert videos to playable rounds"),
-      category: msg("command-palette.category.workshop", "Workshop"),
+      label: i18n._({ id: "command-palette.converter", message: "Round Converter" }),
+      description: i18n._({
+        id: "command-palette.converter.description",
+        message: "Convert videos to playable rounds",
+      }),
+      category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
       to: "/converter",
     },
     {
       id: "playlist-workshop",
-      label: msg("command-palette.playlist-workshop", "Playlist Workshop"),
-      description: msg("command-palette.playlist-workshop.description", "Create and edit playlists"),
-      category: msg("command-palette.category.workshop", "Workshop"),
+      label: i18n._({ id: "command-palette.playlist-workshop", message: "Playlist Workshop" }),
+      description: i18n._({
+        id: "command-palette.playlist-workshop.description",
+        message: "Create and edit playlists",
+      }),
+      category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
       to: "/playlist-workshop",
     },
     {
       id: "map-editor",
-      label: msg("command-palette.map-editor", "Map Editor"),
-      description: msg("command-palette.map-editor.description", "Design board layouts"),
-      category: msg("command-palette.category.workshop", "Workshop"),
+      label: i18n._({ id: "command-palette.map-editor", message: "Map Editor" }),
+      description: i18n._({
+        id: "command-palette.map-editor.description",
+        message: "Design board layouts",
+      }),
+      category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
       to: "/map-editor",
     },
     {
       id: "highscores",
-      label: msg("command-palette.highscores", "Highscores"),
-      description: msg("command-palette.highscores.description", "View score history"),
-      category: msg("command-palette.category.navigation", "Navigation"),
+      label: i18n._({ id: "command-palette.highscores", message: "Highscores" }),
+      description: i18n._({
+        id: "command-palette.highscores.description",
+        message: "View score history",
+      }),
+      category: i18n._({ id: "command-palette.category.navigation", message: "Navigation" }),
       to: "/highscores",
     },
     {
       id: "settings-general",
-      label: msg("command-palette.settings-general", "Settings - General"),
-      description: msg("command-palette.settings-general.description", "Fullscreen, background videos"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-general", message: "Settings - General" }),
+      description: i18n._({
+        id: "command-palette.settings-general.description",
+        message: "Fullscreen, background videos",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=general",
     },
     {
       id: "settings-gameplay",
-      label: msg("command-palette.settings-gameplay", "Settings - Gameplay"),
-      description: msg("command-palette.settings-gameplay.description", "HUD, perks, cheat mode"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-gameplay", message: "Settings - Gameplay" }),
+      description: i18n._({
+        id: "command-palette.settings-gameplay.description",
+        message: "HUD, perks, cheat mode",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=gameplay",
     },
     {
       id: "settings-audio",
-      label: msg("command-palette.settings-audio", "Settings - Audio"),
-      description: msg("command-palette.settings-audio.description", "Music queue, volume"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-audio", message: "Settings - Audio" }),
+      description: i18n._({
+        id: "command-palette.settings-audio.description",
+        message: "Music queue, volume",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=audio",
     },
     {
       id: "settings-hardware",
-      label: msg("command-palette.settings-hardware", "Settings - Hardware & Sync"),
-      description: msg("command-palette.settings-hardware.description", "TheHandy, funscripts"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({
+        id: "command-palette.settings-hardware",
+        message: "Settings - Hardware & Sync",
+      }),
+      description: i18n._({
+        id: "command-palette.settings-hardware.description",
+        message: "TheHandy, funscripts",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=hardware",
       keywords: ["handy", "funscript", "device"],
     },
     {
       id: "settings-sources",
-      label: msg("command-palette.settings-sources", "Settings - Sources & Library"),
-      description: msg("command-palette.settings-sources.description", "Stash, auto-scan folders"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({
+        id: "command-palette.settings-sources",
+        message: "Settings - Sources & Library",
+      }),
+      description: i18n._({
+        id: "command-palette.settings-sources.description",
+        message: "Stash, auto-scan folders",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=sources",
       keywords: ["stash", "scan", "library"],
     },
     {
       id: "settings-security",
-      label: msg("command-palette.settings-security", "Settings - Security & Privacy"),
-      description: msg("command-palette.settings-security.description", "SFW mode, safe domains"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({
+        id: "command-palette.settings-security",
+        message: "Settings - Security & Privacy",
+      }),
+      description: i18n._({
+        id: "command-palette.settings-security.description",
+        message: "SFW mode, safe domains",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=security-privacy",
       keywords: ["sfw", "safe", "domains"],
     },
     {
       id: "settings-data",
-      label: msg("command-palette.settings-data", "Settings - Data & Storage"),
-      description: msg("command-palette.settings-data.description", "Cache, clear data"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-data", message: "Settings - Data & Storage" }),
+      description: i18n._({
+        id: "command-palette.settings-data.description",
+        message: "Cache, clear data",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=app",
       keywords: ["cache", "storage", "phash"],
     },
     {
       id: "settings-advanced",
-      label: msg("command-palette.settings-advanced", "Settings - Advanced"),
-      description: msg("command-palette.settings-advanced.description", "FFmpeg, yt-dlp"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-advanced", message: "Settings - Advanced" }),
+      description: i18n._({
+        id: "command-palette.settings-advanced.description",
+        message: "FFmpeg, yt-dlp",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=advanced",
       keywords: ["ffmpeg", "ytdlp", "binary"],
     },
     {
       id: "settings-experimental",
-      label: msg("command-palette.settings-experimental", "Settings - Experimental"),
-      description: msg("command-palette.settings-experimental.description", "Controller support, web funscripts"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({
+        id: "command-palette.settings-experimental",
+        message: "Settings - Experimental",
+      }),
+      description: i18n._({
+        id: "command-palette.settings-experimental.description",
+        message: "Controller support, web funscripts",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=experimental",
       keywords: ["controller", "gamepad", "experimental"],
     },
     {
       id: "settings-help",
-      label: msg("command-palette.settings-help", "Settings - Help"),
-      description: msg("command-palette.settings-help.description", "Keyboard shortcut reference"),
-      category: msg("command-palette.category.settings", "Settings"),
+      label: i18n._({ id: "command-palette.settings-help", message: "Settings - Help" }),
+      description: i18n._({
+        id: "command-palette.settings-help.description",
+        message: "Keyboard shortcut reference",
+      }),
+      category: i18n._({ id: "command-palette.category.settings", message: "Settings" }),
       to: "/settings?section=help",
       keywords: ["shortcuts", "keyboard", "hotkeys"],
     },
@@ -176,15 +237,6 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const guard = useCommandPaletteGuard();
   const { manuallyStopped, toggleManualStop } = useHandy();
-  const translateMessage = useCallback((id: string, message: string) => {
-    if (!i18n.locale) return message;
-    try {
-      const translated = i18n._({ id, message });
-      return translated || message;
-    } catch {
-      return message;
-    }
-  }, []);
 
   useEffect(() => {
     _setOpenFromOutside = (value: boolean) => {
@@ -201,78 +253,78 @@ export function CommandPalette() {
 
   const commands = useMemo<CommandItem[]>(
     () => [
-      ...buildNavigationCommands(translateMessage),
+      ...buildNavigationCommands(),
       {
         id: "rounds-install-web",
-        label: translateMessage("command-palette.rounds-install-web", "Install From Web"),
-        description: translateMessage(
-          "command-palette.rounds-install-web.description",
-          "Open the website round installer"
-        ),
-        category: translateMessage("command-palette.category.workshop", "Workshop"),
+        label: i18n._({ id: "command-palette.rounds-install-web", message: "Install From Web" }),
+        description: i18n._({
+          id: "command-palette.rounds-install-web.description",
+          message: "Open the website round installer",
+        }),
+        category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
         action: () => navigate({ to: "/rounds", search: { open: "install-web" } }),
         keywords: ["rounds", "install", "web", "url", "website"],
       },
       {
         id: "rounds-install-folder",
-        label: translateMessage("command-palette.rounds-install-folder", "Install Rounds"),
-        description: translateMessage(
-          "command-palette.rounds-install-folder.description",
-          "Open the folder picker for round installs"
-        ),
-        category: translateMessage("command-palette.category.workshop", "Workshop"),
+        label: i18n._({ id: "command-palette.rounds-install-folder", message: "Install Rounds" }),
+        description: i18n._({
+          id: "command-palette.rounds-install-folder.description",
+          message: "Open the folder picker for round installs",
+        }),
+        category: i18n._({ id: "command-palette.category.workshop", message: "Workshop" }),
         action: () => navigate({ to: "/rounds", search: { open: "install-rounds" } }),
         keywords: ["rounds", "install", "folder", "import", "scan"],
       },
       {
         id: "music-menu",
-        label: translateMessage("command-palette.music-menu", "Music Menu"),
-        description: translateMessage(
-          "command-palette.music-menu.description",
-          "Open the global music overlay"
-        ),
-        category: translateMessage("command-palette.category.media", "Media"),
+        label: i18n._({ id: "command-palette.music-menu", message: "Music Menu" }),
+        description: i18n._({
+          id: "command-palette.music-menu.description",
+          message: "Open the global music overlay",
+        }),
+        category: i18n._({ id: "command-palette.category.media", message: "Media" }),
         action: openGlobalMusicOverlay,
         keywords: ["music", "player", "overlay", "queue"],
       },
       {
         id: "thehandy-menu",
-        label: translateMessage("command-palette.thehandy-menu", "TheHandy Menu"),
-        description: translateMessage(
-          "command-palette.thehandy-menu.description",
-          "Open the global TheHandy overlay"
-        ),
-        category: translateMessage("command-palette.category.hardware", "Hardware"),
+        label: i18n._({ id: "command-palette.thehandy-menu", message: "TheHandy Menu" }),
+        description: i18n._({
+          id: "command-palette.thehandy-menu.description",
+          message: "Open the global TheHandy overlay",
+        }),
+        category: i18n._({ id: "command-palette.category.hardware", message: "Hardware" }),
         action: openGlobalHandyOverlay,
         keywords: ["handy", "thehandy", "device", "sync", "overlay", "offset"],
       },
       {
         id: "thehandy-toggle",
         label: manuallyStopped
-          ? translateMessage("command-palette.thehandy-start", "Start TheHandy")
-          : translateMessage("command-palette.thehandy-stop", "Stop TheHandy"),
-        description: translateMessage(
-          "command-palette.thehandy-toggle.description",
-          "Toggle TheHandy manual stop state"
-        ),
-        category: translateMessage("command-palette.category.hardware", "Hardware"),
+          ? i18n._({ id: "command-palette.thehandy-start", message: "Start TheHandy" })
+          : i18n._({ id: "command-palette.thehandy-stop", message: "Stop TheHandy" }),
+        description: i18n._({
+          id: "command-palette.thehandy-toggle.description",
+          message: "Toggle TheHandy manual stop state",
+        }),
+        category: i18n._({ id: "command-palette.category.hardware", message: "Hardware" }),
         action: async () => {
           const result = await toggleManualStop();
           if (result === "stopped") {
-            return translateMessage("command-palette.thehandy-stopped", "TheHandy stopped.");
+            return i18n._({ id: "command-palette.thehandy-stopped", message: "TheHandy stopped." });
           }
           if (result === "resumed") {
-            return translateMessage("command-palette.thehandy-resumed", "TheHandy resumed.");
+            return i18n._({ id: "command-palette.thehandy-resumed", message: "TheHandy resumed." });
           }
-          return translateMessage(
-            "command-palette.thehandy-unavailable",
-            "No connected TheHandy to toggle."
-          );
+          return i18n._({
+            id: "command-palette.thehandy-unavailable",
+            message: "No connected TheHandy to toggle.",
+          });
         },
         keywords: ["handy", "thehandy", "device", "sync", "start", "stop", "resume"],
       },
     ],
-    [manuallyStopped, navigate, toggleManualStop, translateMessage]
+    [manuallyStopped, navigate, toggleManualStop]
   );
 
   const filtered = useMemo(() => {

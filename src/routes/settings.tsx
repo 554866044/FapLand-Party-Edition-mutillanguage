@@ -482,152 +482,153 @@ export function SettingsPage() {
   useEffect(() => {
     let mounted = true;
     const loadSettings = async () => {
+      const storeKeys = [
+        INTERMEDIARY_LOADING_PROMPT_KEY,
+        INTERMEDIARY_LOADING_DURATION_KEY,
+        INTERMEDIARY_RETURN_PAUSE_KEY,
+        VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY,
+        YT_DLP_BINARY_PREFERENCE_KEY,
+        BACKGROUND_VIDEO_ENABLED_KEY,
+        AUTOFIX_BROKEN_FUNSCRIPTS_KEY,
+        ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
+        ANTI_PERK_BEATBAR_ENABLED_KEY,
+        CONTROLLER_SUPPORT_ENABLED_KEY,
+        CHEAT_MODE_ENABLED_KEY,
+        SFW_MODE_ENABLED_KEY,
+        BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+        APPLY_PERK_DIRECTLY_KEY,
+        MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
+        INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
+        SYSTEM_LANGUAGE_ENABLED_KEY,
+        PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY,
+        STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY,
+        WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
+        EROSCRIPTS_CACHE_ROOT_PATH_KEY,
+        MUSIC_CACHE_ROOT_PATH_KEY,
+        FPACK_EXTRACTION_PATH_KEY,
+      ];
+
       try {
-        const [
-          fullscreen,
-          rawPrompt,
-          rawDuration,
-          rawReturnPause,
-          rawVideoHashPreference,
-          rawYtDlpPreference,
-          rawBackgroundVideoEnabled,
-          rawAutofixBrokenFunscripts,
-          rawRoundProgressBarAlwaysVisible,
-          rawAntiPerkBeatbarEnabled,
-          rawControllerSupportEnabled,
-          rawCheatModeEnabled,
-          rawSfwModeEnabled,
-          rawBackgroundPhashScanningEnabled,
-          rawApplyPerkDirectly,
-          rawMultiplayerSkipRoundsCheck,
-          rawInstallWebFunscriptUrlEnabled,
-          rawSystemLanguageEnabled,
-          rawPlaylistCacheOngoingRestrictionDisabled,
-          rawStartupSafeModeShortcutEnabled,
-          rawWebsiteVideoCacheRootPath,
-          rawEroScriptsCacheRootPath,
-          rawEroScriptsLoginStatus,
-          rawMusicCacheRootPath,
-          rawFpackExtractionPath,
-          folders,
-        ] = await Promise.all([
+        const [storeValues, fullscreen, rawEroScriptsLoginStatus, folders] = await Promise.all([
+          trpc.store.getMany.query({ keys: storeKeys }),
           window.electronAPI.window.isFullscreen(),
-          trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
-          trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
-          trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
-          trpc.store.get.query({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY }),
-          trpc.store.get.query({ key: YT_DLP_BINARY_PREFERENCE_KEY }),
-          trpc.store.get.query({ key: BACKGROUND_VIDEO_ENABLED_KEY }),
-          trpc.store.get.query({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY }),
-          trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
-          trpc.store.get.query({ key: ANTI_PERK_BEATBAR_ENABLED_KEY }),
-          trpc.store.get.query({ key: CONTROLLER_SUPPORT_ENABLED_KEY }),
-          trpc.store.get.query({ key: CHEAT_MODE_ENABLED_KEY }),
-          trpc.store.get.query({ key: SFW_MODE_ENABLED_KEY }),
-          trpc.store.get.query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY }),
-          trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY }),
-          trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
-          trpc.store.get.query({ key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY }),
-          trpc.store.get.query({ key: SYSTEM_LANGUAGE_ENABLED_KEY }),
-          trpc.store.get.query({ key: PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY }),
-          trpc.store.get.query({ key: STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY }),
-          trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
-          trpc.store.get.query({ key: EROSCRIPTS_CACHE_ROOT_PATH_KEY }),
           trpc.eroscripts.getLoginStatus.query(),
-          trpc.store.get.query({ key: MUSIC_CACHE_ROOT_PATH_KEY }),
-          trpc.store.get.query({ key: FPACK_EXTRACTION_PATH_KEY }),
           db.install.getAutoScanFolders(),
         ]);
 
-        if (mounted) setIsFullscreen(fullscreen);
-        if (mounted) {
-          const nextPrompt =
-            typeof rawPrompt === "string" && rawPrompt.trim().length > 0
-              ? rawPrompt.trim()
-              : DEFAULT_INTERMEDIARY_LOADING_PROMPT;
-          setIntermediaryLoadingPrompt(nextPrompt);
-          const parsedDuration =
-            typeof rawDuration === "number" ? rawDuration : Number(rawDuration);
-          const nextDuration = Number.isFinite(parsedDuration)
-            ? Math.max(1, Math.min(60, Math.floor(parsedDuration)))
-            : DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC;
-          setIntermediaryLoadingDurationSec(nextDuration);
-          const parsedReturnPause =
-            typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
-          const nextReturnPause = Number.isFinite(parsedReturnPause)
-            ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause)))
-            : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC;
-          setIntermediaryReturnPauseSec(nextReturnPause);
-          setVideoHashFfmpegSourcePreference(
-            normalizeVideoHashFfmpegSourcePreference(rawVideoHashPreference)
-          );
-          setYtDlpBinaryPreference(normalizeYtDlpBinaryPreference(rawYtDlpPreference));
-          setBackgroundVideoEnabled(
-            typeof rawBackgroundVideoEnabled === "boolean"
-              ? rawBackgroundVideoEnabled
-              : DEFAULT_BACKGROUND_VIDEO_ENABLED
-          );
-          setAutofixBrokenFunscripts(normalizeAutofixBrokenFunscripts(rawAutofixBrokenFunscripts));
-          setRoundProgressBarAlwaysVisible(
-            normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible)
-          );
-          setAntiPerkBeatbarEnabled(normalizeAntiPerkBeatbarEnabled(rawAntiPerkBeatbarEnabled));
-          setControllerSupportEnabled(
-            normalizeControllerSupportEnabled(rawControllerSupportEnabled)
-          );
-          setCheatModeEnabled(normalizeCheatModeEnabled(rawCheatModeEnabled));
-          setSfwModeEnabled(normalizeSfwModeEnabled(rawSfwModeEnabled));
-          setMultiplayerSkipRoundsCheck(
-            normalizeMultiplayerSkipRoundsCheck(rawMultiplayerSkipRoundsCheck)
-          );
-          setInstallWebFunscriptUrlEnabled(
-            normalizeInstallWebFunscriptUrlEnabled(rawInstallWebFunscriptUrlEnabled)
-          );
-          setSystemLanguageEnabled(normalizeSystemLanguageEnabled(rawSystemLanguageEnabled));
-          setPlaylistCacheOngoingRestrictionDisabled(
-            normalizePlaylistCacheOngoingRestrictionDisabled(
-              rawPlaylistCacheOngoingRestrictionDisabled
-            )
-          );
-          setBackgroundPhashScanningEnabled(
-            normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
-          );
-          setStartupSafeModeShortcutEnabled(
-            normalizeStartupSafeModeShortcutEnabled(rawStartupSafeModeShortcutEnabled)
-          );
-          setWebsiteVideoCacheRootPath(
-            typeof rawWebsiteVideoCacheRootPath === "string" &&
-              rawWebsiteVideoCacheRootPath.trim().length > 0
-              ? rawWebsiteVideoCacheRootPath.trim()
-              : null
-          );
-          setEroScriptsCacheRootPath(
-            typeof rawEroScriptsCacheRootPath === "string" &&
-              rawEroScriptsCacheRootPath.trim().length > 0
-              ? rawEroScriptsCacheRootPath.trim()
-              : null
-          );
-          setEroScriptsLoginStatus(rawEroScriptsLoginStatus);
-          setMusicCacheRootPath(
-            typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
-              ? rawMusicCacheRootPath.trim()
-              : null
-          );
-          setFpackExtractionPath(
-            typeof rawFpackExtractionPath === "string" && rawFpackExtractionPath.trim().length > 0
-              ? rawFpackExtractionPath.trim()
-              : null
-          );
-          setApplyPerkDirectly(
-            rawApplyPerkDirectly === true || rawApplyPerkDirectly === "true"
-              ? true
-              : rawApplyPerkDirectly === false || rawApplyPerkDirectly === "false"
-                ? false
-                : DEFAULT_APPLY_PERK_DIRECTLY
-          );
-          if (Array.isArray(folders)) {
-            setAutoScanFolders(folders as string[]);
-          }
+        if (!mounted) return;
+
+        const rawPrompt = storeValues[INTERMEDIARY_LOADING_PROMPT_KEY];
+        const rawDuration = storeValues[INTERMEDIARY_LOADING_DURATION_KEY];
+        const rawReturnPause = storeValues[INTERMEDIARY_RETURN_PAUSE_KEY];
+        const rawVideoHashPreference = storeValues[VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY];
+        const rawYtDlpPreference = storeValues[YT_DLP_BINARY_PREFERENCE_KEY];
+        const rawBackgroundVideoEnabled = storeValues[BACKGROUND_VIDEO_ENABLED_KEY];
+        const rawAutofixBrokenFunscripts = storeValues[AUTOFIX_BROKEN_FUNSCRIPTS_KEY];
+        const rawRoundProgressBarAlwaysVisible = storeValues[ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY];
+        const rawAntiPerkBeatbarEnabled = storeValues[ANTI_PERK_BEATBAR_ENABLED_KEY];
+        const rawControllerSupportEnabled = storeValues[CONTROLLER_SUPPORT_ENABLED_KEY];
+        const rawCheatModeEnabled = storeValues[CHEAT_MODE_ENABLED_KEY];
+        const rawSfwModeEnabled = storeValues[SFW_MODE_ENABLED_KEY];
+        const rawBackgroundPhashScanningEnabled =
+          storeValues[BACKGROUND_PHASH_SCANNING_ENABLED_KEY];
+        const rawApplyPerkDirectly = storeValues[APPLY_PERK_DIRECTLY_KEY];
+        const rawMultiplayerSkipRoundsCheck = storeValues[MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY];
+        const rawInstallWebFunscriptUrlEnabled = storeValues[INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY];
+        const rawSystemLanguageEnabled = storeValues[SYSTEM_LANGUAGE_ENABLED_KEY];
+        const rawPlaylistCacheOngoingRestrictionDisabled =
+          storeValues[PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY];
+        const rawStartupSafeModeShortcutEnabled =
+          storeValues[STARTUP_SAFE_MODE_SHORTCUT_ENABLED_KEY];
+        const rawWebsiteVideoCacheRootPath = storeValues[WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY];
+        const rawEroScriptsCacheRootPath = storeValues[EROSCRIPTS_CACHE_ROOT_PATH_KEY];
+        const rawMusicCacheRootPath = storeValues[MUSIC_CACHE_ROOT_PATH_KEY];
+        const rawFpackExtractionPath = storeValues[FPACK_EXTRACTION_PATH_KEY];
+
+        setIsFullscreen(fullscreen);
+        const nextPrompt =
+          typeof rawPrompt === "string" && rawPrompt.trim().length > 0
+            ? rawPrompt.trim()
+            : DEFAULT_INTERMEDIARY_LOADING_PROMPT;
+        setIntermediaryLoadingPrompt(nextPrompt);
+        const parsedDuration = typeof rawDuration === "number" ? rawDuration : Number(rawDuration);
+        const nextDuration = Number.isFinite(parsedDuration)
+          ? Math.max(1, Math.min(60, Math.floor(parsedDuration)))
+          : DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC;
+        setIntermediaryLoadingDurationSec(nextDuration);
+        const parsedReturnPause =
+          typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
+        const nextReturnPause = Number.isFinite(parsedReturnPause)
+          ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause)))
+          : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC;
+        setIntermediaryReturnPauseSec(nextReturnPause);
+        setVideoHashFfmpegSourcePreference(
+          normalizeVideoHashFfmpegSourcePreference(rawVideoHashPreference)
+        );
+        setYtDlpBinaryPreference(normalizeYtDlpBinaryPreference(rawYtDlpPreference));
+        setBackgroundVideoEnabled(
+          typeof rawBackgroundVideoEnabled === "boolean"
+            ? rawBackgroundVideoEnabled
+            : DEFAULT_BACKGROUND_VIDEO_ENABLED
+        );
+        setAutofixBrokenFunscripts(normalizeAutofixBrokenFunscripts(rawAutofixBrokenFunscripts));
+        setRoundProgressBarAlwaysVisible(
+          normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible)
+        );
+        setAntiPerkBeatbarEnabled(normalizeAntiPerkBeatbarEnabled(rawAntiPerkBeatbarEnabled));
+        setControllerSupportEnabled(normalizeControllerSupportEnabled(rawControllerSupportEnabled));
+        setCheatModeEnabled(normalizeCheatModeEnabled(rawCheatModeEnabled));
+        setSfwModeEnabled(normalizeSfwModeEnabled(rawSfwModeEnabled));
+        setMultiplayerSkipRoundsCheck(
+          normalizeMultiplayerSkipRoundsCheck(rawMultiplayerSkipRoundsCheck)
+        );
+        setInstallWebFunscriptUrlEnabled(
+          normalizeInstallWebFunscriptUrlEnabled(rawInstallWebFunscriptUrlEnabled)
+        );
+        setSystemLanguageEnabled(normalizeSystemLanguageEnabled(rawSystemLanguageEnabled));
+        setPlaylistCacheOngoingRestrictionDisabled(
+          normalizePlaylistCacheOngoingRestrictionDisabled(
+            rawPlaylistCacheOngoingRestrictionDisabled
+          )
+        );
+        setBackgroundPhashScanningEnabled(
+          normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
+        );
+        setStartupSafeModeShortcutEnabled(
+          normalizeStartupSafeModeShortcutEnabled(rawStartupSafeModeShortcutEnabled)
+        );
+        setWebsiteVideoCacheRootPath(
+          typeof rawWebsiteVideoCacheRootPath === "string" &&
+            rawWebsiteVideoCacheRootPath.trim().length > 0
+            ? rawWebsiteVideoCacheRootPath.trim()
+            : null
+        );
+        setEroScriptsCacheRootPath(
+          typeof rawEroScriptsCacheRootPath === "string" &&
+            rawEroScriptsCacheRootPath.trim().length > 0
+            ? rawEroScriptsCacheRootPath.trim()
+            : null
+        );
+        setEroScriptsLoginStatus(rawEroScriptsLoginStatus);
+        setMusicCacheRootPath(
+          typeof rawMusicCacheRootPath === "string" && rawMusicCacheRootPath.trim().length > 0
+            ? rawMusicCacheRootPath.trim()
+            : null
+        );
+        setFpackExtractionPath(
+          typeof rawFpackExtractionPath === "string" && rawFpackExtractionPath.trim().length > 0
+            ? rawFpackExtractionPath.trim()
+            : null
+        );
+        setApplyPerkDirectly(
+          rawApplyPerkDirectly === true || rawApplyPerkDirectly === "true"
+            ? true
+            : rawApplyPerkDirectly === false || rawApplyPerkDirectly === "false"
+              ? false
+              : DEFAULT_APPLY_PERK_DIRECTLY
+        );
+        if (Array.isArray(folders)) {
+          setAutoScanFolders(folders as string[]);
         }
       } catch (error) {
         console.error("Failed to read settings state", error);
@@ -660,6 +661,16 @@ export function SettingsPage() {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.eroscripts.subscribeToLoginStatus((status) => {
+      setEroScriptsLoginStatus(status);
+      if (status.loggedIn) {
+        setEroScriptsAuthMessage(t`EroScripts login active.`);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const sections: SettingsSection[] = useMemo(
@@ -1234,7 +1245,7 @@ export function SettingsPage() {
     try {
       await trpc.eroscripts.openLoginWindow.mutate();
       setEroScriptsAuthMessage(
-        t`EroScripts login window opened. Complete sign-in there, then check login here.`
+        t`EroScripts login window opened. Sign in there — login will be detected automatically.`
       );
     } catch (error) {
       setEroScriptsAuthMessage(

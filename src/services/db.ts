@@ -120,6 +120,8 @@ export const db = {
       funscriptUri?: string | null;
       sourceKey?: string | null;
     }) => withInstalledRoundCacheInvalidation(() => trpc.db.createMediaRound.mutate(input)),
+    calculateDifficultyFromFunscript: (funscriptUri: string) =>
+      trpc.db.calculateDifficultyFromFunscript.query({ funscriptUri }),
     checkWebsiteVideoSupport: (videoUri: string) =>
       trpc.db.checkWebsiteRoundVideoSupport.query({ videoUri }),
     delete: (id: string) =>

@@ -727,6 +727,25 @@ async function findDownloadedVideoPath(cacheDir: string): Promise<string | null>
   return null;
 }
 
+async function reconcileCachedVideoPath(
+  paths: WebsiteVideoCachePaths,
+  metadata: WebsiteVideoCacheMetadata
+): Promise<WebsiteVideoCacheMetadata | null> {
+  if (await isNonEmptyFile(metadata.finalFilePath)) {
+    return metadata;
+  }
+  const actualPath = await findDownloadedVideoPath(paths.cacheDir);
+  if (!actualPath || !(await isNonEmptyFile(actualPath))) {
+    return null;
+  }
+  const updated: WebsiteVideoCacheMetadata = {
+    ...metadata,
+    finalFilePath: actualPath,
+  };
+  await writeMetadata(paths, updated);
+  return updated;
+}
+
 async function removeDownloadedVideoArtifacts(cacheDir: string): Promise<void> {
   let entries: string[];
   try {
@@ -1028,9 +1047,12 @@ async function downloadWebsiteVideo(
   await throwIfCacheRemovalRequested(paths);
   await ensureDirectory(paths.cacheDir);
   const existingMetadata = await readMetadataByPath(paths.metadataPath);
-  if (existingMetadata && (await isNonEmptyFile(existingMetadata.finalFilePath))) {
-    await removeInProgressMarker(paths);
-    return touchMetadata(paths, existingMetadata);
+  if (existingMetadata) {
+    const reconciled = await reconcileCachedVideoPath(paths, existingMetadata);
+    if (reconciled) {
+      await removeInProgressMarker(paths);
+      return touchMetadata(paths, reconciled);
+    }
   }
 
   await resetIncompleteCache(paths);
@@ -1120,9 +1142,12 @@ async function downloadMegaWebsiteVideo(
   await throwIfCacheRemovalRequested(paths);
   await ensureDirectory(paths.cacheDir);
   const existingMetadata = await readMetadataByPath(paths.metadataPath);
-  if (existingMetadata && (await isNonEmptyFile(existingMetadata.finalFilePath))) {
-    await removeInProgressMarker(paths);
-    return touchMetadata(paths, existingMetadata);
+  if (existingMetadata) {
+    const reconciled = await reconcileCachedVideoPath(paths, existingMetadata);
+    if (reconciled) {
+      await removeInProgressMarker(paths);
+      return touchMetadata(paths, reconciled);
+    }
   }
 
   await resetIncompleteCache(paths);
@@ -1188,9 +1213,12 @@ async function downloadDirectHosterVideo(
   await throwIfCacheRemovalRequested(paths);
   await ensureDirectory(paths.cacheDir);
   const existingMetadata = await readMetadataByPath(paths.metadataPath);
-  if (existingMetadata && (await isNonEmptyFile(existingMetadata.finalFilePath))) {
-    await removeInProgressMarker(paths);
-    return touchMetadata(paths, existingMetadata);
+  if (existingMetadata) {
+    const reconciled = await reconcileCachedVideoPath(paths, existingMetadata);
+    if (reconciled) {
+      await removeInProgressMarker(paths);
+      return touchMetadata(paths, reconciled);
+    }
   }
 
   await resetIncompleteCache(paths);
@@ -1311,14 +1339,15 @@ export async function getCachedWebsiteVideoMetadata(
     }
     return null;
   }
-  if (!(await isNonEmptyFile(metadata.finalFilePath))) {
+  const reconciled = await reconcileCachedVideoPath(paths, metadata);
+  if (!reconciled) {
     await resetIncompleteCache(paths);
     return null;
   }
   if (hasInProgressMarker) {
     await removeInProgressMarker(paths);
   }
-  return touchMetadata(paths, metadata);
+  return touchMetadata(paths, reconciled);
 }
 
 export async function getCachedWebsiteVideoLocalPath(urlOrUri: string): Promise<string | null> {

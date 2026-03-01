@@ -156,6 +156,9 @@ describe("GlobalMusicContext", () => {
         consumePendingFiles: vi.fn(async () => []),
         subscribe: vi.fn(() => () => {}),
       },
+      eroscripts: {
+        subscribeToLoginStatus: vi.fn(() => () => {}),
+      },
     };
     mocks.setMutate.mockResolvedValue(undefined);
     const values = new Map<string, unknown>([
