@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   DATABASE_BACKUP_ENABLED_KEY,
   DATABASE_BACKUP_FREQUENCY_DAYS_KEY,
@@ -13,9 +12,13 @@ import {
 import { getDb, resolveDatabaseUrl } from "./db";
 import { resolveAppStorageBaseDir } from "./appPaths";
 import { getStore } from "./store";
+import {
+  isDatabaseBackupFileName,
+  parseFileDatabasePath,
+  runDatabaseBackupForClient,
+  type DatabaseBackupResult,
+} from "./databaseBackupCore";
 
-const BACKUP_FILE_PREFIX = "f-land-db-backup-";
-const BACKUP_FILE_SUFFIX = ".db";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INITIAL_BACKUP_CHECK_DELAY_MS = 10_000;
 const BACKUP_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -25,43 +28,12 @@ let initialBackupTimer: NodeJS.Timeout | null = null;
 let activeBackupPromise: Promise<DatabaseBackupResult | null> | null = null;
 let unsupportedDatabaseWarningShown = false;
 
-export type DatabaseBackupResult = {
-  backupPath: string;
-  deletedBackups: number;
-};
-
-function toSafeIsoTimestamp(date: Date): string {
-  return date.toISOString().replaceAll(":", "-");
-}
-
-function sqlStringLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
 function getBackupDir(): string {
   return path.join(resolveAppStorageBaseDir(), "database-backups");
 }
 
 export function resolveDatabaseBackupDir(): string {
   return getBackupDir();
-}
-
-function getBackupPath(date: Date): string {
-  return path.join(
-    getBackupDir(),
-    `${BACKUP_FILE_PREFIX}${toSafeIsoTimestamp(date)}${BACKUP_FILE_SUFFIX}`
-  );
-}
-
-function parseFileDatabasePath(databaseUrl: string): string | null {
-  if (!databaseUrl.startsWith("file:")) return null;
-
-  const rawPath = databaseUrl.slice("file:".length);
-  if (rawPath === ":memory:") return null;
-  if (rawPath.startsWith("//")) {
-    return fileURLToPath(databaseUrl);
-  }
-  return path.resolve(rawPath);
 }
 
 function getLastBackupMs(value: unknown): number | null {
@@ -74,12 +46,7 @@ async function getBackupFileNames(): Promise<string[]> {
   try {
     const entries = await fs.readdir(getBackupDir(), { withFileTypes: true });
     return entries
-      .filter(
-        (entry) =>
-          entry.isFile() &&
-          entry.name.startsWith(BACKUP_FILE_PREFIX) &&
-          entry.name.endsWith(BACKUP_FILE_SUFFIX)
-      )
+      .filter((entry) => entry.isFile() && isDatabaseBackupFileName(entry.name))
       .map((entry) => entry.name);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
@@ -119,16 +86,16 @@ export async function runDatabaseBackup(now = new Date()): Promise<DatabaseBacku
     return null;
   }
 
-  await fs.access(databasePath);
-  const backupDir = getBackupDir();
-  const backupPath = getBackupPath(now);
-  await fs.mkdir(backupDir, { recursive: true });
-
-  await getDb().$client.execute(`VACUUM INTO ${sqlStringLiteral(backupPath)}`);
+  const result = await runDatabaseBackupForClient({
+    db: getDb(),
+    backupDir: getBackupDir(),
+    databaseUrl: resolveDatabaseUrl(),
+    now,
+    pruneOldBackups: pruneOldDatabaseBackups,
+  });
   getStore().set(DATABASE_BACKUP_LAST_BACKUP_AT_KEY, now.toISOString());
 
-  const deletedBackups = await pruneOldDatabaseBackups(now);
-  return { backupPath, deletedBackups };
+  return result;
 }
 
 export async function runDueDatabaseBackup(now = new Date()): Promise<DatabaseBackupResult | null> {

@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { playHoverSound } from "../../utils/audio";
 
@@ -76,6 +77,31 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const { t } = useLingui();
+  const titleId = useId();
+  const descriptionId = useId();
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const focusTimer = window.setTimeout(() => {
+      cancelButtonRef.current?.focus();
+    }, 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isPending) {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen, isPending, onCancel]);
+
   if (!isOpen) return null;
 
   const s = variantStyles[variant];
@@ -86,6 +112,10 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         className={`w-full max-w-lg rounded-3xl border ${s.border} bg-zinc-950/95 p-6 ${s.shadow}`}
       >
         <p
@@ -93,11 +123,16 @@ export function ConfirmDialog({
         >
           {variantLabel}
         </p>
-        <h2 className={`mt-3 text-2xl font-black tracking-tight ${s.titleColor}`}>{title}</h2>
-        <p className="mt-2 text-sm text-zinc-400 whitespace-pre-line">{message}</p>
+        <h2 id={titleId} className={`mt-3 text-2xl font-black tracking-tight ${s.titleColor}`}>
+          {title}
+        </h2>
+        <p id={descriptionId} className="mt-2 text-sm text-zinc-400 whitespace-pre-line">
+          {message}
+        </p>
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
+            ref={cancelButtonRef}
             type="button"
             disabled={isPending}
             onMouseEnter={playHoverSound}

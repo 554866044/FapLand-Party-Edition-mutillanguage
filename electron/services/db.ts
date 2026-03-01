@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getNodeEnv } from "../../src/zod/env";
 import { resolveAppStorageBaseDir } from "./appPaths";
+import { parseFileDatabasePath, runDatabaseBackupForClient } from "./databaseBackupCore";
 import * as schema from "./db/schema";
 import {
   getPortableDataRoot,
@@ -20,6 +21,7 @@ let databaseReadyPromise: Promise<void> | null = null;
 let dbClientUrl: string = "";
 
 const ROUND_EXCLUDE_FROM_RANDOM_MIGRATION_TAG = "0005_round_exclude_from_random";
+const DATABASE_BACKUP_DIR_NAME = "database-backups";
 
 function rowValueToString(row: Record<string, unknown>, key: string): string | null {
   const value = row[key];
@@ -356,6 +358,27 @@ export function getDb() {
   return db;
 }
 
+export async function runPreMigrationDatabaseBackup(
+  dbInstance: ReturnType<typeof drizzle<typeof schema>>,
+  now = new Date()
+): Promise<void> {
+  const databaseUrl = resolveDatabaseUrl();
+  const databasePath = parseFileDatabasePath(databaseUrl);
+  if (!databasePath) {
+    console.warn("Skipping pre-migration database backup because DATABASE_URL is not a local file.");
+    return;
+  }
+  if (!(await pathExists(databasePath))) return;
+
+  await runDatabaseBackupForClient({
+    db: dbInstance,
+    backupDir: path.join(resolveAppStorageBaseDir(), DATABASE_BACKUP_DIR_NAME),
+    databaseUrl,
+    now,
+    pruneOldBackups: async () => 0,
+  });
+}
+
 export async function ensureAppDatabaseReady(): Promise<void> {
   if (!databaseReadyPromise) {
     databaseReadyPromise = (async () => {
@@ -365,6 +388,7 @@ export async function ensureAppDatabaseReady(): Promise<void> {
         ? path.join(process.resourcesPath, "drizzle")
         : path.join(app.getAppPath(), "drizzle");
 
+      await runPreMigrationDatabaseBackup(dbInstance);
       await markRoundExcludeFromRandomMigrationIfManuallyApplied(dbInstance, migrationsFolder);
       await migrate(dbInstance, { migrationsFolder });
       await repairLegacyPlaylistSchema(dbInstance);

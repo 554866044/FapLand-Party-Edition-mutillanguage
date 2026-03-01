@@ -296,10 +296,30 @@ describe("Home route update menu", () => {
     fireEvent.click(screen.getByRole("button", { name: /Report Bug/i }));
 
     expect(window.open).toHaveBeenCalledWith(
-      "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/7",
+      "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/",
       "_blank",
       "noopener,noreferrer"
     );
+  });
+
+  it("blocks bug reporting while an update is available", () => {
+    mocks.appUpdate.state = {
+      ...mocks.appUpdate.state,
+      status: "update_available",
+      latestVersion: "0.1.3",
+      downloadUrl: "https://example.com/download",
+    };
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    const reportBugButton = screen.getByRole("button", { name: /Report Bug/i });
+    expect(reportBugButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Update first before reporting a bug")).toBeDefined();
+
+    fireEvent.click(reportBugButton);
+
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it("opens the first start workflow when onboarding was not completed yet", async () => {

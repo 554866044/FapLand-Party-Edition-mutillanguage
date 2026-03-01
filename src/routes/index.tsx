@@ -146,6 +146,7 @@ const Home = () => {
   const appUpdate = useAppUpdate();
   const sfwModeEnabled = useSfwMode();
   const scopeRef = useRef<HTMLDivElement | null>(null);
+  const [compactSystemOpen, setCompactSystemOpen] = useState(false);
   const { videos, overallHighscore, cumLoadCount, installedRoundCount, skipRoundsCheck } = homeData;
 
   useEffect(() => {
@@ -169,6 +170,10 @@ const Home = () => {
   }, []);
 
   const options: MenuOption[] = useMemo(() => {
+    const multiplayerBlockedByUpdate = appUpdate.state.status === "update_available";
+    const multiplayerBlockedByRounds =
+      !skipRoundsCheck && installedRoundCount < MULTIPLAYER_MINIMUM_ROUNDS;
+
     const nextOptions: MenuOption[] = [
       {
         id: "play",
@@ -187,17 +192,27 @@ const Home = () => {
             experimental: true,
             disabled:
               sfwModeEnabled ||
-              appUpdate.state.status === "update_available" ||
-              (!skipRoundsCheck && installedRoundCount < MULTIPLAYER_MINIMUM_ROUNDS),
+              multiplayerBlockedByUpdate ||
+              multiplayerBlockedByRounds,
             subLabel: sfwModeEnabled
               ? t`Blocked By SFW Mode`
-              : appUpdate.state.status === "update_available"
+              : multiplayerBlockedByUpdate
                 ? t`Update Required`
-                : !skipRoundsCheck && installedRoundCount < MULTIPLAYER_MINIMUM_ROUNDS
+                : multiplayerBlockedByRounds
                   ? t`${MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required`
                   : undefined,
             action: () => navigate({ to: "/multiplayer" }),
           },
+          ...(multiplayerBlockedByRounds && !sfwModeEnabled && !multiplayerBlockedByUpdate
+            ? [
+                {
+                  id: "install-rounds-for-multiplayer",
+                  label: t`Install Rounds`,
+                  subLabel: t`${installedRoundCount}/${MULTIPLAYER_MINIMUM_ROUNDS} installed`,
+                  action: () => navigate({ to: "/rounds", search: { open: "install-rounds" } }),
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -258,6 +273,11 @@ const Home = () => {
     nextOptions.push({
       id: "report-bug",
       label: t`Report Bug`,
+      disabled: appUpdate.state.status === "update_available",
+      subLabel:
+        appUpdate.state.status === "update_available"
+          ? t`Update first before reporting a bug`
+          : undefined,
       action: () => {
         window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer");
       },
@@ -272,7 +292,7 @@ const Home = () => {
     });
 
     return nextOptions;
-  }, [appUpdate, navigate, installedRoundCount, sfwModeEnabled, skipRoundsCheck]);
+  }, [appUpdate, navigate, installedRoundCount, sfwModeEnabled, skipRoundsCheck, t]);
 
   const { selectedIndex, handleMouseEnter, handleClick, currentOptions, depth, goBack } =
     useMenuNavigation(options);
@@ -335,7 +355,7 @@ const Home = () => {
       });
     }
     return list;
-  }, [currentOptions, depth, goBack]);
+  }, [currentOptions, depth, goBack, t]);
 
   useControllerSurface({
     id: "home-route",
@@ -655,6 +675,46 @@ const Home = () => {
         </div>
       </aside>
 
+      <div className="absolute left-4 right-4 top-4 z-20 lg:hidden">
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/80 p-2 shadow-2xl backdrop-blur-xl">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.16em] text-zinc-300"
+            onClick={() => setCompactSystemOpen((open) => !open)}
+            aria-expanded={compactSystemOpen}
+            data-controller-focus-id="home-system-status"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-violet-300">◆</span>
+              <Trans>System</Trans>
+            </span>
+            <span className="text-zinc-500">
+              {handyLabel} · {updateStateLabel}
+            </span>
+          </button>
+          {compactSystemOpen && (
+            <div className="mt-1 grid gap-1.5 px-1 pb-1" role="status" aria-live="polite">
+              <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">
+                <span className="font-semibold text-zinc-100">
+                  <Trans>TheHandy</Trans>
+                </span>
+                <span className="ml-2">{handyLabel}</span>
+                {handyWarning && <span className="ml-2 text-amber-200">{handyWarning}</span>}
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">
+                <span className="font-semibold text-zinc-100">
+                  <Trans>Update Status</Trans>
+                </span>
+                <span className="ml-2">{updateStateLabel}</span>
+              </div>
+              <LibraryStatusPoller />
+              <PhashScanStatusPoller />
+              <WebsiteVideoScanStatusPoller />
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="absolute left-6 bottom-6 z-10 flex items-center gap-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.15em] text-zinc-500 transition-colors">
         <button
           type="button"
@@ -664,7 +724,7 @@ const Home = () => {
           className="transition-colors hover:text-zinc-300"
           data-controller-focus-id="home-command-palette"
         >
-          ⌘K
+          <span>Command</span> <span className="text-zinc-600">Ctrl/Cmd+K</span>
         </button>
         <span className="text-zinc-700">·</span>
         <button

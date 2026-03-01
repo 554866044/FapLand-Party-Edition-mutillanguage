@@ -34,6 +34,7 @@ import { abbreviateNsfwText } from "../utils/sfwText";
 import { formatStoragePathDisplay, isStoragePathResettable } from "../utils/storagePath";
 import { i18n } from "../i18n";
 import { useLocale } from "../i18n/useLocale";
+import "./first-start.css";
 
 const PORTABLE_DEFAULTS: ReadonlyMap<string, string> = new Map([
   [WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY, "web-video-cache"],
@@ -55,15 +56,15 @@ type StepDefinition = {
   id: string;
   icon: string;
   interactive?:
-    | "language"
-    | "music"
-    | "moaning"
-    | "round-packs"
-    | "storage"
-    | "booru"
-    | "handy"
-    | "phash"
-    | "eroscripts";
+  | "language"
+  | "music"
+  | "moaning"
+  | "round-packs"
+  | "storage"
+  | "booru"
+  | "handy"
+  | "phash"
+  | "eroscripts";
 };
 
 function getSteps(): StepDefinition[] {
@@ -1215,11 +1216,17 @@ function FirstStartPage() {
       <AnimatedBackground />
 
       <div className="relative z-10 flex h-screen items-center justify-center px-3 py-4 sm:px-6 sm:py-6">
-        <div className="parallax-ui-none flex h-full w-full max-w-[1600px] flex-col rounded-[2rem] border border-violet-300/20 bg-zinc-950/80 p-4 shadow-[0_0_60px_rgba(139,92,246,0.2)] backdrop-blur-xl sm:p-5">
+        <div className="parallax-ui-none fs-outer-glass flex h-full w-full max-w-[1600px] flex-col rounded-[2rem] p-4 sm:p-5">
           {/* ── Header ── */}
           <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
+                <span
+                  className="animate-entrance text-base drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]"
+                  style={{ animationDelay: "0.05s" }}
+                >
+                  ✦
+                </span>
                 <p
                   className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.35em] text-violet-300/70 animate-entrance"
                   style={{ animationDelay: "0.1s" }}
@@ -1229,15 +1236,15 @@ function FirstStartPage() {
                 <div className="h-px flex-1 bg-gradient-to-r from-violet-400/30 via-violet-400/10 to-transparent" />
               </div>
               <h1
-                className="text-2xl font-black tracking-tight text-white sm:text-3xl xl:text-4xl animate-entrance"
+                className="text-2xl font-black tracking-tight sm:text-3xl xl:text-4xl animate-entrance"
                 style={{ animationDelay: "0.2s" }}
               >
-                <span className="text-gradient-safe">
+                <span className="fs-hero-title">
                   {abbreviateNsfwText(t`Welcome to Fap Land`, sfwMode)}
                 </span>
               </h1>
               <p
-                className="max-w-xl text-sm text-zinc-400 animate-entrance"
+                className="max-w-xl text-sm text-zinc-400/90 animate-entrance"
                 style={{ animationDelay: "0.3s" }}
               >
                 <Trans>
@@ -1255,11 +1262,10 @@ function FirstStartPage() {
                 playSelectSound();
                 void skip();
               }}
-              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${
-                isSkipping
-                  ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                  : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
-              }`}
+              className={`group relative flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all animate-entrance ${isSkipping
+                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                : "border-zinc-500/40 bg-zinc-900/60 text-zinc-300 hover:border-violet-400/50 hover:bg-zinc-800/80 hover:text-violet-100"
+                }`}
               style={{ animationDelay: "0.4s" }}
             >
               <span className="absolute inset-0 rounded-xl opacity-0 transition-opacity group-hover:opacity-100 bg-gradient-to-r from-violet-500/5 to-indigo-500/5" />
@@ -1281,19 +1287,42 @@ function FirstStartPage() {
             </button>
           </header>
 
-          {/* ── Progress Bar ── */}
+          {/* ── Progress Dots ── */}
           <div className="mt-4 animate-entrance" style={{ animationDelay: "0.5s" }}>
-            <div className="flex items-center gap-3">
-              <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-                {stepIndex + 1} / {STEPS.length}
+            <div className="flex items-center gap-1">
+              <span className="mr-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                {stepIndex + 1}/{STEPS.length}
               </span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800/80">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-violet-400/80">
+              {STEPS.map((step, idx) => {
+                const dotClass =
+                  idx < stepIndex
+                    ? "fs-progress-dot fs-progress-dot--complete"
+                    : idx === stepIndex
+                      ? "fs-progress-dot fs-progress-dot--active"
+                      : "fs-progress-dot fs-progress-dot--pending";
+                return (
+                  <div key={step.id} className="flex flex-1 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={getStepShortLabel(step.id)}
+                      onClick={() => {
+                        playSelectSound();
+                        setStepIndex(idx);
+                      }}
+                      className={dotClass}
+                    />
+                    {idx < STEPS.length - 1 && (
+                      <div
+                        className={`fs-progress-line ${idx < stepIndex
+                          ? "fs-progress-line--filled"
+                          : "fs-progress-line--empty"
+                          }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              <span className="ml-2 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-violet-400/80">
                 {Math.round(progressPercent)}%
               </span>
             </div>
@@ -1303,18 +1332,18 @@ function FirstStartPage() {
           <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
             {/* ── Step Navigation ── */}
             <aside
-              className="min-h-0 overflow-y-auto rounded-2xl border border-zinc-800/60 bg-black/30 p-3 backdrop-blur-sm animate-entrance"
+              className="min-h-0 overflow-y-auto rounded-2xl fs-sidebar-glass p-2 animate-entrance"
               style={{ animationDelay: "0.6s" }}
             >
               <div ref={stepNavRef} className="relative">
-                {/* Progress Line */}
-                <div className="absolute left-[18px] top-4 bottom-4 w-0.5 bg-zinc-800" />
+                {/* Thin connecting line */}
+                <div className="absolute left-[13px] top-3 bottom-3 w-px bg-zinc-800/60" />
                 <div
-                  className="absolute left-[18px] top-4 w-0.5 bg-gradient-to-b from-violet-500 to-purple-500 transition-all duration-500"
+                  className="absolute left-[13px] top-3 w-px bg-gradient-to-b from-violet-500/70 to-purple-400/40 transition-all duration-500"
                   style={{ height: `${(stepIndex / (STEPS.length - 1)) * 100}%` }}
                 />
 
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {STEPS.map((step, index) => {
                     const active = index === stepIndex;
                     const complete = index < stepIndex;
@@ -1323,53 +1352,54 @@ function FirstStartPage() {
                         key={step.id}
                         type="button"
                         data-step-index={index}
+                        onMouseEnter={playHoverSound}
                         onClick={() => {
                           playSelectSound();
                           setStepIndex(index);
                         }}
-                        className={`relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${
-                          active
-                            ? "bg-violet-500/15 text-white"
-                            : complete
-                              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                              : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
-                        }`}
+                        className={`fs-sidebar-step relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all ${active
+                          ? "fs-sidebar-step--active bg-violet-500/12 text-white"
+                          : complete
+                            ? "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                            : "text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-400"
+                          }`}
                       >
+                        {/* Active left accent */}
+                        {active && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.6)]" />
+                        )}
+
                         {/* Step Indicator */}
                         <span
-                          className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition-all ${
-                            active
-                              ? "bg-violet-500/30 ring-2 ring-violet-400/50 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
-                              : complete
-                                ? "bg-emerald-500/20 ring-1 ring-emerald-400/30"
-                                : "bg-zinc-800 ring-1 ring-zinc-700"
-                          }`}
+                          className={`relative z-10 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full transition-all ${active
+                            ? "fs-step-indicator-active bg-violet-500/25 ring-[1.5px] ring-violet-400/50"
+                            : complete
+                              ? "fs-step-indicator-complete bg-emerald-500/15 ring-1 ring-emerald-400/25"
+                              : "bg-zinc-800/80 ring-1 ring-zinc-700/70"
+                            }`}
                         >
                           {complete ? (
-                            <span className="text-emerald-400">✓</span>
+                            <span className="fs-checkmark text-[10px] text-emerald-400">✓</span>
+                          ) : active ? (
+                            <span className="text-[11px]">{step.icon}</span>
                           ) : (
-                            <span>{step.icon}</span>
+                            <span className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-bold text-zinc-500">
+                              {index + 1}
+                            </span>
                           )}
                         </span>
 
                         {/* Step Label */}
                         <span
-                          className={`text-xs font-medium transition-all ${
-                            active
-                              ? "text-violet-100"
-                              : complete
-                                ? "text-zinc-300"
-                                : "text-zinc-500"
-                          }`}
+                          className={`text-[11px] font-medium leading-tight transition-all ${active
+                            ? "text-violet-100"
+                            : complete
+                              ? "text-zinc-400"
+                              : "text-zinc-500"
+                            }`}
                         >
                           {getStepShortLabel(step.id)}
                         </span>
-
-                        {active && (
-                          <span className="absolute right-2 text-violet-400/60 animate-pulse">
-                            ▶
-                          </span>
-                        )}
                       </button>
                     );
                   })}
@@ -1378,11 +1408,10 @@ function FirstStartPage() {
             </aside>
 
             {/* ── Content Section ── */}
-            <section className="flex min-h-0 flex-col rounded-2xl border border-zinc-800/60 bg-black/30 p-4 backdrop-blur-sm sm:p-5">
+            <section className="flex min-h-0 flex-col rounded-2xl fs-content-glass p-4 sm:p-5">
               <div
                 key={contentKey}
-                className="animate-entrance-fade"
-                style={{ animationDuration: "0.3s" }}
+                className="fs-content-enter flex min-h-0 flex-1 flex-col"
               >
                 {/* Eyebrow */}
                 <div className="flex items-center gap-2">
@@ -1401,1006 +1430,992 @@ function FirstStartPage() {
                 <p className="mt-2 text-sm leading-relaxed text-zinc-300 sm:text-base">
                   {displayStepDescription}
                 </p>
-              </div>
 
-              {/* Details */}
-              <div
-                ref={contentScrollRef}
-                className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1"
-              >
-                {displayStepDetails.map((detail, idx) => (
-                  <div
-                    key={detail}
-                    className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 px-3.5 py-3 text-sm leading-relaxed text-zinc-400 animate-entrance"
-                    style={{ animationDelay: `${0.1 + idx * 0.05}s` }}
-                  >
-                    {detail}
-                  </div>
-                ))}
-
-                {currentStep.interactive === "language" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-emerald-300">🌐</span>
-                      <p className="text-sm font-semibold text-emerald-100">
-                        <Trans>Language</Trans> / Language
-                      </p>
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        Choose the language used on this page and across the app. Changes apply
-                        immediately.
-                      </Trans>
-                    </p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {locales.map((entry) => {
-                        const selected = entry.code === locale;
-                        return (
-                          <button
-                            key={entry.code}
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              void setLocale(entry.code);
-                            }}
-                            className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                              selected
-                                ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.18)]"
-                                : "border-white/10 bg-black/20 text-zinc-200 hover:border-emerald-400/40 hover:bg-emerald-500/10"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold">{entry.label}</span>
-                              {selected && (
-                                <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
-                                  <Trans>Selected</Trans>
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-xs text-zinc-400">
-                              {getLocaleCardDescription(entry.code)}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Music Section */}
-                {currentStep.interactive === "music" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-violet-400/30 bg-gradient-to-br from-violet-500/10 via-purple-500/5 to-indigo-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-violet-400">🎵</span>
-                      <p className="text-sm font-semibold text-violet-200">
-                        <Trans>Music Queue</Trans>
-                      </p>
-                      {queue.length > 0 && (
-                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          {t`${queue.length} track${queue.length === 1 ? "" : "s"}`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        Pick music files from your computer, or add YouTube videos and playlists to
-                        download as MP3.
-                      </Trans>
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void addMusicTracks();
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                        }`}
-                      >
-                        {isBusy ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
-                            <span>
-                              <Trans>Adding...</Trans>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📁</span>
-                            <span>
-                              <Trans>Add Music Files</Trans>
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          setShowUrlInput((current) => !current);
-                          setUrlError(null);
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          showUrlInput
-                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                            : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
-                        }`}
-                      >
-                        <span>⊕</span>
-                        <span>
-                          <Trans>Add from YouTube</Trans>
-                        </span>
-                      </button>
-                    </div>
-
-                    {showUrlInput && (
-                      <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-xs text-zinc-400">
-                          <Trans>
-                            Paste a YouTube video or playlist URL. Audio is downloaded as MP3 via
-                            yt-dlp.
-                          </Trans>
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            placeholder={t`https://example.com/video-or-playlist`}
-                            value={urlInput}
-                            onChange={(e) => {
-                              setUrlInput(e.target.value);
-                              setUrlError(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                void addMusicFromUrl();
-                              }
-                            }}
-                            disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                              urlError
-                                ? "border-rose-400/40 focus:border-rose-400/60"
-                                : "border-white/10 focus:border-violet-400/60"
-                            }`}
-                          />
-                          <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => void addMusicFromUrl()}
-                            disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-                              isBusy
-                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                            }`}
-                          >
-                            {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
-                          </button>
-                        </div>
-                        {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
-                      </div>
-                    )}
-
-                    {musicMessage && (
-                      <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          musicMessageWasAdded
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
-                      >
-                        <span>{musicMessageWasAdded ? "✓" : "ℹ"}</span>
-                        <span>{musicMessage}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {currentStep.interactive === "moaning" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-rose-400/30 bg-gradient-to-br from-rose-500/10 via-pink-500/5 to-orange-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-rose-300">🔊</span>
-                      <p className="text-sm font-semibold text-rose-100">
-                        <Trans>Gameplay Moaning</Trans>
-                      </p>
-                      {moaningQueue.length > 0 && (
-                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          {t`${moaningQueue.length} file${moaningQueue.length === 1 ? "" : "s"}`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        Add moaning audio so moaning-based perks and anti-perks have something to
-                        play during the run.
-                      </Trans>
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        aria-label={t`Toggle Enable Moaning`}
-                        role="switch"
-                        aria-checked={moaningEnabled}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void setMoaningEnabled(!moaningEnabled);
-                        }}
-                        className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${moaningEnabled ? "border-rose-300/80 bg-rose-500/50 shadow-[0_0_20px_rgba(251,113,133,0.35)]" : "border-zinc-600 bg-zinc-800"}`}
-                      >
-                        <span
-                          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${moaningEnabled ? "translate-x-7" : "translate-x-0"}`}
-                        />
-                      </button>
+                {/* Details */}
+                <div
+                  ref={contentScrollRef}
+                  className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1"
+                >
+                  {displayStepDetails.map((detail, idx) => (
+                    <div
+                      key={`${currentStep.id}-${idx}`}
+                      className="fs-detail-card flex items-start gap-3 rounded-xl border border-zinc-800/60 bg-zinc-900/40 px-3.5 py-3 text-sm leading-relaxed text-zinc-400 animate-entrance"
+                      style={{ animationDelay: `${0.1 + idx * 0.05}s` }}
+                    >
                       <span
-                        className={`text-sm font-medium ${moaningEnabled ? "text-zinc-100" : "text-zinc-400"}`}
+                        className="fs-detail-number"
+                        style={{ animationDelay: `${0.15 + idx * 0.06}s` }}
                       >
-                        <Trans>Moaning</Trans>{" "}
-                        {moaningEnabled ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
+                        {idx + 1}
                       </span>
+                      <span>{detail}</span>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void addMoaningFiles();
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
-                        }`}
-                      >
-                        {isBusy ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-400/30 border-t-rose-300" />
-                            <span>
-                              <Trans>Adding...</Trans>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📁</span>
-                            <span>
-                              <Trans>Add Moaning Files</Trans>
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isBusy || moaningQueue.length === 0}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void previewMoaningTrack(moaningQueue[0]!.id);
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy || moaningQueue.length === 0
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
-                        }`}
-                      >
-                        <span>▶</span>
-                        <span>
-                          <Trans>Preview First File</Trans>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          stopMoaningPreview();
-                        }}
-                        className="flex items-center gap-2 rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70"
-                      >
-                        <span>⏹</span>
-                        <span>
-                          <Trans>Stop Preview</Trans>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          setShowMoaningUrlInput((current) => !current);
-                          setMoaningUrlError(null);
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          showMoaningUrlInput
-                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
-                            : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
-                        }`}
-                      >
-                        <span>⊕</span>
-                        <span>
-                          <Trans>Add from URL</Trans>
-                        </span>
-                      </button>
-                    </div>
+                  ))}
 
-                    {showMoaningUrlInput && (
-                      <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-xs text-zinc-400">
-                          <Trans>
-                            Add from any yt-dlp-supported URL. Single tracks and playlists are both
-                            supported.
-                          </Trans>
-                        </p>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              setMoaningUrlMode("track");
-                            }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                              moaningUrlMode === "track"
-                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                            }`}
-                          >
-                            <Trans>Single Track</Trans>
-                          </button>
-                          <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              setMoaningUrlMode("playlist");
-                            }}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                              moaningUrlMode === "playlist"
-                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                            }`}
-                          >
-                            <Trans>Playlist</Trans>
-                          </button>
-                        </div>
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            placeholder={
-                              moaningUrlMode === "playlist"
-                                ? t`https://example.com/playlist-or-collection`
-                                : t`https://example.com/video-or-audio`
-                            }
-                            value={moaningUrlInput}
-                            onChange={(e) => {
-                              setMoaningUrlInput(e.target.value);
-                              setMoaningUrlError(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                void addMoaningFromUrl();
-                              }
-                            }}
-                            disabled={isBusy}
-                            className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${
-                              moaningUrlError
-                                ? "border-rose-400/40 focus:border-rose-400/60"
-                                : "border-white/10 focus:border-rose-400/60"
-                            }`}
-                          />
-                          <button
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => void addMoaningFromUrl()}
-                            disabled={isBusy}
-                            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-                              isBusy
-                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
-                            }`}
-                          >
-                            {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
-                          </button>
-                        </div>
-                        {moaningUrlError && (
-                          <p className="text-xs text-rose-300">{moaningUrlError}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {moaningMessage && (
-                      <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          moaningMessageWasAdded
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
-                      >
-                        <span>{moaningMessageWasAdded ? "✓" : "ℹ"}</span>
-                        <span>{moaningMessage}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Round Packs Section */}
-                {currentStep.interactive === "round-packs" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-indigo-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-cyan-400">💿</span>
-                      <p className="text-sm font-semibold text-cyan-200">
-                        <Trans>Import Content</Trans>
-                      </p>
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>Add a content folder or import a single hero/round file.</Trans>
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void addRoundFolder();
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                        }`}
-                      >
-                        {isBusy ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
-                            <span>
-                              <Trans>Working...</Trans>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📁</span>
-                            <span>
-                              <Trans>Add Folder</Trans>
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void importHeroOrRound();
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isBusy
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                        }`}
-                      >
-                        {isBusy ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
-                            <span>
-                              <Trans>Working...</Trans>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📄</span>
-                            <span>
-                              <Trans>Import File</Trans>
-                            </span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {roundMessage && (
-                      <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          roundMessageWasImported
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
-                      >
-                        <span>{roundMessageWasImported ? "✓" : "ℹ"}</span>
-                        <span>{roundMessage}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* EroScripts Login Section */}
-                {currentStep.interactive === "eroscripts" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-indigo-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-cyan-300">🔗</span>
-                      <p className="text-sm font-semibold text-cyan-100">
-                        <Trans>EroScripts Account</Trans>
-                      </p>
-                      {eroscriptsLoginStatus?.loggedIn && (
-                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          <Trans>Connected</Trans>
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        Sign in to your EroScripts account to search and download funscripts and
-                        videos directly from the app. If you do not have one yet, creating an
-                        account is free.
-                      </Trans>
-                    </p>
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                            <Trans>Login Status</Trans>
-                          </div>
-                          <div className="mt-1 text-sm font-semibold text-zinc-100">
-                            {isEroScriptsAuthLoading
-                              ? t`Checking login...`
-                              : eroscriptsLoginStatus?.loggedIn
-                                ? eroscriptsLoginStatus.username
-                                  ? t`Logged in as ${eroscriptsLoginStatus.username}`
-                                  : t`Logged in`
-                                : t`Not logged in`}
-                          </div>
-                        </div>
-                        <div className="rounded-full border border-zinc-600/70 px-3 py-1 text-xs font-semibold text-zinc-300">
-                          <Trans>Cookies stored: {eroscriptsLoginStatus?.cookieCount ?? 0}</Trans>
-                        </div>
-                      </div>
-                      {eroscriptsLoginStatus?.error ? (
-                        <p className="mt-2 text-sm text-amber-200">{eroscriptsLoginStatus.error}</p>
-                      ) : null}
-                    </div>
-                    {eroscriptsAuthMessage && (
-                      <div
-                        className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                          eroscriptsLoginStatus?.loggedIn
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-                        }`}
-                      >
-                        <span>{eroscriptsLoginStatus?.loggedIn ? "✓" : "ℹ"}</span>
-                        <span>{eroscriptsAuthMessage}</span>
-                      </div>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void openEroScriptsLogin();
-                        }}
-                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                          isEroScriptsAuthPending
-                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                        }`}
-                      >
-                        {isEroScriptsAuthPending ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
-                            <span>
-                              <Trans>Opening...</Trans>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>🔑</span>
-                            <span>
-                              <Trans>Sign In / Create Account</Trans>
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void refreshEroScriptsLoginStatus();
-                        }}
-                        className="flex items-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-all hover:border-emerald-300/70 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <span>🔄</span>
-                        <span>
-                          <Trans>Check Login</Trans>
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {currentStep.interactive === "storage" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-sky-400/30 bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-indigo-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="text-sky-300">🗄️</span>
-                      <p className="text-sm font-semibold text-sky-100">
-                        <Trans>Storage Locations</Trans>
-                      </p>
-                    </div>
-                    <div className="space-y-3">
-                      {[
-                        {
-                          id: "music-cache" as const,
-                          storeKey: MUSIC_CACHE_ROOT_PATH_KEY,
-                          title: t`Music Cache`,
-                          description: t`Downloaded menu music and imported YouTube audio.`,
-                          value: musicCacheRootPath,
-                          fallback: t`Default app data folder`,
-                        },
-                        {
-                          id: "website-video-cache" as const,
-                          storeKey: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
-                          title: t`Website Video Cache`,
-                          description: t`Downloaded website videos and cache files.`,
-                          value: websiteVideoCacheRootPath,
-                          fallback: t`Default app data folder`,
-                        },
-                        {
-                          id: "fpack-extraction" as const,
-                          storeKey: FPACK_EXTRACTION_PATH_KEY,
-                          title: t`.fpack Extraction`,
-                          description: t`Persistent extracted contents from imported .fpack files.`,
-                          value: fpackExtractionPath,
-                          fallback: t`Default app data folder`,
-                        },
-                        {
-                          id: "eroscripts-cache" as const,
-                          storeKey: EROSCRIPTS_CACHE_ROOT_PATH_KEY,
-                          title: t`EroScripts Extraction`,
-                          description: t`Extracted videos and funscripts for the EroScripts service.`,
-                          value: eroscriptsCacheRootPath,
-                          fallback: t`Default app data folder`,
-                        },
-                      ].map((location) => {
-                        const isPending = updatingStorageTarget === location.id;
-                        return (
-                          <div
-                            key={location.id}
-                            className="rounded-xl border border-white/10 bg-black/20 p-3"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold text-white">{location.title}</p>
-                              <p className="text-xs text-zinc-400">{location.description}</p>
-                            </div>
-                            <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-300">
-                              {isLoadingStorageSettings ? (
-                                <Trans>Loading...</Trans>
-                              ) : (
-                                formatStoragePathDisplay(location.value, location.fallback)
-                              )}
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                disabled={isLoadingStorageSettings || isPending}
-                                onMouseEnter={playHoverSound}
-                                onClick={() => {
-                                  playSelectSound();
-                                  void updateStoragePath(location.id);
-                                }}
-                                className="rounded-xl border border-sky-400/50 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-sky-100 transition-all hover:border-sky-300/70 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {isPending ? (
-                                  <Trans>Updating...</Trans>
-                                ) : (
-                                  <Trans>Choose Folder</Trans>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  isLoadingStorageSettings ||
-                                  isPending ||
-                                  !isStoragePathResettable(
-                                    location.value,
-                                    PORTABLE_DEFAULTS.get(location.storeKey) ?? null
-                                  )
-                                }
-                                onMouseEnter={playHoverSound}
-                                onClick={() => {
-                                  playSelectSound();
-                                  void resetStoragePath(location.id);
-                                }}
-                                className="rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <Trans>Use Default</Trans>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Booru Section */}
-                {currentStep.interactive === "booru" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-pink-400/30 bg-gradient-to-br from-pink-500/10 via-rose-500/5 to-fuchsia-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-pink-400">🔍</span>
-                      <p className="text-sm font-semibold text-pink-200">
-                        <Trans>Search Prompt</Trans>
-                      </p>
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        This determines what media appears during loading. Keep the default if
-                        unsure.
-                      </Trans>
-                    </p>
-                    <textarea
-                      id="first-start-booru-prompt"
-                      value={booruPrompt}
-                      disabled={isLoadingPrompt}
-                      onChange={(event) => setBooruPrompt(event.target.value)}
-                      className="mt-3 min-h-24 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-pink-400/50 focus:ring-2 focus:ring-pink-400/20 disabled:opacity-60"
-                      placeholder={t`Enter search prompt...`}
-                    />
-                  </div>
-                )}
-
-                {/* Background Phash Section */}
-                {currentStep.interactive === "phash" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-yellow-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-amber-300">🐢</span>
-                      <p className="text-sm font-semibold text-amber-100">
-                        <Trans>Background Hashing</Trans>
-                      </p>
-                    </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>
-                        Weak hardware: reduce rounds per pass, enable single-thread previews, or
-                        turn off background hashing if startup or library work feels heavy.
-                      </Trans>
-                    </p>
-                    <button
-                      type="button"
-                      disabled={
-                        isLoadingBackgroundPhashScanningEnabled ||
-                        isLoadingPhashPerformanceSettings ||
-                        isApplyingWeakHardwareSettings
-                      }
-                      onMouseEnter={playHoverSound}
-                      onClick={() => void applyWeakHardwarePerformanceSettings()}
-                      className="mt-4 w-full rounded-xl border border-amber-300/45 bg-amber-500/20 px-4 py-3 text-left text-sm font-semibold text-amber-50 transition-all hover:border-amber-200/80 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900/60 disabled:text-zinc-500"
+                  {currentStep.interactive === "language" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
                     >
-                      {isApplyingWeakHardwareSettings ? (
-                        <Trans>Applying recommended weak hardware settings...</Trans>
-                      ) : (
-                        <Trans>Apply recommended settings for weak hardware</Trans>
-                      )}
-                    </button>
-                    <label
-                      htmlFor="first-start-background-phash-scanning"
-                      className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
-                    >
-                      <input
-                        id="first-start-background-phash-scanning"
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t`Enable background pHash scanning`}
-                        checked={backgroundPhashScanningEnabled}
-                        disabled={isLoadingBackgroundPhashScanningEnabled}
-                        onChange={(event) => {
-                          const next = event.target.checked;
-                          setBackgroundPhashScanningEnabled(next);
-                          void trpc.store.set.mutate({
-                            key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
-                            value: next,
-                          });
-                        }}
-                        className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
-                      />
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-white">
-                          <Trans>Enable background pHash scanning</Trans>
-                        </p>
-                        <p className="text-xs leading-relaxed text-zinc-400">
-                          <Trans>
-                            Recommended on faster machines. Disable this if startup work or
-                            background CPU load feels too heavy.
-                          </Trans>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-emerald-300">🌐</span>
+                        <p className="text-sm font-semibold text-emerald-100">
+                          <Trans>Language</Trans> / Language
                         </p>
                       </div>
-                    </label>
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                      <label
-                        htmlFor="first-start-background-phash-rounds-per-pass"
-                        className="text-sm font-semibold text-white"
-                      >
-                        <Trans>Rounds per background pHash pass</Trans>
-                      </label>
-                      <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                      <p className="text-sm text-zinc-400">
                         <Trans>
-                          Lower values reduce each automatic scan burst on weaker laptops. Higher
-                          values finish background matching faster on stronger systems.
+                          Choose the language used on this page and across the app. Changes apply
+                          immediately.
                         </Trans>
                       </p>
-                      <input
-                        id="first-start-background-phash-rounds-per-pass"
-                        type="number"
-                        min={MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS}
-                        max={MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS}
-                        value={backgroundPhashRoundsPerPass}
-                        disabled={isLoadingPhashPerformanceSettings}
-                        onChange={(event) => {
-                          const next = normalizeBackgroundPhashRoundsPerPass(event.target.value);
-                          setBackgroundPhashRoundsPerPass(next);
-                          void trpc.store.set.mutate({
-                            key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
-                            value: next,
-                          });
-                        }}
-                        className="mt-3 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-2 text-sm text-white outline-none transition-all focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 disabled:opacity-60"
-                      />
-                    </div>
-                    <label
-                      htmlFor="first-start-preview-ffmpeg-single-thread"
-                      className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
-                    >
-                      <input
-                        id="first-start-preview-ffmpeg-single-thread"
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t`Limit preview ffmpeg to one thread`}
-                        checked={previewFfmpegSingleThreadEnabled}
-                        disabled={isLoadingPhashPerformanceSettings}
-                        onChange={(event) => {
-                          const next = event.target.checked;
-                          setPreviewFfmpegSingleThreadEnabled(next);
-                          void trpc.store.set.mutate({
-                            key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
-                            value: next,
-                          });
-                        }}
-                        className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
-                      />
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-white">
-                          <Trans>Limit preview ffmpeg to one thread</Trans>
-                        </p>
-                        <p className="text-xs leading-relaxed text-zinc-400">
-                          <Trans>
-                            Recommended on weak hardware if preview generation causes stutters.
-                            Leave it off for faster imports on stronger machines.
-                          </Trans>
-                        </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {locales.map((entry) => {
+                          const selected = entry.code === locale;
+                          return (
+                            <button
+                              key={entry.code}
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => {
+                                playSelectSound();
+                                void setLocale(entry.code);
+                              }}
+                              className={`rounded-xl border px-4 py-3 text-left transition-all ${selected
+                                ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.18)]"
+                                : "border-white/10 bg-black/20 text-zinc-200 hover:border-emerald-400/40 hover:bg-emerald-500/10"
+                                }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold">{entry.label}</span>
+                                {selected && (
+                                  <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+                                    <Trans>Selected</Trans>
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-xs text-zinc-400">
+                                {getLocaleCardDescription(entry.code)}
+                              </p>
+                            </button>
+                          );
+                        })}
                       </div>
-                    </label>
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {/* Handy Section */}
-                {currentStep.interactive === "handy" && (
-                  <div
-                    className="mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-green-500/5 to-teal-500/10 p-4 animate-entrance"
-                    style={{ animationDelay: "0.3s" }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-emerald-400">🔌</span>
-                      <p className="text-sm font-semibold text-emerald-200">
-                        <Trans>Device Connection</Trans>
+                  {/* Music Section */}
+                  {currentStep.interactive === "music" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-violet-400/30 bg-gradient-to-br from-violet-500/10 via-purple-500/5 to-indigo-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-violet-400">🎵</span>
+                        <p className="text-sm font-semibold text-violet-200">
+                          <Trans>Music Queue</Trans>
+                        </p>
+                        {queue.length > 0 && (
+                          <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                            {t`${queue.length} track${queue.length === 1 ? "" : "s"}`}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>
+                          Pick music files from your computer, or add YouTube videos and playlists to
+                          download as MP3.
+                        </Trans>
                       </p>
-                      {handyConnected && (
-                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          <Trans>Connected</Trans>
-                        </span>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void addMusicTracks();
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                            }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
+                              <span>
+                                <Trans>Adding...</Trans>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📁</span>
+                              <span>
+                                <Trans>Add Music Files</Trans>
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            setShowUrlInput((current) => !current);
+                            setUrlError(null);
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showUrlInput
+                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                            : "border-purple-400/50 bg-purple-500/20 text-purple-100 hover:border-purple-300/70 hover:bg-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                            }`}
+                        >
+                          <span>⊕</span>
+                          <span>
+                            <Trans>Add from YouTube</Trans>
+                          </span>
+                        </button>
+                      </div>
+
+                      {showUrlInput && (
+                        <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                          <p className="text-xs text-zinc-400">
+                            <Trans>
+                              Paste a YouTube video or playlist URL. Audio is downloaded as MP3 via
+                              yt-dlp.
+                            </Trans>
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              type="url"
+                              placeholder={t`https://example.com/video-or-playlist`}
+                              value={urlInput}
+                              onChange={(e) => {
+                                setUrlInput(e.target.value);
+                                setUrlError(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  void addMusicFromUrl();
+                                }
+                              }}
+                              disabled={isBusy}
+                              className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
+                                ? "border-rose-400/40 focus:border-rose-400/60"
+                                : "border-white/10 focus:border-violet-400/60"
+                                }`}
+                            />
+                            <button
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => void addMusicFromUrl()}
+                              disabled={isBusy}
+                              className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
+                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                                }`}
+                            >
+                              {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
+                            </button>
+                          </div>
+                          {urlError && <p className="text-xs text-rose-300">{urlError}</p>}
+                        </div>
+                      )}
+
+                      {musicMessage && (
+                        <div
+                          className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${musicMessageWasAdded
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                            }`}
+                        >
+                          <span>{musicMessageWasAdded ? "✓" : "ℹ"}</span>
+                          <span>{musicMessage}</span>
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-zinc-400">
-                      <Trans>Enter your Handy connection key to enable synchronized motion.</Trans>
-                    </p>
-                    <div className="mt-3 flex flex-col gap-2">
-                      <label
-                        className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
-                        htmlFor="first-start-handy-key"
-                      >
-                        <Trans>Connection Key</Trans>
-                      </label>
-                      <input
-                        id="first-start-handy-key"
-                        type="text"
-                        value={handyInputKey}
-                        onChange={(event) => setHandyInputKey(event.target.value)}
-                        placeholder={t`Enter connection key from Handy app`}
-                        disabled={handyConnected || handyIsConnecting}
-                        className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20 disabled:opacity-60"
+                  )}
+
+                  {currentStep.interactive === "moaning" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-rose-400/30 bg-gradient-to-br from-rose-500/10 via-pink-500/5 to-orange-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-rose-300">🔊</span>
+                        <p className="text-sm font-semibold text-rose-100">
+                          <Trans>Gameplay Moaning</Trans>
+                        </p>
+                        {moaningQueue.length > 0 && (
+                          <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                            {t`${moaningQueue.length} file${moaningQueue.length === 1 ? "" : "s"}`}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>
+                          Add moaning audio so moaning-based perks and anti-perks have something to
+                          play during the run.
+                        </Trans>
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          aria-label={t`Toggle Enable Moaning`}
+                          role="switch"
+                          aria-checked={moaningEnabled}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void setMoaningEnabled(!moaningEnabled);
+                          }}
+                          className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${moaningEnabled ? "border-rose-300/80 bg-rose-500/50 shadow-[0_0_20px_rgba(251,113,133,0.35)]" : "border-zinc-600 bg-zinc-800"}`}
+                        >
+                          <span
+                            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${moaningEnabled ? "translate-x-7" : "translate-x-0"}`}
+                          />
+                        </button>
+                        <span
+                          className={`text-sm font-medium ${moaningEnabled ? "text-zinc-100" : "text-zinc-400"}`}
+                        >
+                          <Trans>Moaning</Trans>{" "}
+                          {moaningEnabled ? <Trans>Enabled</Trans> : <Trans>Disabled</Trans>}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void addMoaningFiles();
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30 hover:shadow-[0_0_20px_rgba(251,113,133,0.3)]"
+                            }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-400/30 border-t-rose-300" />
+                              <span>
+                                <Trans>Adding...</Trans>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📁</span>
+                              <span>
+                                <Trans>Add Moaning Files</Trans>
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy || moaningQueue.length === 0}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void previewMoaningTrack(moaningQueue[0]!.id);
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy || moaningQueue.length === 0
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30"
+                            }`}
+                        >
+                          <span>▶</span>
+                          <span>
+                            <Trans>Preview First File</Trans>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            stopMoaningPreview();
+                          }}
+                          className="flex items-center gap-2 rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70"
+                        >
+                          <span>⏹</span>
+                          <span>
+                            <Trans>Stop Preview</Trans>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            setShowMoaningUrlInput((current) => !current);
+                            setMoaningUrlError(null);
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${showMoaningUrlInput
+                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-100"
+                            : "border-orange-400/50 bg-orange-500/20 text-orange-100 hover:border-orange-300/70 hover:bg-orange-500/30"
+                            }`}
+                        >
+                          <span>⊕</span>
+                          <span>
+                            <Trans>Add from URL</Trans>
+                          </span>
+                        </button>
+                      </div>
+
+                      {showMoaningUrlInput && (
+                        <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                          <p className="text-xs text-zinc-400">
+                            <Trans>
+                              Add from any yt-dlp-supported URL. Single tracks and playlists are both
+                              supported.
+                            </Trans>
+                          </p>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => {
+                                playSelectSound();
+                                setMoaningUrlMode("track");
+                              }}
+                              className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "track"
+                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                                }`}
+                            >
+                              <Trans>Single Track</Trans>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => {
+                                playSelectSound();
+                                setMoaningUrlMode("playlist");
+                              }}
+                              className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${moaningUrlMode === "playlist"
+                                ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                                : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                                }`}
+                            >
+                              <Trans>Playlist</Trans>
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="url"
+                              placeholder={
+                                moaningUrlMode === "playlist"
+                                  ? t`https://example.com/playlist-or-collection`
+                                  : t`https://example.com/video-or-audio`
+                              }
+                              value={moaningUrlInput}
+                              onChange={(e) => {
+                                setMoaningUrlInput(e.target.value);
+                                setMoaningUrlError(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  void addMoaningFromUrl();
+                                }
+                              }}
+                              disabled={isBusy}
+                              className={`flex-1 rounded-lg border bg-white/5 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition ${moaningUrlError
+                                ? "border-rose-400/40 focus:border-rose-400/60"
+                                : "border-white/10 focus:border-rose-400/60"
+                                }`}
+                            />
+                            <button
+                              type="button"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => void addMoaningFromUrl()}
+                              disabled={isBusy}
+                              className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${isBusy
+                                ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                                : "border-cyan-400/50 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30"
+                                }`}
+                            >
+                              {isBusy ? <Trans>Downloading...</Trans> : <Trans>Add</Trans>}
+                            </button>
+                          </div>
+                          {moaningUrlError && (
+                            <p className="text-xs text-rose-300">{moaningUrlError}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {moaningMessage && (
+                        <div
+                          className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${moaningMessageWasAdded
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                            }`}
+                        >
+                          <span>{moaningMessageWasAdded ? "✓" : "ℹ"}</span>
+                          <span>{moaningMessage}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Round Packs Section */}
+                  {currentStep.interactive === "round-packs" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-indigo-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-cyan-400">💿</span>
+                        <p className="text-sm font-semibold text-cyan-200">
+                          <Trans>Import Content</Trans>
+                        </p>
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>Add a content folder or import a single hero/round file.</Trans>
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void addRoundFolder();
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-violet-400/50 bg-violet-500/20 text-violet-100 hover:border-violet-300/70 hover:bg-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                            }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
+                              <span>
+                                <Trans>Working...</Trans>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📁</span>
+                              <span>
+                                <Trans>Add Folder</Trans>
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void importHeroOrRound();
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isBusy
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                            }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+                              <span>
+                                <Trans>Working...</Trans>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📄</span>
+                              <span>
+                                <Trans>Import File</Trans>
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {roundMessage && (
+                        <div
+                          className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${roundMessageWasImported
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                            }`}
+                        >
+                          <span>{roundMessageWasImported ? "✓" : "ℹ"}</span>
+                          <span>{roundMessage}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* EroScripts Login Section */}
+                  {currentStep.interactive === "eroscripts" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-indigo-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-cyan-300">🔗</span>
+                        <p className="text-sm font-semibold text-cyan-100">
+                          <Trans>EroScripts Account</Trans>
+                        </p>
+                        {eroscriptsLoginStatus?.loggedIn && (
+                          <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                            <Trans>Connected</Trans>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>
+                          Sign in to your EroScripts account to search and download funscripts and
+                          videos directly from the app. If you do not have one yet, creating an
+                          account is free.
+                        </Trans>
+                      </p>
+                      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                              <Trans>Login Status</Trans>
+                            </div>
+                            <div className="mt-1 text-sm font-semibold text-zinc-100">
+                              {isEroScriptsAuthLoading
+                                ? t`Checking login...`
+                                : eroscriptsLoginStatus?.loggedIn
+                                  ? eroscriptsLoginStatus.username
+                                    ? t`Logged in as ${eroscriptsLoginStatus.username}`
+                                    : t`Logged in`
+                                  : t`Not logged in`}
+                            </div>
+                          </div>
+                          <div className="rounded-full border border-zinc-600/70 px-3 py-1 text-xs font-semibold text-zinc-300">
+                            <Trans>Cookies stored: {eroscriptsLoginStatus?.cookieCount ?? 0}</Trans>
+                          </div>
+                        </div>
+                        {eroscriptsLoginStatus?.error ? (
+                          <p className="mt-2 text-sm text-amber-200">{eroscriptsLoginStatus.error}</p>
+                        ) : null}
+                      </div>
+                      {eroscriptsAuthMessage && (
+                        <div
+                          className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${eroscriptsLoginStatus?.loggedIn
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
+                            }`}
+                        >
+                          <span>{eroscriptsLoginStatus?.loggedIn ? "✓" : "ℹ"}</span>
+                          <span>{eroscriptsAuthMessage}</span>
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void openEroScriptsLogin();
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isEroScriptsAuthPending
+                            ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                            : "border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:border-cyan-300/70 hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                            }`}
+                        >
+                          {isEroScriptsAuthPending ? (
+                            <>
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+                              <span>
+                                <Trans>Opening...</Trans>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🔑</span>
+                              <span>
+                                <Trans>Sign In / Create Account</Trans>
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isEroScriptsAuthLoading || isEroScriptsAuthPending}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void refreshEroScriptsLoginStatus();
+                          }}
+                          className="flex items-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition-all hover:border-emerald-300/70 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span>🔄</span>
+                          <span>
+                            <Trans>Check Login</Trans>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentStep.interactive === "storage" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-sky-400/30 bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-indigo-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="text-sky-300">🗄️</span>
+                        <p className="text-sm font-semibold text-sky-100">
+                          <Trans>Storage Locations</Trans>
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        {[
+                          {
+                            id: "music-cache" as const,
+                            storeKey: MUSIC_CACHE_ROOT_PATH_KEY,
+                            title: t`Music Cache`,
+                            description: t`Downloaded menu music and imported YouTube audio.`,
+                            value: musicCacheRootPath,
+                            fallback: t`Default app data folder`,
+                          },
+                          {
+                            id: "website-video-cache" as const,
+                            storeKey: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
+                            title: t`Website Video Cache`,
+                            description: t`Downloaded website videos and cache files.`,
+                            value: websiteVideoCacheRootPath,
+                            fallback: t`Default app data folder`,
+                          },
+                          {
+                            id: "fpack-extraction" as const,
+                            storeKey: FPACK_EXTRACTION_PATH_KEY,
+                            title: t`.fpack Extraction`,
+                            description: t`Persistent extracted contents from imported .fpack files.`,
+                            value: fpackExtractionPath,
+                            fallback: t`Default app data folder`,
+                          },
+                          {
+                            id: "eroscripts-cache" as const,
+                            storeKey: EROSCRIPTS_CACHE_ROOT_PATH_KEY,
+                            title: t`EroScripts Extraction`,
+                            description: t`Extracted videos and funscripts for the EroScripts service.`,
+                            value: eroscriptsCacheRootPath,
+                            fallback: t`Default app data folder`,
+                          },
+                        ].map((location) => {
+                          const isPending = updatingStorageTarget === location.id;
+                          return (
+                            <div
+                              key={location.id}
+                              className="rounded-xl border border-white/10 bg-black/20 p-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-white">{location.title}</p>
+                                <p className="text-xs text-zinc-400">{location.description}</p>
+                              </div>
+                              <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-300">
+                                {isLoadingStorageSettings ? (
+                                  <Trans>Loading...</Trans>
+                                ) : (
+                                  formatStoragePathDisplay(location.value, location.fallback)
+                                )}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isLoadingStorageSettings || isPending}
+                                  onMouseEnter={playHoverSound}
+                                  onClick={() => {
+                                    playSelectSound();
+                                    void updateStoragePath(location.id);
+                                  }}
+                                  className="rounded-xl border border-sky-400/50 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-sky-100 transition-all hover:border-sky-300/70 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {isPending ? (
+                                    <Trans>Updating...</Trans>
+                                  ) : (
+                                    <Trans>Choose Folder</Trans>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={
+                                    isLoadingStorageSettings ||
+                                    isPending ||
+                                    !isStoragePathResettable(
+                                      location.value,
+                                      PORTABLE_DEFAULTS.get(location.storeKey) ?? null
+                                    )
+                                  }
+                                  onMouseEnter={playHoverSound}
+                                  onClick={() => {
+                                    playSelectSound();
+                                    void resetStoragePath(location.id);
+                                  }}
+                                  className="rounded-xl border border-zinc-500/50 bg-zinc-800/60 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all hover:border-zinc-300/60 hover:bg-zinc-700/70 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trans>Use Default</Trans>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Booru Section */}
+                  {currentStep.interactive === "booru" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-pink-400/30 bg-gradient-to-br from-pink-500/10 via-rose-500/5 to-fuchsia-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-pink-400">🔍</span>
+                        <p className="text-sm font-semibold text-pink-200">
+                          <Trans>Search Prompt</Trans>
+                        </p>
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>
+                          This determines what media appears during loading. Keep the default if
+                          unsure.
+                        </Trans>
+                      </p>
+                      <textarea
+                        id="first-start-booru-prompt"
+                        value={booruPrompt}
+                        disabled={isLoadingPrompt}
+                        onChange={(event) => setBooruPrompt(event.target.value)}
+                        className="mt-3 min-h-24 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-pink-400/50 focus:ring-2 focus:ring-pink-400/20 disabled:opacity-60"
+                        placeholder={t`Enter search prompt...`}
                       />
                     </div>
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 mt-3 text-xs font-[family-name:var(--font-jetbrains-mono)] text-amber-200">
-                      <Trans>Only firmware version 4 and up is supported.</Trans>
-                    </div>
-                    {handyError && (
-                      <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
-                        <span>⚠</span>
-                        <span>{handyError}</span>
+                  )}
+
+                  {/* Background Phash Section */}
+                  {currentStep.interactive === "phash" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-yellow-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-amber-300">🐢</span>
+                        <p className="text-sm font-semibold text-amber-100">
+                          <Trans>Background Hashing</Trans>
+                        </p>
                       </div>
-                    )}
-                    <button
-                      type="button"
-                      disabled={handyIsConnecting || (!handyConnected && !handyInputKey.trim())}
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        playSelectSound();
-                        void handleHandyConnect();
-                      }}
-                      className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                        handyIsConnecting
+                      <p className="text-sm text-zinc-400">
+                        <Trans>
+                          Weak hardware: reduce rounds per pass, enable single-thread previews, or
+                          turn off background hashing if startup or library work feels heavy.
+                        </Trans>
+                      </p>
+                      <button
+                        type="button"
+                        disabled={
+                          isLoadingBackgroundPhashScanningEnabled ||
+                          isLoadingPhashPerformanceSettings ||
+                          isApplyingWeakHardwareSettings
+                        }
+                        onMouseEnter={playHoverSound}
+                        onClick={() => void applyWeakHardwarePerformanceSettings()}
+                        className="mt-4 w-full rounded-xl border border-amber-300/45 bg-amber-500/20 px-4 py-3 text-left text-sm font-semibold text-amber-50 transition-all hover:border-amber-200/80 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900/60 disabled:text-zinc-500"
+                      >
+                        {isApplyingWeakHardwareSettings ? (
+                          <Trans>Applying recommended weak hardware settings...</Trans>
+                        ) : (
+                          <Trans>Apply recommended settings for weak hardware</Trans>
+                        )}
+                      </button>
+                      <label
+                        htmlFor="first-start-background-phash-scanning"
+                        className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                      >
+                        <input
+                          id="first-start-background-phash-scanning"
+                          type="checkbox"
+                          role="switch"
+                          aria-label={t`Enable background pHash scanning`}
+                          checked={backgroundPhashScanningEnabled}
+                          disabled={isLoadingBackgroundPhashScanningEnabled}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setBackgroundPhashScanningEnabled(next);
+                            void trpc.store.set.mutate({
+                              key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                              value: next,
+                            });
+                          }}
+                          className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
+                        />
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-white">
+                            <Trans>Enable background pHash scanning</Trans>
+                          </p>
+                          <p className="text-xs leading-relaxed text-zinc-400">
+                            <Trans>
+                              Recommended on faster machines. Disable this if startup work or
+                              background CPU load feels too heavy.
+                            </Trans>
+                          </p>
+                        </div>
+                      </label>
+                      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <label
+                          htmlFor="first-start-background-phash-rounds-per-pass"
+                          className="text-sm font-semibold text-white"
+                        >
+                          <Trans>Rounds per background pHash pass</Trans>
+                        </label>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                          <Trans>
+                            Lower values reduce each automatic scan burst on weaker laptops. Higher
+                            values finish background matching faster on stronger systems.
+                          </Trans>
+                        </p>
+                        <input
+                          id="first-start-background-phash-rounds-per-pass"
+                          type="number"
+                          min={MIN_BACKGROUND_PHASH_ROUNDS_PER_PASS}
+                          max={MAX_BACKGROUND_PHASH_ROUNDS_PER_PASS}
+                          value={backgroundPhashRoundsPerPass}
+                          disabled={isLoadingPhashPerformanceSettings}
+                          onChange={(event) => {
+                            const next = normalizeBackgroundPhashRoundsPerPass(event.target.value);
+                            setBackgroundPhashRoundsPerPass(next);
+                            void trpc.store.set.mutate({
+                              key: BACKGROUND_PHASH_ROUNDS_PER_PASS_KEY,
+                              value: next,
+                            });
+                          }}
+                          className="mt-3 w-full rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-2 text-sm text-white outline-none transition-all focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 disabled:opacity-60"
+                        />
+                      </div>
+                      <label
+                        htmlFor="first-start-preview-ffmpeg-single-thread"
+                        className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                      >
+                        <input
+                          id="first-start-preview-ffmpeg-single-thread"
+                          type="checkbox"
+                          role="switch"
+                          aria-label={t`Limit preview ffmpeg to one thread`}
+                          checked={previewFfmpegSingleThreadEnabled}
+                          disabled={isLoadingPhashPerformanceSettings}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setPreviewFfmpegSingleThreadEnabled(next);
+                            void trpc.store.set.mutate({
+                              key: PREVIEW_FFMPEG_SINGLE_THREAD_ENABLED_KEY,
+                              value: next,
+                            });
+                          }}
+                          className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-amber-400 focus:ring-amber-400/40"
+                        />
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-white">
+                            <Trans>Limit preview ffmpeg to one thread</Trans>
+                          </p>
+                          <p className="text-xs leading-relaxed text-zinc-400">
+                            <Trans>
+                              Recommended on weak hardware if preview generation causes stutters.
+                              Leave it off for faster imports on stronger machines.
+                            </Trans>
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Handy Section */}
+                  {currentStep.interactive === "handy" && (
+                    <div
+                      className="fs-interactive-panel mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-green-500/5 to-teal-500/10 p-4 animate-entrance"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-emerald-400">🔌</span>
+                        <p className="text-sm font-semibold text-emerald-200">
+                          <Trans>Device Connection</Trans>
+                        </p>
+                        {handyConnected && (
+                          <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                            <Trans>Connected</Trans>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-zinc-400">
+                        <Trans>Enter your Handy connection key to enable synchronized motion.</Trans>
+                      </p>
+                      <div className="mt-3 flex flex-col gap-2">
+                        <label
+                          className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
+                          htmlFor="first-start-handy-key"
+                        >
+                          <Trans>Connection Key</Trans>
+                        </label>
+                        <input
+                          id="first-start-handy-key"
+                          type="text"
+                          value={handyInputKey}
+                          onChange={(event) => setHandyInputKey(event.target.value)}
+                          placeholder={t`Enter connection key from Handy app`}
+                          disabled={handyConnected || handyIsConnecting}
+                          className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 px-3.5 py-3 text-sm text-white outline-none transition-all focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20 disabled:opacity-60"
+                        />
+                      </div>
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 mt-3 text-xs font-[family-name:var(--font-jetbrains-mono)] text-amber-200">
+                        <Trans>Only firmware version 4 and up is supported.</Trans>
+                      </div>
+                      {handyError && (
+                        <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
+                          <span>⚠</span>
+                          <span>{handyError}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        disabled={handyIsConnecting || (!handyConnected && !handyInputKey.trim())}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void handleHandyConnect();
+                        }}
+                        className={`mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${handyIsConnecting
                           ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
                           : handyConnected
                             ? "border-rose-400/50 bg-rose-500/20 text-rose-100 hover:border-rose-300/70 hover:bg-rose-500/30"
                             : "border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                      }`}
-                    >
-                      {handyIsConnecting ? (
-                        <>
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-400/30 border-t-emerald-300" />
-                          <span>
-                            <Trans>Connecting...</Trans>
-                          </span>
-                        </>
-                      ) : handyConnected ? (
-                        <>
-                          <span>⏹</span>
-                          <span>
-                            <Trans>Disconnect</Trans>
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span>🔌</span>
-                          <span>
-                            <Trans>Connect</Trans>
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                          }`}
+                      >
+                        {handyIsConnecting ? (
+                          <>
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-400/30 border-t-emerald-300" />
+                            <span>
+                              <Trans>Connecting...</Trans>
+                            </span>
+                          </>
+                        ) : handyConnected ? (
+                          <>
+                            <span>⏹</span>
+                            <span>
+                              <Trans>Disconnect</Trans>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span>🔌</span>
+                            <span>
+                              <Trans>Connect</Trans>
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* ── Footer Navigation ── */}
@@ -2413,11 +2428,10 @@ function FirstStartPage() {
                     playSelectSound();
                     setStepIndex((current) => Math.max(0, current - 1));
                   }}
-                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                    stepIndex === 0
-                      ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
-                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
-                  }`}
+                  className={`group flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${stepIndex === 0
+                    ? "cursor-not-allowed border-zinc-800/50 bg-zinc-900/30 text-zinc-600"
+                    : "border-zinc-600/40 bg-zinc-900/60 text-zinc-300 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-white"
+                    }`}
                 >
                   <span
                     className={`transition-transform ${stepIndex === 0 ? "" : "group-hover:-translate-x-1"}`}
@@ -2438,11 +2452,10 @@ function FirstStartPage() {
                       playSelectSound();
                       void skip();
                     }}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                      isSkipping
-                        ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
-                        : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
-                    }`}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${isSkipping
+                      ? "cursor-not-allowed border-zinc-600/50 bg-zinc-800/50 text-zinc-500"
+                      : "border-zinc-600/40 bg-zinc-900/60 text-zinc-400 hover:border-zinc-500/60 hover:bg-zinc-800/80 hover:text-zinc-200"
+                      }`}
                   >
                     <span>⏭</span>
                     <span>
@@ -2457,11 +2470,10 @@ function FirstStartPage() {
                       playSelectSound();
                       void goNext();
                     }}
-                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${
-                      isContinueDisabled
-                        ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
-                        : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
-                    }`}
+                    className={`fs-continue-btn group relative flex items-center gap-2 overflow-hidden rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all ${isContinueDisabled
+                      ? "cursor-not-allowed border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                      : "border-violet-400/50 bg-gradient-to-r from-violet-600/80 via-purple-600/80 to-indigo-600/80 text-white hover:border-violet-300/70 hover:shadow-[0_0_25px_rgba(139,92,246,0.4)]"
+                      }`}
                   >
                     <span className="absolute inset-0 bg-gradient-to-r from-violet-500/0 via-white/10 to-violet-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     <span>

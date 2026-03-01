@@ -58,6 +58,8 @@ type OnboardingStatus =
   | "error"
   | "unavailable";
 
+type MultiplayerTaskTab = "join" | "public" | "host" | "server";
+
 type LobbyJoinRequirement = Pick<
   MultiplayerPublicLobbySummary,
   "inviteCode" | "name" | "requiredRoundCount" | "isOpen" | "status" | "allowLateJoin"
@@ -143,10 +145,6 @@ function MultiplayerRoute() {
   const navigate = useNavigate();
   const sfwModeEnabled = useMultiplayerSfwRedirect();
 
-  if (sfwModeEnabled) {
-    return null;
-  }
-
   const {
     activePlaylist,
     availablePlaylists,
@@ -190,6 +188,7 @@ function MultiplayerRoute() {
   const [allowLateJoin, setAllowLateJoin] = useState(true);
   const [advertisePublicly, setAdvertisePublicly] = useState(false);
   const [inviteCode, setInviteCode] = useState(search.inviteCode ?? "");
+  const [activeTaskTab, setActiveTaskTab] = useState<MultiplayerTaskTab>("public");
   const [joinPending, setJoinPending] = useState(false);
   const [createPending, setCreatePending] = useState(false);
   const [linkPending, setLinkPending] = useState(false);
@@ -203,7 +202,6 @@ function MultiplayerRoute() {
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [editingAuthRequirement, setEditingAuthRequirement] =
     useState<MultiplayerAuthRequirement>("anonymous_only");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [authStatus, setAuthStatus] = useState<MultiplayerAuthStatus | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>("provisioning");
   const [onboardingMessage, setOnboardingMessage] = useState(
@@ -339,7 +337,7 @@ function MultiplayerRoute() {
       setOnboardingMessage(
         t`Online multiplayer is unavailable right now. Retry or use Advanced setup.`
       );
-      setAdvancedOpen(true);
+      setActiveTaskTab("server");
       return;
     }
 
@@ -357,7 +355,7 @@ function MultiplayerRoute() {
       setOnboardingStatus(resolvedStatus.status);
       setOnboardingMessage(resolvedStatus.message);
       if (resolvedStatus.status === "oauth_unavailable") {
-        setAdvancedOpen(true);
+        setActiveTaskTab("server");
       }
       setError(null);
     } catch (bootstrapError) {
@@ -369,7 +367,7 @@ function MultiplayerRoute() {
           ? bootstrapError.message
           : t`Failed to prepare multiplayer authentication. Retry or use Advanced setup.`
       );
-      setAdvancedOpen(true);
+      setActiveTaskTab("server");
     } finally {
       if (bootstrapTokenRef.current === token) {
         setAuthBootstrapPending(false);
@@ -667,6 +665,23 @@ function MultiplayerRoute() {
     : inviteCode.trim().length === 0
       ? t`Paste an invite code to join.`
       : null;
+  const publicDisabledReason = !serverConfigured
+    ? t`Select or configure a multiplayer server first.`
+    : onboardingStatus !== "ready"
+      ? t`Finish account setup before browsing public lobbies.`
+      : null;
+  const taskBlockedReason: Partial<Record<MultiplayerTaskTab, string>> = {
+    join: !canPlay ? (joinDisabledReason ?? t`Resolve multiplayer readiness first.`) : undefined,
+    public: publicDisabledReason ?? undefined,
+    host: createDisabledReason ?? undefined,
+  };
+  const taskTabs: Array<{ id: MultiplayerTaskTab; label: string; blockedReason?: string }> = [
+    { id: "public", label: t`Public Lobbies`, blockedReason: taskBlockedReason.public },
+    { id: "join", label: t`Join Code`, blockedReason: taskBlockedReason.join },
+    { id: "host", label: t`Host Lobby`, blockedReason: taskBlockedReason.host },
+    { id: "server", label: t`Server` },
+  ];
+  const activeTaskBlockedReason = taskBlockedReason[activeTaskTab];
 
   const publicLobbyCards = useMemo(
     () =>
@@ -731,6 +746,10 @@ function MultiplayerRoute() {
     ]
   );
 
+  if (sfwModeEnabled) {
+    return null;
+  }
+
   return (
     <MultiplayerUpdateGuard>
       <div className="relative h-screen overflow-x-hidden overflow-y-auto px-4 py-6 text-zinc-100 sm:px-6 sm:py-8">
@@ -774,7 +793,10 @@ function MultiplayerRoute() {
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-rose-400/55 bg-rose-500/12 px-4 py-3 text-sm text-rose-100 backdrop-blur-xl">
+            <div
+              className="rounded-2xl border border-rose-400/55 bg-rose-500/12 px-4 py-3 text-sm text-rose-100 backdrop-blur-xl"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -941,6 +963,46 @@ function MultiplayerRoute() {
             <p className="-mt-5 text-sm text-zinc-400">{readinessDetail}</p>
           )}
 
+          <div className="grid gap-2 rounded-2xl border border-white/10 bg-zinc-950/45 p-2 backdrop-blur-xl sm:grid-cols-4">
+            {taskTabs.map((tab) => {
+              const active = activeTaskTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setActiveTaskTab(tab.id);
+                  }}
+                  aria-pressed={active}
+                  className={`rounded-xl border px-3 py-2 text-sm font-bold uppercase tracking-[0.12em] transition ${
+                    active
+                      ? "border-violet-300/60 bg-violet-500/25 text-violet-50"
+                      : "border-white/10 bg-black/20 text-zinc-400 hover:border-white/25 hover:text-zinc-100"
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {tab.blockedReason && (
+                    <span
+                      className="ml-2 rounded border border-amber-300/45 bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-100"
+                      aria-hidden="true"
+                    >
+                      <Trans>Blocked</Trans>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeTaskBlockedReason && (
+            <div className="rounded-xl border border-amber-300/35 bg-amber-500/12 px-4 py-3 text-sm text-amber-100" role="status" aria-live="polite">
+              {activeTaskBlockedReason}
+            </div>
+          )}
+
+          {activeTaskTab === "join" && (
           <section className="animate-entrance rounded-3xl border border-violet-400/25 bg-zinc-950/55 p-6 backdrop-blur-xl">
             <h2 className="text-xl font-extrabold tracking-tight text-violet-100">
               <Trans>Join Lobby</Trans>
@@ -992,7 +1054,9 @@ function MultiplayerRoute() {
               <p className="mt-3 text-xs text-zinc-400">{joinDisabledReason}</p>
             )}
           </section>
+          )}
 
+          {activeTaskTab === "public" && (
           <section className="animate-entrance rounded-3xl border border-emerald-400/20 bg-zinc-950/55 p-6 backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1014,7 +1078,10 @@ function MultiplayerRoute() {
             </div>
 
             {publicLobbiesError && (
-              <div className="mt-4 rounded-xl border border-rose-400/45 bg-rose-500/12 px-4 py-3 text-sm text-rose-100">
+              <div
+                className="mt-4 rounded-xl border border-rose-400/45 bg-rose-500/12 px-4 py-3 text-sm text-rose-100"
+                role="alert"
+              >
                 {publicLobbiesError}
               </div>
             )}
@@ -1029,7 +1096,9 @@ function MultiplayerRoute() {
               </p>
             )}
           </section>
+          )}
 
+          {activeTaskTab === "host" && (
           <section className="animate-entrance rounded-3xl border border-cyan-400/20 bg-zinc-950/55 p-6 backdrop-blur-xl">
             <h2 className="text-xl font-extrabold tracking-tight text-cyan-100">
               <Trans>Host a Lobby</Trans>
@@ -1043,19 +1112,23 @@ function MultiplayerRoute() {
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                <label
+                  htmlFor="multiplayer-lobby-name"
+                  className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400"
+                >
                   <Trans>Lobby Name</Trans>
                 </label>
                 <input
+                  id="multiplayer-lobby-name"
                   className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2.5 text-sm font-semibold text-zinc-100 outline-none transition focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/25"
                   value={lobbyName}
                   onChange={(event) => setLobbyName(event.target.value)}
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                   <Trans>Playlist</Trans>
-                </label>
+                </p>
                 <GameDropdown
                   value={selectedPlaylistId}
                   disabled={!hasPlayablePlaylist}
@@ -1133,30 +1206,23 @@ function MultiplayerRoute() {
             )}
             {createWarning && <p className="mt-3 text-xs text-amber-200">{createWarning}</p>}
           </section>
+          )}
 
+          {activeTaskTab === "server" && (
           <section className="animate-entrance rounded-3xl border border-purple-400/15 bg-zinc-950/55 p-6 backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
-                  <Trans>Advanced</Trans>
+                  <Trans>Server Management</Trans>
                 </h2>
                 <p className="mt-0.5 text-xs text-zinc-400">
                   <Trans>
-                    Server management and self-hosted setup. Keep this closed unless needed.
+                    Server selection and self-hosted setup for multiplayer.
                   </Trans>
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setAdvancedOpen((current) => !current)}
-                className={`${actionButtonClass} border-white/20 bg-black/30 hover:border-white/40`}
-                aria-expanded={advancedOpen}
-              >
-                {advancedOpen ? t`Hide Advanced` : t`Show Advanced`}
-              </button>
             </div>
 
-            {advancedOpen && (
               <div className="mt-5 space-y-4">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
                   <div>
@@ -1300,8 +1366,10 @@ function MultiplayerRoute() {
                       placeholder={t`ey...`}
                     />
                   </label>
-                  <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                     <Trans>Auth Requirement</Trans>
+                    </p>
                     <GameDropdown
                       value={editingAuthRequirement}
                       options={[
@@ -1313,7 +1381,7 @@ function MultiplayerRoute() {
                         setEditingAuthRequirement(value as MultiplayerAuthRequirement)
                       }
                     />
-                  </label>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1391,8 +1459,8 @@ function MultiplayerRoute() {
                   </button>
                 </div>
               </div>
-            )}
           </section>
+          )}
         </div>
       </div>
     </MultiplayerUpdateGuard>

@@ -6,6 +6,7 @@ import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { PlaylistMapPreview } from "../components/PlaylistMapPreview";
 import { PlaylistLaunchTransition } from "../components/game/PlaylistLaunchTransition";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import {
   DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED,
   PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED_KEY,
@@ -116,6 +117,7 @@ function SinglePlayerSetupPage() {
   const [notice, setNotice] = useState<string | null>(search.notice ?? null);
   const [launchState, setLaunchState] = useState<LaunchState>({ kind: "idle" });
   const [launchProgress, setLaunchProgress] = useState(0);
+  const [freshStartConfirmOpen, setFreshStartConfirmOpen] = useState(false);
   const [playlistCacheOngoingRestrictionDisabled, setPlaylistCacheOngoingRestrictionDisabled] =
     useState(DEFAULT_PLAYLIST_CACHE_ONGOING_RESTRICTION_DISABLED);
   const scopeRef = useRef<HTMLDivElement | null>(null);
@@ -604,7 +606,11 @@ function SinglePlayerSetupPage() {
                       </Trans>
                     </p>
                   )}
-                  {notice && <p className="mt-3 text-sm text-rose-200">{notice}</p>}
+                  {notice && (
+                    <p className="mt-3 text-sm text-rose-200" role="alert">
+                      {notice}
+                    </p>
+                  )}
                 </div>
 
                 <div className="w-full max-w-xl xl:min-w-[24rem]">
@@ -679,7 +685,7 @@ function SinglePlayerSetupPage() {
                         onHover={playHoverSound}
                         onClick={() => {
                           playSelectSound();
-                          void handleStart();
+                          setFreshStartConfirmOpen(true);
                         }}
                         controllerFocusId="single-start"
                       />
@@ -783,6 +789,20 @@ function SinglePlayerSetupPage() {
           </main>
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={freshStartConfirmOpen}
+        title={t`Start Fresh Run?`}
+        message={t`This will replace the saved run for "${selectedPlaylist.name}". Resume keeps your current progress.`}
+        confirmLabel={t`Start Fresh`}
+        cancelLabel={t`Cancel`}
+        variant="warning"
+        isPending={pendingAction === "start"}
+        onCancel={() => setFreshStartConfirmOpen(false)}
+        onConfirm={() => {
+          setFreshStartConfirmOpen(false);
+          void handleStart();
+        }}
+      />
     </div>
   );
 }

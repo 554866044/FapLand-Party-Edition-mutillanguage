@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLingui } from "@lingui/react/macro";
 
 export type ToastVariant = "error" | "success" | "info";
 
@@ -125,19 +126,22 @@ const variantStyles: Record<ToastVariant, string> = {
 };
 
 function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: number) => void }) {
+  const { t } = useLingui();
+  const role = toast.variant === "error" ? "alert" : "status";
+  const live = toast.variant === "error" ? "assertive" : "polite";
+
   return (
     <div className="animate-entrance">
-      <div
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onDismiss(toast.id);
-        }}
+      <button
+        type="button"
+        role={role}
+        aria-live={live}
+        aria-label={t`Dismiss notification: ${toast.message}`}
         className={`cursor-pointer rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${variantStyles[toast.variant]}`}
         onClick={() => onDismiss(toast.id)}
       >
         {toast.message}
-      </div>
+      </button>
     </div>
   );
 }

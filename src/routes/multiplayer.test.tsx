@@ -171,8 +171,18 @@ vi.mock("../services/multiplayer", () => ({
 
 vi.mock("../services/playlists", () => ({
   playlists: {
-    list: vi.fn(),
-    getActive: vi.fn(),
+    list: vi.fn(async () => mocks.loaderData.availablePlaylists),
+    getActive: vi.fn(async () => mocks.loaderData.activePlaylist),
+  },
+}));
+
+vi.mock("../services/trpc", () => ({
+  trpc: {
+    store: {
+      get: {
+        query: vi.fn(async () => false),
+      },
+    },
   },
 }));
 
@@ -276,6 +286,21 @@ describe("MultiplayerRoute", () => {
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
   });
 
+  it("shows public lobbies as the first multiplayer tab", async () => {
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ready")).toBeDefined();
+    });
+
+    const publicTab = screen.getByRole("button", { name: "Public Lobbies" });
+    const joinTab = screen.getByRole("button", { name: "Join Code" });
+
+    expect(publicTab.compareDocumentPosition(joinTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(publicTab.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("renders nothing while sfw mode is enabled", () => {
     mocks.sfwModeEnabled = true;
 
@@ -295,7 +320,9 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Ready to join or host")).toBeDefined();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Host Lobby" }));
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Join Code" }));
     expect(screen.getByRole("button", { name: "Join Lobby" }).hasAttribute("disabled")).toBe(true);
   });
 
@@ -307,6 +334,7 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Ready")).toBeDefined();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Host Lobby" }));
     fireEvent.click(screen.getByLabelText("Advertise on Public List"));
     fireEvent.click(screen.getByRole("button", { name: "Create Lobby" }));
 
@@ -338,14 +366,16 @@ describe("MultiplayerRoute", () => {
     const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Host Lobby" }));
     await waitFor(() => {
       expect(screen.getByText("Playlist One requires 140 installed rounds.")).toBeDefined();
     });
 
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(true);
     expect(
-      screen.getByText("This playlist requires at least 140 installed rounds. You have 110.")
-    ).toBeDefined();
+      screen.getAllByText("This playlist requires at least 140 installed rounds. You have 110.")
+        .length
+    ).toBeGreaterThan(0);
   });
 
   it("blocks invite-code joins when the preview requires more rounds than installed", async () => {
@@ -370,6 +400,7 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Ready")).toBeDefined();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Join Code" }));
     fireEvent.change(screen.getByLabelText("Invite Code"), { target: { value: "room140" } });
     fireEvent.click(screen.getByRole("button", { name: "Join Lobby" }));
 
@@ -400,6 +431,7 @@ describe("MultiplayerRoute", () => {
     const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Public Lobbies" }));
     await waitFor(() => {
       expect(screen.getByText("Public Lobby")).toBeDefined();
     });
@@ -425,7 +457,7 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Ready")).toBeDefined();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show Advanced" }));
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
 
     expect(screen.queryByRole("button", { name: "Load Into Editor" })).toBeNull();
     expect(screen.getAllByText("Hidden for built-in server").length).toBeGreaterThan(0);
@@ -448,7 +480,9 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Discord linking required")).toBeDefined();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Host Lobby" }));
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Join Code" }));
     expect(screen.getByRole("button", { name: "Join Lobby" }).hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Link Discord" })[0]!);
@@ -490,10 +524,11 @@ describe("MultiplayerRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Unavailable")).toBeDefined();
-      expect(screen.getByRole("button", { name: "Hide Advanced" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Server" }).getAttribute("aria-pressed")).toBe("true");
     });
 
     expect(mocks.resolveMultiplayerAuthStatus).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Host Lobby" }));
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(true);
   });
 
@@ -534,7 +569,7 @@ describe("MultiplayerRoute", () => {
       expect(screen.getByText("Ready")).toBeDefined();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show Advanced" }));
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
     fireEvent.click(screen.getByRole("button", { name: "New Endpoint" }));
     fireEvent.change(screen.getByLabelText("Server Name"), { target: { value: "My Server" } });
     fireEvent.change(screen.getByLabelText("Supabase URL"), { target: { value: "https://custom.supabase.co" } });
@@ -547,6 +582,7 @@ describe("MultiplayerRoute", () => {
         name: "My Server",
         url: "https://custom.supabase.co",
         anonKey: "custom-key",
+        authRequirement: "anonymous_only",
       });
     });
   });
@@ -565,8 +601,7 @@ describe("MultiplayerRoute", () => {
     const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
 
-    await waitFor(() => {
-      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
-    });
+    fireEvent.click(await screen.findByRole("button", { name: "Return to Menu" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
   });
 });

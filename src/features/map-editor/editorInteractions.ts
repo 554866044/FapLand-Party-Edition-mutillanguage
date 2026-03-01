@@ -120,6 +120,13 @@ export const getNodesIntersectingScreenRect = (
   return hits;
 };
 
+export const resolveStartNodeId = (currentStartNodeId: string, nodes: EditorNode[]): string => {
+  const startNodes = nodes.filter((node) => node.kind === "start");
+  if (startNodes.length === 0) return "";
+  if (startNodes.some((node) => node.id === currentStartNodeId)) return currentStartNodeId;
+  return startNodes[0]?.id ?? "";
+};
+
 export const deleteSelectionFromConfig = (
   config: EditorGraphConfig,
   selection: EditorSelectionState,
@@ -133,10 +140,9 @@ export const deleteSelectionFromConfig = (
       return config;
     }
 
-    const hasStart = nextNodes.some((node) => node.id === config.startNodeId);
     return {
       ...config,
-      startNodeId: hasStart ? config.startNodeId : nextNodes.find((node) => node.kind === "start")?.id ?? nextNodes[0]?.id ?? "",
+      startNodeId: resolveStartNodeId(config.startNodeId, nextNodes),
       nodes: nextNodes,
       edges: nextEdges,
     };

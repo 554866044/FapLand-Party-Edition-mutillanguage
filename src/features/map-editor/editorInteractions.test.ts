@@ -6,6 +6,7 @@ import {
   getNodesIntersectingScreenRect,
   mergeNodeSelection,
   replaceNodeSelection,
+  resolveStartNodeId,
   toggleNodeSelection,
 } from "./editorInteractions";
 
@@ -138,6 +139,29 @@ describe("editorInteractions", () => {
     });
     expect(next.nodes.map((node) => node.id)).toEqual(["start", "end"]);
     expect(next.edges).toEqual([]);
+  });
+
+  it("clears startNodeId when the only start node is deleted", () => {
+    const config = makeConfig();
+    const next = deleteSelectionFromConfig(config, {
+      selectedNodeIds: ["start"],
+      primaryNodeId: "start",
+      selectedEdgeId: null,
+      selectedTextAnnotationId: null,
+    });
+
+    expect(next.startNodeId).toBe("");
+    expect(next.nodes.map((node) => node.id)).toEqual(["path-1", "end"]);
+  });
+
+  it("uses a newly added start node when no current start node exists", () => {
+    const nodes = [
+      sampleNode("path-1", 100, 100),
+      sampleNode("start-new", 420, 120, "start"),
+    ];
+
+    expect(resolveStartNodeId("", nodes)).toBe("start-new");
+    expect(resolveStartNodeId("path-1", nodes)).toBe("start-new");
   });
 
   it("deletes selected text annotations without changing nodes or edges", () => {

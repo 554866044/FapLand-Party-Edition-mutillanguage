@@ -201,6 +201,13 @@ export function getVisibleShortcutGroups(
       }),
       shortcuts: [
         {
+          keys: "Ctrl/Cmd+K",
+          description: i18n._({
+            id: "settings.help.shortcuts.global.commandPalette",
+            message: "Open or close the command palette.",
+          }),
+        },
+        {
           keys: "Ctrl/Cmd+M",
           description: i18n._({
             id: "settings.help.shortcuts.global.music",

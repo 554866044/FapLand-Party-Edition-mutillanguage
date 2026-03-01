@@ -78,7 +78,11 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                 </div>
 
                 {saveNotice && (
-                    <div className="mt-3 rounded-lg border border-amber-500/45 bg-amber-950/30 px-3 py-2 text-xs text-amber-100">
+                    <div
+                        className="mt-3 rounded-lg border border-amber-500/45 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"
+                        role="status"
+                        aria-live="polite"
+                    >
                         {saveNotice}
                     </div>
                 )}
@@ -151,11 +155,13 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                         <p className="text-xs uppercase tracking-[0.14em] text-zinc-400">
                             <Trans>Create New</Trans>
                         </p>
-                        <label className="mt-3 block">
-                            <span className="text-[11px] uppercase tracking-[0.1em] text-zinc-400">
+                        <div className="mt-3 block">
+                            <p className="text-[11px] uppercase tracking-[0.1em] text-zinc-400">
                                 <Trans>Playlist name</Trans>
-                            </span>
+                            </p>
                             <input
+                                id="map-editor-new-playlist-name"
+                                aria-label={t`Playlist name`}
                                 type="text"
                                 placeholder={t`New playlist name`}
                                 value={newPlaylistName}
@@ -163,7 +169,7 @@ export const PlaylistPickerView: React.FC<PlaylistPickerViewProps> = React.memo(
                                 className="mt-1 w-full rounded border border-zinc-600/60 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100"
                                 data-controller-focus-id="map-editor-picker-name"
                             />
-                        </label>
+                        </div>
                         <button
                             type="button"
                             className="mt-3 rounded-lg border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100 disabled:opacity-50"

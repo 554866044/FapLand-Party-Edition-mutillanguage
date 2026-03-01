@@ -234,22 +234,42 @@ export function CommandPalette() {
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const navigate = useNavigate();
   const guard = useCommandPaletteGuard();
   const { manuallyStopped, toggleManualStop } = useHandy();
 
+  const closePalette = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    window.setTimeout(() => {
+      const previous = previousFocusRef.current;
+      if (previous?.isConnected) {
+        previous.focus();
+      }
+    }, 0);
+  }, []);
+
+  const openPalette = useCallback(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    setOpen(true);
+    setQuery("");
+    setSelectedIndex(0);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   useEffect(() => {
     _setOpenFromOutside = (value: boolean) => {
-      setOpen(value);
       if (value) {
-        setQuery("");
-        setTimeout(() => inputRef.current?.focus(), 50);
+        openPalette();
+      } else {
+        closePalette();
       }
     };
     return () => {
       _setOpenFromOutside = null;
     };
-  }, []);
+  }, [closePalette, openPalette]);
 
   const commands = useMemo<CommandItem[]>(
     () => [
@@ -346,23 +366,22 @@ export function CommandPalette() {
           setToast(guard.reason ?? t`You cannot use the command palette here.`);
           return;
         }
-        setOpen((prev) => !prev);
-        setQuery("");
-        if (!open) {
-          setTimeout(() => inputRef.current?.focus(), 50);
+        if (open) {
+          closePalette();
+        } else {
+          openPalette();
         }
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [guard.blocked, guard.reason, open, t]);
+  }, [closePalette, guard.blocked, guard.reason, open, openPalette, t]);
 
   const execute = useCallback(
     async (cmd: CommandItem) => {
       playSelectSound();
-      setOpen(false);
-      setQuery("");
+      closePalette();
       if (cmd.to) {
         void navigate({ to: cmd.to });
       }
@@ -371,7 +390,7 @@ export function CommandPalette() {
         setToast(message);
       }
     },
-    [navigate]
+    [closePalette, navigate]
   );
 
   const handleKeyDown = useCallback(
@@ -379,8 +398,7 @@ export function CommandPalette() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         event.stopPropagation();
-        setOpen(false);
-        setQuery("");
+        closePalette();
         return;
       }
 
@@ -396,11 +414,10 @@ export function CommandPalette() {
         if (cmd) execute(cmd);
       } else if (event.key === "Escape") {
         event.preventDefault();
-        setOpen(false);
-        setQuery("");
+        closePalette();
       }
     },
-    [execute, filtered, selectedIndex]
+    [closePalette, execute, filtered, selectedIndex]
   );
 
   useEffect(() => {
@@ -421,22 +438,22 @@ export function CommandPalette() {
   return (
     <div
       className="fixed inset-0 z-[300] flex items-start justify-center pt-[15vh]"
-      onClick={() => {
-        setOpen(false);
-        setQuery("");
-      }}
-      onKeyDown={() => {}}
-      role="button"
-      tabIndex={-1}
-      aria-label={t`Close command palette`}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        aria-label={t`Close command palette`}
+        onClick={closePalette}
+      />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="command-palette-title"
         className="relative w-full max-w-lg animate-entrance overflow-hidden rounded-2xl border border-violet-300/30 bg-zinc-950/90 shadow-2xl backdrop-blur-xl"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
       >
+        <h2 id="command-palette-title" className="sr-only">
+          <Trans>Command Palette</Trans>
+        </h2>
         <div className="flex items-center gap-3 border-b border-violet-300/15 px-4 py-3">
           <svg
             className="h-4 w-4 shrink-0 text-zinc-500"
@@ -455,6 +472,11 @@ export function CommandPalette() {
             ref={inputRef}
             className="flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
             placeholder={t`Search pages, settings, actions...`}
+            aria-label={t`Search commands`}
+            aria-controls="command-palette-results"
+            aria-activedescendant={
+              filtered[selectedIndex] ? `command-option-${filtered[selectedIndex].id}` : undefined
+            }
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -462,18 +484,29 @@ export function CommandPalette() {
             }}
             onKeyDown={handleKeyDown}
           />
+          <kbd className="converter-kbd">Ctrl/Cmd+K</kbd>
           <kbd className="converter-kbd">Esc</kbd>
         </div>
 
-        <div ref={listRef} className="max-h-72 overflow-y-auto p-2">
+        <div
+          ref={listRef}
+          id="command-palette-results"
+          role="listbox"
+          className="max-h-72 overflow-y-auto p-2"
+        >
           {filtered.length === 0 && (
             <div className="px-3 py-6 text-center text-sm text-zinc-600">
               <Trans>No results found.</Trans>
             </div>
           )}
           {filtered.map((cmd, index) => (
-            <button
+            <div
+              id={`command-option-${cmd.id}`}
               key={cmd.id}
+              role="option"
+              aria-selected={index === selectedIndex}
+            >
+            <button
               type="button"
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-100 ${
                 index === selectedIndex
@@ -496,6 +529,7 @@ export function CommandPalette() {
                 {cmd.category}
               </span>
             </button>
+            </div>
           ))}
         </div>
 
@@ -508,6 +542,9 @@ export function CommandPalette() {
           </span>
           <span className="flex items-center gap-1">
             <kbd className="converter-kbd">Esc</kbd> <Trans>close</Trans>
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="converter-kbd">Ctrl/Cmd+K</kbd> <Trans>toggle</Trans>
           </span>
         </div>
       </div>

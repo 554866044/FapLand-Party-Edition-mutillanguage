@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
   app: {
@@ -18,11 +18,22 @@ import {
   migratePortableDatabaseIfNeeded,
   repairSinglePlayerRunSaveSchema,
   resolveDatabaseUrl,
+  runPreMigrationDatabaseBackup,
 } from "./db";
 
 type ExecuteResult = {
   rows: Array<Record<string, unknown>>;
 };
+
+const originalDatabaseUrl = process.env.DATABASE_URL;
+
+afterEach(() => {
+  if (originalDatabaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = originalDatabaseUrl;
+  }
+});
 
 describe("drizzle migration journal", () => {
   it("lists every SQL migration so the runtime migrator applies them", async () => {
@@ -168,6 +179,50 @@ describe("repairSinglePlayerRunSaveSchema", () => {
     expect(execute).toHaveBeenCalledWith(
       expect.stringContaining('CREATE UNIQUE INDEX "SinglePlayerRunSave_playlistId_unique"')
     );
+  });
+});
+
+describe("runPreMigrationDatabaseBackup", () => {
+  const execute = vi.fn<(_: string) => Promise<ExecuteResult>>();
+  const dbInstance = {
+    $client: {
+      execute,
+    },
+  } as never;
+
+  beforeEach(() => {
+    execute.mockReset();
+  });
+
+  it("creates a database backup before migrations run when the database already exists", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-pre-migration-backup-"));
+    const databasePath = path.join(root, "dev.db");
+    process.env.DATABASE_URL = `file:${databasePath}`;
+    await fs.writeFile(databasePath, "sqlite");
+    execute.mockResolvedValue({ rows: [] });
+
+    try {
+      await runPreMigrationDatabaseBackup(dbInstance, new Date("2026-04-21T12:34:56.000Z"));
+
+      expect(execute).toHaveBeenCalledWith(
+        "VACUUM INTO '/tmp/f-land/database-backups/f-land-db-backup-2026-04-21T12-34-56.000Z.db'"
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips the pre-migration backup when the database does not exist yet", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "f-land-pre-migration-backup-"));
+    process.env.DATABASE_URL = `file:${path.join(root, "dev.db")}`;
+
+    try {
+      await runPreMigrationDatabaseBackup(dbInstance);
+
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });
 

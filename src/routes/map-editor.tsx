@@ -33,6 +33,7 @@ import {
   buildTileHotkeyMap,
   deleteSelectionFromConfig,
   isTextInputElement,
+  resolveStartNodeId,
 } from "../features/map-editor/editorInteractions";
 import {
   loadTileCatalog,
@@ -92,16 +93,16 @@ type MapEditorInstalledRound = InstalledRound | InstalledRoundCatalogEntry;
 type InspectorTab = "node" | "edge" | "text" | "settings" | "validation";
 type ResolutionModalState =
   | {
-      context: "import";
-      title: string;
-      filePath: string;
-      analysis: PlaylistResolutionAnalysis;
-    }
+    context: "import";
+    title: string;
+    filePath: string;
+    analysis: PlaylistResolutionAnalysis;
+  }
   | {
-      context: "playlist";
-      title: string;
-      analysis: PlaylistResolutionAnalysis;
-    };
+    context: "playlist";
+    title: string;
+    analysis: PlaylistResolutionAnalysis;
+  };
 type ImportedPlaylistReview = {
   playlistId: string;
   analysis: PlaylistResolutionAnalysis;
@@ -609,12 +610,12 @@ function MapEditorPage() {
     () =>
       selectedPlaylist
         ? analyzePlaylistResolution(
-            {
-              ...selectedPlaylist.config,
-              boardConfig: toGraphBoardConfig(config),
-            },
-            installedRounds
-          )
+          {
+            ...selectedPlaylist.config,
+            boardConfig: toGraphBoardConfig(config),
+          },
+          installedRounds
+        )
         : null,
     [config, installedRounds, selectedPlaylist]
   );
@@ -655,8 +656,8 @@ function MapEditorPage() {
     () =>
       selection.selectedTextAnnotationId
         ? (config.textAnnotations.find(
-            (annotation) => annotation.id === selection.selectedTextAnnotationId
-          ) ?? null)
+          (annotation) => annotation.id === selection.selectedTextAnnotationId
+        ) ?? null)
         : null,
     [config.textAnnotations, selection.selectedTextAnnotationId]
   );
@@ -735,6 +736,7 @@ function MapEditorPage() {
         });
         return {
           ...previous,
+          startNodeId: resolveStartNodeId(previous.startNodeId, nextNodes),
           nodes: nextNodes,
         };
       });
@@ -759,9 +761,9 @@ function MapEditorPage() {
         });
         return changed
           ? {
-              ...previous,
-              textAnnotations: nextTextAnnotations,
-            }
+            ...previous,
+            textAnnotations: nextTextAnnotations,
+          }
           : previous;
       });
     },
@@ -1092,9 +1094,9 @@ function MapEditorPage() {
         });
         return moved
           ? {
-              ...previous,
-              nodes: nextNodes,
-            }
+            ...previous,
+            nodes: nextNodes,
+          }
           : previous;
       }, false);
 
@@ -1124,9 +1126,9 @@ function MapEditorPage() {
         });
         return moved
           ? {
-              ...previous,
-              textAnnotations: nextTextAnnotations,
-            }
+            ...previous,
+            textAnnotations: nextTextAnnotations,
+          }
           : previous;
       }, false);
 
@@ -1168,9 +1170,11 @@ function MapEditorPage() {
           nextNode.visualId = perkOptions[0]?.id;
         }
         createdNodeId = nextNode.id;
+        const nextNodes = [...previous.nodes, nextNode];
         return {
           ...previous,
-          nodes: [...previous.nodes, nextNode],
+          startNodeId: resolveStartNodeId(previous.startNodeId, nextNodes),
+          nodes: nextNodes,
         };
       });
 
@@ -1886,7 +1890,7 @@ function MapEditorPage() {
     setConnectFromNodeId(nodeId);
   }, []);
 
-  const handleSetConnectTool = useCallback((_tool: "connect") => {
+  const handleSetConnectTool = useCallback(() => {
     setTool("connect");
   }, []);
 
@@ -1906,6 +1910,33 @@ function MapEditorPage() {
       return true;
     },
   });
+
+  const editorGuidance =
+    config.nodes.length === 0
+      ? {
+        tone: "cyan" as const,
+        message: t`Add a start node from the left sidebar or use Place mode.`,
+        actionLabel: null,
+      }
+      : validation.errors.length > 0
+        ? {
+          tone: "rose" as const,
+          message: validation.errors[0]?.message ?? t`Map contains validation errors.`,
+          actionLabel: t`Review validation`,
+        }
+        : tool === "connect" && !connectFromNodeId
+          ? {
+            tone: "cyan" as const,
+            message: t`Select a node to start connecting.`,
+            actionLabel: null,
+          }
+          : tool === "place" && activeTile
+            ? {
+              tone: "cyan" as const,
+              message: t`Click the canvas to place ${activeTile.label}.`,
+              actionLabel: null,
+            }
+            : null;
 
   /* ──────────────────────── Playlist picker view ──────────── */
 
@@ -2050,11 +2081,12 @@ function MapEditorPage() {
         {/* ── Save notice ─────────────────── */}
         {saveNotice && (
           <div
-            className={`flex-shrink-0 border-b px-4 py-1.5 text-xs ${
-              saveNotice.startsWith("Cannot continue")
-                ? "border-rose-500/30 bg-rose-950/30 text-rose-200"
-                : "border-emerald-500/30 bg-emerald-950/30 text-emerald-200"
-            }`}
+            className={`flex-shrink-0 border-b px-4 py-1.5 text-xs ${saveNotice.startsWith("Cannot continue")
+              ? "border-rose-500/30 bg-rose-950/30 text-rose-200"
+              : "border-emerald-500/30 bg-emerald-950/30 text-emerald-200"
+              }`}
+            role={saveNotice.startsWith("Cannot continue") ? "alert" : "status"}
+            aria-live={saveNotice.startsWith("Cannot continue") ? "assertive" : "polite"}
           >
             {saveNotice}
           </div>
@@ -2114,7 +2146,31 @@ function MapEditorPage() {
               />
             </div>
 
-            <div className="min-h-0 flex-1 bg-black/20" data-controller-skip="true">
+            <div className="relative min-h-0 flex-1 bg-black/20" data-controller-skip="true">
+              {editorGuidance && (
+                <div
+                  className={`pointer-events-auto absolute left-3 top-3 z-20 max-w-sm rounded-xl border px-4 py-3 text-xs shadow-2xl backdrop-blur-xl ${editorGuidance.tone === "rose"
+                    ? "border-rose-300/40 bg-rose-950/85 text-rose-100"
+                    : "border-cyan-300/35 bg-zinc-950/85 text-cyan-100"
+                    }`}
+                  role={editorGuidance.tone === "rose" ? "alert" : "status"}
+                  aria-live={editorGuidance.tone === "rose" ? "assertive" : "polite"}
+                >
+                  <p>{editorGuidance.message}</p>
+                  {editorGuidance.actionLabel && (
+                    <button
+                      type="button"
+                      className="mt-2 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 font-semibold text-white transition hover:border-white/40 hover:bg-white/15"
+                      onClick={() => {
+                        setInspectorCollapsed(false);
+                        setInspectorTab("validation");
+                      }}
+                    >
+                      {editorGuidance.actionLabel}
+                    </button>
+                  )}
+                </div>
+              )}
               <EditorCanvas
                 config={config}
                 selection={selection}
@@ -2192,9 +2248,8 @@ function MapEditorPage() {
                       <button
                         key={tab.id}
                         type="button"
-                        className={`editor-tab relative flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${
-                          isActive ? "text-cyan-300" : "text-zinc-600 hover:text-zinc-400"
-                        }`}
+                        className={`editor-tab relative flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${isActive ? "text-cyan-300" : "text-zinc-600 hover:text-zinc-400"
+                          }`}
                         onClick={() => setInspectorTab(tab.id)}
                       >
                         {tab.label}
@@ -2302,9 +2357,9 @@ function MapEditorPage() {
                 setImportedPlaylistReview(
                   resolutionModalState.analysis.issues.length > 0
                     ? {
-                        playlistId: imported.playlist.id,
-                        analysis: resolutionModalState.analysis,
-                      }
+                      playlistId: imported.playlist.id,
+                      analysis: resolutionModalState.analysis,
+                    }
                     : null
                 );
                 setSaveNotice(t`Imported "${imported.playlist.name}".`);
