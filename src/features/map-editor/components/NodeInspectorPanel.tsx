@@ -34,6 +34,16 @@ interface NodeInspectorPanelProps {
   onSetConnectFrom: (nodeId: string) => void;
 }
 
+function formatInstalledRoundMeta(
+  round: Pick<InstalledRound, "author" | "difficulty" | "type">
+): string {
+  const parts = [round.author ?? "Unknown Author", round.type ?? "Normal"];
+  if (typeof round.difficulty === "number") {
+    parts.push(`Difficulty ${round.difficulty}`);
+  }
+  return parts.join(" • ");
+}
+
 export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
   ({
     selectedNode,
@@ -202,18 +212,18 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
               <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500">
                 Installed round
               </span>
-              <GameDropdown
-                value={selectedNode.roundRef?.idHint ?? ""}
-                options={[
-                  { value: "" as string, label: "Custom / none" },
-                  ...installedRounds.map((round) => ({
-                    value: round.id,
-                    label: round.name,
-                  })),
-                ]}
-                onChange={(id) => {
-                  const round = installedRounds.find((entry) => entry.id === id);
-                  if (!round) return;
+              <InstalledRoundPicker
+                key={selectedNode.id}
+                selectedRoundId={selectedNode.roundRef?.idHint ?? null}
+                installedRounds={installedRounds}
+                onClearSelection={() => {
+                  onPatchNode(selectedNode.id, {
+                    roundRef: {
+                      name: selectedNode.roundRef?.name?.trim() || "Round",
+                    },
+                  });
+                }}
+                onSelectRound={(round) => {
                   onPatchNode(selectedNode.id, {
                     roundRef: {
                       idHint: round.id,
@@ -418,6 +428,99 @@ export const NodeInspectorPanel: React.FC<NodeInspectorPanelProps> = React.memo(
 );
 
 NodeInspectorPanel.displayName = "NodeInspectorPanel";
+
+const InstalledRoundPicker: React.FC<{
+  selectedRoundId: string | null;
+  installedRounds: ReadonlyArray<InstalledRound>;
+  onSelectRound: (round: InstalledRound) => void;
+  onClearSelection: () => void;
+}> = React.memo(({ selectedRoundId, installedRounds, onSelectRound, onClearSelection }) => {
+  const [query, setQuery] = React.useState("");
+
+  const filteredRounds = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = installedRounds.filter((round) => {
+      if (!normalizedQuery) return true;
+      const haystack =
+        `${round.name} ${round.author ?? ""} ${round.type ?? "Normal"} ${round.difficulty ?? ""}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+
+    return [...matches].sort((left, right) => {
+      if (left.id === selectedRoundId) return -1;
+      if (right.id === selectedRoundId) return 1;
+      return left.name.localeCompare(right.name, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+    });
+  }, [installedRounds, query, selectedRoundId]);
+
+  React.useEffect(() => {
+    setQuery("");
+  }, [selectedRoundId]);
+
+  return (
+    <div className="mt-1 space-y-2 rounded-lg border border-zinc-700/50 bg-zinc-950/40 p-2">
+      <input
+        type="text"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        className="w-full rounded-md border border-zinc-700/50 bg-zinc-950/70 px-2.5 py-2 text-xs text-zinc-100 outline-none transition-colors focus:border-cyan-500/50"
+        placeholder="Search by round, author, or type"
+      />
+      <button
+        type="button"
+        className={`block w-full rounded-md border px-2.5 py-2 text-left text-xs transition-colors ${
+          selectedRoundId
+            ? "border-zinc-700/50 bg-zinc-950/60 text-zinc-300 hover:border-zinc-500/60 hover:text-white"
+            : "border-cyan-400/50 bg-cyan-500/12 text-cyan-100"
+        }`}
+        onMouseEnter={playHoverSound}
+        onClick={onClearSelection}
+      >
+        <div className="font-medium">Custom / none</div>
+        <div className="mt-1 text-[11px] text-zinc-500">
+          Keep the manual round name without linking to an installed round.
+        </div>
+      </button>
+      <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+        {filteredRounds.map((round) => {
+          const selected = round.id === selectedRoundId;
+          return (
+            <button
+              key={round.id}
+              type="button"
+              className={`block w-full rounded-md border px-2.5 py-2 text-left text-xs transition-colors ${
+                selected
+                  ? "border-cyan-400/50 bg-cyan-500/12 text-cyan-100"
+                  : "border-zinc-700/40 bg-zinc-950/50 text-zinc-300 hover:border-zinc-500/60 hover:text-white"
+              }`}
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                onSelectRound(round);
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{round.name}</span>
+                {selected && <span className="text-[10px] uppercase tracking-[0.1em]">Selected</span>}
+              </div>
+              <div className="mt-1 text-[11px] text-zinc-500">{formatInstalledRoundMeta(round)}</div>
+            </button>
+          );
+        })}
+        {filteredRounds.length === 0 && (
+          <div className="rounded-md border border-zinc-800 bg-black/25 px-2.5 py-3 text-xs text-zinc-400">
+            No installed rounds match the current filter.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+InstalledRoundPicker.displayName = "InstalledRoundPicker";
 
 function SelectedRoundPreview({ round }: { round: InstalledRound | null }) {
   const previewUri = round?.resources[0]?.videoUri;
