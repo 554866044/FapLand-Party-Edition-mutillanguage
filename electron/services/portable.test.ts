@@ -18,6 +18,7 @@ import {
   isPathInsidePortableDataRoot,
   isPortableMode,
   normalizeUserDataSuffix,
+  resolvePortableLinkedPath,
   resolvePortableAwareStoragePath,
   resolvePortableDataRelativePath,
   resolvePortableMovedDataPath,
@@ -228,6 +229,80 @@ describe("portable", () => {
         context
       )
     ).toBe("D:\\Games\\Fap Land\\data\\mp1\\music-cache\\abc\\audio.mp3");
+  });
+
+  it("keeps external absolute paths on another drive unchanged in portable mode", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+      pathExists: (filePath: string) => filePath === "E:\\Videos\\scene.mp4",
+    };
+
+    expect(resolvePortableLinkedPath("E:\\Videos\\scene.mp4", undefined, context)).toBe(
+      "E:\\Videos\\scene.mp4"
+    );
+  });
+
+  it("keeps UNC network paths unchanged in portable mode", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+      pathExists: (filePath: string) => filePath === "\\\\server\\share\\scene.mp4",
+    };
+
+    expect(
+      resolvePortableLinkedPath("\\\\server\\share\\scene.mp4", undefined, context)
+    ).toBe("\\\\server\\share\\scene.mp4");
+  });
+
+  it("keeps existing external paths containing a data segment unchanged", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+      pathExists: (filePath: string) => filePath === "E:\\Archive\\data\\clip.mp4",
+    };
+
+    expect(resolvePortableLinkedPath("E:\\Archive\\data\\clip.mp4", undefined, context)).toBe(
+      "E:\\Archive\\data\\clip.mp4"
+    );
+  });
+
+  it("rebases stale moved portable paths only when the rebased target exists", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+      pathExists: (filePath: string) =>
+        filePath === "D:\\Games\\Fap Land\\data\\music-cache\\abc\\audio.mp3",
+    };
+
+    expect(
+      resolvePortableLinkedPath(
+        "C:\\Old\\Fap Land\\data\\music-cache\\abc\\audio.mp3",
+        undefined,
+        context
+      )
+    ).toBe("D:\\Games\\Fap Land\\data\\music-cache\\abc\\audio.mp3");
+  });
+
+  it("resolves relative portable-linked paths inside the portable data root", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+    };
+
+    expect(resolvePortableLinkedPath("media\\portable.mp4", undefined, context)).toBe(
+      "D:\\Games\\Fap Land\\data\\media\\portable.mp4"
+    );
   });
 
   it("preserves custom absolute paths for Windows zip portable storage", () => {

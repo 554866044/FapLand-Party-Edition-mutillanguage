@@ -194,6 +194,11 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const trimmedKey = connectionKey.trim();
         const trimmedApiKey = appApiKey.trim();
 
+        setManuallyStopped(true);
+        setSynced(false);
+        setError(null);
+        setSyncError(null);
+
         try {
             if (trimmedKey && trimmedApiKey) {
                 const session = await issueHandySession({
@@ -213,10 +218,6 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         setConnected((current) => current);
-        setManuallyStopped(true);
-        setSynced(false);
-        setError(null);
-        setSyncError(null);
         await saveToStore(connectionKey, appApiKeyOverride, localIp);
     }, [appApiKey, appApiKeyOverride, connectionKey, localIp]);
 
@@ -234,6 +235,11 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return "unavailable";
         }
 
+        setManuallyStopped(true);
+        setSynced(false);
+        setError(null);
+        setSyncError(null);
+
         try {
             const session = await issueHandySession({
                 connectionKey: trimmedKey,
@@ -246,13 +252,10 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 },
                 session,
             );
-            setManuallyStopped(true);
-            setSynced(false);
-            setSyncError(null);
             return "stopped";
         } catch (err) {
             console.warn("Failed to toggle manual TheHandy stop", err);
-            return "unavailable";
+            return "stopped";
         }
     }, [appApiKey, connected, connectionKey, manuallyStopped]);
 

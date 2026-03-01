@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { normalizeUserDataSuffix, resolvePortableMovedDataPath } from "./portable";
+import { normalizeUserDataSuffix, resolvePortableLinkedPath } from "./portable";
 
 const APP_MEDIA_PROTOCOL = "app:";
 const APP_MEDIA_HOSTNAME = "media";
@@ -21,7 +21,7 @@ export function fromLocalMediaUri(uri: string): string | null {
         process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
           ? path.normalize(decoded.slice(1))
           : path.normalize(decoded);
-      const portablePath = resolvePortableMovedDataPath(
+      const portablePath = resolvePortableLinkedPath(
         normalized,
         normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
       );
@@ -30,7 +30,7 @@ export function fromLocalMediaUri(uri: string): string | null {
 
     if (parsed.protocol === "file:") {
       const normalized = path.normalize(fileURLToPath(parsed));
-      const portablePath = resolvePortableMovedDataPath(
+      const portablePath = resolvePortableLinkedPath(
         normalized,
         normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
       );

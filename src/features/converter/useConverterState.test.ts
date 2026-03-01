@@ -872,6 +872,95 @@ describe("useConverterState", () => {
     expect(result.current.currentTimeMs).toBe(3_250);
   });
 
+  it("skips cuts in preview when only a later segment has a cut", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    const video = {
+      currentTime: 0,
+      paused: false,
+    } as HTMLVideoElement;
+
+    act(() => {
+      result.current.videoRef.current = video;
+      result.current.setDurationMs(12_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(4_000);
+    });
+
+    act(() => {
+      result.current.addSegmentFromMarks();
+    });
+
+    act(() => {
+      result.current.setMarkInMs(6_000);
+      result.current.setMarkOutMs(10_000);
+    });
+
+    act(() => {
+      result.current.addSegmentFromMarks();
+    });
+
+    act(() => {
+      result.current.setMarkInMs(7_000);
+      result.current.setMarkOutMs(8_500);
+    });
+
+    act(() => {
+      result.current.addCutFromMarks();
+    });
+
+    act(() => {
+      result.current.syncPreviewTimeMs(7_250);
+    });
+
+    expect(video.currentTime).toBe(8.5);
+    expect(result.current.currentTimeMs).toBe(8_500);
+  });
+
+  it("does not auto-skip cuts in preview while paused", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    const video = {
+      currentTime: 0,
+      paused: true,
+    } as HTMLVideoElement;
+
+    act(() => {
+      result.current.videoRef.current = video;
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(8_000);
+    });
+
+    act(() => {
+      result.current.addSegmentFromMarks();
+    });
+
+    act(() => {
+      result.current.setMarkInMs(3_000);
+      result.current.setMarkOutMs(4_000);
+    });
+
+    act(() => {
+      result.current.addCutFromMarks();
+    });
+
+    act(() => {
+      result.current.syncPreviewTimeMs(3_250);
+    });
+
+    expect(video.currentTime).toBe(0);
+    expect(result.current.currentTimeMs).toBe(3_250);
+  });
+
   it("trims the selected segment when a cut reaches its start", async () => {
     const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
 

@@ -298,6 +298,10 @@ describe("RoundVideoOverlay", () => {
     mocks.handy.connected = false;
     mocks.handy.manuallyStopped = false;
     mocks.handy.setSyncStatus.mockClear();
+    mocks.handy.toggleManualStop.mockReset();
+    mocks.handy.toggleManualStop.mockResolvedValue("unavailable");
+    mocks.handy.reconnect.mockReset();
+    mocks.handy.reconnect.mockResolvedValue(true);
     mocks.playback.getFunscriptPositionAtMs.mockReset();
     mocks.playback.getFunscriptPositionAtMs.mockReturnValue(null);
     mocks.playback.loadFunscriptTimeline.mockReset();
@@ -1043,6 +1047,55 @@ describe("RoundVideoOverlay", () => {
         ([value]) => value?.synced === true && value?.error === null
       )
     ).toBe(false);
+  });
+
+  it("force stop blocks further sync pushes immediately until the user resumes", async () => {
+    vi.useFakeTimers();
+    mocks.handy.connectionKey = "conn-key";
+    mocks.handy.appApiKey = "app-key";
+    mocks.handy.connected = true;
+    mocks.playback.loadFunscriptTimeline.mockResolvedValue({
+      actions: [{ at: 0, pos: 10 }],
+    });
+    mocks.playback.getFunscriptPositionAtMs.mockReturnValue(10);
+    vi.mocked(handyRuntime.issueHandySession).mockResolvedValue(createHandySession());
+    vi.mocked(handyRuntime.sendHspSync).mockResolvedValue(undefined);
+    mocks.handy.toggleManualStop.mockImplementation(async () => {
+      mocks.handy.manuallyStopped = true;
+      return "stopped";
+    });
+
+    const { container } = renderOverlay({
+      installedRounds: [createInstalledRound("round-1", "/script.funscript")],
+    });
+
+    const video = await waitFor(() => {
+      const candidate = container.querySelector("video");
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(video, { duration: 30, currentTime: 0 });
+
+    fireEvent.loadedMetadata(video);
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Force Stop" }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.handy.toggleManualStop).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("TheHandy stopped manually.")).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledTimes(1);
   });
 
   it("shows an in-game TheHandy sync card with an idle no-script preview", async () => {

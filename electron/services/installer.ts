@@ -59,7 +59,7 @@ import { startWebsiteVideoScan } from "./webVideoScanService";
 import {
   getPortableDataRelativePath,
   normalizeUserDataSuffix,
-  resolvePortableMovedDataPath,
+  resolvePortableLinkedPath,
 } from "./portable";
 
 const AUTO_SCAN_FOLDERS_KEY = "install.autoScanFolders";
@@ -668,7 +668,7 @@ function normalizeText(value: string | null | undefined): string | null {
 
 function normalizeScanFolder(input: string): string {
   const trimmed = input.trim();
-  const resolvedPortablePath = resolvePortableMovedDataPath(
+  const resolvedPortablePath = resolvePortableLinkedPath(
     trimmed,
     normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
   );

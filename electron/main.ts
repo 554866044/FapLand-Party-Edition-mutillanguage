@@ -27,7 +27,7 @@ import { scanInstallSources } from "./services/installer";
 import {
   getPortableDataRoot,
   normalizeUserDataSuffix,
-  resolvePortableMovedDataPath,
+  resolvePortableLinkedPath,
 } from "./services/portable";
 import { resolveExistingLocalMediaPath } from "./services/localMedia";
 import { initializePortableStorageDefaults } from "./services/storagePaths";
@@ -596,7 +596,7 @@ function registerFileProtocol(): void {
         process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
           ? path.normalize(decoded.slice(1))
           : path.normalize(decoded);
-      const portablePath = resolvePortableMovedDataPath(normalizedPath, userDataSuffix);
+      const portablePath = resolvePortableLinkedPath(normalizedPath, userDataSuffix);
 
       return createMediaResponse(
         resolveExistingLocalMediaPath(portablePath ?? normalizedPath),

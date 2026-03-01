@@ -888,6 +888,17 @@ export function RoundVideoOverlay({
     [setSyncStatus]
   );
 
+  const abortHandySyncLocally = useCallback(() => {
+    handyManuallyStoppedRef.current = true;
+    handyBootstrapKeyRef.current = null;
+    handyBootstrapInFlightRef.current = null;
+    handyPushInFlightRef.current = false;
+    forceHandySyncMsRef.current = null;
+    setHandySyncState("disconnected");
+    setHandySyncError(null);
+    setSyncStatus({ synced: false, error: null });
+  }, [setSyncStatus]);
+
   const stopHandyIfNeeded = useCallback(async () => {
     if (!handyConnected) return;
     if (!connectionKey.trim() || !appApiKey.trim()) return;
@@ -937,6 +948,7 @@ export function RoundVideoOverlay({
       const timeMs = Math.max(0, video.currentTime * 1000);
       const effectiveTimeMs = applyHandyOffsetMs(timeMs);
       const playbackRate = video.playbackRate ?? 1;
+      if (handyManuallyStoppedRef.current) return;
 
       await resumeHandyPlayback(
         {
@@ -1096,6 +1108,12 @@ export function RoundVideoOverlay({
               }
             }
             const effectiveElapsedMs = getCurrentElapsedMs();
+            if (
+              generatedSequenceSyncTokenRef.current !== syncToken ||
+              handyManuallyStoppedRef.current
+            ) {
+              return;
+            }
             await sendHspSync(
               { connectionKey: connKey, appApiKey: appKey },
               session,
@@ -2571,14 +2589,10 @@ export function RoundVideoOverlay({
 
   useEffect(() => {
     if (!handyManuallyStopped) return;
-    handyBootstrapKeyRef.current = null;
-    handyBootstrapInFlightRef.current = null;
-    setHandySyncState("disconnected");
-    setHandySyncError(null);
-    setSyncStatus({ synced: false, error: null });
+    abortHandySyncLocally();
     setStatus(t`TheHandy stopped manually.`);
     void stopHandyIfNeeded();
-  }, [handyManuallyStopped, setSyncStatus, stopHandyIfNeeded]);
+  }, [abortHandySyncLocally, handyManuallyStopped, stopHandyIfNeeded]);
 
   useEffect(() => {
     if (!activeRound) return;
@@ -2656,6 +2670,7 @@ export function RoundVideoOverlay({
           mainActions,
           resumeMs
         );
+        if (cancelled || handyManuallyStoppedRef.current) return;
       } catch {
         // Best-effort preload — errors are not fatal; normal sync will retry.
       }
@@ -3534,19 +3549,20 @@ export function RoundVideoOverlay({
               disabled={!handyConnected}
               onClick={() => {
                 playSelectSound();
-                if (handyManuallyStopped) {
-                  void toggleManualStop().then(() => {
-                    setStatus(t`TheHandy resumed.`);
-                  });
-                  return;
+                if (!handyManuallyStopped) {
+                  abortHandySyncLocally();
                 }
-                void stopHandyIfNeeded()
-                  .catch(() => undefined)
-                  .finally(() => {
-                    void toggleManualStop().then(() => {
-                      setStatus(t`TheHandy stopped manually.`);
-                    });
-                  });
+                void toggleManualStop().then((result) => {
+                  if (result === "resumed") {
+                    setStatus(t`TheHandy resumed.`);
+                    return;
+                  }
+                  if (result === "stopped") {
+                    setStatus(t`TheHandy stopped manually.`);
+                    return;
+                  }
+                  setStatus(t`No connected TheHandy to toggle.`);
+                });
               }}
               onMouseEnter={() => playHoverSound()}
               type="button"

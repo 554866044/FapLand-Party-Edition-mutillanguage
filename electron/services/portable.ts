@@ -10,6 +10,7 @@ export type PortableContext = {
   platform?: NodeJS.Platform;
   execPath?: string;
   markerExists?: (markerPath: string) => boolean;
+  pathExists?: (filePath: string) => boolean;
 };
 
 function getContextValue<T>(value: T | undefined, fallback: () => T): T {
@@ -247,6 +248,52 @@ export function resolvePortableMovedDataPath(
   return relativePath.length > 0
     ? pathApi.join(portableDataRoot, relativePath)
     : pathApi.normalize(portableDataRoot);
+}
+
+export function resolvePortableLinkedPath(
+  filePath: string,
+  userDataSuffix?: string | null,
+  context: PortableContext = {}
+): string | null {
+  const platform = getContextValue(context.platform, () => process.platform);
+  const trimmedFilePath = filePath.trim();
+  if (trimmedFilePath.length === 0) return null;
+
+  const pathApi = getPathApi(platform);
+  const normalizedOriginalPath = pathApi.normalize(trimmedFilePath);
+  const portableDataRoot = getPortableDataRoot(userDataSuffix, context);
+  if (!portableDataRoot) {
+    return normalizedOriginalPath;
+  }
+
+  const portablePathApi = getPathApiForResolvedDir(platform, portableDataRoot);
+  if (!portablePathApi.isAbsolute(normalizedOriginalPath)) {
+    return portablePathApi.join(portableDataRoot, normalizedOriginalPath);
+  }
+
+  if (isPathInsideRoot(normalizedOriginalPath, portableDataRoot, platform)) {
+    return portablePathApi.normalize(normalizedOriginalPath);
+  }
+
+  const pathExists = getContextValue(context.pathExists, () => existsSync);
+  if (pathExists(normalizedOriginalPath)) {
+    return portablePathApi.normalize(normalizedOriginalPath);
+  }
+
+  const rebasedPortablePath = resolvePortableMovedDataPath(
+    normalizedOriginalPath,
+    userDataSuffix,
+    context
+  );
+  if (
+    rebasedPortablePath &&
+    rebasedPortablePath !== normalizedOriginalPath &&
+    pathExists(rebasedPortablePath)
+  ) {
+    return portablePathApi.normalize(rebasedPortablePath);
+  }
+
+  return portablePathApi.normalize(normalizedOriginalPath);
 }
 
 export function resolvePortableAwareStoragePath(

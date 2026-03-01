@@ -119,6 +119,20 @@ function clampSegmentCutMarkDraft(
   };
 }
 
+function getSkippedPreviewTimeSec(
+  timeMs: number,
+  segments: SegmentDraft[]
+): number | null {
+  for (const segment of segments) {
+    const skippedToSec = skipCutIfNeeded(timeMs / 1000, segment.cutRanges);
+    if (skippedToSec !== null) {
+      return skippedToSec;
+    }
+  }
+
+  return null;
+}
+
 function getDefaultSegmentCutMarkDraft(): SegmentCutMarkDraft {
   return {
     markInMs: null,
@@ -1034,11 +1048,8 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const syncPreviewTimeMs = useCallback(
     (timeMs: number) => {
       const video = videoRef.current;
-      const segment = sortedSegments.find(
-        (entry) => timeMs >= entry.startTimeMs && timeMs < entry.endTimeMs
-      );
       const skippedToSec =
-        previewSkipsCuts && segment ? skipCutIfNeeded(timeMs / 1000, segment.cutRanges) : null;
+        previewSkipsCuts ? getSkippedPreviewTimeSec(timeMs, sortedSegments) : null;
       if (video && skippedToSec !== null && !video.paused) {
         video.currentTime = skippedToSec;
         const skippedToMs = Math.floor(skippedToSec * 1000);
