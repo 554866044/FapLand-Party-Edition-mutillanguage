@@ -2,7 +2,8 @@ name: Build/release
 
 on:
   push:
-  pull_request:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write

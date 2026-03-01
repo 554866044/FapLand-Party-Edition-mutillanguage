@@ -2,7 +2,7 @@
   "name": "f-land",
   "private": true,
   "type": "module",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "author": "FapLandDev",
   "description": "Fap Land — Party Edition",
   "license": "AGPL-3.0-only",
@@ -151,8 +151,7 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {

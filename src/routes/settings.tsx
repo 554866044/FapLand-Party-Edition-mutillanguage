@@ -230,9 +230,10 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
 ];
 
 export function getVisibleShortcutGroups(
-  isProductionBuild = import.meta.env.PROD
+  isProductionBuild = import.meta.env.PROD,
+  cheatModeEnabled = false
 ): ShortcutGroup[] {
-  if (isProductionBuild) {
+  if (isProductionBuild && !cheatModeEnabled) {
     return SHORTCUT_GROUPS.filter((group) => group.id !== "game-debug");
   }
 
@@ -1271,7 +1272,7 @@ export function SettingsPage() {
                   />
                 </>
               ) : activeSection && activeSection.id === "help" ? (
-                <HelpShortcutsCard />
+                <HelpShortcutsCard cheatModeEnabled={cheatModeEnabled} />
               ) : activeSection && activeSection.id === "hardware" ? (
                 <HardwareSettingsCard
                   section={activeSection}
@@ -1618,10 +1619,10 @@ function PhashScanCard() {
             <div className="mb-3 flex items-center gap-2">
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
-                    ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
-                    : scanStatus.state === "aborted"
-                      ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
-                      : "border-rose-300/40 bg-rose-500/15 text-rose-100"
+                  ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+                  : scanStatus.state === "aborted"
+                    ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
+                    : "border-rose-300/40 bg-rose-500/15 text-rose-100"
                   }`}
               >
                 {scanStatus.state === "done"
@@ -1654,8 +1655,8 @@ function PhashScanCard() {
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
             className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
-                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
               }`}
           >
             {isStarting ? "Starting..." : isRunning ? "Scanning..." : "Scan Now"}
@@ -1788,10 +1789,10 @@ function WebsiteVideoCacheScanCard() {
             <div className="mb-3 flex items-center gap-2">
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${scanStatus.state === "done"
-                    ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
-                    : scanStatus.state === "aborted"
-                      ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
-                      : "border-rose-300/40 bg-rose-500/15 text-rose-100"
+                  ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+                  : scanStatus.state === "aborted"
+                    ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
+                    : "border-rose-300/40 bg-rose-500/15 text-rose-100"
                   }`}
               >
                 {scanStatus.state === "done"
@@ -1824,8 +1825,8 @@ function WebsiteVideoCacheScanCard() {
             disabled={isRunning || isStarting}
             onClick={handleStartScan}
             className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isRunning || isStarting
-                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
               }`}
           >
             {isStarting ? "Starting..." : isRunning ? "Caching..." : "Cache Now"}
@@ -1899,8 +1900,8 @@ function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdat
               void appUpdate.triggerPrimaryAction();
             }}
             className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${appUpdate.isBusy
-                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
               }`}
           >
             {appUpdate.actionLabel}
@@ -2440,8 +2441,8 @@ function MusicSettingsCard() {
                   void addSelectedTracks();
                 }}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingTracks
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
                   }`}
               >
                 {isAddingTracks ? "Adding..." : "Add Tracks"}
@@ -2455,8 +2456,8 @@ function MusicSettingsCard() {
                   setUrlError(null);
                 }}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${showUrlInput
-                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                    : "border-purple-300/60 bg-purple-500/30 text-purple-100 hover:border-purple-200/80 hover:bg-purple-500/45"
+                  ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                  : "border-purple-300/60 bg-purple-500/30 text-purple-100 hover:border-purple-200/80 hover:bg-purple-500/45"
                   }`}
               >
                 {showUrlInput ? "Cancel" : "Add from URL"}
@@ -2470,8 +2471,8 @@ function MusicSettingsCard() {
                   void clearQueue();
                 }}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${queue.length === 0
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
                   }`}
               >
                 Clear
@@ -2494,8 +2495,8 @@ function MusicSettingsCard() {
                     setUrlResult(null);
                   }}
                   className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "track"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                    : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                     }`}
                 >
                   Single Track
@@ -2509,8 +2510,8 @@ function MusicSettingsCard() {
                     setUrlResult(null);
                   }}
                   className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${urlMode === "playlist"
-                      ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
-                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    ? "border-cyan-300/60 bg-cyan-500/30 text-cyan-100"
+                    : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                     }`}
                 >
                   Playlist
@@ -2536,8 +2537,8 @@ function MusicSettingsCard() {
                   }}
                   disabled={isAddingFromUrl}
                   className={`flex-1 rounded-lg border bg-white/5 px-3 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition ${urlError
-                      ? "border-rose-400/40 focus:border-rose-400/60"
-                      : "border-violet-300/30 focus:border-cyan-400/60"
+                    ? "border-rose-400/40 focus:border-rose-400/60"
+                    : "border-violet-300/30 focus:border-cyan-400/60"
                     }`}
                 />
                 <button
@@ -2546,8 +2547,8 @@ function MusicSettingsCard() {
                   onClick={() => void handleAddFromUrl()}
                   disabled={isAddingFromUrl}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isAddingFromUrl
-                      ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                      : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-cyan-300/60 bg-cyan-500/30 text-cyan-100 hover:border-cyan-200/80 hover:bg-cyan-500/45"
                     }`}
                 >
                   {isAddingFromUrl ? "Downloading..." : "Add"}
@@ -2667,8 +2668,8 @@ function DangerZoneCard({
         onMouseEnter={playHoverSound}
         onClick={onOpenConfirm}
         className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-            : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
+          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+          : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
           }`}
       >
         {isPending ? "Clearing..." : "Manage & Clear Data"}
@@ -2757,8 +2758,8 @@ function SelectiveClearDialog({
               disabled={isPending}
               onClick={() => toggle(cat.id as keyof typeof selections)}
               className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${selections[cat.id as keyof typeof selections]
-                  ? "border-rose-400/40 bg-rose-500/10"
-                  : "border-zinc-800 bg-black/20 hover:border-zinc-700"
+                ? "border-rose-400/40 bg-rose-500/10"
+                : "border-zinc-800 bg-black/20 hover:border-zinc-700"
                 }`}
             >
               <div
@@ -2793,8 +2794,8 @@ function SelectiveClearDialog({
             onMouseEnter={playHoverSound}
             onClick={onCancel}
             className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-                ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
-                : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+              ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
+              : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
               }`}
           >
             Cancel
@@ -2805,8 +2806,8 @@ function SelectiveClearDialog({
             onMouseEnter={playHoverSound}
             onClick={onConfirm}
             className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending || !hasSelection
-                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
               }`}
           >
             {isPending ? "Clearing..." : "Confirm Deletion"}
@@ -2973,8 +2974,8 @@ function AutoScanFoldersCard({
             <div
               key={`${notice.folderPath}:${notice.message}`}
               className={`rounded-xl border px-3 py-2 text-xs ${notice.tone === "error"
-                  ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
-                  : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
+                ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
+                : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
                 }`}
             >
               <div className="truncate font-semibold">{notice.folderPath}</div>
@@ -3005,8 +3006,8 @@ function AutoScanFoldersCard({
                 disabled={isPending}
                 onClick={() => onRemoveFolder(folderPath)}
                 className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${isPending
-                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                    : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                  : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
                   }`}
               >
                 Remove
@@ -3022,8 +3023,8 @@ function AutoScanFoldersCard({
         disabled={isPending}
         onClick={onAddFolders}
         className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-            : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+          : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
           }`}
       >
         {isPending ? "Updating..." : "Add Folder"}
@@ -3301,8 +3302,8 @@ function SourceIntegrationsCard() {
             void syncNow();
           }}
           className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isSyncing
-              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+            : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
             }`}
         >
           {isSyncing ? "Syncing..." : "Sync Now"}
@@ -3612,8 +3613,8 @@ function SettingsSectionCard({ section, loading }: { section: SettingsSection; l
   );
 }
 
-function HelpShortcutsCard() {
-  const shortcutGroups = getVisibleShortcutGroups();
+function HelpShortcutsCard({ cheatModeEnabled }: { cheatModeEnabled: boolean }) {
+  const shortcutGroups = getVisibleShortcutGroups(import.meta.env.PROD, cheatModeEnabled);
 
   return (
     <section
@@ -3734,8 +3735,8 @@ function SecuritySettingsCard() {
                     key={mode}
                     type="button"
                     className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${active
-                        ? "bg-violet-500/40 text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
-                        : "text-zinc-400 hover:text-zinc-200"
+                      ? "bg-violet-500/40 text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
+                      : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     onMouseEnter={playHoverSound}
                     onClick={() => {

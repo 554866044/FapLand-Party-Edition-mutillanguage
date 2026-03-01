@@ -242,9 +242,9 @@ const Home = memo(() => {
     onBack:
       depth > 0
         ? () => {
-            goBack();
-            return true;
-          }
+          goBack();
+          return true;
+        }
         : undefined,
   });
 
@@ -382,59 +382,54 @@ const Home = memo(() => {
             </div>
 
             <div
-              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${
-                connected
-                  ? "border-emerald-400/30 bg-emerald-950/8"
-                  : isConnecting
-                    ? "border-cyan-400/30 bg-cyan-950/8"
-                    : "border-amber-400/30 bg-amber-950/8"
-              }`}
+              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${connected
+                ? "border-emerald-400/30 bg-emerald-950/8"
+                : isConnecting
+                  ? "border-cyan-400/30 bg-cyan-950/8"
+                  : "border-amber-400/30 bg-amber-950/8"
+                }`}
             >
               <div className="flex items-center gap-1.5 mb-1">
                 <span
-                  className={`text-[8px] ${
-                    connected
-                      ? "text-emerald-300/80"
-                      : isConnecting
-                        ? "text-cyan-300/80 animate-pulse"
-                        : "text-amber-300/80"
-                  }`}
+                  className={`text-[8px] ${connected
+                    ? "text-emerald-300/80"
+                    : isConnecting
+                      ? "text-cyan-300/80 animate-pulse"
+                      : "text-amber-300/80"
+                    }`}
                 >
                   ◆
                 </span>
                 <p
-                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${
-                    connected
-                      ? "text-emerald-200/70"
-                      : isConnecting
-                        ? "text-cyan-200/70"
-                        : "text-amber-200/70"
-                  }`}
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${connected
+                    ? "text-emerald-200/70"
+                    : isConnecting
+                      ? "text-cyan-200/70"
+                      : "text-amber-200/70"
+                    }`}
                 >
                   TheHandy
                 </p>
               </div>
               <div className="pl-3.5">
                 <div
-                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${
-                    connected
-                      ? "text-emerald-100/90"
-                      : isConnecting
-                        ? "text-cyan-100/90"
-                        : "text-amber-100/90"
-                  }`}
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${connected
+                    ? "text-emerald-100/90"
+                    : isConnecting
+                      ? "text-cyan-100/90"
+                      : "text-amber-100/90"
+                    }`}
                 >
                   {handyLabel}
                 </div>
                 {handyWarning && (
                   <div
-                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${
-                      connected
-                        ? "text-emerald-200/60"
-                        : isConnecting
-                          ? "text-cyan-200/60"
-                          : "text-amber-200/60"
-                    }`}
+                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${connected
+                      ? "text-emerald-200/60"
+                      : isConnecting
+                        ? "text-cyan-200/60"
+                        : "text-amber-200/60"
+                      }`}
                   >
                     {handyWarning}
                   </div>
@@ -449,97 +444,90 @@ const Home = memo(() => {
             <WebsiteVideoScanStatusPoller />
 
             <div
-              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${
-                appUpdate.state.status === "update_available"
-                  ? "border-amber-400/30 bg-amber-950/8"
-                  : appUpdate.state.status === "up_to_date"
-                    ? "border-emerald-400/30 bg-emerald-950/8"
-                    : appUpdate.state.status === "error"
-                      ? "border-rose-400/30 bg-rose-950/8"
-                      : "border-zinc-400/20 bg-zinc-950/8"
-              }`}
+              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${appUpdate.state.status === "update_available"
+                ? "border-amber-400/30 bg-amber-950/8"
+                : appUpdate.state.status === "up_to_date"
+                  ? "border-emerald-400/30 bg-emerald-950/8"
+                  : appUpdate.state.status === "error"
+                    ? "border-rose-400/30 bg-rose-950/8"
+                    : "border-zinc-400/20 bg-zinc-950/8"
+                }`}
             >
               <div className="flex items-center gap-1.5 mb-1">
                 <span
-                  className={`text-[8px] ${
-                    appUpdate.state.status === "update_available"
-                      ? "text-amber-300/80"
-                      : appUpdate.state.status === "up_to_date"
-                        ? "text-emerald-300/80"
-                        : appUpdate.state.status === "error"
-                          ? "text-rose-300/80"
-                          : "text-zinc-300/80"
-                  }`}
+                  className={`text-[8px] ${appUpdate.state.status === "update_available"
+                    ? "text-amber-300/80"
+                    : appUpdate.state.status === "up_to_date"
+                      ? "text-emerald-300/80"
+                      : appUpdate.state.status === "error"
+                        ? "text-rose-300/80"
+                        : "text-zinc-300/80"
+                    }`}
                 >
                   ◆
                 </span>
                 <p
-                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${
-                    appUpdate.state.status === "update_available"
-                      ? "text-amber-200/70"
-                      : appUpdate.state.status === "up_to_date"
-                        ? "text-emerald-200/70"
-                        : appUpdate.state.status === "error"
-                          ? "text-rose-200/70"
-                          : "text-zinc-200/70"
-                  }`}
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${appUpdate.state.status === "update_available"
+                    ? "text-amber-200/70"
+                    : appUpdate.state.status === "up_to_date"
+                      ? "text-emerald-200/70"
+                      : appUpdate.state.status === "error"
+                        ? "text-rose-200/70"
+                        : "text-zinc-200/70"
+                    }`}
                 >
                   Update Status
                 </p>
               </div>
               <div className="pl-3.5 space-y-0">
                 <div
-                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${
-                    appUpdate.state.status === "update_available"
-                      ? "text-amber-100/90"
-                      : appUpdate.state.status === "up_to_date"
-                        ? "text-emerald-100/90"
-                        : appUpdate.state.status === "error"
-                          ? "text-rose-100/90"
-                          : "text-zinc-100/90"
-                  }`}
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${appUpdate.state.status === "update_available"
+                    ? "text-amber-100/90"
+                    : appUpdate.state.status === "up_to_date"
+                      ? "text-emerald-100/90"
+                      : appUpdate.state.status === "error"
+                        ? "text-rose-100/90"
+                        : "text-zinc-100/90"
+                    }`}
                 >
                   {updateStateLabel}
                 </div>
                 <div
-                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${
-                    appUpdate.state.status === "update_available"
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${appUpdate.state.status === "update_available"
+                    ? "text-amber-200/60"
+                    : appUpdate.state.status === "up_to_date"
+                      ? "text-emerald-200/60"
+                      : appUpdate.state.status === "error"
+                        ? "text-rose-200/60"
+                        : "text-zinc-200/60"
+                    }`}
+                >
+                  Installed v{appUpdate.state.currentVersion}
+                </div>
+                {appUpdate.state.latestVersion && (
+                  <div
+                    className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${appUpdate.state.status === "update_available"
                       ? "text-amber-200/60"
                       : appUpdate.state.status === "up_to_date"
                         ? "text-emerald-200/60"
                         : appUpdate.state.status === "error"
                           ? "text-rose-200/60"
                           : "text-zinc-200/60"
-                  }`}
-                >
-                  Installed v{appUpdate.state.currentVersion}
-                </div>
-                {appUpdate.state.latestVersion && (
-                  <div
-                    className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${
-                      appUpdate.state.status === "update_available"
-                        ? "text-amber-200/60"
-                        : appUpdate.state.status === "up_to_date"
-                          ? "text-emerald-200/60"
-                          : appUpdate.state.status === "error"
-                            ? "text-rose-200/60"
-                            : "text-zinc-200/60"
-                    }`}
+                      }`}
                   >
                     Latest v{appUpdate.state.latestVersion}
                   </div>
                 )}
                 {appUpdate.systemMessage && (
                   <div
-                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${
-                      appUpdate.state.status === "update_available"
-                        ? "text-amber-200/60"
-                        : appUpdate.state.status === "up_to_date"
-                          ? "text-emerald-200/60"
-                          : appUpdate.state.status === "error"
-                            ? "text-rose-200/60"
-                            : "text-zinc-200/60"
-                    }`}
+                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${appUpdate.state.status === "update_available"
+                      ? "text-amber-200/60"
+                      : appUpdate.state.status === "up_to_date"
+                        ? "text-emerald-200/60"
+                        : appUpdate.state.status === "error"
+                          ? "text-rose-200/60"
+                          : "text-zinc-200/60"
+                      }`}
                   >
                     {appUpdate.systemMessage}
                   </div>
