@@ -23,6 +23,25 @@ type ExecuteResult = {
   rows: Array<Record<string, unknown>>;
 };
 
+describe("drizzle migration journal", () => {
+  it("lists every SQL migration so the runtime migrator applies them", async () => {
+    const migrationsDir = path.resolve(process.cwd(), "drizzle");
+    const migrationFiles = (await fs.readdir(migrationsDir))
+      .filter((fileName) => fileName.endsWith(".sql"))
+      .map((fileName) => fileName.replace(/\.sql$/, ""))
+      .sort();
+    const journal = JSON.parse(
+      await fs.readFile(path.join(migrationsDir, "meta", "_journal.json"), "utf8")
+    ) as { entries?: Array<{ tag?: unknown }> };
+    const journalTags = (journal.entries ?? [])
+      .map((entry) => entry.tag)
+      .filter((tag): tag is string => typeof tag === "string")
+      .sort();
+
+    expect(journalTags).toEqual(migrationFiles);
+  });
+});
+
 describe("repairSinglePlayerRunSaveSchema", () => {
   const execute = vi.fn<(_: string) => Promise<ExecuteResult>>();
   const dbInstance = {
