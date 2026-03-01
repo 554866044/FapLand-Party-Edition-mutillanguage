@@ -219,6 +219,14 @@ describe("HighscoresRoute", () => {
     expect(screen.getByText("playlist-2")).toBeTruthy();
   });
 
+  it("renders highscore hub section labels beside the icons", () => {
+    render(<Component />);
+
+    expect(screen.getByRole("button", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Single-Player" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Multiplayer" })).toBeTruthy();
+  });
+
   it("deletes a run from the single-player history view", async () => {
     render(<Component />);
     fireEvent.click(screen.getAllByRole("button", { name: "Single-Player" })[0]!);

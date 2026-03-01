@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { SfwGuard } from "../components/SfwGuard";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { GameDropdown } from "../components/ui/GameDropdown";
 import { PlaylistPackExportDialog } from "../components/PlaylistPackExportDialog";
 import { MenuButton } from "../components/MenuButton";
@@ -99,6 +100,7 @@ const AVAILABLE_ROUNDS_INITIAL_RECT_HEIGHT_PX = 352;
 const LARGE_AVAILABLE_LIST_THRESHOLD = 50;
 type NewPlaylistMode = "fully-random" | "progressive-random";
 type NormalRoundSort = "name-asc" | "name-desc" | "author" | "difficulty-asc";
+type RoundOrderConfirmAction = "difficulty" | "random" | "progressive" | "clear";
 type DurationFilter = "any" | "short" | "medium" | "long" | "unknown";
 type WorkshopInstalledRound = InstalledRound | InstalledRoundCatalogEntry;
 type RoundsPanePhase = "idle" | "loading-data" | "preparing-ui" | "ready";
@@ -812,6 +814,8 @@ function PlaylistWorkshopPage() {
   const [playlistMenuOpen, setPlaylistMenuOpen] = useState(false);
   const [manageMenuOpen, setManageMenuOpen] = useState(false);
   const [transferMenuOpen, setTransferMenuOpen] = useState(false);
+  const [roundOrderConfirmAction, setRoundOrderConfirmAction] =
+    useState<RoundOrderConfirmAction | null>(null);
   const [normalRoundSearch, setNormalRoundSearch] = useState("");
   const [normalRoundSort, setNormalRoundSort] = useState<NormalRoundSort>("name-asc");
   const [normalRoundDurationFilter, setNormalRoundDurationFilter] = useState<DurationFilter>("any");
@@ -1842,6 +1846,46 @@ function PlaylistWorkshopPage() {
     });
   };
 
+  const requestRoundOrderAction = (action: RoundOrderConfirmAction) => {
+    playSelectSound();
+    setRoundOrderConfirmAction(action);
+  };
+
+  const confirmRoundOrderAction = () => {
+    playSelectSound();
+    const action = roundOrderConfirmAction;
+    setRoundOrderConfirmAction(null);
+
+    if (action === "difficulty") {
+      applySelectedDifficultyOrdering();
+      return;
+    }
+    if (action === "random") {
+      applyNormalRoundOrdering("fully-random");
+      return;
+    }
+    if (action === "progressive") {
+      applyNormalRoundOrdering("progressive-random");
+      return;
+    }
+    if (action === "clear") {
+      clearNormalRounds();
+    }
+  };
+
+  const roundOrderConfirmTitle =
+    roundOrderConfirmAction === "clear"
+      ? t`Clear selected rounds?`
+      : t`Reorder selected rounds?`;
+  const roundOrderConfirmLabel =
+    roundOrderConfirmAction === "difficulty"
+      ? t`Sort by Difficulty`
+      : roundOrderConfirmAction === "random"
+        ? t`Randomize`
+        : roundOrderConfirmAction === "progressive"
+          ? t`Apply Progressive`
+          : t`Clear`;
+
   const toggleCumRound = (roundId: string) => {
     setSetup((prev) => {
       if (prev.enabledCumRoundIds.includes(roundId)) {
@@ -2456,10 +2500,7 @@ function PlaylistWorkshopPage() {
                             type="button"
                             disabled={!isLinearEditable || selectedNormalRounds.length < 2}
                             onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              applySelectedDifficultyOrdering();
-                            }}
+                            onClick={() => requestRoundOrderAction("difficulty")}
                             className="rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-100 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Trans>Sort by Difficulty</Trans>
@@ -2468,10 +2509,7 @@ function PlaylistWorkshopPage() {
                             type="button"
                             disabled={!isLinearEditable || normalRounds.length === 0}
                             onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              applyNormalRoundOrdering("fully-random");
-                            }}
+                            onClick={() => requestRoundOrderAction("random")}
                             className="rounded-lg border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Trans>🎲 Random</Trans>
@@ -2480,10 +2518,7 @@ function PlaylistWorkshopPage() {
                             type="button"
                             disabled={!isLinearEditable || normalRounds.length === 0}
                             onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              applyNormalRoundOrdering("progressive-random");
-                            }}
+                            onClick={() => requestRoundOrderAction("progressive")}
                             className="rounded-lg border border-violet-300/40 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-violet-100 hover:bg-violet-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Trans>📈 Progressive</Trans>
@@ -2492,10 +2527,7 @@ function PlaylistWorkshopPage() {
                             type="button"
                             disabled={!isLinearEditable || setup.normalRoundOrder.length === 0}
                             onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              clearNormalRounds();
-                            }}
+                            onClick={() => requestRoundOrderAction("clear")}
                             className="rounded-lg border border-rose-300/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <Trans>✕ Clear</Trans>
@@ -3593,6 +3625,15 @@ function PlaylistWorkshopPage() {
           onSubmit={handleStartExportPack}
         />
       )}
+      <ConfirmDialog
+        isOpen={roundOrderConfirmAction !== null}
+        title={roundOrderConfirmTitle}
+        message={t`This changes the order of the entire selected round list. Continue?`}
+        confirmLabel={roundOrderConfirmLabel}
+        variant={roundOrderConfirmAction === "clear" ? "danger" : "warning"}
+        onConfirm={confirmRoundOrderAction}
+        onCancel={() => setRoundOrderConfirmAction(null)}
+      />
       {activePreviewRound && (
         <RoundVideoOverlay
           activeRound={activePreview}

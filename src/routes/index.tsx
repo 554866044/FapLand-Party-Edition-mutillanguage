@@ -26,6 +26,8 @@ import { abbreviateNsfwText } from "../utils/sfwText";
 import "../styles.css";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
+const BUG_REPORT_URL =
+  "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/7";
 
 type OverallHighscore = {
   score: number;
@@ -252,6 +254,14 @@ const Home = () => {
         },
       });
     }
+
+    nextOptions.push({
+      id: "report-bug",
+      label: t`Report Bug`,
+      action: () => {
+        window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer");
+      },
+    });
 
     nextOptions.push({
       id: "close",

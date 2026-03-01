@@ -188,6 +188,8 @@ describe("Home route update menu", () => {
     mocks.appUpdate.systemMessage = "No update check has run yet.";
     mocks.appUpdate.triggerPrimaryAction.mockClear();
     mocks.sfwModeEnabled = false;
+    vi.mocked(trpc.store.get.query).mockResolvedValue(true);
+    vi.spyOn(window, "open").mockImplementation(() => null);
 
     window.electronAPI = {
       file: {
@@ -229,6 +231,7 @@ describe("Home route update menu", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it("hides the update action when no update is available", () => {
@@ -279,6 +282,19 @@ describe("Home route update menu", () => {
       expect(screen.getByText("v0.1.3")).toBeDefined();
       expect(mocks.appUpdate.triggerPrimaryAction).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("opens the bug report thread from the home menu", () => {
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Report Bug/i }));
+
+    expect(window.open).toHaveBeenCalledWith(
+      "https://discuss.eroscripts.com/t/fapland-party-edition-public-beta-release-feedback-wanted-handy-integration-update-v0-1-28/308265/7",
+      "_blank",
+      "noopener,noreferrer"
+    );
   });
 
   it("opens the first start workflow when onboarding was not completed yet", async () => {

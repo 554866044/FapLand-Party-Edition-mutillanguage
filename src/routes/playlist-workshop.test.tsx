@@ -661,6 +661,9 @@ describe("PlaylistWorkshopRoute", () => {
 
     const selectedSection = getSectionByHeading("Selected Rounds");
     fireEvent.click(within(selectedSection).getByRole("button", { name: /Sort/i }));
+    expect(screen.getByText("Reorder selected rounds?")).toBeDefined();
+    const sortConfirmButtons = screen.getAllByRole("button", { name: "Sort by Difficulty" });
+    fireEvent.click(sortConfirmButtons[sortConfirmButtons.length - 1]!);
     fireEvent.click(screen.getByRole("button", { name: "💾 Save" }));
 
     await waitFor(() => {
@@ -676,6 +679,42 @@ describe("PlaylistWorkshopRoute", () => {
       buildRoundRef(easy),
       buildRoundRef(hard),
     ]);
+  });
+
+  it("asks for confirmation before changing the whole selected round order", async () => {
+    const playlist = makeLinearPlaylist("linear-playlist", "Linear Playlist");
+    const rounds = [
+      makeRound("round-1", "Round 1", { difficulty: 3 }),
+      makeRound("round-2", "Round 2", { difficulty: 1 }),
+      makeRound("round-3", "Round 3", { difficulty: 5 }),
+    ];
+    playlist.config.boardConfig.normalRoundOrder = rounds.map(buildRoundRef);
+
+    mocks.loaderData = {
+      installedRounds: rounds,
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+    };
+    mocks.playlists.list.mockResolvedValue([playlist]);
+    mocks.playlists.getActive.mockResolvedValue(playlist);
+
+    await openLinearPlaylistAndSection("Linear Playlist", "Rounds");
+
+    const selectedSection = getSectionByHeading("Selected Rounds");
+    for (const buttonName of [/Sort by Difficulty/i, /Random/i, /Progressive/i]) {
+      fireEvent.click(within(selectedSection).getByRole("button", { name: buttonName }));
+      expect(screen.getByText("Reorder selected rounds?")).toBeDefined();
+      expect(
+        screen.getByText("This changes the order of the entire selected round list. Continue?")
+      ).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    }
+
+    fireEvent.click(within(selectedSection).getByRole("button", { name: /Clear/i }));
+    expect(screen.getByText("Clear selected rounds?")).toBeDefined();
+    expect(
+      screen.getByText("This changes the order of the entire selected round list. Continue?")
+    ).toBeDefined();
   });
 
   it("adds visible rounds in the current available order and saves round count", async () => {

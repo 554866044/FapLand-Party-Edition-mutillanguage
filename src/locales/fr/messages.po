@@ -33,7 +33,7 @@ msgstr " (Par défaut)"
 msgid " Warning: runs from this playlist are marked as assisted on the highscore and in run history."
 msgstr " Attention : les courses de cette playlist sont marquées comme assistées dans le highscore et dans l'historique des courses."
 
-#: src/routes/playlist-workshop.tsx:3807
+#: src/routes/playlist-workshop.tsx:3961
 msgid "…"
 msgstr "…"
 
@@ -41,7 +41,7 @@ msgstr "…"
 msgid ".fpack Extraction"
 msgstr "Extraction .fpack"
 
-#: src/routes/settings.tsx:1551
+#: src/routes/settings.tsx:1552
 msgid ".fpack Extraction Location"
 msgstr "Emplacement d'extraction .fpack"
 
@@ -53,20 +53,20 @@ msgstr "L'emplacement d'extraction .fpack stocke le contenu du pack extrait dans
 #. placeholder {0}: getPlaylistCountLabel(playlistList.length)
 #. placeholder {0}: perk.description
 #. placeholder {0}: perk.name
-#: src/routes/playlist-workshop.tsx:1428
-#: src/routes/playlist-workshop.tsx:2907
-#: src/routes/playlist-workshop.tsx:2928
-#: src/routes/playlist-workshop.tsx:2935
-#: src/routes/playlist-workshop.tsx:3011
-#: src/routes/playlist-workshop.tsx:3032
-#: src/routes/playlist-workshop.tsx:3039
+#: src/routes/playlist-workshop.tsx:1433
+#: src/routes/playlist-workshop.tsx:3056
+#: src/routes/playlist-workshop.tsx:3076
+#: src/routes/playlist-workshop.tsx:3083
+#: src/routes/playlist-workshop.tsx:3158
+#: src/routes/playlist-workshop.tsx:3178
+#: src/routes/playlist-workshop.tsx:3185
 msgid "{0}"
 msgstr "{0}"
 
 #. placeholder {0}: scanStatus.completedCount
 #. placeholder {1}: scanStatus.totalCount
-#: src/routes/settings.tsx:1881
-#: src/routes/settings.tsx:2058
+#: src/routes/settings.tsx:1882
+#: src/routes/settings.tsx:2057
 msgid "{0} / {1} videos"
 msgstr "Vidéos {0} / {1}"
 
@@ -96,7 +96,7 @@ msgid "{0} ACTIVATED"
 msgstr "{0} ACTIVÉ"
 
 #. placeholder {0}: availableNormalRounds.length
-#: src/routes/playlist-workshop.tsx:2496
+#: src/routes/playlist-workshop.tsx:2612
 msgid "{0} available"
 msgstr "{0} disponible"
 
@@ -106,12 +106,12 @@ msgid "{0} board"
 msgstr "Carte {0}"
 
 #. placeholder {0}: scanStatus.completedCount
-#: src/routes/settings.tsx:2089
+#: src/routes/settings.tsx:2087
 msgid "{0} cached"
 msgstr "{0} mis en cache"
 
 #. placeholder {0}: trustedSites.builtInYtDlpDomains.length
-#: src/routes/settings.tsx:4823
+#: src/routes/settings.tsx:4795
 msgid "{0} domains — use the filter above to search."
 msgstr "Domaines {0} — utilisez le filtre ci-dessus pour effectuer une recherche."
 
@@ -145,7 +145,7 @@ msgstr "Lecteur {0}{1}"
 
 #. placeholder {0}: round.name
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:664
-#: src/routes/playlist-workshop.tsx:3743
+#: src/routes/playlist-workshop.tsx:3897
 msgid "{0} preview"
 msgstr "Aperçu {0}"
 
@@ -231,13 +231,13 @@ msgid "{0} safe points"
 msgstr "Points de sécurité {0}"
 
 #. placeholder {0}: visibleAvailableNormalRounds.length
-#: src/routes/playlist-workshop.tsx:2499
+#: src/routes/playlist-workshop.tsx:2615
 msgid "{0} shown"
 msgstr "{0} illustré"
 
 #. placeholder {0}: availablePlaylists.length
 #. placeholder {0}: cumLoadCount.toLocaleString()
-#: src/routes/index.tsx:782
+#: src/routes/index.tsx:792
 #: src/routes/single-player-setup.tsx:422
 msgid "{0} total"
 msgstr "Total {0}"
@@ -267,8 +267,8 @@ msgstr "Ronde Web {0}{1} mise en cache"
 #. placeholder {1}: perkOptions.length
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:421
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:458
-#: src/routes/playlist-workshop.tsx:2846
-#: src/routes/playlist-workshop.tsx:2947
+#: src/routes/playlist-workshop.tsx:2996
+#: src/routes/playlist-workshop.tsx:3095
 msgid "{0}/{1} active"
 msgstr "{0}/{1} actif"
 
@@ -276,7 +276,7 @@ msgstr "{0}/{1} actif"
 msgid "{activeFilterCount} Active Filters"
 msgstr "Filtres actifs {activeFilterCount}"
 
-#: src/routes/playlist-workshop.tsx:1454
+#: src/routes/playlist-workshop.tsx:1459
 msgid "{boardMode} Playlist"
 msgstr "Liste de lecture {boardMode}"
 
@@ -287,17 +287,17 @@ msgid "{completed} / {0} steps completed"
 msgstr "Étapes {completed} / {0} terminées"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:659
+#: src/routes/playlist-workshop.tsx:662
 msgid "playlist-workshop.resolution.missing-summary"
 msgstr "{count, plural, one {# référence de playlist a encore besoin d'une correspondance manuelle.} other {# références de playlist ont encore besoin d'une correspondance manuelle.}}"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:642
+#: src/routes/playlist-workshop.tsx:645
 msgid "playlist-workshop.overview.playlist-count"
 msgstr "{count, plural, one {# Playlist} other {# Playlists}}"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:668
+#: src/routes/playlist-workshop.tsx:671
 msgid "playlist-workshop.resolution.auto-resolved-summary"
 msgstr "{count, plural, one {# référence a été résolue automatiquement et peut être examinée.} other {# références ont été résolues automatiquement et peuvent être examinées.}}"
 
@@ -318,7 +318,7 @@ msgstr "{installedRoundCount} installé"
 msgid "{label} ({0})"
 msgstr "{label} ({0})"
 
-#: src/routes/index.tsx:195
+#: src/routes/index.tsx:197
 #: src/routes/multiplayer.tsx:785
 msgid "{MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required"
 msgstr "Tours {MULTIPLAYER_MINIMUM_ROUNDS} requis"
@@ -340,7 +340,7 @@ msgstr "{playlistName} (tours {roundCount})"
 msgid "{roundCount} Rounds"
 msgstr "Tours {roundCount}"
 
-#: src/routes/highscores.tsx:561
+#: src/routes/highscores.tsx:580
 msgid "{syncQueueCount} multiplayer result entries are still queued."
 msgstr "Les entrées de résultats multijoueurs {syncQueueCount} sont toujours en file d’attente."
 
@@ -354,19 +354,19 @@ msgid "• unsaved"
 msgstr "• non enregistré"
 
 #: src/routes/converter.tsx:140
-#: src/routes/highscores.tsx:430
-#: src/routes/playlist-workshop.tsx:1954
+#: src/routes/highscores.tsx:449
+#: src/routes/playlist-workshop.tsx:1999
 #: src/routes/rounds.tsx:2542
-#: src/routes/settings.tsx:1294
+#: src/routes/settings.tsx:1295
 #: src/routes/single-player-setup.tsx:521
 msgid "← Back"
 msgstr "← Retour"
 
-#: src/routes/playlist-workshop.tsx:2549
+#: src/routes/playlist-workshop.tsx:2665
 msgid "< 3 min"
 msgstr "< 3 minutes"
 
-#: src/routes/playlist-workshop.tsx:2551
+#: src/routes/playlist-workshop.tsx:2667
 msgid "> 10 min"
 msgstr "> 10 minutes"
 
@@ -382,15 +382,15 @@ msgstr "⚠ Pas de chemin de repli gratuit - ajoutez un autre bord sortant."
 msgid "✓ Fallback path available."
 msgstr "✓ Chemin de secours disponible."
 
-#: src/routes/playlist-workshop.tsx:2435
+#: src/routes/playlist-workshop.tsx:2533
 msgid "✕ Clear"
 msgstr "✕ Effacer"
 
-#: src/routes/index.tsx:380
+#: src/routes/index.tsx:390
 msgid "✦   Party Edition   ✦"
 msgstr "✦   Édition Fête   ✦"
 
-#: src/routes/index.tsx:379
+#: src/routes/index.tsx:389
 msgid "✦   Safe Experience   ✦"
 msgstr "✦   Expérience sécurisée    ✦"
 
@@ -405,20 +405,33 @@ msgstr "✦ AVANTAGE"
 msgid "game.perk.header"
 msgstr "✦ CHOISISSEZ UN AVANTAGE ✦"
 
-#: src/routes/playlist-workshop.tsx:2411
+#. placeholder {0}: setup.normalRoundOrder.length
+#: src/routes/playlist-workshop.tsx:2855
+msgid "🎯 {0} added to queue"
+msgstr "🎯 {0} ajouté à la file"
+
+#: src/routes/playlist-workshop.tsx:2459
+msgid "🎯 Queue"
+msgstr "🎯 File"
+
+#: src/routes/playlist-workshop.tsx:2515
 msgid "🎲 Random"
 msgstr "🎲 Aléatoire"
 
-#: src/routes/playlist-workshop.tsx:2423
+#: src/routes/playlist-workshop.tsx:2524
 msgid "📈 Progressive"
 msgstr "📈 Progressif"
+
+#: src/routes/playlist-workshop.tsx:2440
+msgid "📚 Library"
+msgstr "📚 Bibliothèque"
 
 #. placeholder {0}: remote.money
 #: src/routes/multiplayer-match.tsx:1394
 msgid "$ {0}"
 msgstr "$ {0}"
 
-#: src/routes/highscores.tsx:560
+#: src/routes/highscores.tsx:579
 msgid "1 multiplayer result entry is still queued."
 msgstr "1 entrée de résultat multijoueur est toujours en file d'attente."
 
@@ -434,11 +447,11 @@ msgstr "1.0"
 msgid "2. Media"
 msgstr "2. Médias"
 
-#: src/routes/playlist-workshop.tsx:2307
+#: src/routes/playlist-workshop.tsx:2373
 msgid "25, 50, 75"
 msgstr "25, 50, 75"
 
-#: src/routes/playlist-workshop.tsx:2550
+#: src/routes/playlist-workshop.tsx:2666
 msgid "3-10 min"
 msgstr "3-10 minutes"
 
@@ -465,12 +478,12 @@ msgstr "Une carte linéaire est un chemin droit. Il est plus facile à comprendr
 msgid "first-start.step.booru.detail.2"
 msgstr "Une invite simple et spécifique fonctionne généralement mieux qu’une longue. Vous pouvez conserver la valeur par défaut si vous n'êtes pas sûr."
 
-#: src/routes/playlist-workshop.tsx:2537
+#: src/routes/playlist-workshop.tsx:2653
 msgid "A-Z"
 msgstr "A à Z"
 
-#: src/routes/settings.tsx:1949
-#: src/routes/settings.tsx:2126
+#: src/routes/settings.tsx:1948
+#: src/routes/settings.tsx:2123
 msgid "Abort"
 msgstr "Abandonner"
 
@@ -484,7 +497,7 @@ msgid "Abort Import"
 msgstr "Abandonner l'importation"
 
 #: src/routes/settings.tsx:1908
-#: src/routes/settings.tsx:2085
+#: src/routes/settings.tsx:2083
 msgid "Aborted"
 msgstr "Avorté"
 
@@ -494,7 +507,7 @@ msgstr "Avorté"
 msgid "Aborting..."
 msgstr "Abandon en cours..."
 
-#: src/routes/playlist-workshop.tsx:2098
+#: src/routes/playlist-workshop.tsx:2141
 #: src/routes/rounds.tsx:4677
 msgid "Actions"
 msgstr "Actions"
@@ -504,11 +517,11 @@ msgstr "Actions"
 msgid "Activate all"
 msgstr "Activer tout"
 
-#: src/routes/playlist-workshop.tsx:2966
+#: src/routes/playlist-workshop.tsx:3114
 msgid "Activate all anti-perks"
 msgstr "Activez tous les anti-avantages"
 
-#: src/routes/playlist-workshop.tsx:2862
+#: src/routes/playlist-workshop.tsx:3012
 msgid "Activate all perks"
 msgstr "Activer tous les avantages"
 
@@ -529,9 +542,9 @@ msgstr "actif"
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:447
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:484
 #: src/features/map-editor/components/PlaylistPickerView.tsx:110
-#: src/routes/playlist-workshop.tsx:1458
-#: src/routes/playlist-workshop.tsx:2923
-#: src/routes/playlist-workshop.tsx:3027
+#: src/routes/playlist-workshop.tsx:1463
+#: src/routes/playlist-workshop.tsx:3071
+#: src/routes/playlist-workshop.tsx:3173
 #: src/routes/single-player-setup.tsx:507
 msgid "Active"
 msgstr "Actif"
@@ -559,7 +572,7 @@ msgstr "Emplois actifs"
 msgid "Active Players"
 msgstr "Joueurs actifs"
 
-#: src/routes/playlist-workshop.tsx:2006
+#: src/routes/playlist-workshop.tsx:2051
 msgid "Active Playlist"
 msgstr "Liste de lecture active"
 
@@ -569,8 +582,8 @@ msgstr "Serveur actif"
 
 #: src/routes/first-start.tsx:1351
 #: src/routes/first-start.tsx:1573
-#: src/routes/settings.tsx:3022
-#: src/routes/settings.tsx:3439
+#: src/routes/settings.tsx:3011
+#: src/routes/settings.tsx:3420
 msgid "Add"
 msgstr "Ajouter"
 
@@ -578,17 +591,17 @@ msgstr "Ajouter"
 msgid "Add a content folder or import a single hero/round file."
 msgstr "Ajoutez un dossier de contenu ou importez un seul fichier héros/tour."
 
-#: src/routes/settings.tsx:3330
+#: src/routes/settings.tsx:3317
 msgid "Add Files"
 msgstr "Ajouter des fichiers"
 
 #: src/routes/first-start.tsx:1636
-#: src/routes/settings.tsx:3955
+#: src/routes/settings.tsx:3929
 msgid "Add Folder"
 msgstr "Ajouter un dossier"
 
-#: src/routes/settings.tsx:2950
-#: src/routes/settings.tsx:3367
+#: src/routes/settings.tsx:2943
+#: src/routes/settings.tsx:3352
 msgid "Add from any yt-dlp-supported URL (downloaded as MP3 via yt-dlp)"
 msgstr "Ajouter à partir de n'importe quelle URL prise en charge par yt-dlp (téléchargé au format MP3 via yt-dlp)"
 
@@ -597,8 +610,8 @@ msgid "Add from any yt-dlp-supported URL. Single tracks and playlists are both s
 msgstr "Ajoutez à partir de n'importe quelle URL prise en charge par yt-dlp. Les pistes uniques et les listes de lecture sont toutes deux prises en charge."
 
 #: src/routes/first-start.tsx:1496
-#: src/routes/settings.tsx:2929
-#: src/routes/settings.tsx:3346
+#: src/routes/settings.tsx:2923
+#: src/routes/settings.tsx:3332
 msgid "Add from URL"
 msgstr "Ajouter à partir de l'URL"
 
@@ -622,15 +635,11 @@ msgstr "Ajouter des fichiers gémissant"
 msgid "Add Music Files"
 msgstr "Ajouter des fichiers musicaux"
 
-#: src/routes/playlist-workshop.tsx:2473
-msgid "Add rounds from the library →"
-msgstr "Ajouter des tours de la bibliothèque →"
-
-#: src/routes/settings.tsx:4336
+#: src/routes/settings.tsx:4309
 msgid "Add Source"
 msgstr "Ajouter une source"
 
-#: src/routes/settings.tsx:4274
+#: src/routes/settings.tsx:4247
 msgid "Add Stash Source"
 msgstr "Ajouter une source de cache"
 
@@ -638,26 +647,26 @@ msgstr "Ajouter une source de cache"
 msgid "Add the guaranteed perk to the player's inventory instead of applying it immediately."
 msgstr "Ajoutez l'avantage garanti à l'inventaire du joueur au lieu de l'appliquer immédiatement."
 
-#: src/routes/playlist-workshop.tsx:2625
-#: src/routes/playlist-workshop.tsx:2626
-#: src/routes/playlist-workshop.tsx:2683
-#: src/routes/playlist-workshop.tsx:2684
+#: src/routes/playlist-workshop.tsx:2742
+#: src/routes/playlist-workshop.tsx:2743
+#: src/routes/playlist-workshop.tsx:2800
+#: src/routes/playlist-workshop.tsx:2801
 msgid "Add to queue"
 msgstr "Ajouter à la file d'attente"
 
-#: src/routes/settings.tsx:2913
+#: src/routes/settings.tsx:2908
 msgid "Add Tracks"
 msgstr "Ajouter des pistes"
 
-#: src/routes/settings.tsx:4735
+#: src/routes/settings.tsx:4707
 msgid "Add trusted base domain"
 msgstr "Ajouter un domaine de base approuvé"
 
-#: src/routes/settings.tsx:4750
+#: src/routes/settings.tsx:4722
 msgid "Add Trusted Site"
 msgstr "Ajouter un site de confiance"
 
-#: src/routes/playlist-workshop.tsx:2513
+#: src/routes/playlist-workshop.tsx:2629
 msgid "Add Visible"
 msgstr "Ajouter visible"
 
@@ -668,14 +677,14 @@ msgstr "Ajouté"
 
 #. placeholder {0}: urlResult.added
 #. placeholder {1}: urlResult.added !== 1 ? "s" : ""
-#: src/routes/settings.tsx:3446
+#: src/routes/settings.tsx:3427
 msgid "Added {0} file{1}"
 msgstr "Fichier {0} ajouté{1}"
 
 #. placeholder {0}: urlResult.added
 #. placeholder {1}: urlResult.added !== 1 ? "s" : ""
 #. placeholder {2}: urlResult.errors
-#: src/routes/settings.tsx:3445
+#: src/routes/settings.tsx:3426
 msgid "Added {0} file{1} ({2} failed)"
 msgstr "Ajout du fichier {0}{1} (échec de {2})"
 
@@ -687,14 +696,14 @@ msgstr "Ajout du fichier gémissant {0}{1} à la bibliothèque de gameplay."
 
 #. placeholder {0}: urlResult.added
 #. placeholder {1}: urlResult.added !== 1 ? "s" : ""
-#: src/routes/settings.tsx:3029
+#: src/routes/settings.tsx:3018
 msgid "Added {0} track{1}"
 msgstr "Ajout de la piste {0}{1}"
 
 #. placeholder {0}: urlResult.added
 #. placeholder {1}: urlResult.added !== 1 ? "s" : ""
 #. placeholder {2}: urlResult.errors
-#: src/routes/settings.tsx:3028
+#: src/routes/settings.tsx:3017
 msgid "Added {0} track{1} ({2} failed)"
 msgstr "Ajout de la piste {0}{1} (échec de {2})"
 
@@ -704,7 +713,7 @@ msgstr "Ajout de la piste {0}{1} (échec de {2})"
 msgid "Added {0} track{1} to the global music queue."
 msgstr "Ajout du morceau {0}{1} à la file d'attente musicale globale."
 
-#: src/routes/settings.tsx:3886
+#: src/routes/settings.tsx:3863
 msgid "Added folders import immediately, including legacy video-folder fallback, and are rescanned on startup."
 msgstr "Les dossiers ajoutés sont importés immédiatement, y compris la sauvegarde des dossiers vidéo existants, et sont réanalysés au démarrage."
 
@@ -729,16 +738,16 @@ msgstr "Il est préférable d'ajouter un dossier lorsque vous conservez déjà v
 
 #: src/routes/first-start.tsx:1280
 #: src/routes/first-start.tsx:1436
-#: src/routes/settings.tsx:2913
-#: src/routes/settings.tsx:3330
+#: src/routes/settings.tsx:2908
+#: src/routes/settings.tsx:3317
 msgid "Adding..."
 msgstr "Ajout en cours..."
 
-#: src/routes/playlist-workshop.tsx:3219
+#: src/routes/playlist-workshop.tsx:3365
 msgid "Additional anti-perk chance added after each completed round. The chance ramps up round by round until it hits the configured maximum."
 msgstr "Chance anti-avantage supplémentaire ajoutée après chaque tour terminé. La chance augmente tour par tour jusqu'à ce qu'elle atteigne le maximum configuré."
 
-#: src/routes/playlist-workshop.tsx:3168
+#: src/routes/playlist-workshop.tsx:3314
 msgid "Additional intermediary chance added after each completed round. Example: 10% initial plus 5% increase becomes 15% on the next round, then 20%, until the max is reached."
 msgstr "Chance intermédiaire supplémentaire ajoutée après chaque tour terminé. Exemple : 10 % initial plus 5 % d'augmentation deviennent 15 % au tour suivant, puis 20 %, jusqu'à ce que le maximum soit atteint."
 
@@ -747,7 +756,7 @@ msgid "adjust in-game"
 msgstr "ajuster dans le jeu"
 
 #: src/routes/multiplayer.tsx:1141
-#: src/routes/settings.tsx:902
+#: src/routes/settings.tsx:889
 msgid "Advanced"
 msgstr "Avancé"
 
@@ -755,7 +764,7 @@ msgstr "Avancé"
 msgid "Advertise on Public List"
 msgstr "Annoncez sur la liste publique"
 
-#: src/routes/highscores.tsx:741
+#: src/routes/highscores.tsx:760
 msgid "After:"
 msgstr "Après :"
 
@@ -770,7 +779,7 @@ msgstr "Alignement de la chronologie avec TheHandy avant le début de la lecture
 msgid "All"
 msgstr "Tout"
 
-#: src/routes/settings.tsx:3605
+#: src/routes/settings.tsx:3585
 msgid "All downloaded/imported game content."
 msgstr "Tout le contenu du jeu téléchargé/importé."
 
@@ -778,7 +787,7 @@ msgstr "Tout le contenu du jeu téléchargé/importé."
 msgid "All files from this playlist are already in your moaning library."
 msgstr "Tous les fichiers de cette playlist sont déjà dans votre bibliothèque gémissante."
 
-#: src/routes/playlist-workshop.tsx:2711
+#: src/routes/playlist-workshop.tsx:2829
 msgid "All rounds are in the queue."
 msgstr "Tous les tours sont dans la file d'attente."
 
@@ -790,7 +799,7 @@ msgstr "Tous les raccourcis"
 msgid "All tracks from this playlist are already in your queue."
 msgstr "Toutes les pistes de cette playlist sont déjà dans votre file d'attente."
 
-#: src/routes/settings.tsx:2101
+#: src/routes/settings.tsx:2099
 msgid "All website videos cached"
 msgstr "Toutes les vidéos du site Web mises en cache"
 
@@ -798,15 +807,15 @@ msgstr "Toutes les vidéos du site Web mises en cache"
 msgid "Allow late join"
 msgstr "Autoriser les adhésions tardives"
 
-#: src/routes/settings.tsx:785
+#: src/routes/settings.tsx:772
 msgid "Allow multiplayer access regardless of the global minimum and playlist-specific round requirements. Disabling these safeguards may result in a bad user experience."
 msgstr "Autoriser l'accès multijoueur quelles que soient les exigences minimales globales et spécifiques à la playlist. La désactivation de ces protections peut entraîner une mauvaise expérience utilisateur."
 
-#: src/routes/settings.tsx:964
+#: src/routes/settings.tsx:965
 msgid "Allow Playlist Start During Cache Ongoing"
 msgstr "Autoriser le démarrage de la liste de lecture pendant le cache en cours"
 
-#: src/routes/settings.tsx:4715
+#: src/routes/settings.tsx:4687
 msgid "Allowing only configured Stash source URLs and blocking yt-dlp and user-whitelisted domains."
 msgstr "Autoriser uniquement les URL sources Stash configurées et bloquer les domaines yt-dlp et les domaines sur liste blanche des utilisateurs."
 
@@ -841,7 +850,7 @@ msgstr "Analyse de la taille du paquet et du temps de compression..."
 msgid "Analyzing..."
 msgstr "Analyse en cours..."
 
-#: src/routes/settings.tsx:5208
+#: src/routes/settings.tsx:5180
 msgid "anon fapland inventor"
 msgstr "anon fapland inventeur"
 
@@ -882,7 +891,7 @@ msgstr "Flux anti-avantage"
 msgid "Anti-perk increase"
 msgstr "Augmentation des anti-avantages"
 
-#: src/routes/playlist-workshop.tsx:3218
+#: src/routes/playlist-workshop.tsx:3364
 msgid "Anti-Perk Increase %"
 msgstr "% d'augmentation anti-avantage"
 
@@ -891,7 +900,7 @@ msgstr "% d'augmentation anti-avantage"
 msgid "Anti-perk initial"
 msgstr "Initiale anti-avantage"
 
-#: src/routes/playlist-workshop.tsx:3203
+#: src/routes/playlist-workshop.tsx:3349
 msgid "Anti-Perk Initial %"
 msgstr "% initial anti-avantage"
 
@@ -904,7 +913,7 @@ msgstr "Les objets anti-avantages ne peuvent pas être appliqués à vous-même 
 msgid "Anti-perk max"
 msgstr "Anti-avantage maximum"
 
-#: src/routes/playlist-workshop.tsx:3236
+#: src/routes/playlist-workshop.tsx:3382
 msgid "Anti-Perk Max %"
 msgstr "% maximum anti-avantage"
 
@@ -914,33 +923,33 @@ msgstr "Séquence anti-avantage"
 
 #: src/components/game/GameScene.tsx:4754
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:455
-#: src/routes/playlist-workshop.tsx:2945
+#: src/routes/playlist-workshop.tsx:3093
 msgid "Anti-Perks"
 msgstr "Anti-avantages"
 
-#: src/routes/playlist-workshop.tsx:2548
+#: src/routes/playlist-workshop.tsx:2664
 msgid "Any"
 msgstr "N'importe lequel"
 
-#: src/routes/settings.tsx:3755
+#: src/routes/settings.tsx:3732
 msgid "Any highscore you achieve will be permanently marked with 🎭"
 msgstr "Tout meilleur score que vous atteindrez sera marqué de manière permanente par 🎭"
 
-#: src/routes/settings.tsx:4315
-#: src/routes/settings.tsx:4390
+#: src/routes/settings.tsx:4288
+#: src/routes/settings.tsx:4363
 msgid "API key"
 msgstr "Clé API"
 
-#: src/routes/settings.tsx:4303
-#: src/routes/settings.tsx:4372
+#: src/routes/settings.tsx:4276
+#: src/routes/settings.tsx:4345
 msgid "API Key"
 msgstr "Clé API"
 
-#: src/routes/settings.tsx:2353
+#: src/routes/settings.tsx:2349
 msgid "App Key"
 msgstr "Clé d'application"
 
-#: src/routes/settings.tsx:3626
+#: src/routes/settings.tsx:3606
 msgid "App Settings & Preference"
 msgstr "Paramètres et préférences de l'application"
 
@@ -948,11 +957,11 @@ msgstr "Paramètres et préférences de l'application"
 msgid "Appearance"
 msgstr "Apparence"
 
-#: src/routes/settings.tsx:881
+#: src/routes/settings.tsx:868
 msgid "Application data maintenance and destructive actions."
 msgstr "Maintenance des données applicatives et actions destructrices."
 
-#: src/routes/settings.tsx:2385
+#: src/routes/settings.tsx:2381
 msgid "Application ID"
 msgstr "Identifiant de la demande"
 
@@ -961,7 +970,7 @@ msgstr "Identifiant de la demande"
 msgid "Applied playlist resolutions to \"{0}\"."
 msgstr "Résolutions de liste de lecture appliquées à \"{0}\"."
 
-#: src/routes/settings.tsx:2483
+#: src/routes/settings.tsx:2479
 msgid "Applies to all TheHandy sync operations. Use this if the device is slightly ahead or behind the video."
 msgstr "S'applique à toutes les opérations de synchronisation TheHandy. Utilisez-le si l'appareil est légèrement en avant ou en arrière de la vidéo."
 
@@ -970,7 +979,7 @@ msgstr "S'applique à toutes les opérations de synchronisation TheHandy. Utilis
 msgid "Apply {0}"
 msgstr "Appliquer {0}"
 
-#: src/routes/playlist-workshop.tsx:2286
+#: src/routes/playlist-workshop.tsx:2352
 msgid "Apply 25/50/75 Preset"
 msgstr "Appliquer le préréglage 25/50/75"
 
@@ -987,8 +996,12 @@ msgstr "Appliquer la mise en page"
 msgid "Apply Perk"
 msgstr "Appliquer l'avantage"
 
+#: src/routes/playlist-workshop.tsx:1886
+msgid "Apply Progressive"
+msgstr "Appliquer le progressif"
+
 #: src/routes/map-editor.tsx:2128
-#: src/routes/playlist-workshop.tsx:3390
+#: src/routes/playlist-workshop.tsx:3536
 msgid "Apply Resolutions"
 msgstr "Appliquer les résolutions"
 
@@ -1009,7 +1022,7 @@ msgstr "approximatif"
 msgid "Are you sure you want to reset the graph? This will delete all progress made."
 msgstr "Êtes-vous sûr de vouloir réinitialiser le graphique ? Cela supprimera tous les progrès réalisés."
 
-#: src/routes/settings.tsx:4718
+#: src/routes/settings.tsx:4690
 msgid "Asking during manual sidecar imports before trusting unknown remote URLs."
 msgstr "Demander lors des importations manuelles de side-car avant de faire confiance à des URL distantes inconnues."
 
@@ -1043,7 +1056,7 @@ msgstr "Attachez le support installé à <0>{0}</0>."
 msgid "Attach Source Media"
 msgstr "Joindre le média source"
 
-#: src/routes/settings.tsx:809
+#: src/routes/settings.tsx:796
 msgid "Audio"
 msgstr "Audio"
 
@@ -1063,7 +1076,7 @@ msgstr "Authentification en cours..."
 msgid "Authentication failed."
 msgstr "L'authentification a échoué."
 
-#: src/routes/playlist-workshop.tsx:2539
+#: src/routes/playlist-workshop.tsx:2655
 #: src/routes/rounds.tsx:3444
 #: src/routes/rounds.tsx:3684
 msgid "Author"
@@ -1077,8 +1090,8 @@ msgstr "Auteur (facultatif)"
 msgid "Author:"
 msgstr "Auteur :"
 
-#: src/routes/settings.tsx:912
-#: src/routes/settings.tsx:929
+#: src/routes/settings.tsx:899
+#: src/routes/settings.tsx:916
 msgid "Auto (Default)"
 msgstr "Automatique (par défaut)"
 
@@ -1086,11 +1099,11 @@ msgstr "Automatique (par défaut)"
 msgid "Auto Detection"
 msgstr "Détection automatique"
 
-#: src/routes/settings.tsx:909
+#: src/routes/settings.tsx:896
 msgid "Auto keeps current behavior (prefer newer system binaries). Use Bundled/System to force source selection."
 msgstr "Auto conserve le comportement actuel (préférez les binaires système les plus récents). Utilisez Bundled/System pour forcer la sélection de la source."
 
-#: src/routes/settings.tsx:926
+#: src/routes/settings.tsx:913
 msgid "Auto keeps current behavior (prefer the bundled local binary). Use Local/System to force source selection."
 msgstr "Auto conserve le comportement actuel (préférez le binaire local fourni). Utilisez Local/Système pour forcer la sélection de la source."
 
@@ -1098,7 +1111,7 @@ msgstr "Auto conserve le comportement actuel (préférez le binaire local fourni
 msgid "Auto-apply"
 msgstr "Appliquer automatiquement"
 
-#: src/routes/settings.tsx:712
+#: src/routes/settings.tsx:699
 msgid "Auto-Apply Perks"
 msgstr "Avantages d'application automatique"
 
@@ -1110,15 +1123,15 @@ msgstr "Sélection automatique"
 msgid "Auto-pick pending"
 msgstr "Sélection automatique en attente"
 
-#: src/routes/settings.tsx:822
+#: src/routes/settings.tsx:809
 msgid "Autofix Broken Funscripts"
 msgstr "Correction automatique des Funscripts cassés"
 
-#: src/routes/settings.tsx:887
+#: src/routes/settings.tsx:874
 msgid "Automatically compute visual fingerprints for rounds in the background. Highly recommended for accurate similarity matching."
 msgstr "Calculez automatiquement les empreintes visuelles des rondes en arrière-plan. Fortement recommandé pour une correspondance précise des similarités."
 
-#: src/routes/playlist-workshop.tsx:2227
+#: src/routes/playlist-workshop.tsx:2294
 msgid "Automatically grows to fit the selected queue."
 msgstr "S'agrandit automatiquement pour s'adapter à la file d'attente sélectionnée."
 
@@ -1131,28 +1144,28 @@ msgstr "Compression AV1"
 msgid "Available"
 msgstr "Disponible"
 
-#: src/routes/settings.tsx:5248
+#: src/routes/settings.tsx:5220
 msgid "Available on"
 msgstr "Disponible sur"
 
 #. placeholder {0}: round.name
-#: src/routes/playlist-workshop.tsx:2587
-#: src/routes/playlist-workshop.tsx:2646
+#: src/routes/playlist-workshop.tsx:2704
+#: src/routes/playlist-workshop.tsx:2763
 msgid "Available round {0}"
 msgstr "Disponible rond {0}"
 
-#: src/routes/playlist-workshop.tsx:2488
+#: src/routes/playlist-workshop.tsx:2604
 msgid "Available Rounds"
 msgstr "Tours disponibles"
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:76
 #: src/routes/first-start.tsx:1966
-#: src/routes/index.tsx:323
+#: src/routes/index.tsx:333
 #: src/routes/multiplayer-bans.tsx:92
 #: src/routes/multiplayer-lobby.tsx:588
-#: src/routes/playlist-workshop.tsx:1337
-#: src/routes/playlist-workshop.tsx:1407
-#: src/routes/playlist-workshop.tsx:3275
+#: src/routes/playlist-workshop.tsx:1342
+#: src/routes/playlist-workshop.tsx:1412
+#: src/routes/playlist-workshop.tsx:3421
 msgid "Back"
 msgstr "Retour"
 
@@ -1162,9 +1175,9 @@ msgstr "Retour à l'éditeur"
 
 #: src/routes/converter.tsx:175
 #: src/routes/converter.tsx:277
-#: src/routes/highscores.tsx:879
+#: src/routes/highscores.tsx:898
 #: src/routes/rounds.tsx:3342
-#: src/routes/settings.tsx:1463
+#: src/routes/settings.tsx:1464
 msgid "Back to Main Menu"
 msgstr "Retour au menu principal"
 
@@ -1176,7 +1189,7 @@ msgstr "Retour au menu"
 msgid "Background Hashing"
 msgstr "Hachage en arrière-plan"
 
-#: src/routes/settings.tsx:886
+#: src/routes/settings.tsx:873
 msgid "Background Phash Scanning"
 msgstr "Analyse de phash en arrière-plan"
 
@@ -1210,7 +1223,7 @@ msgstr "Les interdictions s'appliquent à vos salons hébergés par ID utilisate
 msgid "Bar {0}"
 msgstr "Barre {0}"
 
-#: src/routes/playlist-workshop.tsx:3141
+#: src/routes/playlist-workshop.tsx:3287
 msgid "Base chance to roll a random perk after each completed round. This does not stack per round; the same chance is checked again each time."
 msgstr "Chance de base de lancer un avantage aléatoire après chaque tour terminé. Cela ne se cumule pas par tour ; la même chance est vérifiée à nouveau à chaque fois."
 
@@ -1219,7 +1232,7 @@ msgstr "Chance de base de lancer un avantage aléatoire après chaque tour termi
 msgid "first-start.step.maps.detail.3"
 msgstr "Étant donné que ces deux styles de carte fonctionnent différemment, l'application dispose de deux éditeurs : Playlist Workshop pour les tableaux linéaires et Map Editor pour les tableaux graphiques."
 
-#: src/routes/highscores.tsx:739
+#: src/routes/highscores.tsx:758
 msgid "Before:"
 msgstr "Avant :"
 
@@ -1227,7 +1240,7 @@ msgstr "Avant :"
 msgid "Begin a fresh run and replace the saved one"
 msgstr "Commencez une nouvelle exécution et remplacez celle enregistrée"
 
-#: src/routes/index.tsx:759
+#: src/routes/index.tsx:769
 msgid "Best"
 msgstr "Meilleur"
 
@@ -1236,11 +1249,11 @@ msgstr "Meilleur"
 msgid "hud.best"
 msgstr "MEILLEUR"
 
-#: src/routes/highscores.tsx:647
+#: src/routes/highscores.tsx:666
 msgid "Best Score"
 msgstr "Meilleure note"
 
-#: src/routes/settings.tsx:4707
+#: src/routes/settings.tsx:4679
 msgid "block"
 msgstr "bloquer"
 
@@ -1248,7 +1261,7 @@ msgstr "bloquer"
 msgid "Blocked"
 msgstr "Bloqué"
 
-#: src/routes/index.tsx:191
+#: src/routes/index.tsx:193
 msgid "Blocked By SFW Mode"
 msgstr "Bloqué par le mode SFW"
 
@@ -1269,7 +1282,7 @@ msgstr "PROGRÈS DU CONSEIL"
 msgid "Board sequence completed."
 msgstr "Séquence du tableau terminée."
 
-#: src/routes/playlist-workshop.tsx:3253
+#: src/routes/playlist-workshop.tsx:3399
 msgid "Bonus score granted when a cum round is completed successfully. This affects scoring only and does not influence trigger probabilities."
 msgstr "Score bonus accordé lorsqu'un tour de sperme est terminé avec succès. Cela affecte uniquement le score et n'influence pas les probabilités de déclenchement."
 
@@ -1293,17 +1306,21 @@ msgid "Bring in a portable round package or other supported import file."
 msgstr "Apportez un package rond portable ou un autre fichier d'importation pris en charge."
 
 #. placeholder {0}: matches.length
-#: src/routes/highscores.tsx:618
+#: src/routes/highscores.tsx:637
 msgid "Browse {0} cached match results and expand individual player standings."
 msgstr "Parcourez les résultats des matchs mis en cache par {0} et développez le classement des joueurs individuels."
 
-#: src/routes/highscores.tsx:617
+#: src/routes/highscores.tsx:636
 msgid "Browse 1 cached match result and expand individual player standings."
 msgstr "Parcourez 1 résultat de match mis en cache et développez le classement des joueurs individuels."
 
 #: src/routes/multiplayer.tsx:1003
 msgid "Browse advertised lobbies and join with one click."
 msgstr "Parcourez les lobbys annoncés et rejoignez-les en un seul clic."
+
+#: src/routes/playlist-workshop.tsx:2585
+msgid "Browse Library →"
+msgstr "Parcourir la bibliothèque →"
 
 #: src/routes/rounds.tsx:2569
 msgid "Browse, filter, and edit installed rounds with the main library view front and center."
@@ -1313,7 +1330,7 @@ msgstr "Parcourez, filtrez et modifiez les séries installées avec la vue princ
 msgid "Build a clean installed-database export and choose where the package should be written."
 msgstr "Créez une exportation propre de la base de données installée et choisissez l'emplacement où le package doit être écrit."
 
-#: src/routes/settings.tsx:2746
+#: src/routes/settings.tsx:2742
 msgid "Build a global queue from local audio files. Music pauses for foreground video playback and resumes from the same spot."
 msgstr "Créez une file d'attente globale à partir de fichiers audio locaux. La musique s'arrête pour la lecture vidéo au premier plan et reprend au même endroit."
 
@@ -1325,7 +1342,7 @@ msgstr "Construire le package d'exportation."
 msgid "Building the library package."
 msgstr "Construire le package de bibliothèque."
 
-#: src/routes/settings.tsx:2419
+#: src/routes/settings.tsx:2415
 msgid "Built-in key loaded. Override only if you need a different app identity."
 msgstr "Clé intégrée chargée. Remplacez uniquement si vous avez besoin d’une identité d’application différente."
 
@@ -1337,27 +1354,23 @@ msgstr "Les informations d'identification du serveur intégrées restent masqué
 msgid "Built-in servers cannot be loaded into the editor."
 msgstr "Les serveurs intégrés ne peuvent pas être chargés dans l'éditeur."
 
-#: src/routes/playlist-workshop.tsx:2141
-msgid "Bundle this playlist with its media into a shareable folder and choose compression before exporting."
-msgstr "Regroupez cette liste de lecture avec ses médias dans un dossier partageable et choisissez la compression avant d'exporter."
-
-#: src/routes/settings.tsx:913
+#: src/routes/settings.tsx:900
 msgid "Bundled Only"
 msgstr "Regroupé uniquement"
 
-#: src/routes/settings.tsx:2117
+#: src/routes/settings.tsx:2114
 msgid "Cache Now"
 msgstr "Cacher maintenant"
 
-#: src/routes/highscores.tsx:776
+#: src/routes/highscores.tsx:795
 msgid "Cached Matches"
 msgstr "Correspondances mises en cache"
 
-#: src/routes/highscores.tsx:767
+#: src/routes/highscores.tsx:786
 msgid "Cached standings let you revisit prior lobbies even when the remote service is unavailable."
 msgstr "Les classements mis en cache vous permettent de revoir les salons précédents même lorsque le service à distance n'est pas disponible."
 
-#: src/routes/settings.tsx:2039
+#: src/routes/settings.tsx:2038
 msgid "Caching"
 msgstr "Mise en cache"
 
@@ -1383,7 +1396,7 @@ msgstr "Mise en cache en cours"
 msgid "Caching Video"
 msgstr "Vidéo de mise en cache"
 
-#: src/routes/settings.tsx:2117
+#: src/routes/settings.tsx:2114
 msgid "Caching..."
 msgstr "Mise en cache en cours..."
 
@@ -1408,16 +1421,16 @@ msgstr "Campagne terminée"
 #: src/components/SfwGuard.tsx:95
 #: src/components/ui/ConfirmDialog.tsx:83
 #: src/features/converter/ConverterCachingOverlay.tsx:134
-#: src/routes/highscores.tsx:1053
-#: src/routes/playlist-workshop.tsx:3350
-#: src/routes/playlist-workshop.tsx:3906
-#: src/routes/playlist-workshop.tsx:4024
+#: src/routes/highscores.tsx:1072
+#: src/routes/playlist-workshop.tsx:3496
+#: src/routes/playlist-workshop.tsx:4059
+#: src/routes/playlist-workshop.tsx:4175
 #: src/routes/rounds.tsx:4879
-#: src/routes/settings.tsx:2929
-#: src/routes/settings.tsx:3346
-#: src/routes/settings.tsx:3702
-#: src/routes/settings.tsx:3768
-#: src/routes/settings.tsx:3844
+#: src/routes/settings.tsx:2923
+#: src/routes/settings.tsx:3332
+#: src/routes/settings.tsx:3680
+#: src/routes/settings.tsx:3745
+#: src/routes/settings.tsx:3821
 msgid "Cancel"
 msgstr "Annuler"
 
@@ -1435,19 +1448,19 @@ msgstr "Resynchronisation impossible : ID d'application/clé API manquants."
 msgid "hud.cap"
 msgstr "PAC"
 
-#: src/routes/settings.tsx:1569
+#: src/routes/settings.tsx:1570
 msgid "Changing this only affects future .fpack extractions. Existing extracted files are not moved automatically."
 msgstr "Changer cela n’affecte que les futures extractions .fpack. Les fichiers extraits existants ne sont pas déplacés automatiquement."
 
-#: src/routes/settings.tsx:1741
+#: src/routes/settings.tsx:1742
 msgid "Changing this only affects the music cache path. Existing downloaded files are not moved automatically."
 msgstr "Changer cela n’affecte que le chemin du cache musical. Les fichiers téléchargés existants ne sont pas déplacés automatiquement."
 
-#: src/routes/settings.tsx:1655
+#: src/routes/settings.tsx:1656
 msgid "Changing this only affects the website video cache path. Existing cached files are not moved automatically."
 msgstr "Changer cela n’affecte que le chemin du cache vidéo du site Web. Les fichiers mis en cache existants ne sont pas déplacés automatiquement."
 
-#: src/routes/settings.tsx:766
+#: src/routes/settings.tsx:753
 msgid "Cheat Mode"
 msgstr "Mode triche"
 
@@ -1455,20 +1468,20 @@ msgstr "Mode triche"
 msgid "Cheat mode active"
 msgstr "Mode triche actif"
 
-#: src/routes/settings.tsx:3756
+#: src/routes/settings.tsx:3733
 msgid "Cheat mode has no effect in multiplayer"
 msgstr "Le mode Cheat n'a aucun effet en multijoueur"
 
-#: src/routes/settings.tsx:2153
+#: src/routes/settings.tsx:2150
 msgid "Check Failed"
 msgstr "Échec de la vérification"
 
-#: src/routes/settings.tsx:2166
+#: src/routes/settings.tsx:2163
 msgid "Check for new releases or open the latest available download for this build."
 msgstr "Recherchez de nouvelles versions ou ouvrez le dernier téléchargement disponible pour cette version."
 
-#: src/routes/index.tsx:291
-#: src/routes/settings.tsx:2147
+#: src/routes/index.tsx:301
+#: src/routes/settings.tsx:2144
 msgid "Checking"
 msgstr "Vérification"
 
@@ -1510,7 +1523,7 @@ msgstr "Choisissez une invite de recherche booru"
 msgid "Choose a folder and scan it for supported round media."
 msgstr "Choisissez un dossier et recherchez-le pour les supports ronds pris en charge."
 
-#: src/routes/playlist-workshop.tsx:3877
+#: src/routes/playlist-workshop.tsx:4030
 msgid "Choose a new name for this playlist."
 msgstr "Choisissez un nouveau nom pour cette playlist."
 
@@ -1522,7 +1535,7 @@ msgstr "Choisissez une liste de lecture sur la gauche, examinez les avertissemen
 msgid "Choose a playlist to edit, or create a new playlist first."
 msgstr "Choisissez une liste de lecture à modifier ou créez d'abord une nouvelle liste de lecture."
 
-#: src/routes/playlist-workshop.tsx:1388
+#: src/routes/playlist-workshop.tsx:1393
 msgid "Choose a playlist to edit, or create one from here."
 msgstr "Choisissez une liste de lecture à modifier ou créez-en une à partir d'ici."
 
@@ -1532,9 +1545,9 @@ msgid "Choose a source hero for <0>{0}</0>. Assignments are auto-filled by round
 msgstr "Choisissez un héros source pour <0>{0}</0>. Les devoirs sont remplis automatiquement par nom de tour, puis par ordre."
 
 #: src/routes/first-start.tsx:1751
-#: src/routes/settings.tsx:1583
-#: src/routes/settings.tsx:1669
-#: src/routes/settings.tsx:1755
+#: src/routes/settings.tsx:1584
+#: src/routes/settings.tsx:1670
+#: src/routes/settings.tsx:1756
 msgid "Choose Folder"
 msgstr "Choisir un dossier"
 
@@ -1542,9 +1555,9 @@ msgstr "Choisir un dossier"
 msgid "Choose Folder and Export"
 msgstr "Choisissez un dossier et exportez"
 
-#: src/routes/settings.tsx:655
+#: src/routes/settings.tsx:656
 msgid "Choose the language used for app labels, dialogs, and safe mode prompts. English stays the default unless the experimental system language option is enabled."
-msgstr ""
+msgstr "Choisissez la langue utilisée pour les libellés de l'application, les boîtes de dialogue et les messages du mode sûr. L'anglais reste la langue par défaut sauf si l'option expérimentale de langue système est activée."
 
 #: src/routes/first-start.tsx:1199
 msgid "Choose the language used on this page and across the app. Changes apply immediately."
@@ -1555,12 +1568,12 @@ msgstr "Choisissez la langue utilisée sur cette page et dans l'application. Les
 msgid "first-start.step.storage.title"
 msgstr "Choisissez où doivent résider les fichiers mis en cache et extraits"
 
-#: src/routes/settings.tsx:3647
+#: src/routes/settings.tsx:3627
 msgid "Choose which categories of information to wipe from this device."
 msgstr "Choisissez les catégories d'informations à effacer de cet appareil."
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:215
+#: src/routes/playlist-workshop.tsx:218
 msgid "playlist-workshop.section.cum-rounds.description"
 msgstr "Choisissez les rondes de sperme disponibles."
 
@@ -1572,13 +1585,14 @@ msgstr "Choisissez votre itinéraire"
 msgid "clear"
 msgstr "clair"
 
+#: src/routes/playlist-workshop.tsx:1887
 #: src/routes/rounds.tsx:2718
-#: src/routes/settings.tsx:2942
-#: src/routes/settings.tsx:3359
+#: src/routes/settings.tsx:2935
+#: src/routes/settings.tsx:3344
 msgid "Clear"
 msgstr "Effacer"
 
-#: src/routes/settings.tsx:3644
+#: src/routes/settings.tsx:3624
 msgid "Clear Data"
 msgstr "Effacer les données"
 
@@ -1590,27 +1604,31 @@ msgstr "Effacer l'éditeur"
 msgid "Clear Filters"
 msgstr "Effacer les filtres"
 
-#: src/routes/settings.tsx:3515
+#: src/routes/settings.tsx:3496
 msgid "Clear moaning playlist?"
 msgstr "Effacer la playlist des gémissements ?"
 
 #: src/components/GlobalMusicOverlay.tsx:768
-#: src/routes/settings.tsx:3108
+#: src/routes/settings.tsx:3097
 msgid "Clear music playlist?"
 msgstr "Effacer la playlist musicale ?"
 
 #: src/components/GlobalMusicOverlay.tsx:770
-#: src/routes/settings.tsx:3110
-#: src/routes/settings.tsx:3517
+#: src/routes/settings.tsx:3099
+#: src/routes/settings.tsx:3498
 msgid "Clear Playlist"
 msgstr "Effacer la liste de lecture"
+
+#: src/routes/playlist-workshop.tsx:1878
+msgid "Clear selected rounds?"
+msgstr "Vider les rounds sélectionnés ?"
 
 #: src/routes/rounds.tsx:3013
 msgid "Clear the current filters to get back to the full library."
 msgstr "Effacez les filtres actuels pour revenir à la bibliothèque complète."
 
-#: src/routes/settings.tsx:3569
-#: src/routes/settings.tsx:3715
+#: src/routes/settings.tsx:3549
+#: src/routes/settings.tsx:3692
 msgid "Clearing..."
 msgstr "Effacement en cours..."
 
@@ -1636,7 +1654,7 @@ msgstr "fermer"
 #: src/components/game/RoundVideoOverlay.tsx:3857
 #: src/components/GlobalHandyOverlay.tsx:228
 #: src/components/PlaylistPackExportDialog.tsx:191
-#: src/routes/index.tsx:258
+#: src/routes/index.tsx:268
 #: src/routes/rounds.tsx:4854
 #: src/routes/rounds.tsx:5240
 #: src/routes/rounds.tsx:5815
@@ -1685,7 +1703,7 @@ msgid "perk.rarity.common"
 msgstr "COMMUN"
 
 #: src/routes/settings.tsx:1906
-#: src/routes/settings.tsx:2083
+#: src/routes/settings.tsx:2081
 msgid "Complete"
 msgstr "Terminé"
 
@@ -1708,7 +1726,7 @@ msgstr "Force de compression"
 msgid "Compression Time"
 msgstr "Temps de compression"
 
-#: src/routes/settings.tsx:4224
+#: src/routes/settings.tsx:4198
 msgid "Configure Stash instances, tags, and run sync."
 msgstr "Configurez les instances Stash, les balises et exécutez la synchronisation."
 
@@ -1728,9 +1746,9 @@ msgstr "Confirmer l'action"
 msgid "Confirm Conversion"
 msgstr "Confirmer la conversion"
 
-#: src/routes/highscores.tsx:1017
-#: src/routes/highscores.tsx:1066
-#: src/routes/settings.tsx:3715
+#: src/routes/highscores.tsx:1036
+#: src/routes/highscores.tsx:1085
+#: src/routes/settings.tsx:3692
 msgid "Confirm Deletion"
 msgstr "Confirmer la suppression"
 
@@ -1757,7 +1775,7 @@ msgstr "Le texte de confirmation ne correspond pas. Aucune modification n'a ét�
 #: src/components/GlobalHandyOverlay.tsx:366
 #: src/features/map-editor/components/EditorToolbar.tsx:68
 #: src/routes/first-start.tsx:1936
-#: src/routes/settings.tsx:2456
+#: src/routes/settings.tsx:2452
 msgid "Connect"
 msgstr "Se connecter"
 
@@ -1771,19 +1789,19 @@ msgid "first-start.step.handy.description"
 msgstr "Connectez votre appareil Handy pour une prise en charge des mouvements synchronisés. Ceci est facultatif mais améliore l’expérience."
 
 #: src/routes/first-start.tsx:1870
-#: src/routes/index.tsx:283
-#: src/routes/settings.tsx:2312
+#: src/routes/index.tsx:293
+#: src/routes/settings.tsx:2308
 msgid "Connected"
 msgstr "Connecté"
 
-#: src/routes/index.tsx:281
-#: src/routes/settings.tsx:2321
+#: src/routes/index.tsx:291
+#: src/routes/settings.tsx:2317
 msgid "Connecting"
 msgstr "Connexion"
 
 #: src/components/GlobalHandyOverlay.tsx:366
 #: src/routes/first-start.tsx:1922
-#: src/routes/settings.tsx:2456
+#: src/routes/settings.tsx:2452
 msgid "Connecting..."
 msgstr "Connexion en cours..."
 
@@ -1791,7 +1809,7 @@ msgstr "Connexion en cours..."
 msgid "Connection"
 msgstr "Connexion"
 
-#: src/routes/index.tsx:285
+#: src/routes/index.tsx:295
 msgid "Connection Error"
 msgstr "Erreur de connexion"
 
@@ -1803,7 +1821,7 @@ msgstr "Échec de la connexion"
 msgid "Connection Key"
 msgstr "Clé de connexion"
 
-#: src/routes/settings.tsx:2332
+#: src/routes/settings.tsx:2328
 msgid "Connection Key / Channel Ref"
 msgstr "Clé de connexion / Réf. canal"
 
@@ -1817,7 +1835,7 @@ msgstr "Contenu"
 msgid "first-start.step.heroes.eyebrow"
 msgstr "Contenu"
 
-#: src/routes/settings.tsx:843
+#: src/routes/settings.tsx:830
 msgid "Content safety, trusted domains, and safe site lists."
 msgstr "Sécurité du contenu, domaines de confiance et listes de sites sécurisés."
 
@@ -1831,11 +1849,11 @@ msgid "Continue the saved run for this playlist"
 msgstr "Continuer la course enregistrée pour cette playlist"
 
 #: src/routes/map-editor.tsx:2131
-#: src/routes/playlist-workshop.tsx:3393
+#: src/routes/playlist-workshop.tsx:3539
 msgid "Continue Unresolved"
 msgstr "Continuer non résolu"
 
-#: src/routes/settings.tsx:950
+#: src/routes/settings.tsx:951
 msgid "Controller Support"
 msgstr "Prise en charge du contrôleur"
 
@@ -1848,7 +1866,7 @@ msgstr "Contrôles"
 msgid "Controls the range of the dice used for movement."
 msgstr "Contrôle la portée des dés utilisés pour le mouvement."
 
-#: src/routes/playlist-workshop.tsx:3104
+#: src/routes/playlist-workshop.tsx:3250
 msgid "Controls the range of the dice used for movement. Default is 1 to 6."
 msgstr "Contrôle la portée des dés utilisés pour le mouvement. La valeur par défaut est 1 à 6."
 
@@ -1902,11 +1920,11 @@ msgstr "Copier le support original"
 msgid "Copy original videos"
 msgstr "Copier des vidéos originales"
 
-#: src/routes/highscores.tsx:340
+#: src/routes/highscores.tsx:359
 msgid "Could not delete single-player run."
 msgstr "Impossible de supprimer la partie solo."
 
-#: src/routes/highscores.tsx:300
+#: src/routes/highscores.tsx:319
 msgid "Could not sync remote results. Showing cached data."
 msgstr "Impossible de synchroniser les résultats à distance. Affichage des données mises en cache."
 
@@ -1915,7 +1933,7 @@ msgstr "Impossible de synchroniser les résultats à distance. Affichage des don
 msgid "hud.phase.countdown"
 msgstr "COMPTE À REBOURS"
 
-#: src/routes/playlist-workshop.tsx:4047
+#: src/routes/playlist-workshop.tsx:4198
 msgid "Create"
 msgstr "Créer"
 
@@ -1960,13 +1978,13 @@ msgid "Create or select a playlist before hosting."
 msgstr "Créez ou sélectionnez une liste de lecture avant l'hébergement."
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:175
-#: src/routes/playlist-workshop.tsx:1328
-#: src/routes/playlist-workshop.tsx:1398
-#: src/routes/playlist-workshop.tsx:3955
+#: src/routes/playlist-workshop.tsx:1333
+#: src/routes/playlist-workshop.tsx:1403
+#: src/routes/playlist-workshop.tsx:4108
 msgid "Create Playlist"
 msgstr "Créer une liste de lecture"
 
-#: src/routes/settings.tsx:4257
+#: src/routes/settings.tsx:4230
 msgid "Created/Updated/Linked:"
 msgstr "Créé/mis à jour/lié :"
 
@@ -1975,7 +1993,7 @@ msgid "Creating or resuming your multiplayer account on the selected server."
 msgstr "Création ou reprise de votre compte multijoueur sur le serveur sélectionné."
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:175
-#: src/routes/playlist-workshop.tsx:4047
+#: src/routes/playlist-workshop.tsx:4198
 msgid "Creating..."
 msgstr "Creation en cours..."
 
@@ -1984,32 +2002,32 @@ msgstr "Creation en cours..."
 msgid "first-start.step.maps.eyebrow"
 msgstr "Création"
 
-#: src/routes/index.tsx:203
-#: src/routes/playlist-workshop.tsx:1311
-#: src/routes/playlist-workshop.tsx:1382
-#: src/routes/playlist-workshop.tsx:1887
+#: src/routes/index.tsx:205
+#: src/routes/playlist-workshop.tsx:1316
+#: src/routes/playlist-workshop.tsx:1387
+#: src/routes/playlist-workshop.tsx:1932
 msgid "Creation & Workshop"
 msgstr "Création & Atelier"
 
-#: src/routes/settings.tsx:5217
+#: src/routes/settings.tsx:5189
 msgid "Creator of the game."
 msgstr "Créateur du jeu."
 
-#: src/routes/settings.tsx:5223
+#: src/routes/settings.tsx:5195
 msgid "Credit for the original Godot version."
 msgstr "Crédit pour la version originale Godot."
 
-#: src/routes/settings.tsx:1001
+#: src/routes/settings.tsx:1002
 msgid "Credits / License"
 msgstr "Crédits / Licence"
 
-#: src/routes/settings.tsx:5179
+#: src/routes/settings.tsx:5151
 msgid "Credits & License"
 msgstr "Crédits et licence"
 
 #: src/routes/rounds.tsx:2867
 #: src/routes/rounds.tsx:3435
-#: src/routes/settings.tsx:4465
+#: src/routes/settings.tsx:4438
 msgid "Cum"
 msgstr "Sperme"
 
@@ -2027,7 +2045,7 @@ msgstr "SPERME ROND"
 msgid "Cum round bonus score"
 msgstr "Bonus de tour de sperme"
 
-#: src/routes/playlist-workshop.tsx:3251
+#: src/routes/playlist-workshop.tsx:3397
 msgid "Cum Round Bonus Score"
 msgstr "Score bonus du tour de sperme"
 
@@ -2036,7 +2054,7 @@ msgid "Cum Round Check"
 msgstr "Contrôle du sperme"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:180
+#: src/routes/playlist-workshop.tsx:183
 msgid "playlist-workshop.section.cum-rounds.title"
 msgstr "Rondes de sperme"
 
@@ -2044,18 +2062,18 @@ msgstr "Rondes de sperme"
 msgid "Cum Rounds"
 msgstr "Rondes de sperme"
 
-#: src/routes/playlist-workshop.tsx:2737
+#: src/routes/playlist-workshop.tsx:2889
 msgid "Cum rounds play after the main playlist reaches the end. The rounds you enable here become a random selection pool, and one of them will be chosen when the run finishes."
 msgstr "Les tours de sperme sont joués après la fin de la liste de lecture principale. Les tours que vous activez ici deviennent un pool de sélection aléatoire, et l'un d'eux sera choisi à la fin de l'exécution."
 
-#: src/routes/index.tsx:295
-#: src/routes/settings.tsx:2491
+#: src/routes/index.tsx:305
+#: src/routes/settings.tsx:2487
 msgid "Current"
 msgstr "Actuel"
 
-#: src/routes/settings.tsx:1563
-#: src/routes/settings.tsx:1647
-#: src/routes/settings.tsx:1733
+#: src/routes/settings.tsx:1564
+#: src/routes/settings.tsx:1648
+#: src/routes/settings.tsx:1734
 msgid "Current Location"
 msgstr "Emplacement actuel"
 
@@ -2071,7 +2089,7 @@ msgstr "Aperçu du tour actuel"
 msgid "Current script position"
 msgstr "Position actuelle du scénario"
 
-#: src/routes/highscores.tsx:550
+#: src/routes/highscores.tsx:569
 msgid "Current Status"
 msgstr "Statut actuel"
 
@@ -2085,17 +2103,17 @@ msgid "Custom Server"
 msgstr "Serveur personnalisé"
 
 #. placeholder {0}: round.difficulty
-#: src/routes/playlist-workshop.tsx:2611
-#: src/routes/playlist-workshop.tsx:2669
-#: src/routes/playlist-workshop.tsx:3597
+#: src/routes/playlist-workshop.tsx:2728
+#: src/routes/playlist-workshop.tsx:2786
+#: src/routes/playlist-workshop.tsx:3751
 msgid "D{0}"
 msgstr "D{0}"
 
-#: src/routes/settings.tsx:3545
+#: src/routes/settings.tsx:3526
 msgid "Danger Zone"
 msgstr "Zone dangereuse"
 
-#: src/routes/settings.tsx:880
+#: src/routes/settings.tsx:867
 msgid "Data & Storage"
 msgstr "Données et stockage"
 
@@ -2104,11 +2122,11 @@ msgstr "Données et stockage"
 msgid "Deactivate all"
 msgstr "Désactiver tout"
 
-#: src/routes/playlist-workshop.tsx:2978
+#: src/routes/playlist-workshop.tsx:3126
 msgid "Deactivate all anti-perks"
 msgstr "Désactivez tous les anti-avantages"
 
-#: src/routes/playlist-workshop.tsx:2874
+#: src/routes/playlist-workshop.tsx:3024
 msgid "Deactivate all perks"
 msgstr "Désactiver tous les avantages"
 
@@ -2118,12 +2136,12 @@ msgstr "Désactiver tous les avantages"
 msgid "Default app data folder"
 msgstr "Dossier de données d'application par défaut"
 
-#: src/routes/settings.tsx:1652
-#: src/routes/settings.tsx:1738
+#: src/routes/settings.tsx:1653
+#: src/routes/settings.tsx:1739
 msgid "Default app data folder (existing behavior)"
 msgstr "Dossier de données d'application par défaut (comportement existant)"
 
-#: src/routes/settings.tsx:1566
+#: src/routes/settings.tsx:1567
 msgid "Default app data folder (persistent)"
 msgstr "Dossier de données d'application par défaut (persistant)"
 
@@ -2133,11 +2151,11 @@ msgstr "Reportez la génération de phash à un moment ultérieur."
 
 #: src/features/map-editor/components/EditorToolbar.tsx:122
 #: src/features/map-editor/components/PlaylistPickerView.tsx:142
-#: src/routes/highscores.tsx:725
+#: src/routes/highscores.tsx:744
 #: src/routes/map-editor.tsx:1793
-#: src/routes/playlist-workshop.tsx:2079
-#: src/routes/playlist-workshop.tsx:3374
-#: src/routes/settings.tsx:4532
+#: src/routes/playlist-workshop.tsx:2122
+#: src/routes/playlist-workshop.tsx:3520
+#: src/routes/settings.tsx:4505
 msgid "Delete"
 msgstr "Supprimer"
 
@@ -2147,7 +2165,7 @@ msgid "Delete \"{0}\"? This cannot be undone."
 msgstr "Supprimer « {0} » ? Cela ne peut pas être annulé."
 
 #. placeholder {0}: activePlaylist.name
-#: src/routes/playlist-workshop.tsx:3335
+#: src/routes/playlist-workshop.tsx:3481
 msgid "Delete <0>{0}</0>? This cannot be undone."
 msgstr "Supprimer <0>{0}</0> ? Cela ne peut pas être annulé."
 
@@ -2176,11 +2194,11 @@ msgstr ""
 msgid "Delete Hero?"
 msgstr "Supprimer le héros ?"
 
-#: src/routes/highscores.tsx:1020
+#: src/routes/highscores.tsx:1039
 msgid "Delete Highscore Entry?"
 msgstr "Supprimer l'entrée des meilleurs scores ?"
 
-#: src/routes/playlist-workshop.tsx:3332
+#: src/routes/playlist-workshop.tsx:3478
 msgid "Delete Playlist"
 msgstr "Supprimer la liste de lecture"
 
@@ -2209,7 +2227,7 @@ msgid "Delete Round?"
 msgstr "Supprimer le tour ?"
 
 #. placeholder {0}: run.score
-#: src/routes/highscores.tsx:723
+#: src/routes/highscores.tsx:742
 msgid "Delete run {0}"
 msgstr "Supprimer l'exécution {0}"
 
@@ -2221,9 +2239,9 @@ msgstr "Supprimer la sélection"
 msgid "Delete source round after save"
 msgstr "Supprimer le tour source après la sauvegarde"
 
-#: src/routes/highscores.tsx:725
-#: src/routes/highscores.tsx:1066
-#: src/routes/playlist-workshop.tsx:3374
+#: src/routes/highscores.tsx:744
+#: src/routes/highscores.tsx:1085
+#: src/routes/playlist-workshop.tsx:3520
 #: src/routes/rounds.tsx:3412
 #: src/routes/rounds.tsx:3667
 msgid "Deleting..."
@@ -2283,8 +2301,8 @@ msgstr "Développement : l'intermédiaire s'est terminé tôt."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:447
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:484
-#: src/routes/playlist-workshop.tsx:2911
-#: src/routes/playlist-workshop.tsx:3015
+#: src/routes/playlist-workshop.tsx:3060
+#: src/routes/playlist-workshop.tsx:3162
 msgid "Device"
 msgstr "Appareil"
 
@@ -2300,7 +2318,7 @@ msgstr "Appareil connecté"
 msgid "Device Connection"
 msgstr "Connexion de l'appareil"
 
-#: src/routes/settings.tsx:2339
+#: src/routes/settings.tsx:2335
 msgid "Device connection key"
 msgstr "Clé de connexion de l'appareil"
 
@@ -2309,7 +2327,7 @@ msgid "Device stopped"
 msgstr "Appareil arrêté"
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:144
-#: src/routes/playlist-workshop.tsx:3055
+#: src/routes/playlist-workshop.tsx:3201
 msgid "Dice Roll Limits"
 msgstr "Limites des lancers de dés"
 
@@ -2337,7 +2355,7 @@ msgid "Difficulty"
 msgstr "Difficulté"
 
 #. placeholder {0}: round.difficulty
-#: src/routes/playlist-workshop.tsx:2780
+#: src/routes/playlist-workshop.tsx:2931
 msgid "Difficulty {0}"
 msgstr "Difficulté {0}"
 
@@ -2354,7 +2372,7 @@ msgstr "Direct"
 msgid "game.perk.directApply"
 msgstr "Candidature directe"
 
-#: src/routes/settings.tsx:4524
+#: src/routes/settings.tsx:4497
 msgid "Disable"
 msgstr "Désactiver"
 
@@ -2363,8 +2381,8 @@ msgid "disabled"
 msgstr "désactivé"
 
 #: src/routes/first-start.tsx:1415
-#: src/routes/playlist-workshop.tsx:2265
-#: src/routes/playlist-workshop.tsx:2800
+#: src/routes/playlist-workshop.tsx:2331
+#: src/routes/playlist-workshop.tsx:2950
 #: src/routes/rounds.tsx:2761
 #: src/routes/rounds.tsx:4236
 msgid "Disabled"
@@ -2378,7 +2396,7 @@ msgstr "Désactivé masqué"
 msgid "Disabled Included"
 msgstr "Désactivé Inclus"
 
-#: src/routes/settings.tsx:3830
+#: src/routes/settings.tsx:3807
 msgid "Disabling both checks may result in a bad user experience for you and other players"
 msgstr "La désactivation des deux vérifications peut entraîner une mauvaise expérience utilisateur pour vous et les autres joueurs."
 
@@ -2410,14 +2428,14 @@ msgstr "Article rejeté"
 
 #: src/components/GlobalHandyOverlay.tsx:366
 #: src/routes/first-start.tsx:1929
-#: src/routes/settings.tsx:2456
+#: src/routes/settings.tsx:2452
 msgid "Disconnect"
 msgstr "Déconnecter"
 
 #: src/components/game/RoundVideoOverlay.tsx:3015
 #: src/components/GlobalHandyOverlay.tsx:125
-#: src/routes/index.tsx:286
-#: src/routes/settings.tsx:2312
+#: src/routes/index.tsx:296
+#: src/routes/settings.tsx:2308
 msgid "Disconnected"
 msgstr "Déconnecté"
 
@@ -2446,7 +2464,7 @@ msgstr "Nom d'affichage"
 msgid "Display name is required."
 msgstr "Le nom d’affichage est requis."
 
-#: src/routes/settings.tsx:2405
+#: src/routes/settings.tsx:2401
 msgid "Do not use your access token here. Create or select an app at Handy and paste the application ID instead."
 msgstr "N'utilisez pas votre jeton d'accès ici. Créez ou sélectionnez une application sur Handy et collez l'ID de l'application à la place."
 
@@ -2468,7 +2486,7 @@ msgstr "N'ACHETEZ AUCUN AVANTAGE"
 msgid "download"
 msgstr "télécharger"
 
-#: src/routes/settings.tsx:2024
+#: src/routes/settings.tsx:2023
 msgid "Download and cache videos from website rounds for offline playback. A background scan runs automatically every 5 minutes."
 msgstr "Téléchargez et mettez en cache les vidéos des visites de sites Web pour une lecture hors ligne. Une analyse en arrière-plan s'exécute automatiquement toutes les 5 minutes."
 
@@ -2476,7 +2494,7 @@ msgstr "Téléchargez et mettez en cache les vidéos des visites de sites Web po
 msgid "Downloaded"
 msgstr "Téléchargé"
 
-#: src/routes/settings.tsx:3617
+#: src/routes/settings.tsx:3597
 msgid "Downloaded match results and sync queue."
 msgstr "Résultats de match téléchargés et file d'attente de synchronisation."
 
@@ -2488,31 +2506,31 @@ msgstr "Musique de menu téléchargée et audio YouTube importé."
 msgid "Downloaded website videos and cache files."
 msgstr "Vidéos de sites Web téléchargées et fichiers de cache."
 
-#: src/routes/settings.tsx:3622
+#: src/routes/settings.tsx:3602
 msgid "Downloaded website videos and generated playback transcodes."
 msgstr "Vidéos de sites Web téléchargées et transcodages de lecture générés."
 
-#: src/routes/settings.tsx:2052
+#: src/routes/settings.tsx:2051
 msgid "Downloading:"
 msgstr "Téléchargement :"
 
 #: src/routes/first-start.tsx:1351
 #: src/routes/first-start.tsx:1573
-#: src/routes/settings.tsx:3022
-#: src/routes/settings.tsx:3439
+#: src/routes/settings.tsx:3011
+#: src/routes/settings.tsx:3420
 msgid "Downloading..."
 msgstr "Telechargement en cours..."
 
-#: src/routes/highscores.tsx:842
+#: src/routes/highscores.tsx:861
 msgid "Draft"
 msgstr "Brouillon"
 
-#: src/routes/playlist-workshop.tsx:3566
-#: src/routes/playlist-workshop.tsx:3567
+#: src/routes/playlist-workshop.tsx:3720
+#: src/routes/playlist-workshop.tsx:3721
 msgid "Drag to reorder"
 msgstr "Faites glisser pour réorganiser"
 
-#: src/routes/playlist-workshop.tsx:2077
+#: src/routes/playlist-workshop.tsx:2120
 msgid "Duplicate"
 msgstr "Dupliquer"
 
@@ -2520,15 +2538,15 @@ msgstr "Dupliquer"
 msgid "Duration"
 msgstr "Durée"
 
-#: src/routes/highscores.tsx:668
+#: src/routes/highscores.tsx:687
 msgid "Each row preserves score progression, completion reason, playlist reference, and survival duration when available."
 msgstr "Chaque ligne préserve la progression du score, la raison de l'achèvement, la référence de la playlist et la durée de survie lorsqu'elles sont disponibles."
 
-#: src/routes/index.tsx:474
+#: src/routes/index.tsx:484
 msgid "Early Access"
 msgstr "Accès anticipé"
 
-#: src/routes/playlist-workshop.tsx:2540
+#: src/routes/playlist-workshop.tsx:2656
 msgid "Easiest"
 msgstr "Le plus simple"
 
@@ -2587,11 +2605,11 @@ msgid "Email Required"
 msgstr "E-mail requis"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:619
+#: src/routes/playlist-workshop.tsx:622
 msgid "playlist-workshop.empty-playlist.name"
 msgstr "Vide"
 
-#: src/routes/settings.tsx:4524
+#: src/routes/settings.tsx:4497
 msgid "Enable"
 msgstr "Activer"
 
@@ -2599,7 +2617,7 @@ msgstr "Activer"
 msgid "Enable background pHash scanning"
 msgstr "Activer l'analyse pHash en arrière-plan"
 
-#: src/routes/settings.tsx:3741
+#: src/routes/settings.tsx:3718
 msgid "Enable Cheat Mode?"
 msgstr "Activer le mode triche ?"
 
@@ -2612,12 +2630,12 @@ msgid "enabled"
 msgstr "activé"
 
 #: src/routes/first-start.tsx:1415
-#: src/routes/playlist-workshop.tsx:2265
-#: src/routes/playlist-workshop.tsx:2800
+#: src/routes/playlist-workshop.tsx:2331
+#: src/routes/playlist-workshop.tsx:2950
 msgid "Enabled"
 msgstr "Activé"
 
-#: src/routes/settings.tsx:767
+#: src/routes/settings.tsx:754
 msgid "Enables dev menu features in singleplayer. Any highscore achieved will be permanently marked with 🎭. Does not work in multiplayer."
 msgstr "Active les fonctionnalités du menu de développement en mode solo. Tout meilleur score obtenu sera marqué de manière permanente par 🎭. Ne fonctionne pas en multijoueur."
 
@@ -2675,7 +2693,7 @@ msgstr "Entrez la clé de connexion depuis l'application Handy"
 msgid "Enter search prompt..."
 msgstr "Entrez l'invite de recherche..."
 
-#: src/routes/settings.tsx:2392
+#: src/routes/settings.tsx:2388
 msgid "Enter your Handy application ID"
 msgstr "Entrez votre identifiant d'application Handy"
 
@@ -2694,7 +2712,7 @@ msgid "perk.rarity.epic"
 msgstr "ÉPIQUE"
 
 #: src/routes/settings.tsx:1909
-#: src/routes/settings.tsx:2086
+#: src/routes/settings.tsx:2084
 msgid "Error"
 msgstr "Erreur"
 
@@ -2731,12 +2749,12 @@ msgstr "Calibrage ETA..."
 msgid "gameboard.kind.event"
 msgstr "ÉVÉNEMENT★"
 
-#: src/routes/settings.tsx:4579
+#: src/routes/settings.tsx:4552
 msgid "Every shortcut currently wired into the app is listed here."
 msgstr "Chaque raccourci actuellement connecté à l'application est répertorié ici."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:201
-#: src/routes/playlist-workshop.tsx:2319
+#: src/routes/playlist-workshop.tsx:2385
 msgid "Everywhere"
 msgstr "Partout"
 
@@ -2752,7 +2770,7 @@ msgstr "Exclus :"
 msgid "Exit"
 msgstr "Quitter"
 
-#: src/routes/highscores.tsx:794
+#: src/routes/highscores.tsx:813
 msgid "Expand a cached match to review every player row from the stored standings snapshot."
 msgstr "Développez un match en cache pour examiner chaque ligne de joueur à partir de l'instantané du classement stocké."
 
@@ -2781,16 +2799,16 @@ msgid "Expected Size"
 msgstr "Taille attendue"
 
 #: src/components/MenuButton.tsx:201
-#: src/routes/settings.tsx:944
+#: src/routes/settings.tsx:931
 msgid "Experimental"
 msgstr "Expérimental"
 
-#: src/routes/settings.tsx:3738
-#: src/routes/settings.tsx:3800
+#: src/routes/settings.tsx:3715
+#: src/routes/settings.tsx:3777
 msgid "Experimental Feature"
 msgstr "Fonctionnalité expérimentale"
 
-#: src/routes/settings.tsx:951
+#: src/routes/settings.tsx:952
 msgid "Experimental gamepad navigation and input support. Disabled by default until it is more stable. Expect some things to not work as expected."
 msgstr "Navigation par manette de jeu expérimentale et prise en charge de la saisie. Désactivé par défaut jusqu'à ce qu'il soit plus stable. Attendez-vous à ce que certaines choses ne fonctionnent pas comme prévu."
 
@@ -2809,7 +2827,7 @@ msgstr "Remplacement expérimental actif. Ce lobby s'attend à ce que {0} soit i
 msgid "Export"
 msgstr "Exporter"
 
-#: src/routes/playlist-workshop.tsx:2089
+#: src/routes/playlist-workshop.tsx:2132
 msgid "Export .fplay"
 msgstr "Exporter .fplay"
 
@@ -2831,8 +2849,7 @@ msgid "Export Fplay"
 msgstr "Exporter Fplay"
 
 #: src/routes/map-editor.tsx:1861
-#: src/routes/playlist-workshop.tsx:2138
-#: src/routes/playlist-workshop.tsx:2155
+#: src/routes/playlist-workshop.tsx:2220
 msgid "Export Pack"
 msgstr "Pack d'exportation"
 
@@ -2856,6 +2873,10 @@ msgstr "Exportez toute la bibliothèque installée."
 msgid "Export the pack without reencoding. File size stays close to the original sources."
 msgstr "Exportez le pack sans réencodage. La taille du fichier reste proche des sources originales."
 
+#: src/routes/playlist-workshop.tsx:2197
+msgid "Export Your Creation"
+msgstr "Exporter votre création"
+
 #. js-lingui-explicit-id
 #: src/routes/first-start.tsx:345
 msgid "first-start.step.heroes.detail.5"
@@ -2867,11 +2888,11 @@ msgstr "Exporter votre propre travail est également censé être simple. Une fo
 msgid "Exporting..."
 msgstr "Exportation en cours..."
 
-#: src/routes/settings.tsx:979
+#: src/routes/settings.tsx:980
 msgid "Exposes an optional remote funscript URL field in the Install From Web dialog. Disabled by default so web installs prefer a local funscript file."
 msgstr "Expose un champ URL de funscript distant facultatif dans la boîte de dialogue Installer à partir du Web. Désactivé par défaut afin que les installations Web préfèrent un fichier funscript local."
 
-#: src/routes/settings.tsx:836
+#: src/routes/settings.tsx:823
 msgid "External source integrations, Stash sync, and local library folders."
 msgstr "Intégrations de sources externes, synchronisation Stash et dossiers de bibliothèque locale."
 
@@ -2885,7 +2906,7 @@ msgstr "Pack d'extraction des fichiers {0} / {1}"
 msgid "ey..."
 msgstr "ey..."
 
-#: src/routes/playlist-workshop.tsx:3602
+#: src/routes/playlist-workshop.tsx:3756
 msgid "F{fieldIndex}"
 msgstr "F{fieldIndex}"
 
@@ -2897,12 +2918,12 @@ msgstr "Échec"
 msgid "Failed instruction"
 msgstr "Instruction échouée"
 
-#: src/routes/playlist-workshop.tsx:1531
+#: src/routes/playlist-workshop.tsx:1536
 msgid "Failed to abort playlist export."
 msgstr "Échec de l'abandon de l'exportation de la liste de lecture."
 
-#: src/routes/settings.tsx:2712
-#: src/routes/settings.tsx:3199
+#: src/routes/settings.tsx:2708
+#: src/routes/settings.tsx:3188
 msgid "Failed to add from URL"
 msgstr "Échec de l'ajout à partir de l'URL"
 
@@ -2957,13 +2978,13 @@ msgstr "Échec de la création d'une ancienne playlist."
 msgid "Failed to create lobby."
 msgstr "Échec de la création du lobby."
 
-#: src/routes/playlist-workshop.tsx:1362
-#: src/routes/playlist-workshop.tsx:1488
-#: src/routes/playlist-workshop.tsx:3320
+#: src/routes/playlist-workshop.tsx:1367
+#: src/routes/playlist-workshop.tsx:1493
+#: src/routes/playlist-workshop.tsx:3466
 msgid "Failed to create playlist."
 msgstr "Échec de la création de la liste de lecture."
 
-#: src/routes/settings.tsx:4117
+#: src/routes/settings.tsx:4091
 msgid "Failed to create source."
 msgstr "Échec de la création de la source."
 
@@ -2971,7 +2992,7 @@ msgstr "Échec de la création de la source."
 msgid "Failed to delete hero."
 msgstr "Échec de la suppression du héros."
 
-#: src/routes/playlist-workshop.tsx:3366
+#: src/routes/playlist-workshop.tsx:3512
 msgid "Failed to delete playlist."
 msgstr "Échec de la suppression de la playlist."
 
@@ -2979,7 +3000,7 @@ msgstr "Échec de la suppression de la playlist."
 msgid "Failed to delete round."
 msgstr "Échec de la suppression du tour."
 
-#: src/routes/settings.tsx:4154
+#: src/routes/settings.tsx:4128
 msgid "Failed to delete source."
 msgstr "Échec de la suppression de la source."
 
@@ -2992,7 +3013,7 @@ msgstr "Échec de l'envoi direct de l'anti-avantage."
 msgid "Failed to export library package."
 msgstr "Échec de l'exportation du package de bibliothèque."
 
-#: src/routes/playlist-workshop.tsx:1623
+#: src/routes/playlist-workshop.tsx:1628
 msgid "Failed to export playlist pack."
 msgstr "Échec de l'exportation du pack de playlist."
 
@@ -3070,7 +3091,7 @@ msgstr "Échec du chargement des paramètres d'aperçu."
 msgid "Failed to load public lobbies."
 msgstr "Échec du chargement des lobbys publics."
 
-#: src/routes/settings.tsx:4635
+#: src/routes/settings.tsx:4608
 msgid "Failed to load trusted sites."
 msgstr "Échec du chargement des sites de confiance."
 
@@ -3078,8 +3099,8 @@ msgstr "Échec du chargement des sites de confiance."
 msgid "Failed to load web install settings."
 msgstr "Échec du chargement des paramètres d'installation Web."
 
-#: src/routes/playlist-workshop.tsx:1175
-#: src/routes/playlist-workshop.tsx:1592
+#: src/routes/playlist-workshop.tsx:1180
+#: src/routes/playlist-workshop.tsx:1597
 msgid "Failed to open advanced map editor."
 msgstr "Échec de l'ouverture de l'éditeur de carte avancé."
 
@@ -3112,7 +3133,7 @@ msgstr "Échec de l'actualisation du résultat."
 msgid "Failed to remove server profile."
 msgstr "Échec de la suppression du profil de serveur."
 
-#: src/routes/playlist-workshop.tsx:3299
+#: src/routes/playlist-workshop.tsx:3445
 msgid "Failed to rename playlist."
 msgstr "Échec du renommage de la playlist."
 
@@ -3140,7 +3161,7 @@ msgstr "Échec de la nouvelle tentative d'association du héros du modèle."
 msgid "Failed to retry template round linking."
 msgstr "Échec de la nouvelle tentative de liaison du modèle."
 
-#: src/routes/playlist-workshop.tsx:1714
+#: src/routes/playlist-workshop.tsx:1719
 msgid "Failed to save playlist."
 msgstr "Échec de l'enregistrement de la liste de lecture."
 
@@ -3193,7 +3214,7 @@ msgstr "Échec de l'abonnement aux mises à jour des matchs."
 msgid "Failed to sync local progress."
 msgstr "Échec de la synchronisation de la progression locale."
 
-#: src/routes/settings.tsx:4086
+#: src/routes/settings.tsx:4060
 msgid "Failed to sync sources."
 msgstr "Échec de la synchronisation des sources."
 
@@ -3222,14 +3243,14 @@ msgstr "Échec de la mise à jour de la visibilité du lobby public."
 msgid "Failed to update round."
 msgstr "Échec de la mise à jour du cycle."
 
-#: src/routes/settings.tsx:4933
-#: src/routes/settings.tsx:4997
-#: src/routes/settings.tsx:5059
-#: src/routes/settings.tsx:5119
+#: src/routes/settings.tsx:4905
+#: src/routes/settings.tsx:4969
+#: src/routes/settings.tsx:5031
+#: src/routes/settings.tsx:5091
 msgid "Failed to update setting."
 msgstr "Échec de la mise à jour du paramètre."
 
-#: src/routes/settings.tsx:4141
+#: src/routes/settings.tsx:4115
 msgid "Failed to update source."
 msgstr "Échec de la mise à jour de la source."
 
@@ -3280,11 +3301,11 @@ msgstr "Champ {0} : {1}"
 msgid "File Name"
 msgstr "Nom du fichier"
 
-#: src/routes/settings.tsx:4757
+#: src/routes/settings.tsx:4729
 msgid "Filter domains"
 msgstr "Filtrer les domaines"
 
-#: src/routes/highscores.tsx:842
+#: src/routes/highscores.tsx:861
 msgid "Final"
 msgstr "Finale"
 
@@ -3292,7 +3313,7 @@ msgstr "Finale"
 msgid "Final Artifact"
 msgstr "Artefact final"
 
-#: src/routes/highscores.tsx:515
+#: src/routes/highscores.tsx:534
 msgid "Final Matches"
 msgstr "Matchs finaux"
 
@@ -3309,7 +3330,7 @@ msgstr "Score final"
 msgid "Final Standings"
 msgstr "Classement final"
 
-#: src/routes/highscores.tsx:777
+#: src/routes/highscores.tsx:796
 msgid "Finalized"
 msgstr "Finalisé"
 
@@ -3343,7 +3364,7 @@ msgstr "Terminer le tour"
 msgid "game.btn.finishRound"
 msgstr "FINIR LE TOUR"
 
-#: src/routes/highscores.tsx:1037
+#: src/routes/highscores.tsx:1056
 msgid "Finished:"
 msgstr "Terminé :"
 
@@ -3352,7 +3373,7 @@ msgstr "Terminé :"
 msgid "Finished: {0}"
 msgstr "Terminé : {0}"
 
-#: src/routes/settings.tsx:2219
+#: src/routes/settings.tsx:2215
 msgid "First Start Workflow"
 msgstr "Flux de travail de premier démarrage"
 
@@ -3364,7 +3385,7 @@ msgstr "Les installations de dossiers sont idéales pour le contenu local en mas
 msgid "Folders"
 msgstr "Dossiers"
 
-#: src/routes/settings.tsx:5229
+#: src/routes/settings.tsx:5201
 msgid "For"
 msgstr "Pour"
 
@@ -3374,7 +3395,7 @@ msgid "Force stop"
 msgstr "Forcer l'arrêt"
 
 #: src/components/game/RoundVideoOverlay.tsx:3300
-#: src/routes/settings.tsx:2466
+#: src/routes/settings.tsx:2462
 msgid "Force Stop"
 msgstr "Forcer l'arrêt"
 
@@ -3411,7 +3432,7 @@ msgstr "À partir de l'URL"
 msgid "Fullscreen"
 msgstr "Plein écran"
 
-#: src/routes/playlist-workshop.tsx:3988
+#: src/routes/playlist-workshop.tsx:4140
 msgid "Fully Random"
 msgstr "Entièrement aléatoire"
 
@@ -3447,7 +3468,7 @@ msgstr "Funscripts"
 msgid "Game saved."
 msgstr "Jeu sauvegardé."
 
-#: src/routes/settings.tsx:681
+#: src/routes/settings.tsx:668
 msgid "Gameplay"
 msgstr "Jouabilite"
 
@@ -3509,15 +3530,15 @@ msgstr "Cadeau garanti"
 msgid "Give Up"
 msgstr "Abandonner"
 
-#: src/routes/settings.tsx:810
+#: src/routes/settings.tsx:797
 msgid "Global background music queue and playback preferences."
 msgstr "File d’attente globale de musique de fond et préférences de lecture."
 
-#: src/routes/settings.tsx:3613
+#: src/routes/settings.tsx:3593
 msgid "Global Stats"
 msgstr "Statistiques mondiales"
 
-#: src/routes/settings.tsx:2480
+#: src/routes/settings.tsx:2476
 msgid "Global Sync Offset"
 msgstr "Décalage de synchronisation globale"
 
@@ -3535,11 +3556,11 @@ msgstr "Retourner"
 msgid "Go to Main Menu"
 msgstr "Aller au menu principal"
 
-#: src/routes/playlist-workshop.tsx:1436
+#: src/routes/playlist-workshop.tsx:1441
 msgid "Graph"
 msgstr "Graphique"
 
-#: src/routes/playlist-workshop.tsx:2067
+#: src/routes/playlist-workshop.tsx:2110
 msgid "Graph Board"
 msgstr "Tableau graphique"
 
@@ -3547,7 +3568,7 @@ msgstr "Tableau graphique"
 msgid "Graph is valid"
 msgstr "Le graphique est valide"
 
-#: src/routes/playlist-workshop.tsx:2105
+#: src/routes/playlist-workshop.tsx:2148
 msgid "Graph Playlist"
 msgstr "Liste de lecture graphique"
 
@@ -3567,11 +3588,11 @@ msgstr "Avantage garanti"
 msgid "Handy Menu"
 msgstr "Menu pratique"
 
-#: src/routes/playlist-workshop.tsx:3237
+#: src/routes/playlist-workshop.tsx:3383
 msgid "Hard cap for anti-perk chance. Once reached, later rounds keep using this maximum instead of growing further."
 msgstr "Casquette rigide pour une chance anti-avantage. Une fois atteint, les tours suivants continuent d’utiliser ce maximum au lieu de croître davantage."
 
-#: src/routes/playlist-workshop.tsx:3186
+#: src/routes/playlist-workshop.tsx:3332
 msgid "Hard cap for intermediary chance. Scaling stops increasing once this value is reached, even if more rounds are completed."
 msgstr "Casquette rigide pour chance intermédiaire. La mise à l'échelle cesse d'augmenter une fois cette valeur atteinte, même si d'autres tours sont effectués."
 
@@ -3589,7 +3610,7 @@ msgstr "Matériel"
 msgid "first-start.step.handy.eyebrow"
 msgstr "Matériel"
 
-#: src/routes/settings.tsx:816
+#: src/routes/settings.tsx:803
 msgid "Hardware & Sync"
 msgstr "Matériel et synchronisation"
 
@@ -3602,7 +3623,7 @@ msgstr "Matériel : {0}"
 msgid "Hashes may need to be calculated, and video transcoding or preview generation may also be required."
 msgstr "Des hachages devront peut-être être calculés, et un transcodage vidéo ou une génération d'aperçus peuvent également être nécessaires."
 
-#: src/routes/settings.tsx:994
+#: src/routes/settings.tsx:995
 msgid "Help"
 msgstr "Aide"
 
@@ -3679,17 +3700,17 @@ msgstr "Chance anti-avantage la plus élevée autorisée."
 msgid "Highest intermediary chance allowed."
 msgstr "Chance intermédiaire la plus élevée autorisée."
 
-#: src/routes/highscores.tsx:397
-#: src/routes/highscores.tsx:448
+#: src/routes/highscores.tsx:416
+#: src/routes/highscores.tsx:467
 #: src/routes/multiplayer-result.tsx:256
 msgid "Highscore Hub"
 msgstr "Centre des meilleurs scores"
 
-#: src/routes/index.tsx:230
+#: src/routes/index.tsx:232
 msgid "Highscores"
 msgstr "Meilleurs scores"
 
-#: src/routes/settings.tsx:3613
+#: src/routes/settings.tsx:3593
 msgid "Highscores and overall career progress."
 msgstr "Meilleurs scores et progression globale de la carrière."
 
@@ -3716,15 +3737,15 @@ msgstr "Liste des hôtes bannis"
 msgid "Hover, focus, or click a route to preview it on the board. You can also click the glowing destination tiles."
 msgstr "Passez la souris, concentrez-vous ou cliquez sur un itinéraire pour le prévisualiser sur le tableau. Vous pouvez également cliquer sur les vignettes de destination lumineuses."
 
-#: src/routes/playlist-workshop.tsx:2733
+#: src/routes/playlist-workshop.tsx:2885
 msgid "How cum rounds work"
 msgstr "Comment fonctionnent les rondes de sperme"
 
-#: src/routes/settings.tsx:739
+#: src/routes/settings.tsx:726
 msgid "How long the intermediary loading countdown runs before switching videos."
 msgstr "Combien de temps dure le compte à rebours de chargement intermédiaire avant de changer de vidéo."
 
-#: src/routes/playlist-workshop.tsx:2822
+#: src/routes/playlist-workshop.tsx:2972
 msgid "How the system works"
 msgstr "Comment fonctionne le système"
 
@@ -3734,14 +3755,14 @@ msgid "first-start.step.heroes.title"
 msgstr "Comment ajouter des héros fap ou cock et du contenu rond"
 
 #: src/routes/first-start.tsx:1544
-#: src/routes/settings.tsx:2991
-#: src/routes/settings.tsx:3408
+#: src/routes/settings.tsx:2982
+#: src/routes/settings.tsx:3391
 msgid "https://example.com/playlist-or-collection"
 msgstr "https://example.com/playlist-or-collection"
 
 #: src/routes/first-start.tsx:1545
-#: src/routes/settings.tsx:2992
-#: src/routes/settings.tsx:3409
+#: src/routes/settings.tsx:2983
+#: src/routes/settings.tsx:3392
 msgid "https://example.com/video-or-audio"
 msgstr "https://example.com/video-or-audio"
 
@@ -3753,7 +3774,7 @@ msgstr "https://example.com/video-or-playlist"
 msgid "https://project.supabase.co"
 msgstr "https://project.supabase.co"
 
-#: src/routes/settings.tsx:4293
+#: src/routes/settings.tsx:4266
 msgid "https://stash.example.com"
 msgstr "https://stash.example.com"
 
@@ -3761,21 +3782,21 @@ msgstr "https://stash.example.com"
 msgid "https://www.pornhub.com/view_video.php?viewkey=..."
 msgstr "https://www.pornhub.com/view_video.php?viewkey=..."
 
-#: src/routes/settings.tsx:3852
+#: src/routes/settings.tsx:3829
 msgid "I Understand, Disable Safeguards"
 msgstr "Je comprends, désactivez les sauvegardes"
 
-#: src/routes/settings.tsx:3776
+#: src/routes/settings.tsx:3753
 msgid "I Understand, Enable"
 msgstr "Je comprends, active"
 
-#: src/routes/index.tsx:298
+#: src/routes/index.tsx:308
 #: src/routes/settings.tsx:1921
-#: src/routes/settings.tsx:2098
+#: src/routes/settings.tsx:2096
 msgid "Idle"
 msgstr "Inactif"
 
-#: src/routes/highscores.tsx:555
+#: src/routes/highscores.tsx:574
 msgid "Idle. Cached history is ready to browse."
 msgstr "Inactif. L'historique mis en cache est prêt à être parcouru."
 
@@ -3792,7 +3813,7 @@ msgstr "Si cette case n'est pas cochée, seuls les fichiers texte et les configu
 msgid "first-start.step.handy.detail.2"
 msgstr "Si vous ne possédez pas de Handy, ignorez cette étape. Vous pouvez toujours utiliser l'application et jouer au jeu sans matériel."
 
-#: src/routes/playlist-workshop.tsx:2743
+#: src/routes/playlist-workshop.tsx:2895
 msgid "If you leave this list empty, the game falls back to a random installed cum round instead of ending without one."
 msgstr "Si vous laissez cette liste vide, le jeu revient à un tour de sperme installé aléatoirement au lieu de se terminer sans un."
 
@@ -3821,13 +3842,13 @@ msgstr "Si votre ordinateur est plus ancien ou a déjà des difficultés au dém
 msgid "IMPACT COST: ₪{0}"
 msgstr "COÛT D'IMPACT : ₪{0}"
 
-#: src/routes/playlist-workshop.tsx:2088
+#: src/routes/playlist-workshop.tsx:2131
 #: src/routes/rounds.tsx:3945
 msgid "Import"
 msgstr "Importer"
 
 #. placeholder {0}: analysis.metadata.name
-#: src/routes/playlist-workshop.tsx:1254
+#: src/routes/playlist-workshop.tsx:1259
 msgid "Import {0}"
 msgstr "Importer {0}"
 
@@ -3859,7 +3880,7 @@ msgid "Import Order Preview"
 msgstr "Aperçu de la commande d'importation"
 
 #: src/routes/map-editor.tsx:2127
-#: src/routes/playlist-workshop.tsx:3389
+#: src/routes/playlist-workshop.tsx:3535
 msgid "Import with Selected Resolutions"
 msgstr "Importer avec les résolutions sélectionnées"
 
@@ -3867,7 +3888,7 @@ msgstr "Importer avec les résolutions sélectionnées"
 msgid "Import Without Playlist"
 msgstr "Importer sans playlist"
 
-#: src/routes/settings.tsx:3752
+#: src/routes/settings.tsx:3729
 msgid "Important consequences:"
 msgstr "Conséquences importantes :"
 
@@ -3915,14 +3936,14 @@ msgstr "en mode développement."
 msgid "In this round, you may cum when the video instructs you to do so."
 msgstr "Dans ce tour, vous pouvez jouir lorsque la vidéo vous le demande."
 
-#: src/routes/settings.tsx:682
+#: src/routes/settings.tsx:669
 msgid "In-game HUD, anti-perks, intermediary session behavior, and gameplay modifiers."
 msgstr "HUD en jeu, anti-avantages, comportement de session intermédiaire et modificateurs de gameplay."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:447
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:484
-#: src/routes/playlist-workshop.tsx:2923
-#: src/routes/playlist-workshop.tsx:3027
+#: src/routes/playlist-workshop.tsx:3071
+#: src/routes/playlist-workshop.tsx:3173
 msgid "Inactive"
 msgstr "Inactif"
 
@@ -3934,6 +3955,11 @@ msgstr "Inclure les fichiers multimédias"
 #: src/routes/multiplayer.tsx:1126
 msgid "Initializing..."
 msgstr "Initialisation en cours..."
+
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:58
+msgid "highscores.section.single.description"
+msgstr "Inspectez l'historique local des courses, le temps de survie et la progression des highscores."
 
 #: src/routes/rounds.tsx:3014
 msgid "Install a folder or import a portable file to start building the library."
@@ -3976,7 +4002,7 @@ msgstr "Installer ce contenu ?"
 #: src/routes/rounds.tsx:381
 #: src/routes/rounds.tsx:2883
 #: src/routes/rounds.tsx:4090
-#: src/routes/settings.tsx:2177
+#: src/routes/settings.tsx:2174
 msgid "Installed"
 msgstr "Installé"
 
@@ -3988,7 +4014,7 @@ msgstr "\"{trimmedName}\" installé."
 msgid "Installed Library"
 msgstr "Bibliothèque installée"
 
-#: src/routes/playlist-workshop.tsx:2491
+#: src/routes/playlist-workshop.tsx:2607
 msgid "Installed library · click Add to include in queue"
 msgstr "Bibliothèque installée · cliquez sur Ajouter pour l'inclure dans la file d'attente"
 
@@ -4000,13 +4026,13 @@ msgstr "Rond installé"
 msgid "Installed Round Source"
 msgstr "Source ronde installée"
 
-#: src/routes/index.tsx:207
+#: src/routes/index.tsx:209
 #: src/routes/rounds.tsx:2448
 #: src/routes/rounds.tsx:2562
 msgid "Installed Rounds"
 msgstr "Rondes installées"
 
-#: src/routes/settings.tsx:3604
+#: src/routes/settings.tsx:3584
 msgid "Installed Rounds & Heroes"
 msgstr "Tours et héros installés"
 
@@ -4015,14 +4041,14 @@ msgid "Installed rounds from local or external sources can be used."
 msgstr "Des cartouches installées provenant de sources locales ou externes peuvent être utilisées."
 
 #. placeholder {0}: appUpdate.state.currentVersion
-#: src/routes/index.tsx:248
-#: src/routes/index.tsx:610
+#: src/routes/index.tsx:250
+#: src/routes/index.tsx:620
 msgid "Installed v{0}"
 msgstr "v{0} installé"
 
 #. placeholder {0}: appUpdate.state.currentVersion
 #. placeholder {1}: appUpdate.state.latestVersion
-#: src/routes/index.tsx:247
+#: src/routes/index.tsx:249
 msgid "Installed v{0} -> Latest v{1}"
 msgstr "v{0} installé -> Dernier v{1}"
 
@@ -4041,7 +4067,7 @@ msgstr "Intensité <="
 
 #: src/routes/rounds.tsx:2866
 #: src/routes/rounds.tsx:3434
-#: src/routes/settings.tsx:4464
+#: src/routes/settings.tsx:4437
 msgid "Interjection"
 msgstr "Interjection"
 
@@ -4063,7 +4089,7 @@ msgstr "Clip intermédiaire généré."
 msgid "Intermediary increase"
 msgstr "Augmentation intermédiaire"
 
-#: src/routes/playlist-workshop.tsx:3167
+#: src/routes/playlist-workshop.tsx:3313
 msgid "Intermediary Increase %"
 msgstr "% d'augmentation intermédiaire"
 
@@ -4072,15 +4098,15 @@ msgstr "% d'augmentation intermédiaire"
 msgid "Intermediary initial"
 msgstr "Initiale intermédiaire"
 
-#: src/routes/playlist-workshop.tsx:3149
+#: src/routes/playlist-workshop.tsx:3295
 msgid "Intermediary Initial %"
 msgstr "% initial intermédiaire"
 
-#: src/routes/settings.tsx:738
+#: src/routes/settings.tsx:725
 msgid "Intermediary Loading Duration (s)"
 msgstr "Durée(s) de chargement intermédiaire"
 
-#: src/routes/settings.tsx:723
+#: src/routes/settings.tsx:710
 msgid "Intermediary Loading Prompt"
 msgstr "Invite de chargement intermédiaire"
 
@@ -4089,7 +4115,7 @@ msgstr "Invite de chargement intermédiaire"
 msgid "Intermediary max"
 msgstr "Intermédiaire maximum"
 
-#: src/routes/playlist-workshop.tsx:3185
+#: src/routes/playlist-workshop.tsx:3331
 msgid "Intermediary Max %"
 msgstr "Intermédiaire Max %"
 
@@ -4108,8 +4134,8 @@ msgstr "Nom interne"
 
 #: src/routes/first-start.tsx:756
 #: src/routes/first-start.tsx:883
-#: src/routes/settings.tsx:2692
-#: src/routes/settings.tsx:3179
+#: src/routes/settings.tsx:2688
+#: src/routes/settings.tsx:3168
 msgid "Invalid URL format"
 msgstr "Format d'URL invalide"
 
@@ -4170,8 +4196,8 @@ msgid "Jump to a random point in the source video."
 msgstr "Accédez à un point aléatoire de la vidéo source."
 
 #: src/components/GlobalMusicOverlay.tsx:771
-#: src/routes/settings.tsx:3111
-#: src/routes/settings.tsx:3518
+#: src/routes/settings.tsx:3100
+#: src/routes/settings.tsx:3499
 msgid "Keep Playlist"
 msgstr "Conserver la liste de lecture"
 
@@ -4187,19 +4213,19 @@ msgstr "Conservez les principaux outils de navigation, l’état de la collectio
 msgid "Keep the manual round name without linking to an installed round."
 msgstr "Conservez le nom du tour manuel sans créer de lien vers un tour installé."
 
-#: src/routes/settings.tsx:699
+#: src/routes/settings.tsx:686
 msgid "Keep the round playback progress bar visible even after the rest of the HUD fades out."
 msgstr "Gardez la barre de progression de lecture ronde visible même après la disparition du reste du HUD."
 
-#: src/routes/playlist-workshop.tsx:4007
+#: src/routes/playlist-workshop.tsx:4158
 msgid "Keeps randomness, but later rounds increasingly favor longer and higher-difficulty entries."
 msgstr "Conserve le caractère aléatoire, mais les tours ultérieurs favorisent de plus en plus les entrées plus longues et plus difficiles."
 
-#: src/routes/settings.tsx:995
+#: src/routes/settings.tsx:996
 msgid "Keyboard shortcut reference for the app, editor, and gameplay screens."
 msgstr "Référence de raccourci clavier pour les écrans d'application, d'éditeur et de jeu."
 
-#: src/routes/settings.tsx:4576
+#: src/routes/settings.tsx:4549
 msgid "Keyboard Shortcuts"
 msgstr "Raccourcis clavier"
 
@@ -4226,11 +4252,11 @@ msgid "Landing on any end node queues these rounds in order."
 msgstr "L'atterrissage sur n'importe quel nœud final met ces tours en file d'attente dans l'ordre."
 
 #: src/routes/first-start.tsx:1195
-#: src/routes/settings.tsx:654
+#: src/routes/settings.tsx:655
 msgid "Language"
 msgstr "Langue"
 
-#: src/routes/settings.tsx:3824
+#: src/routes/settings.tsx:3801
 msgid "Large playlists can still require more installed rounds than the global minimum"
 msgstr "Les grandes listes de lecture peuvent toujours nécessiter plus de tours installés que le minimum global"
 
@@ -4242,16 +4268,16 @@ msgstr "Dernière analyse effectuée ({summary})"
 msgid "Late join is"
 msgstr "L'adhésion tardive est"
 
-#: src/routes/settings.tsx:2181
+#: src/routes/settings.tsx:2178
 msgid "Latest"
 msgstr "Dernier"
 
-#: src/routes/highscores.tsx:651
+#: src/routes/highscores.tsx:670
 msgid "Latest Survival"
 msgstr "Dernière survie"
 
 #. placeholder {0}: appUpdate.state.latestVersion
-#: src/routes/index.tsx:624
+#: src/routes/index.tsx:634
 msgid "Latest v{0}"
 msgstr "Dernier v{0}"
 
@@ -4275,7 +4301,7 @@ msgstr "Disposition"
 msgid "Leaderboard"
 msgstr "Classement"
 
-#: src/routes/settings.tsx:2411
+#: src/routes/settings.tsx:2407
 msgid "Leave custom mode off unless you explicitly want to override the built-in app identity."
 msgstr "Désactivez le mode personnalisé, sauf si vous souhaitez explicitement remplacer l'identité de l'application intégrée."
 
@@ -4283,7 +4309,7 @@ msgstr "Désactivez le mode personnalisé, sauf si vous souhaitez explicitement 
 msgid "Legacy import did not finish."
 msgstr "L'importation héritée n'a pas été terminée."
 
-#: src/routes/settings.tsx:4377
+#: src/routes/settings.tsx:4350
 msgid "Legacy Login"
 msgstr "Connexion héritée"
 
@@ -4293,7 +4319,7 @@ msgstr "Connexion héritée"
 msgid "Legacy Playlist"
 msgstr "Liste de lecture héritée"
 
-#: src/routes/settings.tsx:4396
+#: src/routes/settings.tsx:4369
 msgid "Legacy username/password login is no longer offered for Stash sources. Switch this source to No Auth or API Key."
 msgstr "La connexion par nom d'utilisateur/mot de passe hérité n'est plus proposée pour les sources Stash. Basculez cette source sur No Auth ou API Key."
 
@@ -4319,19 +4345,19 @@ msgstr "Laissez le joueur choisir de jouer ce tour ou de le sauter et de lancer 
 msgid "Let's get you set up. This quick walkthrough covers the essentials and lets you import content right away."
 msgstr "On va vous installer. Cette procédure pas à pas rapide couvre l'essentiel et vous permet d'importer du contenu immédiatement."
 
-#: src/routes/settings.tsx:965
+#: src/routes/settings.tsx:966
 msgid "Lets singleplayer start while required web rounds are still caching. Warning: some rounds may not play, and the web version is used instead of the local cache."
 msgstr "Permet de démarrer le mode solo pendant que les parties Web requises sont toujours en cache. Attention : certaines parties peuvent ne pas être jouées et la version Web est utilisée à la place du cache local."
 
 #: src/routes/rounds.tsx:2485
 #: src/routes/rounds.tsx:2565
 #: src/routes/rounds.tsx:4254
-#: src/routes/settings.tsx:3883
+#: src/routes/settings.tsx:3860
 msgid "Library"
 msgstr "Bibliothèque"
 
 #. placeholder {0}: queue.length
-#: src/routes/settings.tsx:3286
+#: src/routes/settings.tsx:3275
 msgid "Library ({0} files)"
 msgstr "Bibliothèque (fichiers {0})"
 
@@ -4355,15 +4381,15 @@ msgstr "Bibliothèque inactive"
 msgid "Library Snapshot"
 msgstr "Instantané de la bibliothèque"
 
-#: src/routes/settings.tsx:5263
+#: src/routes/settings.tsx:5235
 msgid "License"
 msgstr "Licence"
 
-#: src/routes/playlist-workshop.tsx:1436
+#: src/routes/playlist-workshop.tsx:1441
 msgid "Linear"
 msgstr "Linéaire"
 
-#: src/routes/playlist-workshop.tsx:2065
+#: src/routes/playlist-workshop.tsx:2108
 msgid "Linear Board"
 msgstr "Conseil linéaire"
 
@@ -4398,11 +4424,11 @@ msgstr "Charger dans l'éditeur"
 msgid "Loading captions"
 msgstr "Chargement des sous-titres"
 
-#: src/routes/settings.tsx:4210
+#: src/routes/settings.tsx:4184
 msgid "Loading external sources..."
 msgstr "Chargement de sources externes..."
 
-#: src/routes/settings.tsx:3914
+#: src/routes/settings.tsx:3890
 msgid "Loading folders..."
 msgstr "Chargement des dossiers..."
 
@@ -4418,7 +4444,7 @@ msgstr "Chargement des actifs intermédiaires..."
 msgid "Loading playlist groups..."
 msgstr "Chargement des groupes de playlists..."
 
-#: src/routes/settings.tsx:4772
+#: src/routes/settings.tsx:4744
 msgid "Loading security settings..."
 msgstr "Chargement des paramètres de sécurité..."
 
@@ -4426,9 +4452,9 @@ msgstr "Chargement des paramètres de sécurité..."
 #: src/features/converter/ConverterSourcePicker.tsx:334
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:728
 #: src/routes/first-start.tsx:1732
-#: src/routes/settings.tsx:1566
-#: src/routes/settings.tsx:1651
-#: src/routes/settings.tsx:1737
+#: src/routes/settings.tsx:1567
+#: src/routes/settings.tsx:1652
+#: src/routes/settings.tsx:1738
 msgid "Loading..."
 msgstr "Chargement en cours..."
 
@@ -4440,7 +4466,7 @@ msgstr "Chargement…"
 msgid "Loadout"
 msgstr "Chargement"
 
-#: src/routes/highscores.tsx:839
+#: src/routes/highscores.tsx:858
 #: src/routes/multiplayer-lobby.tsx:567
 msgid "Lobby"
 msgstr "Hall d'entrée"
@@ -4496,8 +4522,8 @@ msgstr "Hall d'entrée :"
 msgid "Local"
 msgstr "Locale"
 
-#: src/routes/highscores.tsx:459
-#: src/routes/highscores.tsx:513
+#: src/routes/highscores.tsx:478
+#: src/routes/highscores.tsx:532
 msgid "Local Best"
 msgstr "Meilleur local"
 
@@ -4509,11 +4535,11 @@ msgstr "Funscript local joint : {websiteFunscriptFileLabel}"
 msgid "Local media file not found"
 msgstr "Fichier multimédia local introuvable"
 
-#: src/routes/settings.tsx:930
+#: src/routes/settings.tsx:917
 msgid "Local Only"
 msgstr "Local uniquement"
 
-#: src/routes/highscores.tsx:638
+#: src/routes/highscores.tsx:657
 msgid "Local run history is stored directly in the app database, including legacy rows and newer survival-time data."
 msgstr "L'historique des exécutions locales est stocké directement dans la base de données de l'application, y compris les lignes existantes et les données de durée de survie les plus récentes."
 
@@ -4545,7 +4571,7 @@ msgstr "Longue importation en cours d'exécution"
 msgid "Loop"
 msgstr "Boucle"
 
-#: src/routes/settings.tsx:2878
+#: src/routes/settings.tsx:2874
 msgid "Loop:"
 msgstr "Boucle :"
 
@@ -4568,11 +4594,11 @@ msgstr "Menu principal"
 msgid "first-start.step.heroes.detail.4"
 msgstr "Créer vos propres packs est également assez simple. Vous pouvez utiliser Round Converter pour transformer le matériel source en rounds jouables, puis les organiser avec Playlist Workshop ou Map Editor."
 
-#: src/routes/playlist-workshop.tsx:2072
+#: src/routes/playlist-workshop.tsx:2115
 msgid "Manage"
 msgstr "Gérer"
 
-#: src/routes/settings.tsx:3569
+#: src/routes/settings.tsx:3549
 msgid "Manage & Clear Data"
 msgstr "Gérer et effacer les données"
 
@@ -4580,7 +4606,7 @@ msgstr "Gérer et effacer les données"
 msgid "Manage imports, hero groups, and exports with the same focused shell as the new settings screen."
 msgstr "Gérez les importations, les groupes de héros et les exportations avec le même shell ciblé que le nouvel écran de paramètres."
 
-#: src/routes/settings.tsx:3233
+#: src/routes/settings.tsx:3222
 msgid "Manage the gameplay moaning library used by perks and anti-perks. Add local audio files or download them from supported URLs via yt-dlp."
 msgstr "Gérez la bibliothèque de gémissements de gameplay utilisée par les avantages et les anti-avantages. Ajoutez des fichiers audio locaux ou téléchargez-les à partir d'URL prises en charge via yt-dlp."
 
@@ -4596,12 +4622,12 @@ msgstr "Pause manuelle active (15s)."
 msgid "Manual pause ended."
 msgstr "La pause manuelle est terminée."
 
-#: src/routes/settings.tsx:1847
+#: src/routes/settings.tsx:1848
 msgid "Manually trigger a scan to compute perceptual hashes for rounds that don't have them yet."
 msgstr "Déclenchez manuellement une analyse pour calculer les hachages perceptuels pour les tours qui n'en ont pas encore."
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:59
-#: src/routes/index.tsx:222
+#: src/routes/index.tsx:224
 #: src/routes/map-editor.tsx:1815
 msgid "Map Editor"
 msgstr "Éditeur de cartes"
@@ -4643,7 +4669,7 @@ msgstr "Terminal de mise en relation"
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:170
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:173
-#: src/routes/playlist-workshop.tsx:3085
+#: src/routes/playlist-workshop.tsx:3231
 msgid "Maximum Roll"
 msgstr "Rouleau maximum"
 
@@ -4685,11 +4711,11 @@ msgstr "Tour minimum (ms)"
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:153
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:156
-#: src/routes/playlist-workshop.tsx:3063
+#: src/routes/playlist-workshop.tsx:3209
 msgid "Minimum Roll"
 msgstr "Rouleau minimum"
 
-#: src/routes/playlist-workshop.tsx:2382
+#: src/routes/playlist-workshop.tsx:2492
 msgid "Minimum Round Count: {requiredNormalRoundCount}"
 msgstr "Nombre minimum de tours : {requiredNormalRoundCount}"
 
@@ -4721,15 +4747,15 @@ msgid "first-start.step.moaning.shortLabel"
 msgstr "Gémissant"
 
 #: src/routes/first-start.tsx:1414
-#: src/routes/settings.tsx:3230
+#: src/routes/settings.tsx:3219
 msgid "Moaning"
 msgstr "Gémissant"
 
-#: src/routes/settings.tsx:3260
+#: src/routes/settings.tsx:3249
 msgid "Moaning Disabled"
 msgstr "Gémissements désactivés"
 
-#: src/routes/settings.tsx:3260
+#: src/routes/settings.tsx:3249
 msgid "Moaning Enabled"
 msgstr "Gémissements activés"
 
@@ -4737,7 +4763,7 @@ msgstr "Gémissements activés"
 msgid "Moaning file added to the gameplay library."
 msgstr "Fichier gémissant ajouté à la bibliothèque de gameplay."
 
-#: src/routes/settings.tsx:3268
+#: src/routes/settings.tsx:3257
 msgid "Moaning volume"
 msgstr "Volume gémissant"
 
@@ -4751,7 +4777,7 @@ msgstr "Mode"
 msgid "hud.money"
 msgstr "ARGENT"
 
-#: src/routes/playlist-workshop.tsx:3113
+#: src/routes/playlist-workshop.tsx:3259
 msgid "Money available at the beginning of a new run from this playlist. Existing resumed runs keep their saved money."
 msgstr "Argent disponible au début d'une nouvelle course à partir de cette playlist. Les courses reprises existantes conservent l’argent économisé."
 
@@ -4764,7 +4790,7 @@ msgstr "Argent disponible au début d'une nouvelle course à partir de cette pla
 msgid "hud.more"
 msgstr "plus"
 
-#: src/routes/highscores.tsx:577
+#: src/routes/highscores.tsx:596
 msgid "Move straight to the detailed score views when you know what you want to inspect."
 msgstr "Accédez directement aux vues détaillées des partitions lorsque vous savez ce que vous souhaitez inspecter."
 
@@ -4776,12 +4802,17 @@ msgstr "Déplacez la fin du segment sélectionné vers la tête de lecture."
 msgid "Move the selected segment start to the playhead."
 msgstr "Déplacez le début du segment sélectionné vers la tête de lecture."
 
-#: src/routes/index.tsx:184
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:66
+msgid "highscores.section.multiplayer.title"
+msgstr "Multijoueur"
+
+#: src/routes/index.tsx:186
 #: src/routes/multiplayer.tsx:760
 msgid "Multiplayer"
 msgstr "Multijoueur"
 
-#: src/routes/settings.tsx:3616
+#: src/routes/settings.tsx:3596
 msgid "Multiplayer Cache"
 msgstr "Cache multijoueur"
 
@@ -4803,7 +4834,7 @@ msgstr "Le multijoueur nécessite au moins des tours installés de {MULTIPLAYER_
 msgid "Multiplayer Result"
 msgstr "Résultat multijoueur"
 
-#: src/routes/highscores.tsx:791
+#: src/routes/highscores.tsx:810
 msgid "Multiplayer Result History"
 msgstr "Historique des résultats multijoueurs"
 
@@ -4811,7 +4842,7 @@ msgstr "Historique des résultats multijoueurs"
 msgid "Multiplayer setup needs attention"
 msgstr "La configuration multijoueur nécessite une attention particulière"
 
-#: src/routes/highscores.tsx:764
+#: src/routes/highscores.tsx:783
 msgid "Multiplayer Summary"
 msgstr "Résumé multijoueur"
 
@@ -4820,7 +4851,7 @@ msgstr "Résumé multijoueur"
 msgid "first-start.step.music.shortLabel"
 msgstr "Musique"
 
-#: src/routes/settings.tsx:2743
+#: src/routes/settings.tsx:2739
 msgid "Music"
 msgstr "Musique"
 
@@ -4828,7 +4859,7 @@ msgstr "Musique"
 msgid "Music Cache"
 msgstr "Cache musical"
 
-#: src/routes/settings.tsx:1721
+#: src/routes/settings.tsx:1722
 msgid "Music Cache Location"
 msgstr "Emplacement du cache de musique"
 
@@ -4837,7 +4868,7 @@ msgstr "Emplacement du cache de musique"
 msgid "first-start.step.storage.detail.1"
 msgstr "Le cache musical stocke la musique du menu téléchargée et les importations YouTube."
 
-#: src/routes/settings.tsx:2773
+#: src/routes/settings.tsx:2769
 msgid "Music Disabled"
 msgstr "Musique désactivée"
 
@@ -4846,7 +4877,7 @@ msgstr "Musique désactivée"
 msgid "first-start.step.music.detail.1"
 msgstr "La musique ne remplace pas vos vidéos rondes. Il s'agit de l'audio de fond pour l'application lorsqu'aucune vidéo de premier plan n'est en cours de lecture."
 
-#: src/routes/settings.tsx:2773
+#: src/routes/settings.tsx:2769
 msgid "Music Enabled"
 msgstr "Musique activée"
 
@@ -4859,7 +4890,7 @@ msgstr "La musique est facultative, mais elle rend l'application beaucoup plus v
 msgid "Music Queue"
 msgstr "File d'attente musicale"
 
-#: src/routes/settings.tsx:2826
+#: src/routes/settings.tsx:2822
 msgid "Music volume"
 msgstr "Volume de la musique"
 
@@ -4877,7 +4908,7 @@ msgid "My Website Round"
 msgstr "Mon tour de site Web"
 
 #: src/components/PlaylistPackExportDialog.tsx:439
-#: src/routes/highscores.tsx:652
+#: src/routes/highscores.tsx:671
 #: src/routes/rounds.tsx:4088
 #: src/routes/rounds.tsx:4334
 msgid "N/A"
@@ -4899,11 +4930,11 @@ msgstr "Affinez la collection par type de ronde, disponibilité de script ou rec
 msgid "navigate"
 msgstr "naviguer"
 
-#: src/routes/highscores.tsx:745
+#: src/routes/highscores.tsx:764
 msgid "New Best!"
 msgstr "Nouveau meilleur !"
 
-#: src/routes/highscores.tsx:649
+#: src/routes/highscores.tsx:668
 msgid "New Bests"
 msgstr "Nouveaux meilleurs"
 
@@ -4916,8 +4947,8 @@ msgstr "Nouveau point de terminaison"
 msgid "game.reward.newMoneyTotal"
 msgstr "TOTAL DE NOUVEAUX ARGENT"
 
-#: src/routes/playlist-workshop.tsx:2076
-#: src/routes/playlist-workshop.tsx:3947
+#: src/routes/playlist-workshop.tsx:2119
+#: src/routes/playlist-workshop.tsx:4100
 msgid "New Playlist"
 msgstr "Nouvelle liste de lecture"
 
@@ -4935,7 +4966,7 @@ msgstr "NOUVEAU TOTAL DE SCORE"
 msgid "Newest"
 msgstr "Le plus récent"
 
-#: src/routes/settings.tsx:2812
+#: src/routes/settings.tsx:2808
 msgid "Next"
 msgstr "Suivant"
 
@@ -4999,16 +5030,16 @@ msgstr "Aucune vidéo active à resynchroniser."
 msgid "No anti-perks available."
 msgstr "Aucun anti-avantages disponible."
 
-#: src/routes/settings.tsx:4302
-#: src/routes/settings.tsx:4371
+#: src/routes/settings.tsx:4275
+#: src/routes/settings.tsx:4344
 msgid "No Auth"
 msgstr "Pas d'authentification"
 
-#: src/routes/settings.tsx:3918
+#: src/routes/settings.tsx:3894
 msgid "No auto-scan folders configured."
 msgstr "Aucun dossier d'analyse automatique configuré."
 
-#: src/routes/settings.tsx:2428
+#: src/routes/settings.tsx:2424
 msgid "No bundled TheHandy app key is configured in this build. Enable custom mode and enter one manually."
 msgstr "Aucune clé d'application TheHandy groupée n'est configurée dans cette version. Activez le mode personnalisé et saisissez-en un manuellement."
 
@@ -5021,15 +5052,15 @@ msgstr "Aucun TheHandy connecté pour basculer."
 msgid "game.handy.noDevice"
 msgstr "Aucun TheHandy connecté pour basculer."
 
-#: src/routes/index.tsx:279
+#: src/routes/index.tsx:289
 msgid "No Connection Key"
 msgstr "Pas de clé de connexion"
 
-#: src/routes/settings.tsx:4403
+#: src/routes/settings.tsx:4376
 msgid "No credentials required for this Stash instance."
 msgstr "Aucune information d'identification requise pour cette instance Stash."
 
-#: src/routes/playlist-workshop.tsx:2808
+#: src/routes/playlist-workshop.tsx:2958
 msgid "No cum rounds installed."
 msgstr "Aucune ronde de sperme installée."
 
@@ -5087,7 +5118,7 @@ msgstr "Aucune ressource intermédiaire disponible pour ce tour."
 msgid "No match history visible."
 msgstr "Aucun historique de match visible."
 
-#: src/routes/settings.tsx:3456
+#: src/routes/settings.tsx:3437
 msgid "No moaning files configured."
 msgstr "Aucun fichier gémissant configuré."
 
@@ -5095,7 +5126,7 @@ msgstr "Aucun fichier gémissant configuré."
 msgid "No moaning files were selected. You can continue and add them later in Settings."
 msgstr "Aucun fichier gémissant n’a été sélectionné. Vous pouvez continuer et les ajouter plus tard dans Paramètres."
 
-#: src/routes/highscores.tsx:812
+#: src/routes/highscores.tsx:831
 msgid "No multiplayer result cache yet."
 msgstr "Pas encore de cache de résultats multijoueur."
 
@@ -5103,7 +5134,7 @@ msgstr "Pas encore de cache de résultats multijoueur."
 msgid "No music files were selected. You can continue and add them later in Settings."
 msgstr "Aucun fichier musical n'a été sélectionné. Vous pouvez continuer et les ajouter plus tard dans Paramètres."
 
-#: src/routes/settings.tsx:3039
+#: src/routes/settings.tsx:3028
 msgid "No music tracks configured."
 msgstr "Aucun morceau de musique configuré."
 
@@ -5111,8 +5142,8 @@ msgstr "Aucun morceau de musique configuré."
 msgid "No New Record Set"
 msgstr "Aucun nouveau record établi"
 
-#: src/routes/playlist-workshop.tsx:2471
-#: src/routes/playlist-workshop.tsx:2709
+#: src/routes/playlist-workshop.tsx:2570
+#: src/routes/playlist-workshop.tsx:2827
 msgid "No normal rounds installed."
 msgstr "Aucun tour normal installé."
 
@@ -5124,7 +5155,7 @@ msgstr "Aucun avantage disponible."
 msgid "No players available for moderation."
 msgstr "Aucun joueur disponible pour la modération."
 
-#: src/routes/playlist-workshop.tsx:1317
+#: src/routes/playlist-workshop.tsx:1322
 msgid "No playlist exists yet. Create one here when you want to start editing."
 msgstr "Aucune playlist n'existe pour l'instant. Créez-en un ici lorsque vous souhaitez commencer l’édition."
 
@@ -5137,7 +5168,7 @@ msgid "No playlists available"
 msgstr "Aucune playlist disponible"
 
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:728
-#: src/routes/playlist-workshop.tsx:3807
+#: src/routes/playlist-workshop.tsx:3961
 #: src/routes/rounds.tsx:4186
 msgid "No Preview"
 msgstr "Aucun aperçu"
@@ -5146,7 +5177,7 @@ msgstr "Aucun aperçu"
 msgid "No public lobbies available on the selected server right now."
 msgstr "Aucun salon public disponible sur le serveur sélectionné pour le moment."
 
-#: src/routes/highscores.tsx:562
+#: src/routes/highscores.tsx:581
 msgid "No queued multiplayer results remain."
 msgstr "Il ne reste aucun résultat multijoueur en file d'attente."
 
@@ -5168,12 +5199,12 @@ msgid "No rounds match this filter"
 msgstr "Aucun cycle ne correspond à ce filtre"
 
 #: src/features/converter/ConverterSourcePicker.tsx:341
-#: src/routes/playlist-workshop.tsx:2713
+#: src/routes/playlist-workshop.tsx:2831
 msgid "No rounds match your search."
 msgstr "Aucune tournée ne correspond à votre recherche."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:199
-#: src/routes/playlist-workshop.tsx:2317
+#: src/routes/playlist-workshop.tsx:2383
 msgid "No Saves"
 msgstr "Aucune sauvegarde"
 
@@ -5198,11 +5229,11 @@ msgstr "Aucun serveur sélectionné"
 msgid "No servers saved"
 msgstr "Aucun serveur enregistré"
 
-#: src/routes/highscores.tsx:676
+#: src/routes/highscores.tsx:695
 msgid "No single-player history yet."
 msgstr "Pas d'historique solo pour l'instant."
 
-#: src/routes/settings.tsx:4343
+#: src/routes/settings.tsx:4316
 msgid "No sources configured yet."
 msgstr "Aucune source configurée pour le moment."
 
@@ -5230,7 +5261,7 @@ msgstr "Aucun fichier vidéo pris en charge trouvé dans le dossier sélectionn�
 msgid "No tiles match this filter."
 msgstr "Aucune vignette ne correspond à ce filtre."
 
-#: src/routes/settings.tsx:2815
+#: src/routes/settings.tsx:2811
 msgid "No track"
 msgstr "Aucune trace"
 
@@ -5243,7 +5274,7 @@ msgstr "Aucune piste sélectionnée"
 msgid "No URL configured"
 msgstr "Aucune URL configurée"
 
-#: src/routes/settings.tsx:4864
+#: src/routes/settings.tsx:4836
 msgid "No user-trusted domains yet."
 msgstr "Aucun domaine approuvé par l'utilisateur pour l'instant."
 
@@ -5297,7 +5328,7 @@ msgstr "Aucun sélectionné"
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:745
 #: src/routes/rounds.tsx:2865
 #: src/routes/rounds.tsx:3433
-#: src/routes/settings.tsx:4463
+#: src/routes/settings.tsx:4436
 msgid "Normal"
 msgstr "Normale"
 
@@ -5309,7 +5340,7 @@ msgstr "TOUR NORMAL"
 msgid "Not attached"
 msgstr "Non attaché"
 
-#: src/routes/settings.tsx:2154
+#: src/routes/settings.tsx:2151
 msgid "Not Checked Yet"
 msgstr "Pas encore vérifié"
 
@@ -5317,7 +5348,7 @@ msgstr "Pas encore vérifié"
 msgid "Not selected"
 msgstr "Non sélectionné"
 
-#: src/routes/settings.tsx:2317
+#: src/routes/settings.tsx:2313
 msgid "Not Synced"
 msgstr "Non synchronisé"
 
@@ -5335,11 +5366,11 @@ msgstr "OAuth indisponible"
 
 #: src/components/GlobalMusicOverlay.tsx:646
 #: src/components/GlobalMusicOverlay.tsx:663
-#: src/routes/settings.tsx:2885
+#: src/routes/settings.tsx:2881
 msgid "Off"
 msgstr "Désactivé"
 
-#: src/routes/settings.tsx:2558
+#: src/routes/settings.tsx:2554
 msgid "Offset Slider"
 msgstr "Curseur de décalage"
 
@@ -5357,12 +5388,12 @@ msgid "Online multiplayer is unavailable right now. Retry or use Advanced setup.
 msgstr "Le multijoueur en ligne n'est pas disponible pour le moment. Réessayez ou utilisez la configuration avancée."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:200
-#: src/routes/playlist-workshop.tsx:2318
+#: src/routes/playlist-workshop.tsx:2384
 msgid "Only Checkpoint"
 msgstr "Seul point de contrôle"
 
 #: src/routes/first-start.tsx:1895
-#: src/routes/settings.tsx:2346
+#: src/routes/settings.tsx:2342
 msgid "Only firmware version 4 and up is supported."
 msgstr "Seule la version 4 et ultérieure du micrologiciel est prise en charge."
 
@@ -5370,7 +5401,7 @@ msgstr "Seule la version 4 et ultérieure du micrologiciel est prise en charge."
 msgid "Only sidecars and script files will be written. Video URIs stay as references."
 msgstr "Seuls les side-cars et les fichiers de script seront écrits. Les URI vidéo restent comme références."
 
-#: src/routes/settings.tsx:4277
+#: src/routes/settings.tsx:4250
 msgid "Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively supported."
 msgstr "Seule la dernière version de Stash, actuellement la version {ACTIVE_STASH_VERSION}, est activement prise en charge."
 
@@ -5378,16 +5409,16 @@ msgstr "Seule la dernière version de Stash, actuellement la version {ACTIVE_STA
 msgid "open"
 msgstr "ouvert"
 
-#: src/routes/playlist-workshop.tsx:1464
+#: src/routes/playlist-workshop.tsx:1469
 msgid "Open"
 msgstr "Ouvert"
 
 #. placeholder {0}: round.name
-#: src/routes/playlist-workshop.tsx:3737
+#: src/routes/playlist-workshop.tsx:3891
 msgid "Open {0}"
 msgstr "Ouvrir {0}"
 
-#: src/routes/playlist-workshop.tsx:1424
+#: src/routes/playlist-workshop.tsx:1429
 msgid "Open A Playlist"
 msgstr "Ouvrir une liste de lecture"
 
@@ -5395,22 +5426,22 @@ msgstr "Ouvrir une liste de lecture"
 msgid "Open a popup to create an installed round from a public website URL."
 msgstr "Ouvrez une fenêtre contextuelle pour créer une ronde installée à partir d'une URL de site Web public."
 
-#: src/routes/playlist-workshop.tsx:1945
-#: src/routes/playlist-workshop.tsx:2126
+#: src/routes/playlist-workshop.tsx:1990
+#: src/routes/playlist-workshop.tsx:2169
 msgid "Open Advanced Map Editor"
 msgstr "Ouvrir l'éditeur de carte avancé"
 
-#: src/routes/settings.tsx:1592
-#: src/routes/settings.tsx:1678
-#: src/routes/settings.tsx:1764
+#: src/routes/settings.tsx:1593
+#: src/routes/settings.tsx:1679
+#: src/routes/settings.tsx:1765
 msgid "Open Current Folder"
 msgstr "Ouvrir le dossier actuel"
 
-#: src/routes/settings.tsx:2238
+#: src/routes/settings.tsx:2234
 msgid "Open First Start Workflow"
 msgstr "Ouvrir le workflow Premier démarrage"
 
-#: src/routes/settings.tsx:2402
+#: src/routes/settings.tsx:2398
 msgid "Open Handy User Portal"
 msgstr "Ouvrir le portail utilisateur pratique"
 
@@ -5442,7 +5473,7 @@ msgstr "Ouvrir l'éditeur de carte"
 msgid "Open Match View"
 msgstr "Ouvrir la vue des matchs"
 
-#: src/routes/highscores.tsx:613
+#: src/routes/highscores.tsx:632
 msgid "Open multiplayer standings"
 msgstr "Classement multijoueur ouvert"
 
@@ -5451,7 +5482,7 @@ msgstr "Classement multijoueur ouvert"
 msgid "Open Playlist Workshop"
 msgstr "Atelier de liste de lecture ouverte"
 
-#: src/routes/highscores.tsx:594
+#: src/routes/highscores.tsx:613
 msgid "Open single-player history"
 msgstr "Ouvrir l'historique solo"
 
@@ -5467,7 +5498,7 @@ msgstr "Ouvrez l'atelier de playlist pour créer une playlist linéaire, ou util
 msgid "Opening Discord..."
 msgstr "Ouverture de Discord..."
 
-#: src/routes/playlist-workshop.tsx:1510
+#: src/routes/playlist-workshop.tsx:1515
 msgid "Opening Graph Editor"
 msgstr "Ouverture de l'éditeur de graphiques"
 
@@ -5475,13 +5506,13 @@ msgstr "Ouverture de l'éditeur de graphiques"
 msgid "Opening Workshop..."
 msgstr "Atelier d'ouverture..."
 
-#: src/routes/settings.tsx:1592
-#: src/routes/settings.tsx:1678
-#: src/routes/settings.tsx:1764
+#: src/routes/settings.tsx:1593
+#: src/routes/settings.tsx:1679
+#: src/routes/settings.tsx:1765
 msgid "Opening..."
 msgstr "Ouverture en cours..."
 
-#: src/routes/settings.tsx:945
+#: src/routes/settings.tsx:932
 msgid "Opt into unfinished features that may change or break between builds."
 msgstr "Optez pour des fonctionnalités inachevées qui peuvent changer ou être interrompues entre les versions."
 
@@ -5506,13 +5537,18 @@ msgstr "Possibilités"
 msgid "Other Players"
 msgstr "Autres joueurs"
 
-#: src/routes/index.tsx:293
+#: src/routes/index.tsx:303
 msgid "Out of Date"
 msgstr "Obsolète"
 
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:417
 msgid "Outgoing Paths"
 msgstr "Chemins sortants"
+
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:42
+msgid "highscores.section.overview.title"
+msgstr "Vue d'ensemble"
 
 #: src/routes/rounds.tsx:5284
 msgid "Pack"
@@ -5541,11 +5577,11 @@ msgstr "Regroupe tous les fichiers exportés dans une seule archive ZIP (.fpack)
 msgid "Parallel Jobs"
 msgstr "Travaux parallèles"
 
-#: src/routes/settings.tsx:4707
+#: src/routes/settings.tsx:4679
 msgid "paranoid"
 msgstr "paranoïaque"
 
-#: src/routes/settings.tsx:4722
+#: src/routes/settings.tsx:4694
 msgid "Paranoid mode will impact the user experience significantly and should only be used if you know exactly what you are doing."
 msgstr "Le mode paranoïaque aura un impact significatif sur l'expérience utilisateur et ne doit être utilisé que si vous savez exactement ce que vous faites."
 
@@ -5579,7 +5615,7 @@ msgstr "Chemin"
 msgid "gameboard.kind.path"
 msgstr "CHEMIN"
 
-#: src/routes/settings.tsx:2801
+#: src/routes/settings.tsx:2797
 msgid "Pause"
 msgstr "Pause"
 
@@ -5588,7 +5624,7 @@ msgstr "Pause"
 msgid "Pause {0}"
 msgstr "Pause {0}"
 
-#: src/routes/settings.tsx:753
+#: src/routes/settings.tsx:740
 msgid "Pause duration after intermediary ends before resuming the main round."
 msgstr "Durée de pause après la fin du tour intermédiaire avant de reprendre le tour principal."
 
@@ -5604,7 +5640,7 @@ msgstr "Pause ronde"
 msgid "Pending"
 msgstr "En attente"
 
-#: src/routes/highscores.tsx:778
+#: src/routes/highscores.tsx:797
 msgid "Pending Queue"
 msgstr "File d'attente en attente"
 
@@ -5651,22 +5687,22 @@ msgstr "Inventaire des avantages"
 msgid "Perk Rates"
 msgstr "Tarifs des avantages"
 
-#: src/routes/playlist-workshop.tsx:3140
+#: src/routes/playlist-workshop.tsx:3286
 msgid "Perk Trigger Chance %"
 msgstr "% de chances de déclenchement de l'avantage"
 
 #: src/components/game/GameScene.tsx:4723
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:418
-#: src/routes/playlist-workshop.tsx:2844
+#: src/routes/playlist-workshop.tsx:2994
 msgid "Perks"
 msgstr "Avantages"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:185
+#: src/routes/playlist-workshop.tsx:188
 msgid "playlist-workshop.section.perks.title"
 msgstr "Avantages et anti-avantages"
 
-#: src/routes/playlist-workshop.tsx:2825
+#: src/routes/playlist-workshop.tsx:2975
 msgid "Perks are beneficial choices offered between completed rounds. Anti-perks are harmful effects that can enter the same choice pool when enabled and can also stay active across multiple rounds."
 msgstr "Les avantages sont des choix avantageux offerts entre les tours terminés. Les anti-avantages sont des effets néfastes qui peuvent entrer dans le même pool de choix lorsqu'ils sont activés et peuvent également rester actifs sur plusieurs tours."
 
@@ -5679,7 +5715,7 @@ msgstr "permanente"
 msgid "Permanent"
 msgstr "Permanent"
 
-#: src/routes/settings.tsx:3548
+#: src/routes/settings.tsx:3529
 msgid "Permanently remove saved data, such as rounds, playlists, or settings."
 msgstr "Supprimez définitivement les données enregistrées, telles que les parties, les listes de lecture ou les paramètres."
 
@@ -5713,7 +5749,7 @@ msgstr "Choisissez et démarrez"
 msgid "Pick music files from your computer, or add YouTube videos and playlists to download as MP3."
 msgstr "Choisissez des fichiers musicaux sur votre ordinateur ou ajoutez des vidéos et des listes de lecture YouTube à télécharger au format MP3."
 
-#: src/routes/settings.tsx:698
+#: src/routes/settings.tsx:685
 msgid "Pin Round Progress Bar"
 msgstr "Barre de progression ronde à épingler"
 
@@ -5722,8 +5758,8 @@ msgid "Place"
 msgstr "Lieu"
 
 #: src/components/game/GameScene.tsx:1867
-#: src/routes/index.tsx:173
-#: src/routes/settings.tsx:2801
+#: src/routes/index.tsx:175
+#: src/routes/settings.tsx:2797
 msgid "Play"
 msgstr "Jouer"
 
@@ -5798,23 +5834,23 @@ msgstr "Lecture vidéo + funscript."
 #: src/routes/first-start.tsx:1536
 #: src/routes/multiplayer.tsx:1057
 #: src/routes/rounds.tsx:1604
-#: src/routes/settings.tsx:2983
-#: src/routes/settings.tsx:3400
+#: src/routes/settings.tsx:2974
+#: src/routes/settings.tsx:3383
 msgid "Playlist"
 msgstr "Liste de lecture"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:165
+#: src/routes/playlist-workshop.tsx:168
 msgid "playlist-workshop.section.playlist.title"
 msgstr "Liste de lecture"
 
-#: src/routes/playlist-workshop.tsx:1359
-#: src/routes/playlist-workshop.tsx:1485
-#: src/routes/playlist-workshop.tsx:3317
+#: src/routes/playlist-workshop.tsx:1364
+#: src/routes/playlist-workshop.tsx:1490
+#: src/routes/playlist-workshop.tsx:3463
 msgid "Playlist created."
 msgstr "Playlist créée."
 
-#: src/routes/playlist-workshop.tsx:3363
+#: src/routes/playlist-workshop.tsx:3509
 msgid "Playlist deleted."
 msgstr "Liste de lecture supprimée."
 
@@ -5822,7 +5858,7 @@ msgstr "Liste de lecture supprimée."
 msgid "Playlist Export Running"
 msgstr "Exportation de la liste de lecture en cours"
 
-#: src/routes/playlist-workshop.tsx:1575
+#: src/routes/playlist-workshop.tsx:1580
 msgid "Playlist exported."
 msgstr "Playlist exportée."
 
@@ -5831,21 +5867,21 @@ msgid "Playlist Group"
 msgstr "Groupe de listes de lecture"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:650
+#: src/routes/playlist-workshop.tsx:653
 msgid "playlist-workshop.import.auto-resolved"
 msgstr "Playlist importée avec {count, plural, one {# référence de ronde auto-résolue} other {# références de ronde auto-résolues}}."
 
-#: src/routes/playlist-workshop.tsx:3457
+#: src/routes/playlist-workshop.tsx:3603
 msgid "Playlist imported with unresolved refs preserved."
 msgstr "Playlist importée avec les références non résolues préservées."
 
-#: src/routes/playlist-workshop.tsx:1275
-#: src/routes/playlist-workshop.tsx:3416
+#: src/routes/playlist-workshop.tsx:1280
+#: src/routes/playlist-workshop.tsx:3562
 msgid "Playlist imported."
 msgstr "Liste de lecture importée."
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:677
+#: src/routes/playlist-workshop.tsx:680
 msgid "playlist-workshop.import.unresolved-summary"
 msgstr "Liste de lecture importée. {count, plural, one {# ref a encore besoin d'une correspondance manuelle.} other {# refs a encore besoin d'une correspondance manuelle.}}"
 
@@ -5857,16 +5893,16 @@ msgstr "Liste de lecture verrouillée"
 msgid "Playlist name"
 msgstr "Nom de la liste de lecture"
 
-#: src/routes/playlist-workshop.tsx:3884
-#: src/routes/playlist-workshop.tsx:3965
+#: src/routes/playlist-workshop.tsx:4037
+#: src/routes/playlist-workshop.tsx:4118
 #: src/routes/rounds.tsx:3887
 msgid "Playlist Name"
 msgstr "Nom de la liste de lecture"
 
-#: src/routes/playlist-workshop.tsx:1366
-#: src/routes/playlist-workshop.tsx:1492
-#: src/routes/playlist-workshop.tsx:3303
-#: src/routes/playlist-workshop.tsx:3324
+#: src/routes/playlist-workshop.tsx:1371
+#: src/routes/playlist-workshop.tsx:1497
+#: src/routes/playlist-workshop.tsx:3449
+#: src/routes/playlist-workshop.tsx:3470
 msgid "Playlist name cannot be empty."
 msgstr "Le nom de la playlist ne peut pas être vide."
 
@@ -5875,43 +5911,43 @@ msgid "Playlist Pack Export"
 msgstr "Exportation du pack de playlist"
 
 #. placeholder {0}: result.exportDir
-#: src/routes/playlist-workshop.tsx:1619
+#: src/routes/playlist-workshop.tsx:1624
 msgid "Playlist pack exported to {0}."
 msgstr "Pack de playlist exporté vers {0}."
 
-#: src/routes/playlist-workshop.tsx:3296
+#: src/routes/playlist-workshop.tsx:3442
 msgid "Playlist renamed."
 msgstr "Liste de lecture renommée."
 
-#: src/routes/playlist-workshop.tsx:3440
+#: src/routes/playlist-workshop.tsx:3586
 msgid "Playlist resolutions applied."
 msgstr "Résolutions de playlist appliquées."
 
-#: src/routes/playlist-workshop.tsx:1710
+#: src/routes/playlist-workshop.tsx:1715
 msgid "Playlist saved."
 msgstr "Liste de lecture enregistrée."
 
 #. placeholder {0}: activePlaylist.config.playlistVersion
-#: src/routes/playlist-workshop.tsx:2055
+#: src/routes/playlist-workshop.tsx:2099
 msgid "Playlist Version {0}"
 msgstr "Version de la liste de lecture {0}"
 
-#: src/routes/index.tsx:217
-#: src/routes/playlist-workshop.tsx:1314
-#: src/routes/playlist-workshop.tsx:1385
-#: src/routes/playlist-workshop.tsx:1890
+#: src/routes/index.tsx:219
+#: src/routes/playlist-workshop.tsx:1319
+#: src/routes/playlist-workshop.tsx:1390
+#: src/routes/playlist-workshop.tsx:1935
 msgid "Playlist Workshop"
 msgstr "Atelier de playlist"
 
-#: src/routes/highscores.tsx:735
-#: src/routes/highscores.tsx:1034
+#: src/routes/highscores.tsx:754
+#: src/routes/highscores.tsx:1053
 msgid "Playlist:"
 msgstr "Liste de lecture :"
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:89
 #: src/routes/rounds.tsx:382
 #: src/routes/rounds.tsx:2497
-#: src/routes/settings.tsx:3607
+#: src/routes/settings.tsx:3587
 #: src/routes/single-player-setup.tsx:419
 msgid "Playlists"
 msgstr "Listes de lecture"
@@ -5920,18 +5956,18 @@ msgstr "Listes de lecture"
 msgid "Playlists..."
 msgstr "Listes de lecture..."
 
-#: src/routes/settings.tsx:5188
+#: src/routes/settings.tsx:5160
 msgid "Playtesters"
 msgstr "Testeurs"
 
 #: src/routes/first-start.tsx:750
 #: src/routes/first-start.tsx:877
-#: src/routes/settings.tsx:2686
-#: src/routes/settings.tsx:3173
+#: src/routes/settings.tsx:2682
+#: src/routes/settings.tsx:3162
 msgid "Please enter a URL"
 msgstr "Veuillez saisir une URL"
 
-#: src/routes/settings.tsx:4991
+#: src/routes/settings.tsx:4963
 msgid "Please enter a valid number."
 msgstr "Veuillez entrer un numéro valide."
 
@@ -5946,7 +5982,7 @@ msgstr "PDV"
 msgid "Pos {0} • ${1} • Score {2}"
 msgstr "Pos {0} • ${1} • Score {2}"
 
-#: src/routes/settings.tsx:3627
+#: src/routes/settings.tsx:3607
 msgid "Preferences, hardware keys, and window state."
 msgstr "Préférences, clés matérielles et état de la fenêtre."
 
@@ -5963,7 +5999,7 @@ msgstr "Préparation"
 msgid "Preparing Account..."
 msgstr "Préparation du compte..."
 
-#: src/routes/playlist-workshop.tsx:2696
+#: src/routes/playlist-workshop.tsx:2813
 msgid "Preparing available rounds"
 msgstr "Préparation des tournées disponibles"
 
@@ -6012,16 +6048,16 @@ msgstr "Presse"
 msgid "Press C"
 msgstr "Appuyez sur C"
 
-#: src/routes/settings.tsx:2786
+#: src/routes/settings.tsx:2782
 msgid "Prev"
 msgstr "Précédent"
 
-#: src/routes/settings.tsx:849
+#: src/routes/settings.tsx:836
 msgid "Prevents all media from loading. Videos, images, previews, and booru media are replaced with a placeholder banner. Does not affect gameplay logic."
 msgstr "Empêche le chargement de tous les médias. Les vidéos, images, aperçus et médias booru sont remplacés par une bannière d'espace réservé. N'affecte pas la logique du jeu."
 
 #: src/components/game/GameScene.tsx:4543
-#: src/routes/settings.tsx:3303
+#: src/routes/settings.tsx:3291
 msgid "Preview"
 msgstr "Aperçu"
 
@@ -6068,7 +6104,7 @@ msgstr "Hall privé (cliquez pour annoncer)"
 msgid "Proceed"
 msgstr "Continuer"
 
-#: src/routes/settings.tsx:1875
+#: src/routes/settings.tsx:1876
 msgid "Processing:"
 msgstr "Traitement :"
 
@@ -6076,7 +6112,7 @@ msgstr "Traitement :"
 msgid "Processing..."
 msgstr "Traitement en cours..."
 
-#: src/routes/index.tsx:466
+#: src/routes/index.tsx:476
 msgid "Program Version"
 msgstr "Version du programme"
 
@@ -6086,11 +6122,11 @@ msgstr "Version du programme"
 msgid "Progress"
 msgstr "Progrès"
 
-#: src/routes/playlist-workshop.tsx:4004
+#: src/routes/playlist-workshop.tsx:4155
 msgid "Progressive Random"
 msgstr "Aléatoire progressif"
 
-#: src/routes/settings.tsx:4707
+#: src/routes/settings.tsx:4679
 msgid "prompt"
 msgstr "invite"
 
@@ -6120,27 +6156,27 @@ msgstr "Lobbies publics"
 msgid "Public lobbies appear in the browser when they are also open and joinable."
 msgstr "Les lobbys publics apparaissent dans le navigateur lorsqu'ils sont également ouverts et joignables."
 
-#: src/routes/highscores.tsx:531
+#: src/routes/highscores.tsx:550
 msgid "Pull remote match history into the local cache, then browse it instantly from the multiplayer section."
 msgstr "Extrayez l'historique des matchs à distance dans le cache local, puis parcourez-le instantanément depuis la section multijoueur."
 
 #: src/components/GlobalMusicOverlay.tsx:661
 #: src/components/GlobalMusicOverlay.tsx:701
-#: src/routes/highscores.tsx:466
-#: src/routes/settings.tsx:2883
+#: src/routes/highscores.tsx:485
+#: src/routes/settings.tsx:2879
 msgid "Queue"
 msgstr "File d'attente"
 
-#: src/routes/playlist-workshop.tsx:2372
+#: src/routes/playlist-workshop.tsx:2482
 msgid "Queue · drag to reorder · fills repeats if shorter than session"
 msgstr "File d'attente · faites glisser pour réorganiser · remplit les répétitions si elles sont plus courtes que la session"
 
 #. placeholder {0}: queue.length
-#: src/routes/settings.tsx:2896
+#: src/routes/settings.tsx:2892
 msgid "Queue ({0} tracks)"
 msgstr "File d'attente (pistes {0})"
 
-#: src/routes/highscores.tsx:574
+#: src/routes/highscores.tsx:593
 msgid "Quick Jumps"
 msgstr "Sauts rapides"
 
@@ -6160,6 +6196,10 @@ msgstr "Tour aléatoire"
 #: src/components/game/RoundStartTransition.tsx:46
 msgid "Random round acquired"
 msgstr "Tour aléatoire acquis"
+
+#: src/routes/playlist-workshop.tsx:1884
+msgid "Randomize"
+msgstr "Randomiser"
 
 #: src/components/GlobalMusicOverlay.tsx:650
 msgid "Randomize track order"
@@ -6200,6 +6240,10 @@ msgstr "Prêt à jouer"
 msgid "Ready to scan"
 msgstr "Prêt à numériser"
 
+#: src/routes/playlist-workshop.tsx:2200
+msgid "Ready to share? Bundle this playlist along with all its associated media into a highly compressed, easily shareable format. Perfect for distribution."
+msgstr "Prêt à partager ? Regroupez cette playlist avec tous ses médias associés dans un format très compressé et facile à partager. Parfait pour la distribution."
+
 #. placeholder {0}: ban.reason
 #: src/routes/multiplayer-bans.tsx:117
 msgid "Reason: {0}"
@@ -6222,11 +6266,11 @@ msgstr "recommandé"
 msgid "Recommended on faster machines. Disable this if startup work or background CPU load feels too heavy."
 msgstr "Recommandé sur les machines plus rapides. Désactivez cette option si le travail de démarrage ou la charge du processeur en arrière-plan semble trop lourd."
 
-#: src/routes/settings.tsx:3611
+#: src/routes/settings.tsx:3591
 msgid "Records of your past games and sessions."
 msgstr "Enregistrements de vos jeux et sessions passés."
 
-#: src/routes/playlist-workshop.tsx:1507
+#: src/routes/playlist-workshop.tsx:1512
 msgid "Redirecting"
 msgstr "Redirection"
 
@@ -6249,11 +6293,11 @@ msgstr "Réencodé"
 msgid "Refresh"
 msgstr "Actualiser"
 
-#: src/routes/highscores.tsx:540
+#: src/routes/highscores.tsx:559
 msgid "Refresh local highscore data and attempt multiplayer result cache updates."
 msgstr "Actualisez les données des meilleurs scores locaux et tentez de mettre à jour le cache des résultats multijoueurs."
 
-#: src/routes/highscores.tsx:801
+#: src/routes/highscores.tsx:820
 msgid "Refresh Multiplayer"
 msgstr "Actualiser le multijoueur"
 
@@ -6265,7 +6309,7 @@ msgstr "Analyse rafraîchissante des exportations..."
 msgid "Refreshing library..."
 msgstr "Bibliothèque rafraîchissante..."
 
-#: src/routes/highscores.tsx:554
+#: src/routes/highscores.tsx:573
 msgid "Refreshing local and remote result history."
 msgstr "Actualisation de l'historique des résultats locaux et distants."
 
@@ -6282,7 +6326,7 @@ msgstr "Recharger l'application"
 msgid "Remaining missing:"
 msgstr "Restant manquant :"
 
-#: src/routes/settings.tsx:4665
+#: src/routes/settings.tsx:4638
 msgid "Remote Import Trust"
 msgstr "Confiance d’importation à distance"
 
@@ -6294,14 +6338,14 @@ msgstr "Fichier multimédia distant introuvable"
 msgid "Remote Videos"
 msgstr "Vidéos à distance"
 
-#: src/routes/settings.tsx:3937
-#: src/routes/settings.tsx:4492
-#: src/routes/settings.tsx:4884
+#: src/routes/settings.tsx:3912
+#: src/routes/settings.tsx:4465
+#: src/routes/settings.tsx:4856
 msgid "Remove"
 msgstr "Supprimer"
 
-#: src/routes/playlist-workshop.tsx:3617
-#: src/routes/playlist-workshop.tsx:3618
+#: src/routes/playlist-workshop.tsx:3771
+#: src/routes/playlist-workshop.tsx:3772
 msgid "Remove from queue"
 msgstr "Supprimer de la file d'attente"
 
@@ -6313,18 +6357,22 @@ msgstr "Supprimer la sélection"
 msgid "Remove the currently selected segment."
 msgstr "Supprime le segment actuellement sélectionné."
 
-#: src/routes/playlist-workshop.tsx:2078
-#: src/routes/playlist-workshop.tsx:3929
+#: src/routes/playlist-workshop.tsx:2121
+#: src/routes/playlist-workshop.tsx:4082
 msgid "Rename"
 msgstr "Renommer"
 
-#: src/routes/playlist-workshop.tsx:3874
+#: src/routes/playlist-workshop.tsx:4027
 msgid "Rename Playlist"
 msgstr "Renommer la liste de lecture"
 
-#: src/routes/playlist-workshop.tsx:3929
+#: src/routes/playlist-workshop.tsx:4082
 msgid "Renaming..."
 msgstr "Renommage en cours..."
+
+#: src/routes/playlist-workshop.tsx:1879
+msgid "Reorder selected rounds?"
+msgstr "Réordonner les rounds sélectionnés ?"
 
 #: src/routes/rounds.tsx:4394
 msgid "Repair Template"
@@ -6351,10 +6399,14 @@ msgstr "Reparation en cours..."
 msgid "Replace Funscript"
 msgstr "Remplacer Funscript"
 
+#: src/routes/index.tsx:260
+msgid "Report Bug"
+msgstr "Signaler un bug"
+
 #: src/components/GlobalHandyOverlay.tsx:323
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:161
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:202
-#: src/routes/settings.tsx:2529
+#: src/routes/settings.tsx:2525
 msgid "Reset"
 msgstr "Réinitialiser"
 
@@ -6396,12 +6448,12 @@ msgstr "Réinitialiser la vue"
 #. placeholder {0}: selectedPlaylist.name
 #: src/routes/map-editor.tsx:1871
 #: src/routes/multiplayer-lobby.tsx:932
-#: src/routes/playlist-workshop.tsx:2167
+#: src/routes/playlist-workshop.tsx:2234
 msgid "Resolve {0}"
 msgstr "Résoudre {0}"
 
 #: src/routes/multiplayer-lobby.tsx:756
-#: src/routes/playlist-workshop.tsx:1208
+#: src/routes/playlist-workshop.tsx:1213
 msgid "Resolve Missing"
 msgstr "Résoudre les disparus"
 
@@ -6419,7 +6471,7 @@ msgstr "Hachage de ressources"
 msgid "Resource ID"
 msgstr "ID de ressource"
 
-#: src/routes/settings.tsx:4261
+#: src/routes/settings.tsx:4234
 msgid "Resources Added:"
 msgstr "Ressources ajoutées :"
 
@@ -6428,7 +6480,7 @@ msgstr "Ressources ajoutées :"
 msgid "hud.phase.result"
 msgstr "RÉSULTAT"
 
-#: src/routes/highscores.tsx:394
+#: src/routes/highscores.tsx:413
 msgid "Result Nexus"
 msgstr "Résultat Nexus"
 
@@ -6481,11 +6533,11 @@ msgstr "Réessayer"
 msgid "Retry Auto-Link"
 msgstr "Réessayez la liaison automatique"
 
-#: src/routes/index.tsx:297
+#: src/routes/index.tsx:307
 msgid "Retry Needed"
 msgstr "Réessayer nécessaire"
 
-#: src/routes/settings.tsx:752
+#: src/routes/settings.tsx:739
 msgid "Return Pause After Intermediary (s)"
 msgstr "Retour Pause Après Intermédiaire(s)"
 
@@ -6503,15 +6555,20 @@ msgstr "RETOUR À LA PRINCIPALE"
 msgid "Returning to main round video."
 msgstr "Revenons à la vidéo du tour principal."
 
-#: src/routes/highscores.tsx:597
+#: src/routes/highscores.tsx:616
 msgid "Review {singleRunCount} stored runs, including survival time and playlist provenance."
 msgstr "Passez en revue les exécutions stockées de {singleRunCount}, y compris la durée de survie et la provenance de la liste de lecture."
 
 #: src/routes/multiplayer-lobby.tsx:756
-#: src/routes/playlist-workshop.tsx:1209
-#: src/routes/playlist-workshop.tsx:1211
+#: src/routes/playlist-workshop.tsx:1214
+#: src/routes/playlist-workshop.tsx:1216
 msgid "Review Auto-Resolve"
 msgstr "Vérifier la résolution automatique"
+
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:70
+msgid "highscores.section.multiplayer.description"
+msgstr "Consultez les classements de matchs mis en cache et synchronisez les résultats distants en file d'attente."
 
 #: src/routes/rounds.tsx:3824
 msgid "Review Legacy Import"
@@ -6572,16 +6629,16 @@ msgid "game.reward.title"
 msgstr "ROND COMPLET"
 
 #: src/routes/converter.tsx:105
-#: src/routes/index.tsx:212
+#: src/routes/index.tsx:214
 msgid "Round Converter"
 msgstr "Convertisseur rond"
 
-#: src/routes/playlist-workshop.tsx:2226
+#: src/routes/playlist-workshop.tsx:2293
 msgid "Round Count"
 msgstr "Nombre de tours"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:205
+#: src/routes/playlist-workshop.tsx:208
 msgid "playlist-workshop.section.session.description"
 msgstr "Nombre de tours, points de sécurité et disposition du plateau."
 
@@ -6624,12 +6681,12 @@ msgstr "Aperçu du tour"
 msgid "Round Slot {0}"
 msgstr "Fente ronde {0}"
 
-#: src/routes/playlist-workshop.tsx:3126
+#: src/routes/playlist-workshop.tsx:3272
 msgid "Round Start Delay (sec)"
 msgstr "Délai de début de tour (sec)"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:225
+#: src/routes/playlist-workshop.tsx:228
 msgid "playlist-workshop.section.timing.description"
 msgstr "Délai de début de tour et mise à l’échelle des probabilités."
 
@@ -6652,7 +6709,7 @@ msgid "first-start.step.round-packs.shortLabel"
 msgstr "Tours"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:175
+#: src/routes/playlist-workshop.tsx:178
 msgid "playlist-workshop.section.rounds.title"
 msgstr "Tours"
 
@@ -6664,11 +6721,11 @@ msgstr "Itinéraire"
 msgid "Run auto-detection on the current funscript."
 msgstr "Exécutez la détection automatique sur le funscript actuel."
 
-#: src/routes/highscores.tsx:648
+#: src/routes/highscores.tsx:667
 msgid "Run Count"
 msgstr "Nombre d'exécutions"
 
-#: src/routes/settings.tsx:3610
+#: src/routes/settings.tsx:3590
 msgid "Run History"
 msgstr "Historique d'exécution"
 
@@ -6680,7 +6737,7 @@ msgstr "EXÉCUTER L'INITIALISATION"
 msgid "Run Summary"
 msgstr "Exécuter le résumé"
 
-#: src/routes/settings.tsx:2222
+#: src/routes/settings.tsx:2218
 msgid "Run the guided introduction again if you want a refresher on play modes, content installs, editors, Handy setup, music, and booru search."
 msgstr "Exécutez à nouveau l'introduction guidée si vous souhaitez un rappel sur les modes de lecture, les installations de contenu, les éditeurs, la configuration de Handy, la musique et la recherche booru."
 
@@ -6692,7 +6749,7 @@ msgstr "Exécution d'une séquence anti-avantage..."
 msgid "Safe Mode Enabled"
 msgstr "Mode sans échec activé"
 
-#: src/routes/settings.tsx:863
+#: src/routes/settings.tsx:850
 msgid "Safe Mode Startup Shortcut"
 msgstr "Raccourci de démarrage en mode sans échec"
 
@@ -6700,26 +6757,26 @@ msgstr "Raccourci de démarrage en mode sans échec"
 msgid "Safe Point"
 msgstr "Point de sécurité"
 
-#: src/routes/playlist-workshop.tsx:2296
+#: src/routes/playlist-workshop.tsx:2362
 msgid "Safe Point Indices (comma-separated)"
 msgstr "Indices de points de sécurité (séparés par des virgules)"
 
-#: src/routes/playlist-workshop.tsx:2244
+#: src/routes/playlist-workshop.tsx:2311
 #: src/routes/single-player-setup.tsx:763
 msgid "Safe Points"
 msgstr "Points de sécurité"
 
 #: src/features/converter/SegmentList.tsx:70
 #: src/features/map-editor/components/EditorToolbar.tsx:177
-#: src/routes/playlist-workshop.tsx:1926
-#: src/routes/settings.tsx:4506
-#: src/routes/settings.tsx:4961
-#: src/routes/settings.tsx:5034
-#: src/routes/settings.tsx:5155
+#: src/routes/playlist-workshop.tsx:1971
+#: src/routes/settings.tsx:4479
+#: src/routes/settings.tsx:4933
+#: src/routes/settings.tsx:5006
+#: src/routes/settings.tsx:5127
 msgid "Save"
 msgstr "Enregistrer"
 
-#: src/routes/playlist-workshop.tsx:2185
+#: src/routes/playlist-workshop.tsx:2252
 msgid "Save and Test"
 msgstr "Enregistrer et tester"
 
@@ -6744,7 +6801,7 @@ msgid "Save Hero"
 msgstr "Sauver le héros"
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:191
-#: src/routes/playlist-workshop.tsx:2313
+#: src/routes/playlist-workshop.tsx:2379
 msgid "Save Mode"
 msgstr "Mode Enregistrer"
 
@@ -6760,7 +6817,7 @@ msgstr "Enregistrer le tour"
 msgid "Save Rounds to Hero"
 msgstr "Enregistrer des tours sur le héros"
 
-#: src/routes/playlist-workshop.tsx:2176
+#: src/routes/playlist-workshop.tsx:2243
 msgid "Save Without Test"
 msgstr "Enregistrer sans tester"
 
@@ -6770,10 +6827,10 @@ msgstr "Les courses avec sauvegarde activée sont marquées comme assistées dan
 
 #: src/features/converter/HeroPanel.tsx:98
 #: src/features/map-editor/components/EditorToolbar.tsx:177
-#: src/routes/playlist-workshop.tsx:1926
-#: src/routes/playlist-workshop.tsx:1934
-#: src/routes/playlist-workshop.tsx:2176
-#: src/routes/playlist-workshop.tsx:2185
+#: src/routes/playlist-workshop.tsx:1971
+#: src/routes/playlist-workshop.tsx:1979
+#: src/routes/playlist-workshop.tsx:2243
+#: src/routes/playlist-workshop.tsx:2252
 #: src/routes/rounds.tsx:3410
 #: src/routes/rounds.tsx:3665
 msgid "Saving..."
@@ -6793,7 +6850,7 @@ msgstr "Erreur de numérisation ({summary})"
 
 #: src/routes/rounds.tsx:3277
 #: src/routes/rounds.tsx:3333
-#: src/routes/settings.tsx:1940
+#: src/routes/settings.tsx:1939
 msgid "Scan Now"
 msgstr "Scanner maintenant"
 
@@ -6801,7 +6858,7 @@ msgstr "Scanner maintenant"
 msgid "Scan running ({summary})"
 msgstr "Analyse en cours ({summary})"
 
-#: src/routes/settings.tsx:1862
+#: src/routes/settings.tsx:1863
 msgid "Scanning"
 msgstr "Numérisation"
 
@@ -6811,11 +6868,11 @@ msgstr "Scanner les fichiers et préparer les tournées importées..."
 
 #: src/routes/rounds.tsx:3277
 #: src/routes/rounds.tsx:3333
-#: src/routes/settings.tsx:1940
+#: src/routes/settings.tsx:1939
 msgid "Scanning..."
 msgstr "Analyse en cours..."
 
-#: src/routes/settings.tsx:4254
+#: src/routes/settings.tsx:4227
 msgid "Scenes:"
 msgstr "Scènes :"
 
@@ -6847,11 +6904,11 @@ msgstr "Note {0}"
 msgid "Score awarded when a cum round succeeds."
 msgstr "Score attribué lorsqu'un tour de sperme réussit."
 
-#: src/routes/highscores.tsx:502
+#: src/routes/highscores.tsx:521
 msgid "Score Snapshot"
 msgstr "Aperçu du score"
 
-#: src/routes/highscores.tsx:1031
+#: src/routes/highscores.tsx:1050
 msgid "Score:"
 msgstr "Note :"
 
@@ -6874,7 +6931,7 @@ msgid "Scripts Ready"
 msgstr "Scripts prêts"
 
 #: src/routes/rounds.tsx:2842
-#: src/routes/settings.tsx:4435
+#: src/routes/settings.tsx:4408
 msgid "Search"
 msgstr "Rechercher"
 
@@ -6887,7 +6944,7 @@ msgstr "Rechercher {0}..."
 msgid "Search & Filter"
 msgstr "Rechercher et filtrer"
 
-#: src/routes/playlist-workshop.tsx:2531
+#: src/routes/playlist-workshop.tsx:2647
 msgid "Search by round or author…"
 msgstr "Recherche par manche ou par auteur…"
 
@@ -6904,15 +6961,15 @@ msgstr "Pages de recherche, paramètres, actions..."
 msgid "Search Prompt"
 msgstr "Invite de recherche"
 
-#: src/routes/settings.tsx:724
+#: src/routes/settings.tsx:711
 msgid "Search prompt used for loading-screen media from rule34/booru sites."
 msgstr "Invite de recherche utilisée pour charger les médias d'écran à partir des sites Rule34/Booru."
 
-#: src/routes/playlist-workshop.tsx:2522
+#: src/routes/playlist-workshop.tsx:2638
 msgid "Search rounds"
 msgstr "Tours de recherche"
 
-#: src/routes/settings.tsx:4415
+#: src/routes/settings.tsx:4388
 msgid "Search tags"
 msgstr "Rechercher des balises"
 
@@ -6924,15 +6981,15 @@ msgstr "Rechercher des vignettes"
 msgid "Search title, hero, author"
 msgstr "Rechercher titre, héros, auteur"
 
-#: src/routes/settings.tsx:842
+#: src/routes/settings.tsx:829
 msgid "Security & Privacy"
 msgstr "Sécurité et confidentialité"
 
-#: src/routes/settings.tsx:4685
+#: src/routes/settings.tsx:4658
 msgid "Security Mode"
 msgstr "Mode sécurité"
 
-#: src/routes/settings.tsx:4650
+#: src/routes/settings.tsx:4623
 msgid "Security settings update failed."
 msgstr "La mise à jour des paramètres de sécurité a échoué."
 
@@ -6968,7 +7025,7 @@ msgstr "Sel"
 #: src/components/PlaylistPackExportDialog.tsx:290
 #: src/components/PlaylistPackExportDialog.tsx:352
 #: src/features/map-editor/components/EditorToolbar.tsx:66
-#: src/routes/playlist-workshop.tsx:2044
+#: src/routes/playlist-workshop.tsx:2088
 msgid "Select"
 msgstr "Sélectionnez"
 
@@ -7013,7 +7070,7 @@ msgid "Select an item first."
 msgstr "Sélectionnez d'abord un élément."
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:210
+#: src/routes/playlist-workshop.tsx:213
 msgid "playlist-workshop.section.rounds.description"
 msgstr "Sélectionnez et réorganisez les tours normaux."
 
@@ -7052,7 +7109,7 @@ msgid "Select Perk"
 msgstr "Sélectionnez un avantage"
 
 #: src/features/map-editor/components/PlaylistPickerView.tsx:62
-#: src/routes/playlist-workshop.tsx:1421
+#: src/routes/playlist-workshop.tsx:1426
 msgid "Select Playlist"
 msgstr "Sélectionnez la liste de lecture"
 
@@ -7078,7 +7135,7 @@ msgid "Select Video File"
 msgstr "Sélectionnez un fichier vidéo"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:200
+#: src/routes/playlist-workshop.tsx:203
 msgid "playlist-workshop.section.playlist.description"
 msgstr "Sélectionnez, créez et gérez des listes de lecture."
 
@@ -7086,7 +7143,7 @@ msgstr "Sélectionnez, créez et gérez des listes de lecture."
 #: src/components/PlaylistPackExportDialog.tsx:350
 #: src/features/map-editor/components/NodeInspectorPanel.tsx:543
 #: src/routes/first-start.tsx:1225
-#: src/routes/playlist-workshop.tsx:2044
+#: src/routes/playlist-workshop.tsx:2088
 #: src/routes/rounds.tsx:5355
 msgid "Selected"
 msgstr "Sélectionné"
@@ -7100,20 +7157,20 @@ msgid "Selected Item"
 msgstr "Article sélectionné"
 
 #. placeholder {0}: round.name
-#: src/routes/playlist-workshop.tsx:3557
+#: src/routes/playlist-workshop.tsx:3711
 msgid "Selected round {0}"
 msgstr "Rond sélectionné {0}"
 
-#: src/routes/playlist-workshop.tsx:2366
+#: src/routes/playlist-workshop.tsx:2476
 msgid "Selected Rounds"
 msgstr "Tours sélectionnés"
 
 #. placeholder {0}: setup.normalRoundOrder.length
-#: src/routes/playlist-workshop.tsx:2379
+#: src/routes/playlist-workshop.tsx:2489
 msgid "Selected: {0}"
 msgstr "Sélectionné : {0}"
 
-#: src/routes/settings.tsx:3641
+#: src/routes/settings.tsx:3621
 msgid "Selective Maintenance"
 msgstr "Entretien sélectif"
 
@@ -7147,11 +7204,11 @@ msgid "Server name: <0>{0}</0>"
 msgstr "Nom du serveur : <0>{0}</0>"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:170
+#: src/routes/playlist-workshop.tsx:173
 msgid "playlist-workshop.section.session.title"
 msgstr "Séance"
 
-#: src/routes/playlist-workshop.tsx:3958
+#: src/routes/playlist-workshop.tsx:4111
 msgid "Set a name and choose how rounds are generated."
 msgstr "Définissez un nom et choisissez la manière dont les tours sont générés."
 
@@ -7185,17 +7242,17 @@ msgstr "Définissez le type de segment sélectionné sur Normal."
 msgid "first-start.step.moaning.title"
 msgstr "Configurez le gameplay pour que les avantages des gémissements aient réellement du contenu"
 
-#: src/routes/index.tsx:235
+#: src/routes/index.tsx:237
 #: src/routes/map-editor.tsx:1726
-#: src/routes/settings.tsx:1258
+#: src/routes/settings.tsx:1259
 msgid "Settings"
 msgstr "Paramètres"
 
-#: src/routes/settings.tsx:848
+#: src/routes/settings.tsx:835
 msgid "SFW Mode"
 msgstr "Mode SFW"
 
-#: src/routes/playlist-workshop.tsx:2135
+#: src/routes/playlist-workshop.tsx:2193
 msgid "Shareable Pack"
 msgstr "Pack partageable"
 
@@ -7208,7 +7265,7 @@ msgstr "Bouclier"
 msgid "Show Advanced"
 msgstr "Afficher avancé"
 
-#: src/routes/settings.tsx:687
+#: src/routes/settings.tsx:674
 msgid "Show Anti-Perk Beatbar"
 msgstr "Afficher la barre anti-avantage"
 
@@ -7241,24 +7298,24 @@ msgstr "Montrer quand même ce {mediaLabel} ?"
 msgid "Show Video Once"
 msgstr "Afficher la vidéo une fois"
 
-#: src/routes/settings.tsx:978
+#: src/routes/settings.tsx:979
 msgid "Show Web Install Funscript URL"
 msgstr "Afficher l'URL Funscript d'installation Web"
 
-#: src/routes/settings.tsx:688
+#: src/routes/settings.tsx:675
 msgid "Shows a synchronized manual beatbar during jackhammer and milker anti-perk sequences."
 msgstr "Affiche une barre de battement manuelle synchronisée pendant les séquences anti-avantages du marteau-piqueur et du trayeur."
 
 #: src/components/GlobalMusicOverlay.tsx:630
-#: src/routes/settings.tsx:2873
+#: src/routes/settings.tsx:2869
 msgid "Shuffle"
 msgstr "Mélanger"
 
-#: src/routes/playlist-workshop.tsx:3991
+#: src/routes/playlist-workshop.tsx:4143
 msgid "Shuffles normal rounds randomly without difficulty bias."
 msgstr "Mélange les tours normaux de manière aléatoire sans difficulté de biais."
 
-#: src/routes/settings.tsx:4668
+#: src/routes/settings.tsx:4641
 msgid "Sidecar imports automatically trust Stash source hosts, yt-dlp-supported domains, and the user-trusted domains listed here. In <0>Prompt</0> mode, unknown remote URLs can be approved during manual import. In <1>Block</1> mode, every non-whitelisted remote URL is blocked automatically. In <2>Paranoid</2> mode, only configured Stash source URLs are allowed."
 msgstr "Les importations Sidecar font automatiquement confiance aux hôtes sources Stash, aux domaines pris en charge par yt-dlp et aux domaines approuvés par les utilisateurs répertoriés ici. En mode <0>Invite</0>, les URL distantes inconnues peuvent être approuvées lors de l'importation manuelle. En mode <1>Bloquer</1>, chaque URL distante non inscrite sur la liste blanche est automatiquement bloquée. En mode <2>Paranoïaque</2>, seules les URL sources Stash configurées sont autorisées."
 
@@ -7279,27 +7336,32 @@ msgstr "Connectez-vous"
 msgid "Sign Up"
 msgstr "S'inscrire"
 
-#: src/routes/settings.tsx:4717
+#: src/routes/settings.tsx:4689
 msgid "Silently blocking every remote URL that is not already whitelisted."
 msgstr "Bloquer silencieusement chaque URL distante qui ne figure pas déjà sur la liste blanche."
 
-#: src/routes/index.tsx:178
+#: src/routes/index.tsx:180
 #: src/routes/single-player-setup.tsx:328
 #: src/routes/single-player-setup.tsx:404
 msgid "Single Player"
 msgstr "Un joueur"
 
-#: src/routes/highscores.tsx:514
+#: src/routes/highscores.tsx:533
 msgid "Single Runs"
 msgstr "Exécutions uniques"
 
 #: src/routes/first-start.tsx:1522
-#: src/routes/settings.tsx:2967
-#: src/routes/settings.tsx:3384
+#: src/routes/settings.tsx:2959
+#: src/routes/settings.tsx:3368
 msgid "Single Track"
 msgstr "Piste unique"
 
-#: src/routes/highscores.tsx:635
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:54
+msgid "highscores.section.single.title"
+msgstr "Solo"
+
+#: src/routes/highscores.tsx:654
 msgid "Single-Player Summary"
 msgstr "Résumé du mode solo"
 
@@ -7308,7 +7370,7 @@ msgstr "Résumé du mode solo"
 msgid "first-start.step.welcome.detail.2"
 msgstr "Le mode solo est le mode solo. Vous créez ou choisissez une liste de lecture, jouez seul et essayez de survivre sur le plateau, de terminer les parties et de pousser votre meilleur score personnel aussi loin que vous le pouvez."
 
-#: src/routes/highscores.tsx:665
+#: src/routes/highscores.tsx:684
 msgid "Singleplayer Run History"
 msgstr "Historique des courses en solo"
 
@@ -7325,11 +7387,11 @@ msgstr "Sauter {0}"
 msgid "Skip All"
 msgstr "Tout ignorer"
 
-#: src/routes/settings.tsx:784
+#: src/routes/settings.tsx:771
 msgid "Skip Multiplayer Safeguards"
 msgstr "Ignorer les garanties multijoueurs"
 
-#: src/routes/settings.tsx:3803
+#: src/routes/settings.tsx:3780
 msgid "Skip Multiplayer Safeguards?"
 msgstr "Ignorer les garanties multijoueurs ?"
 
@@ -7398,7 +7460,8 @@ msgstr "Quelque chose s'est mal passé"
 msgid "Sort"
 msgstr "Trier"
 
-#: src/routes/playlist-workshop.tsx:2399
+#: src/routes/playlist-workshop.tsx:1882
+#: src/routes/playlist-workshop.tsx:2506
 msgid "Sort by Difficulty"
 msgstr "Trier par difficulté"
 
@@ -7406,7 +7469,7 @@ msgstr "Trier par difficulté"
 msgid "Sort:"
 msgstr "Trier :"
 
-#: src/routes/settings.tsx:2842
+#: src/routes/settings.tsx:2838
 msgid "Sound effects volume"
 msgstr "Volume des effets sonores"
 
@@ -7414,7 +7477,7 @@ msgstr "Volume des effets sonores"
 msgid "Source"
 msgstr "Source"
 
-#: src/routes/settings.tsx:5245
+#: src/routes/settings.tsx:5217
 msgid "Source Code"
 msgstr "Code source"
 
@@ -7426,7 +7489,7 @@ msgstr "Héros source"
 msgid "Source Key"
 msgstr "Clé source"
 
-#: src/routes/settings.tsx:4285
+#: src/routes/settings.tsx:4258
 msgid "Source name"
 msgstr "Nom de la source"
 
@@ -7442,15 +7505,15 @@ msgstr "Taille de la vidéo source"
 msgid "Source:"
 msgstr "Source :"
 
-#: src/routes/settings.tsx:4221
+#: src/routes/settings.tsx:4195
 msgid "Sources"
 msgstr "Sources"
 
-#: src/routes/settings.tsx:835
+#: src/routes/settings.tsx:822
 msgid "Sources & Library"
 msgstr "Sources et bibliothèque"
 
-#: src/routes/settings.tsx:4251
+#: src/routes/settings.tsx:4224
 msgid "Sources:"
 msgstr "Sources :"
 
@@ -7459,11 +7522,11 @@ msgstr "Sources :"
 msgid "first-start.language-option.es"
 msgstr "Interface espagnole"
 
-#: src/routes/settings.tsx:1002
+#: src/routes/settings.tsx:1003
 msgid "Special thanks & inspiration."
 msgstr "Remerciements spéciaux et inspiration."
 
-#: src/routes/settings.tsx:5182
+#: src/routes/settings.tsx:5154
 msgid "Special thanks to the community and creators who inspired this project."
 msgstr "Un merci spécial à la communauté et aux créateurs qui ont inspiré ce projet."
 
@@ -7563,17 +7626,17 @@ msgstr "DÉMARRER LA VIDÉO"
 msgid "Start With Web Fallback"
 msgstr "Commencez par la solution de secours Web"
 
-#: src/routes/playlist-workshop.tsx:3150
+#: src/routes/playlist-workshop.tsx:3296
 msgid "Starting chance for an intermediary event before round 1. The run begins at this value, then uses the increase and max settings below to scale over time."
 msgstr "Chance de départ pour un événement intermédiaire avant le premier tour. La course commence à cette valeur, puis utilise les paramètres d'augmentation et de maximum ci-dessous pour évoluer au fil du temps."
 
-#: src/routes/playlist-workshop.tsx:3204
+#: src/routes/playlist-workshop.tsx:3350
 msgid "Starting chance for anti-perks at the beginning of the run. This is the first value used before any round-based scaling happens."
 msgstr "Chance de départ pour les anti-avantages au début de la course. Il s’agit de la première valeur utilisée avant toute mise à l’échelle basée sur les tours."
 
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:373
 #: src/features/map-editor/components/GraphSettingsPanel.tsx:376
-#: src/routes/playlist-workshop.tsx:3112
+#: src/routes/playlist-workshop.tsx:3258
 msgid "Starting Money"
 msgstr "Argent de départ"
 
@@ -7584,23 +7647,23 @@ msgstr "Pourcentage de chance de départ."
 
 #: src/components/PlaylistPackExportDialog.tsx:548
 #: src/features/map-editor/components/EditorToolbar.tsx:187
-#: src/routes/settings.tsx:1940
-#: src/routes/settings.tsx:2117
+#: src/routes/settings.tsx:1939
+#: src/routes/settings.tsx:2114
 #: src/routes/single-player-setup.tsx:633
 #: src/routes/single-player-setup.tsx:640
 #: src/routes/single-player-setup.tsx:675
 msgid "Starting..."
 msgstr "Demarrage en cours..."
 
-#: src/routes/settings.tsx:4167
+#: src/routes/settings.tsx:4141
 msgid "Stash connection failed."
 msgstr "La connexion cachée a échoué."
 
-#: src/routes/settings.tsx:4165
+#: src/routes/settings.tsx:4139
 msgid "Stash connection succeeded."
 msgstr "La connexion au stockage a réussi."
 
-#: src/routes/settings.tsx:4780
+#: src/routes/settings.tsx:4752
 msgid "Stash Hosts"
 msgstr "Cacher les hôtes"
 
@@ -7608,7 +7671,7 @@ msgstr "Cacher les hôtes"
 msgid "state"
 msgstr "état"
 
-#: src/routes/settings.tsx:4248
+#: src/routes/settings.tsx:4221
 msgid "State:"
 msgstr "État :"
 
@@ -7620,7 +7683,7 @@ msgstr "Statut"
 msgid "Status:"
 msgstr "Statut :"
 
-#: src/routes/settings.tsx:3314
+#: src/routes/settings.tsx:3302
 msgid "Stop"
 msgstr "Arrêter"
 
@@ -7659,15 +7722,15 @@ msgstr "Emplacements de stockage"
 msgid "Store"
 msgstr "Magasin"
 
-#: src/routes/settings.tsx:1724
+#: src/routes/settings.tsx:1725
 msgid "Store downloaded music files in a custom folder, or leave this unset to keep using the built-in default location."
 msgstr "Stockez les fichiers musicaux téléchargés dans un dossier personnalisé ou laissez cette option désactivée pour continuer à utiliser l'emplacement par défaut intégré."
 
-#: src/routes/settings.tsx:1638
+#: src/routes/settings.tsx:1639
 msgid "Store downloaded website videos in a custom folder, or leave this unset to keep using the built-in default location."
 msgstr "Stockez les vidéos téléchargées du site Web dans un dossier personnalisé ou laissez cette option désactivée pour continuer à utiliser l'emplacement par défaut intégré."
 
-#: src/routes/settings.tsx:1554
+#: src/routes/settings.tsx:1555
 msgid "Store extracted content from .fpack files in a persistent folder. This ensures that rounds referring to extracted media remain playable across app restarts."
 msgstr "Stockez le contenu extrait des fichiers .fpack dans un dossier persistant. Cela garantit que les parties faisant référence aux médias extraits restent lisibles lors des redémarrages de l'application."
 
@@ -7717,7 +7780,7 @@ msgstr "Pris en charge via {sourceLabel}{titleSuffix}"
 msgid "Survived"
 msgstr "A survécu"
 
-#: src/routes/highscores.tsx:731
+#: src/routes/highscores.tsx:750
 msgid "Survived:"
 msgstr "Survécu :"
 
@@ -7733,7 +7796,7 @@ msgstr "Passer à la connexion"
 msgid "Switch to Sign Up"
 msgstr "Passer à l'inscription"
 
-#: src/routes/highscores.tsx:528
+#: src/routes/highscores.tsx:547
 msgid "Sync & Cache"
 msgstr "Synchronisation et cache"
 
@@ -7741,9 +7804,9 @@ msgstr "Synchronisation et cache"
 msgid "Sync Error"
 msgstr "Erreur de synchronisation"
 
-#: src/routes/highscores.tsx:479
-#: src/routes/highscores.tsx:539
-#: src/routes/settings.tsx:4241
+#: src/routes/highscores.tsx:498
+#: src/routes/highscores.tsx:558
+#: src/routes/settings.tsx:4214
 msgid "Sync Now"
 msgstr "Synchroniser maintenant"
 
@@ -7751,13 +7814,13 @@ msgstr "Synchroniser maintenant"
 msgid "Sync Offset"
 msgstr "Décalage de synchronisation"
 
-#: src/routes/highscores.tsx:516
+#: src/routes/highscores.tsx:535
 msgid "Sync Queue"
 msgstr "File d'attente de synchronisation"
 
 #: src/components/game/RoundVideoOverlay.tsx:3021
 #: src/components/GlobalHandyOverlay.tsx:129
-#: src/routes/settings.tsx:2317
+#: src/routes/settings.tsx:2313
 msgid "Synced"
 msgstr "Synchronisé"
 
@@ -7766,23 +7829,23 @@ msgstr "Synchronisé"
 msgid "Syncing"
 msgstr "Synchronisation"
 
-#: src/routes/highscores.tsx:479
-#: src/routes/highscores.tsx:539
-#: src/routes/highscores.tsx:801
-#: src/routes/settings.tsx:4241
+#: src/routes/highscores.tsx:498
+#: src/routes/highscores.tsx:558
+#: src/routes/highscores.tsx:820
+#: src/routes/settings.tsx:4214
 msgid "Syncing..."
 msgstr "Synchronisation en cours..."
 
-#: src/routes/index.tsx:456
+#: src/routes/index.tsx:466
 msgid "System"
 msgstr "Système"
 
-#: src/routes/settings.tsx:1255
+#: src/routes/settings.tsx:1256
 msgid "System Config"
 msgstr "Configuration du système"
 
-#: src/routes/settings.tsx:914
-#: src/routes/settings.tsx:931
+#: src/routes/settings.tsx:901
+#: src/routes/settings.tsx:918
 msgid "System Only"
 msgstr "Système uniquement"
 
@@ -7794,11 +7857,11 @@ msgstr "TERMINAISON DU SYSTÈME"
 msgid "System Warning"
 msgstr "Avertissement système"
 
-#: src/routes/settings.tsx:4180
+#: src/routes/settings.tsx:4154
 msgid "Tag search failed."
 msgstr "La recherche de balises a échoué."
 
-#: src/routes/settings.tsx:4410
+#: src/routes/settings.tsx:4383
 msgid "Tags"
 msgstr "Balises"
 
@@ -7810,7 +7873,7 @@ msgstr "Cible verrouillée"
 msgid "Target Player"
 msgstr "Joueur cible"
 
-#: src/routes/settings.tsx:903
+#: src/routes/settings.tsx:890
 msgid "Technical preferences for power users."
 msgstr "Préférences techniques pour les utilisateurs expérimentés."
 
@@ -7827,8 +7890,8 @@ msgstr "Les séries de modèles n'ont pas de ressource média principale, donc u
 msgid "Temporary Standings"
 msgstr "Classement temporaire"
 
-#: src/routes/playlist-workshop.tsx:1934
-#: src/routes/settings.tsx:4514
+#: src/routes/playlist-workshop.tsx:1979
+#: src/routes/settings.tsx:4487
 msgid "Test"
 msgstr "Tester"
 
@@ -7844,7 +7907,7 @@ msgstr "Carte de test"
 msgid "That file type is not supported here."
 msgstr "Ce type de fichier n'est pas pris en charge ici."
 
-#: src/routes/settings.tsx:5240
+#: src/routes/settings.tsx:5212
 msgid "that inspired this project."
 msgstr "qui a inspiré ce projet."
 
@@ -7878,7 +7941,7 @@ msgstr "L'exportation ignorera les fichiers multimédias et les regroupera dans 
 msgid "The export will skip media files and save to a folder."
 msgstr "L'exportation ignorera les fichiers multimédias et les enregistrera dans un dossier."
 
-#: src/routes/highscores.tsx:505
+#: src/routes/highscores.tsx:524
 msgid "The fastest read on current local progress and multiplayer cache health."
 msgstr "La lecture la plus rapide sur la progression locale actuelle et la santé du cache multijoueur."
 
@@ -7894,7 +7957,7 @@ msgstr "La bibliothèque entièrement installée sera empaquetée."
 msgid "The game keeps running in the background."
 msgstr "Le jeu continue de fonctionner en arrière-plan."
 
-#: src/routes/settings.tsx:3818
+#: src/routes/settings.tsx:3795
 msgid "The global multiplayer minimum helps ensure everyone starts from a baseline good experience"
 msgstr "Le minimum multijoueur mondial permet de garantir que tout le monde part d'une bonne expérience de base."
 
@@ -7902,7 +7965,7 @@ msgstr "Le minimum multijoueur mondial permet de garantir que tout le monde part
 msgid "The hero will be removed and the kept round will become a standalone entry. This cannot be undone in-app."
 msgstr "Le héros sera supprimé et la partie conservée deviendra une entrée autonome. Cela ne peut pas être annulé dans l'application."
 
-#: src/routes/settings.tsx:3757
+#: src/routes/settings.tsx:3734
 msgid "The mark on your highscores cannot be removed later"
 msgstr "La marque sur vos meilleurs scores ne peut pas être supprimée plus tard"
 
@@ -7911,11 +7974,11 @@ msgstr "La marque sur vos meilleurs scores ne peut pas être supprimée plus tar
 msgid "first-start.step.moaning.detail.1"
 msgstr "La bibliothèque gémissante est distincte de la musique du menu. Il est utilisé par les événements de jeu qui déclenchent un gémissement sonore en un seul coup ou en boucle."
 
-#: src/routes/settings.tsx:5211
+#: src/routes/settings.tsx:5183
 msgid "The person who came up with the original fap land idea."
 msgstr "La personne qui a eu l’idée originale du Fap Land."
 
-#: src/routes/index.tsx:509
+#: src/routes/index.tsx:519
 msgid "TheHandy"
 msgstr "LeHandy"
 
@@ -7931,7 +7994,7 @@ msgstr "Les commandes pratiques"
 msgid "TheHandy global offset slider"
 msgstr "Curseur de décalage global TheHandy"
 
-#: src/routes/settings.tsx:817
+#: src/routes/settings.tsx:804
 msgid "TheHandy hardware integration and funscript compatibility."
 msgstr "Intégration matérielle TheHandy et compatibilité funscript."
 
@@ -7949,7 +8012,7 @@ msgstr "TheHandy offset"
 msgid "game.handy.offsetReset"
 msgstr "Réinitialisation du décalage TheHandy"
 
-#: src/routes/settings.tsx:2567
+#: src/routes/settings.tsx:2563
 msgid "TheHandy offset slider"
 msgstr "Curseur de décalage TheHandy"
 
@@ -7981,21 +8044,25 @@ msgstr "Le Handy s’arrêta."
 msgid "TheHandy timing resynced."
 msgstr "Le timing du Handy a été resynchronisé."
 
-#: src/routes/settings.tsx:5238
+#: src/routes/settings.tsx:5210
 msgid "TheHandy version"
 msgstr "La version Handy"
 
-#: src/routes/settings.tsx:3814
+#: src/routes/settings.tsx:3791
 msgid "These safeguards are not here to annoy you:"
 msgstr "Ces garanties ne sont pas là pour vous ennuyer :"
 
-#: src/routes/settings.tsx:5191
+#: src/routes/settings.tsx:5163
 msgid "They helped improving and polishing the game."
 msgstr "Ils ont contribué à améliorer et à peaufiner le jeu."
 
 #: src/components/SfwGuard.tsx:54
 msgid "This {mediaLabel} is hidden while safe mode is active."
 msgstr "Ce {mediaLabel} est masqué lorsque le mode sans échec est actif."
+
+#: src/routes/playlist-workshop.tsx:3631
+msgid "This changes the order of the entire selected round list. Continue?"
+msgstr "Cela modifie l'ordre de toute la liste de rounds sélectionnés. Continuer ?"
 
 #: src/routes/first-start.tsx:1789
 msgid "This determines what media appears during loading. Keep the default if unsure."
@@ -8009,9 +8076,9 @@ msgstr "Cette exportation est bloquante. Les vidéos et les funscripts joints so
 msgid "This export is blocking. Videos, sidecars, and attached funscripts are being copied, downloaded, compressed, and written into the package."
 msgstr "Cette exportation est bloquante. Les vidéos, les side-cars et les funscripts joints sont copiés, téléchargés, compressés et écrits dans le package."
 
-#: src/routes/highscores.tsx:941
-#: src/routes/index.tsx:752
-#: src/routes/index.tsx:768
+#: src/routes/highscores.tsx:960
+#: src/routes/index.tsx:762
+#: src/routes/index.tsx:778
 msgid "This highscore was achieved with cheat mode active"
 msgstr "Ce meilleur score a été obtenu avec le mode triche actif"
 
@@ -8038,15 +8105,15 @@ msgstr "Cela révèle uniquement le {mediaLabel} actuel pour cette vue. Le mode 
 msgid "This playlist requires at least {selectedPlaylistRequiredRounds} installed rounds. You have {installedRoundCount}."
 msgstr "Cette playlist nécessite au moins des tours installés de {selectedPlaylistRequiredRounds}. Vous avez {installedRoundCount}."
 
-#: src/routes/playlist-workshop.tsx:1513
+#: src/routes/playlist-workshop.tsx:1518
 msgid "This playlist uses a graph board, so it opens in the Advanced Map Editor instead."
 msgstr "Cette liste de lecture utilise un tableau graphique, elle s'ouvre donc dans l'éditeur de carte avancé."
 
-#: src/routes/playlist-workshop.tsx:2111
+#: src/routes/playlist-workshop.tsx:2154
 msgid "This playlist uses a graph board, so Playlist Workshop cannot edit its layout. Open the Advanced Map Editor to change nodes, paths, and graph flow."
 msgstr "Cette playlist utilise un tableau graphique, donc Playlist Workshop ne peut pas modifier sa mise en page. Ouvrez l'éditeur de carte avancé pour modifier les nœuds, les chemins et le flux graphique."
 
-#: src/routes/playlist-workshop.tsx:2211
+#: src/routes/playlist-workshop.tsx:2278
 msgid "This playlist uses graph board mode. Playlist Workshop only supports linear playlists. Open the Advanced Map Editor to edit this board."
 msgstr "Cette liste de lecture utilise le mode tableau graphique. Playlist Workshop ne prend en charge que les listes de lecture linéaires. Ouvrez l'éditeur de carte avancé pour modifier ce tableau."
 
@@ -8055,11 +8122,11 @@ msgstr "Cette liste de lecture utilise le mode tableau graphique. Playlist Works
 msgid "first-start.step.booru.detail.1"
 msgstr "Cette invite indique à l'application quel type de média elle doit rechercher pendant le chargement et les moments intermédiaires."
 
-#: src/routes/playlist-workshop.tsx:2370
+#: src/routes/playlist-workshop.tsx:2480
 msgid "This queue defines the order used first during the session. Remaining slots are filled with repeats."
 msgstr "Cette file d'attente définit l'ordre utilisé en premier au cours de la session. Les emplacements restants sont remplis de répétitions."
 
-#: src/routes/highscores.tsx:1023
+#: src/routes/highscores.tsx:1042
 msgid "This removes the stored single-player run from local history and may lower your local best score."
 msgstr "Cela supprime la partie solo stockée de l'historique local et peut réduire votre meilleur score local."
 
@@ -8067,11 +8134,11 @@ msgstr "Cela supprime la partie solo stockée de l'historique local et peut réd
 msgid "This result is temporary. {activePlayers} player(s) still active. Final standings will auto-sync."
 msgstr "Ce résultat est temporaire. Lecteur(s) {activePlayers} toujours actif. Le classement final sera automatiquement synchronisé."
 
-#: src/routes/highscores.tsx:687
+#: src/routes/highscores.tsx:706
 msgid "This run was completed with cheat mode active"
 msgstr "Cette exécution s'est terminée avec le mode de triche actif"
 
-#: src/routes/settings.tsx:4323
+#: src/routes/settings.tsx:4296
 msgid "This Stash source will connect without API keys."
 msgstr "Cette source Stash se connectera sans clés API."
 
@@ -8079,20 +8146,20 @@ msgstr "Cette source Stash se connectera sans clés API."
 msgid "This website video URL is not supported."
 msgstr "L'URL de la vidéo de ce site Web n'est pas prise en charge."
 
-#: src/routes/settings.tsx:3806
+#: src/routes/settings.tsx:3783
 msgid "This will allow you to access multiplayer regardless of the general minimum round count and any playlist-specific round requirement."
 msgstr "Cela vous permettra d'accéder au multijoueur quel que soit le nombre minimum de tours général et toute exigence de tour spécifique à la playlist."
 
-#: src/routes/settings.tsx:3744
+#: src/routes/settings.tsx:3721
 msgid "This will enable developer menu features in singleplayer sessions, giving you access to debug controls and shortcuts."
 msgstr "Cela activera les fonctionnalités du menu développeur dans les sessions solo, vous donnant accès aux commandes de débogage et aux raccourcis."
 
-#: src/routes/settings.tsx:3516
+#: src/routes/settings.tsx:3497
 msgid "This will remove every file from the current moaning playlist."
 msgstr "Cela supprimera tous les fichiers de la liste de lecture gémissante actuelle."
 
 #: src/components/GlobalMusicOverlay.tsx:769
-#: src/routes/settings.tsx:3109
+#: src/routes/settings.tsx:3098
 msgid "This will remove every track from the current music playlist."
 msgstr "Cela supprimera chaque piste de la liste de lecture musicale actuelle."
 
@@ -8113,12 +8180,12 @@ msgstr "TEMPS"
 msgid "hud.time"
 msgstr "TEMPS"
 
-#: src/routes/playlist-workshop.tsx:3127
+#: src/routes/playlist-workshop.tsx:3273
 msgid "Time to wait before each round starts. Set to 0 for instant transitions. Default is 20 seconds."
 msgstr "Il est temps d'attendre avant le début de chaque tour. Réglez sur 0 pour des transitions instantanées. La valeur par défaut est de 20 secondes."
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:190
+#: src/routes/playlist-workshop.tsx:193
 msgid "playlist-workshop.section.timing.title"
 msgstr "Calendrier et probabilités"
 
@@ -8127,16 +8194,16 @@ msgid "to toggle"
 msgstr "basculer"
 
 #. placeholder {0}: setting.label
-#: src/routes/settings.tsx:5080
+#: src/routes/settings.tsx:5052
 msgid "Toggle {0}"
 msgstr "Basculer {0}"
 
-#: src/routes/settings.tsx:2758
+#: src/routes/settings.tsx:2754
 msgid "Toggle Enable Global Music"
 msgstr "Toggle Activer la musique globale"
 
 #: src/routes/first-start.tsx:1397
-#: src/routes/settings.tsx:3245
+#: src/routes/settings.tsx:3234
 msgid "Toggle Enable Moaning"
 msgstr "Activer/désactiver les gémissements"
 
@@ -8145,11 +8212,11 @@ msgid "Toggle Handy"
 msgstr "Basculer pratique"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:220
+#: src/routes/playlist-workshop.tsx:223
 msgid "playlist-workshop.section.perks.description"
 msgstr "Basculez les avantages et les anti-avantages individuels."
 
-#: src/routes/settings.tsx:2858
+#: src/routes/settings.tsx:2854
 msgid "Toggle Shuffle"
 msgstr "Activer la lecture aléatoire"
 
@@ -8162,16 +8229,21 @@ msgstr "trop cher"
 msgid "Tool"
 msgstr "Outil"
 
-#: src/routes/highscores.tsx:779
+#: src/routes/highscores.tsx:798
 msgid "Top Score"
 msgstr "Meilleur score"
+
+#. js-lingui-explicit-id
+#: src/routes/highscores.tsx:46
+msgid "highscores.section.overview.description"
+msgstr "État général des scores, synchronisation et actions rapides."
 
 #: src/routes/rounds.tsx:5273
 msgid "Total Rounds"
 msgstr "Nombre total de tours"
 
 #: src/components/GlobalMusicOverlay.tsx:662
-#: src/routes/settings.tsx:2884
+#: src/routes/settings.tsx:2880
 msgid "Track"
 msgstr "Suivre"
 
@@ -8179,7 +8251,7 @@ msgstr "Suivre"
 msgid "Track added to the global music queue."
 msgstr "Piste ajoutée à la file d'attente musicale mondiale."
 
-#: src/routes/highscores.tsx:400
+#: src/routes/highscores.tsx:419
 msgid "Track local runs, compare multiplayer standings, and keep cached results in sync."
 msgstr "Suivez les courses locales, comparez les classements multijoueurs et synchronisez les résultats mis en cache."
 
@@ -8188,7 +8260,7 @@ msgstr "Suivez les courses locales, comparez les classements multijoueurs et syn
 msgid "Transcoding Progress"
 msgstr "Progrès du transcodage"
 
-#: src/routes/playlist-workshop.tsx:2084
+#: src/routes/playlist-workshop.tsx:2127
 msgid "Transfer"
 msgstr "Transfert"
 
@@ -8201,7 +8273,7 @@ msgstr "Conseils de transfert"
 msgid "hud.phase.travel"
 msgstr "VOYAGE"
 
-#: src/routes/playlist-workshop.tsx:2832
+#: src/routes/playlist-workshop.tsx:2982
 msgid "Trigger chance controls how often a perk choice appears. In singleplayer, the computer can also randomly hit you with one of the enabled anti-perks based on the anti-perk chance settings. The enabled lists below define what can show up during a run."
 msgstr "La chance de déclenchement contrôle la fréquence à laquelle un choix d’avantage apparaît. En mode solo, l'ordinateur peut également vous frapper au hasard avec l'un des anti-avantages activés en fonction des paramètres de chance anti-avantage. Les listes activées ci-dessous définissent ce qui peut apparaître lors d'une exécution."
 
@@ -8262,13 +8334,13 @@ msgstr "inconnu"
 #: src/routes/multiplayer-lobby.tsx:768
 #: src/routes/multiplayer-match.tsx:938
 #: src/routes/multiplayer.tsx:631
-#: src/routes/playlist-workshop.tsx:2552
+#: src/routes/playlist-workshop.tsx:2668
 #: src/routes/rounds.tsx:4087
 msgid "Unknown"
 msgstr "Inconnu"
 
 #. js-lingui-explicit-id
-#: src/routes/playlist-workshop.tsx:635
+#: src/routes/playlist-workshop.tsx:638
 msgid "playlist-workshop.fallback.unknown-author"
 msgstr "Auteur inconnu"
 
@@ -8288,11 +8360,11 @@ msgstr "Déverrouiller le lobby"
 msgid "Unresolved"
 msgstr "Non résolu"
 
-#: src/routes/settings.tsx:2151
+#: src/routes/settings.tsx:2148
 msgid "Up to Date"
 msgstr "À jour"
 
-#: src/routes/settings.tsx:2149
+#: src/routes/settings.tsx:2146
 msgid "Update Available"
 msgstr "Mise à jour disponible"
 
@@ -8300,23 +8372,23 @@ msgstr "Mise à jour disponible"
 msgid "Update Endpoint"
 msgstr "Mettre à jour le point de terminaison"
 
-#: src/routes/index.tsx:193
+#: src/routes/index.tsx:195
 msgid "Update Required"
 msgstr "Mise à jour requise"
 
-#: src/routes/index.tsx:582
+#: src/routes/index.tsx:592
 msgid "Update Status"
 msgstr "Statut de la mise à jour"
 
-#: src/routes/settings.tsx:2163
+#: src/routes/settings.tsx:2160
 msgid "Updates"
 msgstr "Mises à jour"
 
 #: src/routes/first-start.tsx:1749
-#: src/routes/settings.tsx:1583
-#: src/routes/settings.tsx:1669
-#: src/routes/settings.tsx:1755
-#: src/routes/settings.tsx:3955
+#: src/routes/settings.tsx:1584
+#: src/routes/settings.tsx:1670
+#: src/routes/settings.tsx:1756
+#: src/routes/settings.tsx:3929
 msgid "Updating..."
 msgstr "Mise a jour en cours..."
 
@@ -8324,18 +8396,18 @@ msgstr "Mise a jour en cours..."
 msgid "Use a website video URL like Pornhub, XVideos, or rule34video as the source."
 msgstr "Utilisez l'URL d'une vidéo de site Web comme Pornhub, XVideos ou Rule34video comme source."
 
-#: src/routes/settings.tsx:2375
+#: src/routes/settings.tsx:2371
 msgid "Use Built-In"
 msgstr "Utiliser intégré"
 
-#: src/routes/settings.tsx:2375
+#: src/routes/settings.tsx:2371
 msgid "Use Custom"
 msgstr "Utiliser personnalisé"
 
 #: src/routes/first-start.tsx:1766
-#: src/routes/settings.tsx:1601
-#: src/routes/settings.tsx:1687
-#: src/routes/settings.tsx:1773
+#: src/routes/settings.tsx:1602
+#: src/routes/settings.tsx:1688
+#: src/routes/settings.tsx:1774
 msgid "Use Default"
 msgstr "Utiliser par défaut"
 
@@ -8347,11 +8419,11 @@ msgstr "Utiliser l'article"
 msgid "Use perks on yourself, fire anti-perks at opponents, or discard stored items."
 msgstr "Utilisez des avantages sur vous-même, lancez des anti-avantages sur vos adversaires ou défaussez les objets stockés."
 
-#: src/routes/settings.tsx:665
+#: src/routes/settings.tsx:937
 msgid "Use System Language"
 msgstr "Utiliser la langue du système"
 
-#: src/routes/playlist-workshop.tsx:2108
+#: src/routes/playlist-workshop.tsx:2151
 msgid "Use the Advanced Map Editor"
 msgstr "Utiliser l'éditeur de carte avancé"
 
@@ -8359,7 +8431,7 @@ msgstr "Utiliser l'éditeur de carte avancé"
 msgid "Use Website Source"
 msgstr "Utiliser la source du site Web"
 
-#: src/routes/settings.tsx:4852
+#: src/routes/settings.tsx:4824
 msgid "User-Trusted Domains"
 msgstr "Domaines approuvés par l'utilisateur"
 
@@ -8372,11 +8444,11 @@ msgstr "Utilisateur : {0}"
 msgid "Uses normal rest when empty"
 msgstr "Utilise le repos normal lorsqu'il est vide"
 
-#: src/routes/settings.tsx:2358
+#: src/routes/settings.tsx:2354
 msgid "Using the built-in TheHandy app key automatically."
 msgstr "Utilisation automatique de la clé d'application TheHandy intégrée."
 
-#: src/routes/settings.tsx:2357
+#: src/routes/settings.tsx:2353
 msgid "Using your custom TheHandy app key."
 msgstr "À l'aide de votre clé d'application TheHandy personnalisée."
 
@@ -8389,7 +8461,7 @@ msgstr "Vérifiez le tableau et démarrez."
 msgid "video"
 msgstr "vidéo"
 
-#: src/routes/settings.tsx:3621
+#: src/routes/settings.tsx:3601
 msgid "Video Cache"
 msgstr "Cache vidéo"
 
@@ -8397,7 +8469,7 @@ msgstr "Cache vidéo"
 msgid "Video Caching"
 msgstr "Mise en cache vidéo"
 
-#: src/routes/settings.tsx:1844
+#: src/routes/settings.tsx:1845
 msgid "Video Fingerprint Scanner"
 msgstr "Scanner d'empreintes digitales vidéo"
 
@@ -8411,7 +8483,7 @@ msgstr "URL de la vidéo"
 msgid "Video:"
 msgstr "Vidéo :"
 
-#: src/routes/settings.tsx:908
+#: src/routes/settings.tsx:895
 msgid "VideoHash FFmpeg Source"
 msgstr "Source vidéoHash FFmpeg"
 
@@ -8429,6 +8501,11 @@ msgstr "Les vidéos et les funscripts seront copiés dans le package d'exportati
 msgid "Videos will be packaged and reencoded to AV1 when needed. Funscripts remain attached."
 msgstr "Les vidéos seront empaquetées et réencodées en AV1 si nécessaire. Les funscripts restent attachés."
 
+#: src/routes/playlist-workshop.tsx:2844
+#: src/routes/playlist-workshop.tsx:2866
+msgid "View Queue →"
+msgstr "Voir la file →"
+
 #: src/routes/multiplayer-lobby.tsx:648
 msgid "Visibility is"
 msgstr "La visibilité est"
@@ -8445,8 +8522,8 @@ msgstr "marches visibles"
 msgid "Volume"
 msgstr "Volume"
 
-#: src/routes/settings.tsx:2823
-#: src/routes/settings.tsx:3265
+#: src/routes/settings.tsx:2819
+#: src/routes/settings.tsx:3254
 msgid "Volume:"
 msgstr "Volume :"
 
@@ -8471,11 +8548,11 @@ msgstr "En attente de la synchronisation TheHandy avant la lecture..."
 msgid "Warning"
 msgstr "Avertissement"
 
-#: src/routes/playlist-workshop.tsx:2343
+#: src/routes/playlist-workshop.tsx:2408
 msgid "Warning: runs from this playlist are marked as assisted on the highscore and in run history."
 msgstr "Attention : les courses de cette playlist sont marquées comme assistées dans le highscore et dans l'historique des courses."
 
-#: src/routes/settings.tsx:3687
+#: src/routes/settings.tsx:3666
 msgid "Warning: This cannot be undone."
 msgstr "Attention : cette opération est irréversible."
 
@@ -8488,11 +8565,11 @@ msgid "Website stream playback failed"
 msgstr "Échec de la lecture du flux du site Web"
 
 #: src/routes/first-start.tsx:1707
-#: src/routes/settings.tsx:2021
+#: src/routes/settings.tsx:2020
 msgid "Website Video Cache"
 msgstr "Cache vidéo du site Web"
 
-#: src/routes/settings.tsx:1635
+#: src/routes/settings.tsx:1636
 msgid "Website Video Cache Location"
 msgstr "Emplacement du cache vidéo du site Web"
 
@@ -8531,19 +8608,19 @@ msgstr "Que se passe-t-il"
 msgid "When disabled, animated backgrounds keep the visual effects but skip loading video files."
 msgstr "Lorsqu'ils sont désactivés, les arrière-plans animés conservent les effets visuels mais ignorent le chargement des fichiers vidéo."
 
-#: src/routes/settings.tsx:666
+#: src/routes/settings.tsx:938
 msgid "When enabled, first launch may use your system language if it is supported. Disabled by default so English remains the default language."
 msgstr "Lorsqu'il est activé, le premier lancement peut utiliser la langue de votre système si elle est prise en charge. Désactivé par défaut afin que l'anglais reste la langue par défaut."
 
-#: src/routes/settings.tsx:823
+#: src/routes/settings.tsx:810
 msgid "When enabled, funscripts with `range: 90` are normalized to `100` in memory so TheHandy playback keeps working."
 msgstr "Lorsqu'ils sont activés, les funscripts avec « range : 90 » sont normalisés à « 100 » en mémoire afin que la lecture de TheHandy continue de fonctionner."
 
-#: src/routes/settings.tsx:864
+#: src/routes/settings.tsx:851
 msgid "When enabled, holding 'S' during the first 5 seconds of app startup will automatically enable SFW Mode. Useful for emergency situations."
 msgstr "Lorsqu'il est activé, maintenir « S » pendant les 5 premières secondes du démarrage de l'application activera automatiquement le mode SFW. Utile pour les situations d'urgence."
 
-#: src/routes/settings.tsx:713
+#: src/routes/settings.tsx:700
 msgid "When enabled, perks (not anti-perks) are applied immediately when received instead of being stored in inventory."
 msgstr "Lorsqu'ils sont activés, les avantages (et non les anti-avantages) sont appliqués immédiatement lorsqu'ils sont reçus au lieu d'être stockés dans l'inventaire."
 
@@ -8642,7 +8719,7 @@ msgstr "Vous avez complété le tableau et clôturé le match."
 msgid "You failed the final instruction. The system is disappointed."
 msgstr "Vous avez échoué à la dernière instruction. Le système est déçu."
 
-#: src/routes/settings.tsx:3828
+#: src/routes/settings.tsx:3805
 msgid "You may encounter empty rounds, repeated content, or broken match flows"
 msgstr "Vous pouvez rencontrer des parties vides, du contenu répété ou des flux de correspondance interrompus."
 
@@ -8662,7 +8739,7 @@ msgstr "Vous avez été exclu de ce jeu."
 msgid "You will choose a destination folder, then a timestamped export package will be generated inside it."
 msgstr "Vous choisirez un dossier de destination, puis un package d'exportation horodaté sera généré à l'intérieur de celui-ci."
 
-#: src/routes/settings.tsx:3607
+#: src/routes/settings.tsx:3587
 msgid "Your custom and imported playlists."
 msgstr "Vos playlists personnalisées et importées."
 
@@ -8674,15 +8751,19 @@ msgstr "Votre exportation est prête. Vous pouvez fermer cette boîte de dialogu
 msgid "Your Placement"
 msgstr "Votre placement"
 
-#: src/routes/settings.tsx:925
+#: src/routes/playlist-workshop.tsx:2572
+msgid "Your queue is empty."
+msgstr "Votre file est vide."
+
+#: src/routes/settings.tsx:912
 msgid "yt-dlp Binary Source"
 msgstr "Source binaire yt-dlp"
 
-#: src/routes/settings.tsx:4812
+#: src/routes/settings.tsx:4784
 msgid "yt-dlp Domains"
 msgstr "Domaines yt-dlp"
 
-#: src/routes/playlist-workshop.tsx:2538
+#: src/routes/playlist-workshop.tsx:2654
 msgid "Z-A"
 msgstr "ZA"
 

@@ -1,3 +1,5 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,33 +27,52 @@ type HighscoreMatchView = {
   isFinal: boolean;
   rows: MultiplayerStandingRow[];
 };
+type HighscoreAssistedSaveMode = "checkpoint" | "everywhere";
 type HighscoreSectionId = "overview" | "single" | "multiplayer";
 type HighscoreSection = {
   id: HighscoreSectionId;
   icon: string;
-  title: string;
-  description: string;
+  title: MessageDescriptor;
+  description: MessageDescriptor;
 };
 
-function getHighscoreSections(t: ReturnType<typeof useLingui>["t"]): HighscoreSection[] {
+function getHighscoreSections(): HighscoreSection[] {
   return [
     {
       id: "overview",
       icon: "🏆",
-      title: t`Overview`,
-      description: t`Top-level score health, sync status, and quick actions.`,
+      title: msg({
+        id: "highscores.section.overview.title",
+        message: "Overview",
+      }),
+      description: msg({
+        id: "highscores.section.overview.description",
+        message: "Top-level score health, sync status, and quick actions.",
+      }),
     },
     {
       id: "single",
       icon: "🎯",
-      title: t`Single-Player`,
-      description: t`Inspect local run history, survival time, and highscore progression.`,
+      title: msg({
+        id: "highscores.section.single.title",
+        message: "Single-Player",
+      }),
+      description: msg({
+        id: "highscores.section.single.description",
+        message: "Inspect local run history, survival time, and highscore progression.",
+      }),
     },
     {
       id: "multiplayer",
       icon: "🌐",
-      title: t`Multiplayer`,
-      description: t`Review cached match standings and sync queued remote results.`,
+      title: msg({
+        id: "highscores.section.multiplayer.title",
+        message: "Multiplayer",
+      }),
+      description: msg({
+        id: "highscores.section.multiplayer.description",
+        message: "Review cached match standings and sync queued remote results.",
+      }),
     },
   ];
 }
@@ -73,6 +94,10 @@ function toIsoString(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) return value;
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString();
   return null;
+}
+
+function toHighscoreAssistedSaveMode(value: unknown): HighscoreAssistedSaveMode | null {
+  return value === "checkpoint" || value === "everywhere" ? value : null;
 }
 
 function formatRunSurvival(
@@ -170,7 +195,7 @@ export const Route = createFileRoute("/highscores")({
     const localHighscoreAssistedSaveMode =
       typeof localHighscoreResult === "number"
         ? null
-        : (localHighscoreResult.highscoreAssistedSaveMode ?? null);
+        : toHighscoreAssistedSaveMode(localHighscoreResult.highscoreAssistedSaveMode);
 
     return {
       localHighscore,
@@ -186,10 +211,10 @@ export const Route = createFileRoute("/highscores")({
 });
 
 function HighscoresPage() {
-  const { t } = useLingui();
+  const { i18n, t } = useLingui();
   const sfwMode = useSfwMode();
   const navigate = useNavigate();
-  const highscoreSections = getHighscoreSections(t);
+  const highscoreSections = getHighscoreSections();
   const {
     localHighscore: initialHighscore,
     localHighscoreCheatMode: initialHighscoreCheatMode,
@@ -204,7 +229,7 @@ function HighscoresPage() {
   const [localHighscoreCheatMode, setLocalHighscoreCheatMode] = useState(initialHighscoreCheatMode);
   const [localHighscoreAssisted, setLocalHighscoreAssisted] = useState(initialHighscoreAssisted);
   const [localHighscoreAssistedSaveMode, setLocalHighscoreAssistedSaveMode] = useState<
-    "checkpoint" | "everywhere" | null
+    HighscoreAssistedSaveMode | null
   >(initialHighscoreAssistedSaveMode);
   const [singleRuns, setSingleRuns] = useState<SinglePlayerRunHistoryRow[]>(initialSingleRuns);
   const [matches, setMatches] = useState<HighscoreMatchView[]>(cachedViews);
@@ -249,7 +274,9 @@ function HighscoresPage() {
           setLocalHighscore(Math.max(0, Math.floor(freshHighscoreResult.highscore)));
           setLocalHighscoreCheatMode(freshHighscoreResult.highscoreCheatMode ?? false);
           setLocalHighscoreAssisted(freshHighscoreResult.highscoreAssisted ?? false);
-          setLocalHighscoreAssistedSaveMode(freshHighscoreResult.highscoreAssistedSaveMode ?? null);
+          setLocalHighscoreAssistedSaveMode(
+            toHighscoreAssistedSaveMode(freshHighscoreResult.highscoreAssistedSaveMode)
+          );
         }
       }
       setSingleRuns(freshSingleRuns);
@@ -331,7 +358,9 @@ function HighscoresPage() {
         setLocalHighscore(Math.max(0, Math.floor(result.highscore ?? 0)));
         setLocalHighscoreCheatMode(result.highscoreCheatMode ?? false);
         setLocalHighscoreAssisted(result.highscoreAssisted ?? false);
-        setLocalHighscoreAssistedSaveMode(result.highscoreAssistedSaveMode ?? null);
+        setLocalHighscoreAssistedSaveMode(
+          toHighscoreAssistedSaveMode(result.highscoreAssistedSaveMode)
+        );
         setPendingDeleteRunId((current) => (current === runId ? null : current));
       } catch (deleteError) {
         setError(
@@ -420,7 +449,7 @@ function HighscoresPage() {
                 <span aria-hidden="true" className="settings-sidebar-icon">
                   {section.icon}
                 </span>
-                <span>{section.title}</span>
+                <span>{abbreviateNsfwText(i18n._(section.title), sfwMode)}</span>
               </button>
             );
           })}
@@ -448,10 +477,10 @@ function HighscoresPage() {
                     <Trans>Highscore Hub</Trans>
                   </p>
                   <h2 className="mt-2 text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-4xl">
-                    {activeSection.title}
+                    {abbreviateNsfwText(i18n._(activeSection.title), sfwMode)}
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm text-zinc-400">
-                    {activeSection.description}
+                    {i18n._(activeSection.description)}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

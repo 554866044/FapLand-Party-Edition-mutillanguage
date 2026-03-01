@@ -5139,7 +5139,7 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
 function CreditsCard() {
   const { t } = useLingui();
   const sfwMode = useSfwMode();
-  const playtesters = ["Kyral", "VladTheImplier", "Aodin", "woo"];
+  const playtesters = ["Kyral", "VladTheImplier", "Aodin", "woo", "edale"];
 
   return (
     <section
