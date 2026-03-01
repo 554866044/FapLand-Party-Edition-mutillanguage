@@ -1091,6 +1091,8 @@ describe("InstalledRoundsPage hero grouping", () => {
       activeRound: { roundId: string; phaseKind: string };
       currentPlayer: unknown;
       showCloseButton: boolean;
+      intermediaryProbability: number;
+      allowAutomaticIntermediaries: boolean;
       onClose: () => void;
       onFinishRound: () => void;
     };
@@ -1098,6 +1100,8 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(lastCall.activeRound.phaseKind).toBe("normal");
     expect(lastCall.currentPlayer).toBeUndefined();
     expect(lastCall.showCloseButton).toBe(true);
+    expect(lastCall.intermediaryProbability).toBe(0);
+    expect(lastCall.allowAutomaticIntermediaries).toBe(false);
     expect(lastCall.onClose).toBeTypeOf("function");
     expect(lastCall.onFinishRound).toBeTypeOf("function");
   });

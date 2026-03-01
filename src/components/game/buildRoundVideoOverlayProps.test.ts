@@ -65,7 +65,7 @@ describe("buildRoundVideoOverlayProps", () => {
     const preview = buildPreviewRoundVideoOverlayProps({
       activeRound,
       installedRounds,
-      intermediaryProbability: 1,
+      intermediaryProbability: 0,
       booruSearchPrompt: "animated gif webm",
       intermediaryLoadingDurationSec: 5,
       intermediaryReturnPauseSec: 4,
@@ -95,11 +95,12 @@ describe("buildRoundVideoOverlayProps", () => {
 
     expect(preview.activeRound).toBe(gameplay.activeRound);
     expect(preview.installedRounds).toBe(gameplay.installedRounds);
-    expect(preview.intermediaryProbability).toBe(gameplay.intermediaryProbability);
+    expect(preview.intermediaryProbability).toBe(0);
     expect(preview.booruSearchPrompt).toBe(gameplay.booruSearchPrompt);
     expect(preview.intermediaryLoadingDurationSec).toBe(gameplay.intermediaryLoadingDurationSec);
     expect(preview.intermediaryReturnPauseSec).toBe(gameplay.intermediaryReturnPauseSec);
-    expect(preview.allowAutomaticIntermediaries).toBe(gameplay.allowAutomaticIntermediaries);
+    expect(preview.allowAutomaticIntermediaries).toBe(false);
+    expect(gameplay.allowAutomaticIntermediaries).toBe(true);
     expect(preview.initialShowProgressBarAlways).toBe(gameplay.initialShowProgressBarAlways);
     expect(preview.initialShowAntiPerkBeatbar).toBe(gameplay.initialShowAntiPerkBeatbar);
   });
@@ -108,7 +109,7 @@ describe("buildRoundVideoOverlayProps", () => {
     const preview = buildPreviewRoundVideoOverlayProps({
       activeRound: createActiveRound(),
       installedRounds: [createInstalledRound()],
-      intermediaryProbability: 1,
+      intermediaryProbability: 0,
       booruSearchPrompt: "animated gif webm",
       intermediaryLoadingDurationSec: 5,
       intermediaryReturnPauseSec: 4,
@@ -122,5 +123,21 @@ describe("buildRoundVideoOverlayProps", () => {
     expect(preview.roundControl).toBeUndefined();
     expect(preview.onRequestCum).toBeUndefined();
     expect(preview.onOpenOptions).toBeUndefined();
+  });
+
+  it("allows preview callers to opt back into automatic intermediaries explicitly", () => {
+    const preview = buildPreviewRoundVideoOverlayProps({
+      activeRound: createActiveRound(),
+      installedRounds: [createInstalledRound()],
+      intermediaryProbability: 0.5,
+      booruSearchPrompt: "animated gif webm",
+      intermediaryLoadingDurationSec: 5,
+      intermediaryReturnPauseSec: 4,
+      allowAutomaticIntermediaries: true,
+      onClose: vi.fn(),
+      onFinishRound: vi.fn(),
+    });
+
+    expect(preview.allowAutomaticIntermediaries).toBe(true);
   });
 });

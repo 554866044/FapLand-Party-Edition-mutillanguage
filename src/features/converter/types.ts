@@ -6,6 +6,11 @@ export type RoundCutRangeDraft = {
     endTimeMs: number;
 };
 
+export type SegmentCutMarkDraft = {
+    markInMs: number | null;
+    markOutMs: number | null;
+};
+
 export type SegmentDraft = {
     id: string;
     startTimeMs: number;

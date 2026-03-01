@@ -140,15 +140,26 @@ vi.mock("../features/converter/AutoDetectionPanel", () => ({
 vi.mock("../features/converter/SegmentList", () => ({
   SegmentList: ({
     sortedSegments,
+    onSetSegmentCutMarkIn,
+    onAddCutToSegmentFromLocalMarks,
   }: {
     sortedSegments: Array<{ id: string; customName?: string }>;
+    onSetSegmentCutMarkIn?: (segmentId: string) => void;
+    onAddCutToSegmentFromLocalMarks?: (segmentId: string) => void;
   }) => (
     <div data-testid="segment-list">
+      <span data-testid="segment-list-local-cut-ready">
+        {typeof onSetSegmentCutMarkIn === "function" &&
+        typeof onAddCutToSegmentFromLocalMarks === "function"
+          ? "yes"
+          : "no"}
+      </span>
       {sortedSegments.map((seg, i) => (
         <span key={seg.id}>{seg.customName ?? `Round ${i + 1}`}</span>
       ))}
     </div>
   ),
+  pickSegmentListProps: (state: unknown) => state,
 }));
 
 vi.mock("../features/converter/StatusBar", () => ({
@@ -456,6 +467,28 @@ describe("ConverterPage", () => {
       });
 
       expect(screen.getByDisplayValue("Standalone Source")).toBeDefined();
+    });
+
+    it("passes local segment cutting controls into the edit-step segment list", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-1", "Standalone Source", {
+          startTime: 1000,
+          endTime: 9000,
+        }),
+      ]);
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Standalone Source/ })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Standalone Source/ }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("segment-list-local-cut-ready")).toHaveTextContent("yes");
+      });
     });
 
     it("shows 'Change Source' button in edit mode that returns to selection", async () => {

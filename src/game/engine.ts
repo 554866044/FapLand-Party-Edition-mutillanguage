@@ -746,7 +746,9 @@ function resolveRandomInstalledRound(
   const candidates =
     pool?.candidates ??
     installedRounds
-      .filter((round) => !round.excludeFromRandom)
+      .filter(
+        (round) => !round.excludeFromRandom && (round.type ?? "Normal") === "Normal"
+      )
       .map((round) => ({
         roundId: round.id,
         weight: 1,

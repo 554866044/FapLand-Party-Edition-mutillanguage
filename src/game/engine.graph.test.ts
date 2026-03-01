@@ -429,6 +429,28 @@ describe("graph engine runtime", () => {
     expect(second.queuedRound?.roundId).toBe("round-1");
   });
 
+  it("filters non-normal rounds out of the default installed random-node fallback", () => {
+    const config = makeGraphConfig({
+      board: [
+        { id: "start", name: "Start", kind: "start" },
+        { id: "rng", name: "Random", kind: "randomRound" },
+      ],
+      edges: [{ id: "e1", fromNodeId: "start", toNodeId: "rng", gateCost: 0, weight: 1 }],
+    });
+
+    const state = rollTurn(
+      createInitialGameState(config),
+      [
+        makeRound("normal-1", "Normal 1", "Normal"),
+        makeRound("interjection-1", "Interjection 1", "Interjection"),
+        makeRound("cum-1", "Cum 1", "Cum"),
+      ],
+      1
+    );
+
+    expect(state.queuedRound?.roundId).toBe("normal-1");
+  });
+
   it("supports loops without crashing", () => {
     const config = makeGraphConfig({
       board: [

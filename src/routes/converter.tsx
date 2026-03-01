@@ -15,7 +15,7 @@ import {
   AutoDetectionPanel,
   pickAutoDetectionPanelProps,
 } from "../features/converter/AutoDetectionPanel";
-import { SegmentList } from "../features/converter/SegmentList";
+import { SegmentList, pickSegmentListProps } from "../features/converter/SegmentList";
 import { StatusBar } from "../features/converter/StatusBar";
 import { HotkeyOverlay } from "../features/converter/HotkeyOverlay";
 import { ConverterSourcePicker } from "../features/converter/ConverterSourcePicker";
@@ -249,32 +249,7 @@ function ConverterPage() {
                     </button>
                   </div>
                   <div className="p-4 space-y-4">
-                    <SegmentList
-                      sortedSegments={state.sortedSegments}
-                      selectedSegmentId={state.selectedSegmentId}
-                      selectedSegment={state.selectedSegment}
-                      heroName={state.heroName}
-                      allowOverlappingSegments={state.allowOverlappingSegments}
-                      onSelectSegment={state.setSelectedSegmentId}
-                      onRemoveSegment={state.removeSegment}
-                      onAllowOverlappingSegmentsChange={state.setAllowOverlappingSegments}
-                      onAddCutFromMarks={state.addCutFromMarks}
-                      onRemoveCut={state.removeCut}
-                      onSeekToMs={(ms) => {
-                        state.seekToMs(ms);
-                        playSelectSound();
-                      }}
-                      onMergeSegmentWithNext={state.mergeSegmentWithNext}
-                      onSetSegmentCustomName={state.setSegmentCustomName}
-                      onSetSegmentBpm={state.setSegmentBpm}
-                      onResetSegmentBpm={state.resetSegmentBpm}
-                      onSetSegmentDifficulty={state.setSegmentDifficulty}
-                      onResetSegmentDifficulty={state.resetSegmentDifficulty}
-                      onSetSegmentType={state.setSegmentType}
-                      onUpdateSegmentTiming={state.updateSegmentTiming}
-                      setMessage={() => {}}
-                      setError={() => {}}
-                    />
+                    <SegmentList {...pickSegmentListProps(state)} />
                     <div className="border-t border-zinc-700/50 pt-4">
                       <HeroPanel {...pickHeroPanelProps(state)} />
                     </div>

@@ -197,6 +197,8 @@ function createHandySession(): handyRuntime.HandySession {
     nextStreamPointIndex: 0,
     tailPointStreamIndex: 0,
     uploadedUntilMs: 0,
+    lastHspAddAtMs: 0,
+    hspAddBackoffUntilMs: 0,
     hspModeActive: false,
   };
 }
@@ -963,6 +965,84 @@ describe("RoundVideoOverlay", () => {
       expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledTimes(2);
       expect(mocks.handy.setSyncStatus).toHaveBeenCalledWith({ synced: true, error: null });
     });
+  });
+
+  it("does not mark TheHandy synced if manual stop is enabled while bootstrap sync is in flight", async () => {
+    mocks.handy.connectionKey = "conn-key";
+    mocks.handy.appApiKey = "app-key";
+    mocks.handy.connected = true;
+    mocks.playback.loadFunscriptTimeline.mockResolvedValue({
+      actions: [{ at: 0, pos: 10 }],
+    });
+    mocks.playback.getFunscriptPositionAtMs.mockReturnValue(10);
+    vi.mocked(handyRuntime.issueHandySession).mockResolvedValue(createHandySession());
+
+    let resolveSync: (() => void) | null = null;
+    vi.mocked(handyRuntime.sendHspSync).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSync = resolve;
+        })
+    );
+
+    const activeRound = createActiveRound("round-1");
+    const installedRounds = [createInstalledRound("round-1", "/script.funscript")];
+    const onFinishRound = vi.fn();
+    const view = render(
+      <RoundVideoOverlay
+        activeRound={activeRound}
+        installedRounds={installedRounds}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={onFinishRound}
+      />
+    );
+
+    const video = await waitFor(() => {
+      const candidate = view.container.querySelector("video");
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLVideoElement;
+    });
+    primeVideoElement(video, { duration: 30, currentTime: 0 });
+
+    fireEvent.loadedMetadata(video);
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.preloadHspScript)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(handyRuntime.sendHspSync)).toHaveBeenCalledTimes(1);
+    });
+
+    mocks.handy.manuallyStopped = true;
+    view.rerender(
+      <RoundVideoOverlay
+        activeRound={activeRound}
+        installedRounds={installedRounds}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={onFinishRound}
+      />
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(handyRuntime.stopHandyPlayback)).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      resolveSync?.();
+      await Promise.resolve();
+    });
+
+    expect(
+      mocks.handy.setSyncStatus.mock.calls.some(
+        ([value]) => value?.synced === true && value?.error === null
+      )
+    ).toBe(false);
   });
 
   it("shows an in-game TheHandy sync card with an idle no-script preview", async () => {

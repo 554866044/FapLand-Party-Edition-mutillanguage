@@ -3,7 +3,7 @@ import { useSfwMode } from "../../hooks/useSfwMode";
 import { playSelectSound } from "../../utils/audio";
 import { abbreviateNsfwText } from "../../utils/sfwText";
 import { GameDropdown } from "../../components/ui/GameDropdown";
-import { formatMs, type SegmentDraft, type SegmentType } from "./types";
+import { formatMs, type SegmentCutMarkDraft, type SegmentDraft, type SegmentType } from "./types";
 
 type SegmentCardProps = {
   segment: SegmentDraft;
@@ -11,10 +11,17 @@ type SegmentCardProps = {
   isSelected: boolean;
   hasNext: boolean;
   heroName: string;
+  currentTimeMs: number;
+  segmentCutMarks: SegmentCutMarkDraft;
   onSelect: () => void;
+  onSeekToTimeline: (ms: number) => void;
   onJumpStart: () => void;
   onJumpEnd: () => void;
   onMergeWithNext: () => void;
+  onSetCutMarkIn: () => void;
+  onSetCutMarkOut: () => void;
+  onClearCutMarks: () => void;
+  onCutSegment: () => void;
   onRemoveCut: (cutId: string) => void;
   onJumpCutStart: (cutId: string) => void;
   onJumpCutEnd: (cutId: string) => void;
@@ -33,6 +40,11 @@ const TYPE_ACCENT: Record<SegmentType, string> = {
   Cum: "border-l-rose-400/60",
 };
 
+function toPercent(value: number, startTimeMs: number, endTimeMs: number): number {
+  const durationMs = Math.max(1, endTimeMs - startTimeMs);
+  return ((value - startTimeMs) / durationMs) * 100;
+}
+
 export const SegmentCard: React.FC<SegmentCardProps> = React.memo(
   ({
     segment,
@@ -40,10 +52,17 @@ export const SegmentCard: React.FC<SegmentCardProps> = React.memo(
     isSelected,
     hasNext,
     heroName,
+    currentTimeMs,
+    segmentCutMarks,
     onSelect,
+    onSeekToTimeline,
     onJumpStart,
     onJumpEnd,
     onMergeWithNext,
+    onSetCutMarkIn,
+    onSetCutMarkOut,
+    onClearCutMarks,
+    onCutSegment,
     onRemoveCut,
     onJumpCutStart,
     onJumpCutEnd,
@@ -60,6 +79,19 @@ export const SegmentCard: React.FC<SegmentCardProps> = React.memo(
     const [expanded, setExpanded] = React.useState(true);
     const difficultyLevel =
       segment.difficulty == null ? 0 : Math.max(1, Math.min(5, segment.difficulty));
+    const playheadInsideSegment =
+      currentTimeMs >= segment.startTimeMs && currentTimeMs <= segment.endTimeMs;
+    const markInPercent =
+      segmentCutMarks.markInMs === null
+        ? null
+        : toPercent(segmentCutMarks.markInMs, segment.startTimeMs, segment.endTimeMs);
+    const markOutPercent =
+      segmentCutMarks.markOutMs === null
+        ? null
+        : toPercent(segmentCutMarks.markOutMs, segment.startTimeMs, segment.endTimeMs);
+    const playheadPercent = playheadInsideSegment
+      ? toPercent(currentTimeMs, segment.startTimeMs, segment.endTimeMs)
+      : null;
 
     return (
       <div
@@ -109,6 +141,110 @@ export const SegmentCard: React.FC<SegmentCardProps> = React.memo(
 
         {expanded && (
           <div className="mt-2 space-y-2 pl-5">
+            <div className="rounded border border-violet-400/20 bg-black/20 p-2">
+              <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-violet-100">
+                <span>Segment Timeline</span>
+                <span className="text-zinc-500">
+                  {formatMs(segment.startTimeMs)}-{formatMs(segment.endTimeMs)}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label={`Segment timeline for round ${index + 1}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+                  const clampedRatio = Math.max(0, Math.min(1, ratio));
+                  const targetMs =
+                    segment.startTimeMs +
+                    Math.round((segment.endTimeMs - segment.startTimeMs) * clampedRatio);
+                  onSeekToTimeline(targetMs);
+                }}
+                className="relative block h-8 w-full overflow-hidden rounded border border-zinc-700 bg-zinc-950/80"
+              >
+                {segment.cutRanges.map((cut) => (
+                  <span
+                    key={cut.id}
+                    aria-label="Segment cut overlay"
+                    className="absolute inset-y-0 rounded-sm border border-rose-200/60 bg-[repeating-linear-gradient(135deg,rgba(244,63,94,0.42)_0,rgba(244,63,94,0.42)_6px,rgba(127,29,29,0.22)_6px,rgba(127,29,29,0.22)_12px)]"
+                    style={{
+                      left: `${toPercent(cut.startTimeMs, segment.startTimeMs, segment.endTimeMs)}%`,
+                      width: `${Math.max(1, toPercent(cut.endTimeMs, segment.startTimeMs, segment.endTimeMs) - toPercent(cut.startTimeMs, segment.startTimeMs, segment.endTimeMs))}%`,
+                    }}
+                  />
+                ))}
+                {playheadPercent !== null && (
+                  <span
+                    aria-label="Segment playhead"
+                    className="absolute inset-y-0 w-[2px] bg-violet-300/90"
+                    style={{ left: `${playheadPercent}%` }}
+                  />
+                )}
+                {markInPercent !== null && (
+                  <span
+                    aria-label="Local cut in"
+                    className="absolute inset-y-0 w-[2px] bg-cyan-300"
+                    style={{ left: `${markInPercent}%` }}
+                  />
+                )}
+                {markOutPercent !== null && (
+                  <span
+                    aria-label="Local cut out"
+                    className="absolute inset-y-0 w-[2px] bg-indigo-300"
+                    style={{ left: `${markOutPercent}%` }}
+                  />
+                )}
+              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetCutMarkIn();
+                  }}
+                  className="text-cyan-300 hover:text-cyan-200"
+                >
+                  Set Cut IN
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetCutMarkOut();
+                  }}
+                  className="text-indigo-300 hover:text-indigo-200"
+                >
+                  Set Cut OUT
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCutSegment();
+                  }}
+                  className="text-amber-300 hover:text-amber-200"
+                >
+                  Cut Segment
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClearCutMarks();
+                  }}
+                  className="text-zinc-400 hover:text-zinc-200"
+                >
+                  Clear Cut Marks
+                </button>
+                {segmentCutMarks.markInMs !== null && (
+                  <span className="text-cyan-200">IN {formatMs(segmentCutMarks.markInMs)}</span>
+                )}
+                {segmentCutMarks.markOutMs !== null && (
+                  <span className="text-indigo-200">OUT {formatMs(segmentCutMarks.markOutMs)}</span>
+                )}
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"

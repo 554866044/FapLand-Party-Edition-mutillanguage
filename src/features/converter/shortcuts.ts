@@ -111,7 +111,7 @@ export const CONVERTER_SHORTCUTS: readonly ConverterShortcutBinding[] = [
   {
     id: "add-cut",
     keysLabel: "C",
-    description: t`Create a cut inside the selected segment from the current IN and OUT markers.`,
+    description: t`Create a cut from the global IN and OUT markers on the selected timeline segment.`,
     category: "Marking",
     matches: (event) => keyMatch(event, "c") || keyMatch(event, "C"),
     trigger: (context) => context.addCutFromMarks(),

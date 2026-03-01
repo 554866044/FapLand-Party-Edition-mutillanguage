@@ -37,6 +37,7 @@ import {
   type DragState,
   type HeroOption,
   type InstalledSourceOption,
+  type SegmentCutMarkDraft,
   type SegmentDraft,
   type SegmentType,
 } from "./types";
@@ -99,6 +100,32 @@ function segmentOverlapsRange(
   return startTimeMs < segment.endTimeMs && endTimeMs > segment.startTimeMs;
 }
 
+function clampTimeToSegment(
+  timeMs: number,
+  segment: Pick<SegmentDraft, "startTimeMs" | "endTimeMs">
+): number {
+  return clamp(timeMs, segment.startTimeMs, segment.endTimeMs);
+}
+
+function clampSegmentCutMarkDraft(
+  marks: SegmentCutMarkDraft,
+  segment: Pick<SegmentDraft, "startTimeMs" | "endTimeMs">
+): SegmentCutMarkDraft {
+  return {
+    markInMs:
+      marks.markInMs === null ? null : clampTimeToSegment(marks.markInMs, segment),
+    markOutMs:
+      marks.markOutMs === null ? null : clampTimeToSegment(marks.markOutMs, segment),
+  };
+}
+
+function getDefaultSegmentCutMarkDraft(): SegmentCutMarkDraft {
+  return {
+    markInMs: null,
+    markOutMs: null,
+  };
+}
+
 export function useConverterState(searchParams: ConverterSearchParams) {
   const { sourceRoundId: preselectedSourceRoundId, heroName: prefilledHeroName } = searchParams;
 
@@ -130,6 +157,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [markInMs, setMarkInMs] = useState<number | null>(null);
   const [markOutMs, setMarkOutMs] = useState<number | null>(null);
+  const [segmentCutMarks, setSegmentCutMarks] = useState<Record<string, SegmentCutMarkDraft>>({});
 
   const [segments, setSegments] = useState<SegmentDraft[]>([]);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
@@ -191,6 +219,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setSelectedInstalledId("");
     setSourceRoundIdsToReplace([]);
     setSegments([]);
+    setSegmentCutMarks({});
     setSelectedSegmentId(null);
     setDetectedSegments([]);
     setMarkInMs(null);
@@ -250,9 +279,11 @@ export function useConverterState(searchParams: ConverterSearchParams) {
         };
         resetSegments = [draft];
         setSegments(resetSegments);
+        setSegmentCutMarks({});
         setSelectedSegmentId(draft.id);
       } else {
         setSegments([]);
+        setSegmentCutMarks({});
         setSelectedSegmentId(null);
       }
       pendingInstalledSegmentsRef.current = resetSegments;
@@ -331,6 +362,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       pendingInstalledSegmentsRef.current = sortedSegmentDrafts;
       pendingInstalledLoadMessageRef.current = `Loaded hero "${hero.name}" from installed rounds.`;
       setSegments(sortedSegmentDrafts);
+      setSegmentCutMarks({});
       setSelectedSegmentId(sortedSegmentDrafts[0]?.id ?? null);
 
       setDetectedSegments([]);
@@ -367,6 +399,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setHeroAuthor("");
     setHeroDescription("");
     setSegments([]);
+    setSegmentCutMarks({});
     setSelectedSegmentId(null);
     setDetectedSegments([]);
     setMarkInMs(null);
@@ -413,6 +446,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       setHeroAuthor("");
       setHeroDescription("");
       setSegments([]);
+      setSegmentCutMarks({});
       setSelectedSegmentId(null);
       setDetectedSegments([]);
       setMarkInMs(null);
@@ -499,6 +533,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setSelectedInstalledId("");
     setSourceRoundIdsToReplace([]);
     setSegments([]);
+    setSegmentCutMarks({});
     setSelectedSegmentId(null);
     setDetectedSegments([]);
     setMarkInMs(null);
@@ -541,6 +576,56 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     () => sortedSegments.find((segment) => segment.id === selectedSegmentId) ?? null,
     [sortedSegments, selectedSegmentId]
   );
+
+  const clearSegmentCutMarks = useCallback((segmentId: string) => {
+    setSegmentCutMarks((previous) => {
+      if (!(segmentId in previous)) return previous;
+      const next = { ...previous };
+      delete next[segmentId];
+      return next;
+    });
+  }, []);
+
+  const setSegmentCutMark = useCallback(
+    (segmentId: string, edge: "markInMs" | "markOutMs") => {
+      const segment = sortedSegments.find((entry) => entry.id === segmentId);
+      if (!segment) return;
+
+      setSegmentCutMarks((previous) => ({
+        ...previous,
+        [segmentId]: {
+          ...(previous[segmentId] ?? getDefaultSegmentCutMarkDraft()),
+          [edge]: clampTimeToSegment(currentTimeMs, segment),
+        },
+      }));
+      setSelectedSegmentId(segmentId);
+      setError(null);
+    },
+    [currentTimeMs, sortedSegments]
+  );
+
+  useEffect(() => {
+    setSegmentCutMarks((previous) => {
+      const next: Record<string, SegmentCutMarkDraft> = {};
+      let changed = false;
+
+      for (const segment of sortedSegments) {
+        const marks = previous[segment.id];
+        if (!marks) continue;
+        const clamped = clampSegmentCutMarkDraft(marks, segment);
+        next[segment.id] = clamped;
+        if (clamped.markInMs !== marks.markInMs || clamped.markOutMs !== marks.markOutMs) {
+          changed = true;
+        }
+      }
+
+      if (!changed && Object.keys(previous).length === Object.keys(next).length) {
+        return previous;
+      }
+
+      return next;
+    });
+  }, [sortedSegments]);
 
   const resolveCutTarget = useCallback(
     (startTimeMs: number, endTimeMs: number): { segment: SegmentDraft | null; reason: string | null } => {
@@ -1074,6 +1159,91 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     playConverterSegmentAddSound();
   }, [applySegments, markInMs, markOutMs, segments]);
 
+  const applyCutToSegment = useCallback(
+    (
+      segmentId: string,
+      startTimeMs: number,
+      endTimeMs: number,
+      source: "global" | "local"
+    ) => {
+      const targetSegment = segments.find((segment) => segment.id === segmentId) ?? null;
+      if (!targetSegment) {
+        setError(source === "local" ? "Segment timeline is no longer available." : "Select a segment before adding a cut.");
+        playConverterValidationErrorSound();
+        return false;
+      }
+
+      const boundedStartTimeMs = clamp(
+        startTimeMs,
+        targetSegment.startTimeMs,
+        targetSegment.endTimeMs
+      );
+      const boundedEndTimeMs = clamp(endTimeMs, targetSegment.startTimeMs, targetSegment.endTimeMs);
+
+      if (
+        boundedStartTimeMs <= targetSegment.startTimeMs &&
+        boundedEndTimeMs >= targetSegment.endTimeMs
+      ) {
+        const next = segments.filter((segment) => segment.id !== targetSegment.id);
+        const sorted = sortSegments(withAutoMetadata(next));
+        undoManagerRef.current.push(sorted);
+        syncUndoState();
+        setSegments(sorted);
+        setSegmentCutMarks((previous) => {
+          if (!(targetSegment.id in previous)) return previous;
+          const nextMarks = { ...previous };
+          delete nextMarks[targetSegment.id];
+          return nextMarks;
+        });
+        if (selectedSegmentId === targetSegment.id) {
+          setSelectedSegmentId(sorted[0]?.id ?? null);
+        }
+        setMessage(
+          `Segment cut out (${formatMs(targetSegment.startTimeMs)} - ${formatMs(targetSegment.endTimeMs)}).`
+        );
+        setError(null);
+        playConverterSegmentDeleteSound();
+        return true;
+      }
+
+      let nextSelectedSegment: SegmentDraft = targetSegment;
+      if (boundedStartTimeMs <= targetSegment.startTimeMs) {
+        nextSelectedSegment = {
+          ...targetSegment,
+          startTimeMs: boundedEndTimeMs,
+          cutRanges: targetSegment.cutRanges.filter((cut) => cut.endTimeMs > boundedEndTimeMs),
+        };
+      } else if (boundedEndTimeMs >= targetSegment.endTimeMs) {
+        nextSelectedSegment = {
+          ...targetSegment,
+          endTimeMs: boundedStartTimeMs,
+          cutRanges: targetSegment.cutRanges.filter((cut) => cut.startTimeMs < boundedStartTimeMs),
+        };
+      } else {
+        const normalizedCuts = normalizeRoundCutRanges(
+          [
+            ...targetSegment.cutRanges,
+            { id: createSegmentId(), startTimeMs: boundedStartTimeMs, endTimeMs: boundedEndTimeMs },
+          ],
+          targetSegment.startTimeMs,
+          targetSegment.endTimeMs
+        ).map((cut) => ({ ...cut, id: createSegmentId() }));
+        nextSelectedSegment = { ...targetSegment, cutRanges: normalizedCuts };
+      }
+
+      const next = segments.map((segment) =>
+        segment.id === targetSegment.id ? nextSelectedSegment : segment
+      );
+      if (!applySegments(next)) return false;
+
+      setMessage(`Cut added (${formatMs(boundedStartTimeMs)} - ${formatMs(boundedEndTimeMs)}).`);
+      setError(null);
+      playConverterSegmentAddSound();
+      return true;
+    },
+    [applySegments, segments, selectedSegmentId, syncUndoState, withAutoMetadata]
+  );
+
   const addCutFromMarks = useCallback(() => {
     if (markInMs === null || markOutMs === null) {
       setError("Set both IN and OUT marks before adding a cut.");
@@ -1096,70 +1266,38 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       return;
     }
 
-    const boundedStartTimeMs = clamp(startTimeMs, targetSegment.startTimeMs, targetSegment.endTimeMs);
-    const boundedEndTimeMs = clamp(endTimeMs, targetSegment.startTimeMs, targetSegment.endTimeMs);
-
-    if (
-      boundedStartTimeMs <= targetSegment.startTimeMs &&
-      boundedEndTimeMs >= targetSegment.endTimeMs
-    ) {
-      const next = segments.filter((segment) => segment.id !== targetSegment.id);
-      const sorted = sortSegments(withAutoMetadata(next));
-      undoManagerRef.current.push(sorted);
-      syncUndoState();
-      setSegments(sorted);
-      if (selectedSegmentId === targetSegment.id) {
-        setSelectedSegmentId(sorted[0]?.id ?? null);
-      }
-      setMessage(`Segment cut out (${formatMs(targetSegment.startTimeMs)} - ${formatMs(targetSegment.endTimeMs)}).`);
-      setError(null);
-      playConverterSegmentDeleteSound();
-      return;
-    }
-
-    let nextSelectedSegment: SegmentDraft = targetSegment;
-    if (boundedStartTimeMs <= targetSegment.startTimeMs) {
-      nextSelectedSegment = {
-        ...targetSegment,
-        startTimeMs: boundedEndTimeMs,
-        cutRanges: targetSegment.cutRanges.filter((cut) => cut.endTimeMs > boundedEndTimeMs),
-      };
-    } else if (boundedEndTimeMs >= targetSegment.endTimeMs) {
-      nextSelectedSegment = {
-        ...targetSegment,
-        endTimeMs: boundedStartTimeMs,
-        cutRanges: targetSegment.cutRanges.filter((cut) => cut.startTimeMs < boundedStartTimeMs),
-      };
-    } else {
-      const normalizedCuts = normalizeRoundCutRanges(
-        [
-          ...targetSegment.cutRanges,
-          { id: createSegmentId(), startTimeMs: boundedStartTimeMs, endTimeMs: boundedEndTimeMs },
-        ],
-        targetSegment.startTimeMs,
-        targetSegment.endTimeMs
-      ).map((cut) => ({ ...cut, id: createSegmentId() }));
-      nextSelectedSegment = { ...targetSegment, cutRanges: normalizedCuts };
-    }
-
-    const next = segments.map((segment) =>
-      segment.id === targetSegment.id ? nextSelectedSegment : segment
-    );
-    if (!applySegments(next)) return;
-
-    setMessage(`Cut added (${formatMs(boundedStartTimeMs)} - ${formatMs(boundedEndTimeMs)}).`);
-    setError(null);
-    playConverterSegmentAddSound();
+    void applyCutToSegment(targetSegment.id, startTimeMs, endTimeMs, "global");
   }, [
-    applySegments,
+    applyCutToSegment,
     markInMs,
     markOutMs,
     resolveCutTarget,
-    segments,
-    selectedSegmentId,
-    syncUndoState,
-    withAutoMetadata,
   ]);
+
+  const addCutToSegmentFromLocalMarks = useCallback(
+    (segmentId: string) => {
+      const marks = segmentCutMarks[segmentId] ?? getDefaultSegmentCutMarkDraft();
+      if (marks.markInMs === null || marks.markOutMs === null) {
+        setError("Set both local cut IN and OUT marks before cutting this segment.");
+        playConverterValidationErrorSound();
+        return;
+      }
+
+      const startTimeMs = Math.min(marks.markInMs, marks.markOutMs);
+      const endTimeMs = Math.max(marks.markInMs, marks.markOutMs);
+      if (endTimeMs - startTimeMs < MIN_ROUND_CUT_MS) {
+        setError("Cut is too short.");
+        playConverterValidationErrorSound();
+        return;
+      }
+
+      const applied = applyCutToSegment(segmentId, startTimeMs, endTimeMs, "local");
+      if (!applied) return;
+
+      clearSegmentCutMarks(segmentId);
+    },
+    [applyCutToSegment, clearSegmentCutMarks, segmentCutMarks]
+  );
 
   const removeCut = useCallback(
     (segmentId: string, cutId: string) => {
@@ -1183,12 +1321,13 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       undoManagerRef.current.push(sorted);
       syncUndoState();
       setSegments(sorted);
+      clearSegmentCutMarks(segmentId);
       if (selectedSegmentId === segmentId) {
         setSelectedSegmentId(next[0]?.id ?? null);
       }
       playConverterSegmentDeleteSound();
     },
-    [segments, selectedSegmentId, syncUndoState, withAutoMetadata]
+    [clearSegmentCutMarks, segments, selectedSegmentId, syncUndoState, withAutoMetadata]
   );
 
   const setSegmentType = useCallback(
@@ -1376,12 +1515,14 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       const nextSegments = [...sorted.slice(0, index), merged, ...sorted.slice(index + 2)];
       if (!applySegments(nextSegments)) return;
 
+      clearSegmentCutMarks(current.id);
+      clearSegmentCutMarks(next.id);
       setSelectedSegmentId(merged.id);
       setMessage(`Merged round ${index + 1} with round ${index + 2}.`);
       setError(null);
       playConverterSegmentAddSound();
     },
-    [applySegments, segments]
+    [applySegments, clearSegmentCutMarks, segments]
   );
 
   const splitSegmentAtPlayhead = useCallback(() => {
@@ -1442,11 +1583,12 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     );
     if (!applySegments(nextSegments)) return;
 
+    clearSegmentCutMarks(segmentToSplit.id);
     setSelectedSegmentId(splitSegment.id);
     setMessage(`Split segment at ${formatMs(currentTimeMs)}.`);
     setError(null);
     playConverterSegmentAddSound();
-  }, [applySegments, currentTimeMs, segments, selectedSegment]);
+  }, [applySegments, clearSegmentCutMarks, currentTimeMs, segments, selectedSegment]);
 
   const clearMarks = useCallback(() => {
     if (markInMs === null && markOutMs === null) return false;
@@ -1465,6 +1607,22 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     return true;
   }, [selectedSegmentId]);
 
+  const setSegmentCutMarkIn = useCallback(
+    (segmentId: string) => {
+      setSegmentCutMark(segmentId, "markInMs");
+      playConverterMarkInSound();
+    },
+    [setSegmentCutMark]
+  );
+
+  const setSegmentCutMarkOut = useCallback(
+    (segmentId: string) => {
+      setSegmentCutMark(segmentId, "markOutMs");
+      playConverterMarkOutSound();
+    },
+    [setSegmentCutMark]
+  );
+
   const handleUndo = useCallback(() => {
     const nextState = undoManagerRef.current.undo();
     if (!nextState) {
@@ -1472,6 +1630,13 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       return;
     }
     setSegments(nextState);
+    setSegmentCutMarks((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(([segmentId]) =>
+          nextState.some((segment) => segment.id === segmentId)
+        )
+      )
+    );
     syncUndoState();
     setMessage("Undo.");
     setError(null);
@@ -1485,6 +1650,13 @@ export function useConverterState(searchParams: ConverterSearchParams) {
       return;
     }
     setSegments(nextState);
+    setSegmentCutMarks((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(([segmentId]) =>
+          nextState.some((segment) => segment.id === segmentId)
+        )
+      )
+    );
     syncUndoState();
     setMessage("Redo.");
     setError(null);
@@ -1689,6 +1861,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setCurrentTimeMs(0);
     setDurationMs(0);
     setSegments([]);
+    setSegmentCutMarks({});
     setDetectedSegments([]);
     setMarkInMs(null);
     setMarkOutMs(null);
@@ -1877,6 +2050,7 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     const pendingSegments = pendingInstalledSegmentsRef.current;
     pendingInstalledSegmentsRef.current = null;
     setSegments(pendingSegments ?? []);
+    setSegmentCutMarks({});
     setSelectedSegmentId(pendingSegments?.[0]?.id ?? null);
     setDetectedSegments([]);
     setMarkInMs(null);
@@ -2155,6 +2329,11 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     setAllowOverlappingSegments,
     addSegmentFromMarks,
     addCutFromMarks,
+    segmentCutMarks,
+    setSegmentCutMarkIn,
+    setSegmentCutMarkOut,
+    clearSegmentCutMarks,
+    addCutToSegmentFromLocalMarks,
     removeSegment,
     removeCut,
     setSegmentType,

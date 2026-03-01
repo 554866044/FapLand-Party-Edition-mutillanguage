@@ -3,17 +3,24 @@ import React from "react";
 import { playSelectSound } from "../../utils/audio";
 import type { ConverterState } from "./useConverterState";
 import { SegmentCard } from "./SegmentCard";
+import type { SegmentCutMarkDraft } from "./types";
 
 type SegmentListProps = {
   sortedSegments: ConverterState["sortedSegments"];
   selectedSegmentId: string | null;
   selectedSegment: ConverterState["selectedSegment"];
   heroName: string;
+  currentTimeMs: number;
   allowOverlappingSegments: boolean;
+  segmentCutMarks: Record<string, SegmentCutMarkDraft>;
   onSelectSegment: (id: string) => void;
   onRemoveSegment: (id: string) => void;
   onAllowOverlappingSegmentsChange: (enabled: boolean) => void;
   onAddCutFromMarks: () => void;
+  onSetSegmentCutMarkIn: (segmentId: string) => void;
+  onSetSegmentCutMarkOut: (segmentId: string) => void;
+  onClearSegmentCutMarks: (segmentId: string) => void;
+  onAddCutToSegmentFromLocalMarks: (segmentId: string) => void;
   onRemoveCut: (segmentId: string, cutId: string) => void;
   onSeekToMs: (ms: number) => void;
   onMergeSegmentWithNext: (id: string) => void;
@@ -34,11 +41,17 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
     selectedSegmentId,
     selectedSegment,
     heroName,
+    currentTimeMs,
     allowOverlappingSegments,
+    segmentCutMarks,
     onSelectSegment,
     onRemoveSegment,
     onAllowOverlappingSegmentsChange,
     onAddCutFromMarks,
+    onSetSegmentCutMarkIn,
+    onSetSegmentCutMarkOut,
+    onClearSegmentCutMarks,
+    onAddCutToSegmentFromLocalMarks,
     onRemoveCut,
     onSeekToMs,
     onMergeSegmentWithNext,
@@ -128,7 +141,13 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
                 isSelected={selectedSegmentId === segment.id}
                 hasNext={index < sortedSegments.length - 1}
                 heroName={heroName}
+                currentTimeMs={currentTimeMs}
+                segmentCutMarks={segmentCutMarks[segment.id] ?? { markInMs: null, markOutMs: null }}
                 onSelect={() => onSelectSegment(segment.id)}
+                onSeekToTimeline={(ms) => {
+                  onSelectSegment(segment.id);
+                  onSeekToMs(ms);
+                }}
                 onJumpStart={() => {
                   onSeekToMs(segment.startTimeMs);
                   setMessage(`Jumped to segment ${index + 1} start.`);
@@ -140,6 +159,10 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
                   setError(null);
                 }}
                 onMergeWithNext={() => onMergeSegmentWithNext(segment.id)}
+                onSetCutMarkIn={() => onSetSegmentCutMarkIn(segment.id)}
+                onSetCutMarkOut={() => onSetSegmentCutMarkOut(segment.id)}
+                onClearCutMarks={() => onClearSegmentCutMarks(segment.id)}
+                onCutSegment={() => onAddCutToSegmentFromLocalMarks(segment.id)}
                 onRemoveCut={(cutId) => onRemoveCut(segment.id, cutId)}
                 onJumpCutStart={(cutId) => {
                   const cut = segment.cutRanges.find((entry) => entry.id === cutId);
@@ -177,11 +200,17 @@ export function pickSegmentListProps(state: ConverterState): SegmentListProps {
     selectedSegmentId: state.selectedSegmentId,
     selectedSegment: state.selectedSegment,
     heroName: state.heroName,
+    currentTimeMs: state.currentTimeMs,
     allowOverlappingSegments: state.allowOverlappingSegments,
+    segmentCutMarks: state.segmentCutMarks,
     onSelectSegment: state.setSelectedSegmentId,
     onRemoveSegment: state.removeSegment,
     onAllowOverlappingSegmentsChange: state.setAllowOverlappingSegments,
     onAddCutFromMarks: state.addCutFromMarks,
+    onSetSegmentCutMarkIn: state.setSegmentCutMarkIn,
+    onSetSegmentCutMarkOut: state.setSegmentCutMarkOut,
+    onClearSegmentCutMarks: state.clearSegmentCutMarks,
+    onAddCutToSegmentFromLocalMarks: state.addCutToSegmentFromLocalMarks,
     onRemoveCut: state.removeCut,
     onSeekToMs: (ms: number) => {
       state.seekToMs(ms);

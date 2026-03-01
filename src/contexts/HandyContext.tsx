@@ -212,8 +212,8 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             console.warn("Failed to force-stop TheHandy playback", err);
         }
 
-        setConnected(false);
-        setManuallyStopped(false);
+        setConnected((current) => current);
+        setManuallyStopped(true);
         setSynced(false);
         setError(null);
         setSyncError(null);

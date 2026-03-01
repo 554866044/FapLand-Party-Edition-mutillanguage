@@ -483,6 +483,7 @@ export function RoundVideoOverlay({
   const handyLastPushPosRef = useRef<number | null>(null);
   const handyLastSuccessAtRef = useRef(0);
   const handySyncStateRef = useRef<HandySyncState>("disconnected");
+  const handyManuallyStoppedRef = useRef(handyManuallyStopped);
   const handyBootstrapKeyRef = useRef<string | null>(null);
   const handyBootstrapInFlightRef = useRef<string | null>(null);
   const pendingVideoActivationTokenRef = useRef(0);
@@ -518,6 +519,10 @@ export function RoundVideoOverlay({
   const lastShownAntiPerkAlertRef = useRef<string | null>(null);
 
   const [timeline, setTimeline] = useState<Awaited<ReturnType<typeof loadFunscriptTimeline>>>(null);
+
+  useEffect(() => {
+    handyManuallyStoppedRef.current = handyManuallyStopped;
+  }, [handyManuallyStopped]);
   const [timelineUri, setTimelineUri] = useState<string | null>(null);
 
   const [handySyncState, setHandySyncState] = useState<HandySyncState>("disconnected");
@@ -922,7 +927,7 @@ export function RoundVideoOverlay({
   const resumeHandyIfNeeded = useCallback(async () => {
     if (!handyConnected) return;
     if (!connectionKey.trim() || !appApiKey.trim()) return;
-    if (handyManuallyStopped) return;
+    if (handyManuallyStoppedRef.current) return;
     const session = handySessionRef.current;
     if (!session) return;
     const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
@@ -1043,6 +1048,7 @@ export function RoundVideoOverlay({
 
       const runSync = (elapsedMs: number) => {
         if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+        if (handyManuallyStoppedRef.current) return;
         if (syncInFlight) {
           queuedElapsedMs = elapsedMs;
           return;
@@ -1051,8 +1057,15 @@ export function RoundVideoOverlay({
         syncInFlight = true;
         void (async () => {
           try {
+            if (handyManuallyStoppedRef.current) return;
             const session = await ensureHandySession();
-            if (!session || generatedSequenceSyncTokenRef.current !== syncToken) return;
+            if (
+              !session ||
+              generatedSequenceSyncTokenRef.current !== syncToken ||
+              handyManuallyStoppedRef.current
+            ) {
+              return;
+            }
             if (!preloadStarted) {
               preloadStarted = true;
               if (
@@ -1061,7 +1074,12 @@ export function RoundVideoOverlay({
                 session.streamedPoints !== null
               ) {
                 await stopHandyPlayback({ connectionKey: connKey, appApiKey: appKey }, session);
-                if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+                if (
+                  generatedSequenceSyncTokenRef.current !== syncToken ||
+                  handyManuallyStoppedRef.current
+                ) {
+                  return;
+                }
               }
               await preloadHspScript(
                 { connectionKey: connKey, appApiKey: appKey },
@@ -1070,7 +1088,12 @@ export function RoundVideoOverlay({
                 input.actions,
                 0
               );
-              if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+              if (
+                generatedSequenceSyncTokenRef.current !== syncToken ||
+                handyManuallyStoppedRef.current
+              ) {
+                return;
+              }
             }
             const effectiveElapsedMs = getCurrentElapsedMs();
             await sendHspSync(
@@ -1081,7 +1104,12 @@ export function RoundVideoOverlay({
               sourceId,
               input.actions
             );
-            if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+            if (
+              generatedSequenceSyncTokenRef.current !== syncToken ||
+              handyManuallyStoppedRef.current
+            ) {
+              return;
+            }
             const syncedAt = Date.now();
             handyLastPushAtRef.current = syncedAt;
             handyLastSuccessAtRef.current = syncedAt;
@@ -1093,7 +1121,12 @@ export function RoundVideoOverlay({
             setHandySyncError(null);
             setSyncStatus({ synced: true, error: null });
           } catch (error) {
-            if (generatedSequenceSyncTokenRef.current !== syncToken) return;
+            if (
+              generatedSequenceSyncTokenRef.current !== syncToken ||
+              handyManuallyStoppedRef.current
+            ) {
+              return;
+            }
             const message =
               error instanceof Error ? error.message : t`Generated sequence sync failed.`;
             setHandySyncState("error");
@@ -1267,7 +1300,11 @@ export function RoundVideoOverlay({
     void video
       .play()
       .then(() => {
-        if (shouldUseHandySync && !handyManuallyStopped && handySyncState === "synced") {
+        if (
+          shouldUseHandySync &&
+          !handyManuallyStoppedRef.current &&
+          handySyncState === "synced"
+        ) {
           void resumeHandyIfNeeded();
         }
       })
@@ -1542,6 +1579,10 @@ export function RoundVideoOverlay({
   ]);
 
   const resyncHandyTiming = useCallback(async () => {
+    if (handyManuallyStoppedRef.current) {
+      setStatus(t`TheHandy stopped manually.`);
+      return;
+    }
     if (!activeRound || !activeVideoUri) {
       setStatus(t`No active video to resync.`);
       return;
@@ -1560,6 +1601,7 @@ export function RoundVideoOverlay({
     setSyncStatus({ synced: false, error: null });
 
     try {
+      if (handyManuallyStoppedRef.current) return;
       const timeMs = Math.max(0, video.currentTime * 1000);
       const effectiveTimeMs = applyHandyOffsetMs(timeMs);
       const playbackRate = video.playbackRate ?? 1;
@@ -1572,7 +1614,7 @@ export function RoundVideoOverlay({
       }
 
       const session = await ensureHandySession();
-      if (!session) {
+      if (!session || handyManuallyStoppedRef.current) {
         setStatus(t`Failed to initialize TheHandy session for resync.`);
         return;
       }
@@ -1587,6 +1629,7 @@ export function RoundVideoOverlay({
         `${activeVideoUri}:${segment.kind}`,
         actions
       );
+      if (handyManuallyStoppedRef.current) return;
       await sendHspSync(
         {
           connectionKey: connectionKey.trim(),
@@ -1598,6 +1641,7 @@ export function RoundVideoOverlay({
         `${activeVideoUri}:${segment.kind}`,
         actions
       );
+      if (handyManuallyStoppedRef.current) return;
 
       const syncedAt = Date.now();
       handyLastPushAtRef.current = syncedAt;
@@ -1608,6 +1652,7 @@ export function RoundVideoOverlay({
       setSyncStatus({ synced: true, error: null });
       setStatus(t`TheHandy timing resynced.`);
     } catch (error) {
+      if (handyManuallyStoppedRef.current) return;
       const message =
         error instanceof Error ? error.message : t`Failed to resync timing with TheHandy.`;
       setHandySyncState("error");
@@ -1629,6 +1674,7 @@ export function RoundVideoOverlay({
   ]);
 
   const bootstrapHandySyncIfReady = useCallback(async (): Promise<boolean> => {
+    if (handyManuallyStoppedRef.current) return false;
     if (!shouldUseHandySync) return false;
     if (!activeRound || !activeVideoUri) return false;
     if (isIntermediaryScreenActive) return false;
@@ -1660,6 +1706,7 @@ export function RoundVideoOverlay({
     setSyncStatus({ synced: false, error: null });
 
     try {
+      if (handyManuallyStoppedRef.current) return false;
       const timeMs =
         forceHandySyncMsRef.current ??
         Math.max(
@@ -1680,7 +1727,7 @@ export function RoundVideoOverlay({
       }
 
       const session = await ensureHandySession();
-      if (!session) return false;
+      if (!session || handyManuallyStoppedRef.current) return false;
 
       await preloadHspScript(
         {
@@ -1692,6 +1739,7 @@ export function RoundVideoOverlay({
         actions,
         effectiveTimeMs
       );
+      if (handyManuallyStoppedRef.current) return false;
       await sendHspSync(
         {
           connectionKey: connectionKey.trim(),
@@ -1703,6 +1751,7 @@ export function RoundVideoOverlay({
         `${activeVideoUri}:${segment.kind}`,
         actions
       );
+      if (handyManuallyStoppedRef.current) return false;
 
       const syncedAt = Date.now();
       handyLastPushAtRef.current = syncedAt;
@@ -1715,6 +1764,7 @@ export function RoundVideoOverlay({
       setSyncStatus({ synced: true, error: null });
       return true;
     } catch (error) {
+      if (handyManuallyStoppedRef.current) return false;
       const message =
         error instanceof Error ? error.message : t`Failed to initialize TheHandy sync.`;
       setHandySyncState("error");
@@ -2688,12 +2738,14 @@ export function RoundVideoOverlay({
     if (!shouldUseHandySync) return;
     if (!activeRound || !activeVideoUri) return;
     if (isIntermediaryScreenActive) return;
+    if (handyManuallyStopped) return;
 
     let cancelled = false;
     const timer = window.setInterval(() => {
       if (cancelled) return;
       if (finishRequestedRef.current) return;
       if (handyPushInFlightRef.current) return;
+      if (handyManuallyStoppedRef.current) return;
 
       const video = segment.kind === "main" ? mainVideoRef.current : intermediaryVideoRef.current;
       const actions = timeline?.actions ?? [];
@@ -2712,10 +2764,11 @@ export function RoundVideoOverlay({
 
       void (async () => {
         try {
+          if (handyManuallyStoppedRef.current) return;
           if (!connectionKey.trim() || !appApiKey.trim()) return;
 
           const session = await ensureHandySession();
-          if (!session) return;
+          if (!session || handyManuallyStoppedRef.current) return;
 
           const syncPayload = {
             connectionKey: connectionKey.trim(),
@@ -2730,6 +2783,7 @@ export function RoundVideoOverlay({
             `${activeVideoUri}:${segment.kind}`,
             actions
           );
+          if (handyManuallyStoppedRef.current) return;
 
           const sentAt = Date.now();
           handyLastPushAtRef.current = sentAt;
@@ -2740,6 +2794,7 @@ export function RoundVideoOverlay({
           setHandySyncError(null);
           setSyncStatus({ synced: true, error: null });
         } catch (error) {
+          if (handyManuallyStoppedRef.current) return;
           const message =
             error instanceof Error ? error.message : t`Failed to stream sync position to TheHandy.`;
           setHandySyncState("error");
@@ -2762,6 +2817,7 @@ export function RoundVideoOverlay({
     appApiKey,
     connectionKey,
     ensureHandySession,
+    handyManuallyStopped,
     isIntermediaryScreenActive,
     segment.kind,
     setSyncStatus,
@@ -2772,6 +2828,7 @@ export function RoundVideoOverlay({
   useEffect(() => {
     if (!handyConnected) return;
     const timer = window.setInterval(() => {
+      if (handyManuallyStoppedRef.current) return;
       if (handySyncState !== "synced") return;
       if (Date.now() - handyLastSuccessAtRef.current <= HANDY_SYNC_STALE_MS) return;
       setHandySyncState("connecting");

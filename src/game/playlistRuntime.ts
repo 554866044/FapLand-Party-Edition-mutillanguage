@@ -33,7 +33,9 @@ function randomIndex(length: number, randomValue: () => number): number {
 function buildRandomInstalledRoundPool(
   installedRounds: ReadonlyArray<InstalledRound>
 ): RuntimeGraphRandomPool {
-  const eligible = installedRounds.filter((round) => !round.excludeFromRandom);
+  const eligible = installedRounds.filter(
+    (round) => !round.excludeFromRandom && (round.type ?? "Normal") === "Normal"
+  );
   return {
     id: "__installed-rounds__",
     candidates: eligible.map((round) => ({

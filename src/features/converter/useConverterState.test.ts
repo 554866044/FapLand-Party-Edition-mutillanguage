@@ -499,6 +499,233 @@ describe("useConverterState", () => {
     expect(result.current.error).toBe("Cut marks must overlap the selected segment.");
   });
 
+  it("adds a cut from local segment marks to the explicit segment", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(8_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const segmentId = result.current.sortedSegments[0]?.id;
+    expect(segmentId).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(3_000);
+      result.current.setSegmentCutMarkIn(segmentId!);
+      result.current.setCurrentTimeMs(4_000);
+      result.current.setSegmentCutMarkOut(segmentId!);
+      result.current.addCutToSegmentFromLocalMarks(segmentId!);
+    });
+
+    expect(result.current.sortedSegments[0]?.cutRanges).toMatchObject([
+      { startTimeMs: 3_000, endTimeMs: 4_000 },
+    ]);
+    expect(result.current.segmentCutMarks[segmentId!]).toBeUndefined();
+    expect(result.current.error).toBeNull();
+  });
+
+  it("applies a local cut only to the targeted segment when overlaps exist", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setAllowOverlappingSegments(true);
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(6_000);
+      result.current.addSegmentFromMarks();
+      result.current.setMarkInMs(3_000);
+      result.current.setMarkOutMs(8_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const [first, second] = result.current.sortedSegments;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(4_000);
+      result.current.setSegmentCutMarkIn(first!.id);
+      result.current.setCurrentTimeMs(5_000);
+      result.current.setSegmentCutMarkOut(first!.id);
+      result.current.addCutToSegmentFromLocalMarks(first!.id);
+    });
+
+    expect(result.current.sortedSegments[0]?.cutRanges).toMatchObject([
+      { startTimeMs: 4_000, endTimeMs: 5_000 },
+    ]);
+    expect(result.current.sortedSegments[1]?.cutRanges).toEqual([]);
+  });
+
+  it("trims a segment from local cut marks that touch the start boundary", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(2_000);
+      result.current.setMarkOutMs(8_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const segmentId = result.current.sortedSegments[0]?.id;
+    expect(segmentId).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(1_000);
+      result.current.setSegmentCutMarkIn(segmentId!);
+      result.current.setCurrentTimeMs(3_000);
+      result.current.setSegmentCutMarkOut(segmentId!);
+      result.current.addCutToSegmentFromLocalMarks(segmentId!);
+    });
+
+    expect(result.current.sortedSegments[0]?.startTimeMs).toBe(3_000);
+    expect(result.current.sortedSegments[0]?.cutRanges).toEqual([]);
+  });
+
+  it("deletes a segment when local cut marks cover the full segment", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(2_000);
+      result.current.setMarkOutMs(8_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const segmentId = result.current.sortedSegments[0]?.id;
+    expect(segmentId).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(2_000);
+      result.current.setSegmentCutMarkIn(segmentId!);
+      result.current.setCurrentTimeMs(8_000);
+      result.current.setSegmentCutMarkOut(segmentId!);
+      result.current.addCutToSegmentFromLocalMarks(segmentId!);
+    });
+
+    expect(result.current.sortedSegments).toEqual([]);
+    expect(result.current.segmentCutMarks[segmentId!]).toBeUndefined();
+    expect(result.current.message).toBe("Segment cut out (00:02.00 - 00:08.00).");
+  });
+
+  it("drops local marks when a segment is removed", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(3_000);
+      result.current.addSegmentFromMarks();
+      result.current.setMarkInMs(4_000);
+      result.current.setMarkOutMs(6_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const [first, second] = result.current.sortedSegments;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(1_500);
+      result.current.setSegmentCutMarkIn(first!.id);
+      result.current.setCurrentTimeMs(4_500);
+      result.current.setSegmentCutMarkIn(second!.id);
+    });
+
+    expect(result.current.segmentCutMarks[first!.id]?.markInMs).toBe(1_500);
+    expect(result.current.segmentCutMarks[second!.id]?.markInMs).toBe(4_500);
+
+    act(() => {
+      result.current.removeSegment(first!.id);
+    });
+
+    expect(result.current.segmentCutMarks[first!.id]).toBeUndefined();
+    expect(result.current.segmentCutMarks[second!.id]?.markInMs).toBe(4_500);
+  });
+
+  it("clears local marks when segments are merged", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(3_000);
+      result.current.addSegmentFromMarks();
+      result.current.setMarkInMs(3_000);
+      result.current.setMarkOutMs(6_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const [first, second] = result.current.sortedSegments;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(1_500);
+      result.current.setSegmentCutMarkIn(first!.id);
+      result.current.setCurrentTimeMs(4_500);
+      result.current.setSegmentCutMarkIn(second!.id);
+      result.current.mergeSegmentWithNext(first!.id);
+    });
+
+    expect(result.current.segmentCutMarks[first!.id]).toBeUndefined();
+    expect(result.current.segmentCutMarks[second!.id]).toBeUndefined();
+  });
+
+  it("clears local marks when a segment is split", async () => {
+    const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
+
+    await waitFor(() => {
+      expect(result.current.zoomPxPerSec).toBe(MIN_ZOOM_PX_PER_SEC);
+    });
+
+    act(() => {
+      result.current.setDurationMs(10_000);
+      result.current.setMarkInMs(1_000);
+      result.current.setMarkOutMs(5_000);
+      result.current.addSegmentFromMarks();
+    });
+
+    const segmentId = result.current.sortedSegments[0]?.id;
+    expect(segmentId).toBeDefined();
+
+    act(() => {
+      result.current.setCurrentTimeMs(2_000);
+      result.current.setSegmentCutMarkIn(segmentId!);
+      result.current.setCurrentTimeMs(3_000);
+      result.current.splitSegmentAtPlayhead();
+    });
+
+    expect(result.current.segmentCutMarks[segmentId!]).toBeUndefined();
+    expect(result.current.sortedSegments).toHaveLength(2);
+  });
+
   it("rejects overlapping segments while overlap mode is off", async () => {
     const { result } = renderHook(() => useConverterState({ sourceRoundId: "", heroName: "" }));
 

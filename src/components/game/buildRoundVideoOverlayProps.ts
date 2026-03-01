@@ -99,6 +99,7 @@ export type PreviewRoundVideoOverlayLaunchConfig = {
   booruSearchPrompt: string;
   intermediaryLoadingDurationSec: number;
   intermediaryReturnPauseSec: number;
+  allowAutomaticIntermediaries?: boolean;
   initialShowProgressBarAlways?: boolean;
   initialShowAntiPerkBeatbar?: boolean;
   onClose: () => void;
@@ -116,7 +117,7 @@ export function buildPreviewRoundVideoOverlayProps(
       booruSearchPrompt: config.booruSearchPrompt,
       intermediaryLoadingDurationSec: config.intermediaryLoadingDurationSec,
       intermediaryReturnPauseSec: config.intermediaryReturnPauseSec,
-      allowAutomaticIntermediaries: true,
+      allowAutomaticIntermediaries: config.allowAutomaticIntermediaries ?? false,
       initialShowProgressBarAlways: config.initialShowProgressBarAlways,
       initialShowAntiPerkBeatbar: config.initialShowAntiPerkBeatbar,
     },

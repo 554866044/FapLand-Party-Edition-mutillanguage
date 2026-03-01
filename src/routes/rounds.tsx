@@ -1462,10 +1462,11 @@ export function InstalledRoundsPage() {
       buildPreviewRoundVideoOverlayProps({
         activeRound: activePreview,
         installedRounds: previewInstalledRounds,
-        intermediaryProbability: 1,
+        intermediaryProbability: 0,
         booruSearchPrompt: intermediaryLoadingPrompt,
         intermediaryLoadingDurationSec,
         intermediaryReturnPauseSec,
+        allowAutomaticIntermediaries: false,
         initialShowProgressBarAlways: roundProgressBarAlwaysVisible,
         onClose: () => {
           setActivePreviewRound(null);
