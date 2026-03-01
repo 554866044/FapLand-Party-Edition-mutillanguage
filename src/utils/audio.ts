@@ -1,9 +1,39 @@
+import {
+    clampSfxVolume,
+    DEFAULT_SFX_VOLUME,
+    SFX_VOLUME_CHANGED_EVENT,
+    SFX_VOLUME_KEY,
+} from "../constants/audioSettings";
+import { trpc } from "../services/trpc";
+
 let audioCtx: AudioContext | null = null;
 const activeSamplePlayers = new Set<HTMLAudioElement>();
 const decodedSampleCache = new Map<string, Promise<AudioBuffer | null>>();
 let activeWebAudioNodes = 0;
 let audioSuspendTimer: number | null = null;
 const AUDIO_IDLE_SUSPEND_DELAY_MS = 1500;
+
+let globalSfxVolume = DEFAULT_SFX_VOLUME;
+
+if (typeof window !== "undefined") {
+    window.addEventListener(SFX_VOLUME_CHANGED_EVENT, (event: Event) => {
+        const customEvent = event as CustomEvent<number>;
+        globalSfxVolume = customEvent.detail;
+    });
+}
+
+export const setGlobalSfxVolume = (volume: number) => {
+    globalSfxVolume = volume;
+};
+
+export const initializeSfxVolume = async () => {
+    try {
+        const volume = await trpc.store.get.query({ key: SFX_VOLUME_KEY });
+        globalSfxVolume = clampSfxVolume(volume);
+    } catch (error) {
+        console.warn("Failed to load initial SFX volume", error);
+    }
+};
 
 const SOUND_ASSETS = {
     hover: "/sounds/ui-hover.wav",
@@ -126,9 +156,6 @@ const playTone = (
     osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), audioCtx.currentTime + durationSec);
 
-    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationSec);
-
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
     osc.onended = () => {
@@ -136,6 +163,10 @@ const playTone = (
         gainNode.disconnect();
         releaseAudioNode();
     };
+
+    const finalVolume = volume * globalSfxVolume;
+    gainNode.gain.setValueAtTime(finalVolume, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationSec);
 
     osc.start();
     osc.stop(audioCtx.currentTime + durationSec);
@@ -165,7 +196,7 @@ const playSample = (
 
                 activeSamplePlayers.add(audio);
                 audio.preload = "auto";
-                audio.volume = volume;
+                audio.volume = volume * globalSfxVolume;
                 audio.playbackRate = playbackRate;
                 audio.currentTime = 0;
                 audio.addEventListener("ended", cleanup, { once: true });
@@ -187,7 +218,7 @@ const playSample = (
 
         source.buffer = buffer;
         source.playbackRate.setValueAtTime(playbackRate, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(volume * globalSfxVolume, audioCtx.currentTime);
 
         source.connect(gainNode);
         gainNode.connect(audioCtx.destination);
@@ -298,16 +329,18 @@ export const playAntiPerkBeatSound = () => {
     bodyOsc.frequency.setValueAtTime(120, now);
     bodyOsc.frequency.exponentialRampToValueAtTime(46, now + 0.09);
 
+    const finalBodyVolume = 0.18 * globalSfxVolume;
     bodyGain.gain.setValueAtTime(0.0001, now);
-    bodyGain.gain.exponentialRampToValueAtTime(0.18, now + 0.008);
+    bodyGain.gain.exponentialRampToValueAtTime(finalBodyVolume, now + 0.008);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
 
     transientOsc.type = "triangle";
     transientOsc.frequency.setValueAtTime(950, now);
     transientOsc.frequency.exponentialRampToValueAtTime(220, now + 0.028);
 
+    const finalTransientVolume = 0.045 * globalSfxVolume;
     transientGain.gain.setValueAtTime(0.0001, now);
-    transientGain.gain.exponentialRampToValueAtTime(0.045, now + 0.002);
+    transientGain.gain.exponentialRampToValueAtTime(finalTransientVolume, now + 0.002);
     transientGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
 
     bodyOsc.connect(bodyGain);

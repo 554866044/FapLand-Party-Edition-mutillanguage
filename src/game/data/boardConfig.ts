@@ -23,6 +23,12 @@ function createCampaignBoard(plan: SinglePlayerSessionPlan): BoardField[] {
     });
   }
 
+  board.push({
+    id: "end",
+    name: "End",
+    kind: "end",
+  });
+
   return board;
 }
 

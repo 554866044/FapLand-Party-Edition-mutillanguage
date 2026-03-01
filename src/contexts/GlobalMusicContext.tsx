@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   clampMusicVolume,
   DEFAULT_MUSIC_ENABLED,
@@ -30,6 +38,8 @@ export type GlobalMusicState = {
   volume: number;
   shuffle: boolean;
   loopMode: MusicLoopMode;
+  currentTime: number;
+  duration: number;
 };
 
 export type GlobalMusicActions = {
@@ -46,6 +56,7 @@ export type GlobalMusicActions = {
   setVolume: (next: number) => Promise<void>;
   setShuffle: (next: boolean) => Promise<void>;
   setLoopMode: (next: MusicLoopMode) => Promise<void>;
+  seek: (time: number) => void;
 };
 
 type GlobalMusicContextValue = GlobalMusicState & GlobalMusicActions;
@@ -87,6 +98,8 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
   const [loopMode, setLoopModeState] = useState<MusicLoopMode>(DEFAULT_MUSIC_LOOP_MODE);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const userPausedRef = useRef(false);
@@ -103,14 +116,17 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
     await trpc.store.set.mutate({ key, value });
   }, []);
 
-  const setAndPersistQueue = useCallback(async (nextQueue: MusicQueueEntry[], nextIndex: number) => {
-    setQueue(nextQueue);
-    setCurrentIndex(nextIndex);
-    await Promise.all([
-      persist(MUSIC_QUEUE_KEY, nextQueue),
-      persist(MUSIC_CURRENT_INDEX_KEY, nextIndex),
-    ]);
-  }, [persist]);
+  const setAndPersistQueue = useCallback(
+    async (nextQueue: MusicQueueEntry[], nextIndex: number) => {
+      setQueue(nextQueue);
+      setCurrentIndex(nextIndex);
+      await Promise.all([
+        persist(MUSIC_QUEUE_KEY, nextQueue),
+        persist(MUSIC_CURRENT_INDEX_KEY, nextIndex),
+      ]);
+    },
+    [persist]
+  );
 
   const tryPlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -123,30 +139,39 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
     }
   }, [currentTrack, enabled, isSuppressedByVideo]);
 
-  const getNextIndex = useCallback((fromIndex: number): number | null => {
-    if (queue.length === 0) return null;
-    if (loopMode === "track") return fromIndex;
+  const getNextIndex = useCallback(
+    (fromIndex: number): number | null => {
+      if (queue.length === 0) return null;
+      if (loopMode === "track") return fromIndex;
 
-    if (shuffle) {
-      if (shuffleBagRef.current.length === 0) {
-        const candidates = Array.from({ length: queue.length }, (_, index) => index).filter((index) => index !== fromIndex);
-        if (candidates.length === 0) {
-          return loopMode === "queue" ? fromIndex : null;
+      if (shuffle) {
+        if (shuffleBagRef.current.length === 0) {
+          const candidates = Array.from({ length: queue.length }, (_, index) => index).filter(
+            (index) => index !== fromIndex
+          );
+          if (candidates.length === 0) {
+            return loopMode === "queue" ? fromIndex : null;
+          }
+          shuffleBagRef.current = shuffleIndices(candidates);
         }
-        shuffleBagRef.current = shuffleIndices(candidates);
+        const nextIndex = shuffleBagRef.current.shift() ?? null;
+        if (nextIndex === null && loopMode === "queue") {
+          shuffleBagRef.current = shuffleIndices(
+            Array.from({ length: queue.length }, (_, index) => index).filter(
+              (index) => index !== fromIndex
+            )
+          );
+          return shuffleBagRef.current.shift() ?? fromIndex;
+        }
+        return nextIndex;
       }
-      const nextIndex = shuffleBagRef.current.shift() ?? null;
-      if (nextIndex === null && loopMode === "queue") {
-        shuffleBagRef.current = shuffleIndices(Array.from({ length: queue.length }, (_, index) => index).filter((index) => index !== fromIndex));
-        return shuffleBagRef.current.shift() ?? fromIndex;
-      }
-      return nextIndex;
-    }
 
-    const candidate = fromIndex + 1;
-    if (candidate < queue.length) return candidate;
-    return loopMode === "queue" ? 0 : null;
-  }, [loopMode, queue.length, shuffle]);
+      const candidate = fromIndex + 1;
+      if (candidate < queue.length) return candidate;
+      return loopMode === "queue" ? 0 : null;
+    },
+    [loopMode, queue.length, shuffle]
+  );
 
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -164,6 +189,14 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
 
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
+    const handleTimeUpdate = () => {
+      if (audio.currentTime !== currentTime) {
+        setCurrentTime(audio.currentTime);
+      }
+    };
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration || 0);
+    };
     const handleEnded = () => {
       const nextIndex = getNextIndexRef.current(currentIndexRef.current);
       if (nextIndex === null) {
@@ -178,6 +211,8 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
 
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("ended", handleEnded);
 
     return () => {
@@ -186,6 +221,8 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       audio.load();
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("ended", handleEnded);
       audioRef.current = null;
     };
@@ -200,20 +237,22 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       trpc.store.get.query({ key: MUSIC_SHUFFLE_KEY }),
       trpc.store.get.query({ key: MUSIC_LOOP_MODE_KEY }),
       trpc.store.get.query({ key: MUSIC_CURRENT_INDEX_KEY }),
-    ]).then(([rawEnabled, rawQueue, rawVolume, rawShuffle, rawLoopMode, rawCurrentIndex]) => {
-      if (cancelled) return;
-      const nextQueue = normalizeMusicQueue(rawQueue);
-      setEnabledState(typeof rawEnabled === "boolean" ? rawEnabled : DEFAULT_MUSIC_ENABLED);
-      setQueue(nextQueue);
-      setVolumeState(clampMusicVolume(rawVolume));
-      setShuffleState(typeof rawShuffle === "boolean" ? rawShuffle : DEFAULT_MUSIC_SHUFFLE);
-      setLoopModeState(normalizeMusicLoopMode(rawLoopMode));
-      setCurrentIndex(normalizeMusicCurrentIndex(rawCurrentIndex, nextQueue.length));
-      setHasLoaded(true);
-    }).catch((error) => {
-      console.warn("Failed to load music settings", error);
-      if (!cancelled) setHasLoaded(true);
-    });
+    ])
+      .then(([rawEnabled, rawQueue, rawVolume, rawShuffle, rawLoopMode, rawCurrentIndex]) => {
+        if (cancelled) return;
+        const nextQueue = normalizeMusicQueue(rawQueue);
+        setEnabledState(typeof rawEnabled === "boolean" ? rawEnabled : DEFAULT_MUSIC_ENABLED);
+        setQueue(nextQueue);
+        setVolumeState(clampMusicVolume(rawVolume));
+        setShuffleState(typeof rawShuffle === "boolean" ? rawShuffle : DEFAULT_MUSIC_SHUFFLE);
+        setLoopModeState(normalizeMusicLoopMode(rawLoopMode));
+        setCurrentIndex(normalizeMusicCurrentIndex(rawCurrentIndex, nextQueue.length));
+        setHasLoaded(true);
+      })
+      .catch((error) => {
+        console.warn("Failed to load music settings", error);
+        if (!cancelled) setHasLoaded(true);
+      });
 
     return () => {
       cancelled = true;
@@ -239,12 +278,16 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       audio.load();
       activeTrackPathRef.current = null;
       setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
       return;
     }
     const nextSrc = window.electronAPI.file.convertFileSrc(currentTrack.filePath);
     if (activeTrackPathRef.current === currentTrack.filePath) return;
     const shouldAutoplay = enabled && !isSuppressedByVideo && !userPausedRef.current;
     activeTrackPathRef.current = currentTrack.filePath;
+    setCurrentTime(0);
+    setDuration(0);
     audio.src = nextSrc;
     audio.load();
     if (shouldAutoplay) {
@@ -274,66 +317,86 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    if (!userPausedRef.current && enabled && currentTrack && audio.paused && audio.currentTime === 0) {
+    if (
+      !userPausedRef.current &&
+      enabled &&
+      currentTrack &&
+      audio.paused &&
+      audio.currentTime === 0
+    ) {
       void tryPlay();
     }
   }, [currentTrack, enabled, hasLoaded, isSuppressedByVideo, tryPlay]);
 
-  const setEnabled = useCallback(async (next: boolean) => {
-    setEnabledState(next);
-    await persist(MUSIC_ENABLED_KEY, next);
-    if (!next) {
-      resumeAfterVideoRef.current = false;
-      userPausedRef.current = true;
-      audioRef.current?.pause();
-      return;
-    }
-    if (queue.length > 0) {
+  const setEnabled = useCallback(
+    async (next: boolean) => {
+      setEnabledState(next);
+      await persist(MUSIC_ENABLED_KEY, next);
+      if (!next) {
+        resumeAfterVideoRef.current = false;
+        userPausedRef.current = true;
+        audioRef.current?.pause();
+        return;
+      }
+      if (queue.length > 0) {
+        userPausedRef.current = false;
+        await tryPlay();
+      }
+    },
+    [persist, queue.length, tryPlay]
+  );
+
+  const addTracks = useCallback(
+    async (filePaths: string[]) => {
+      const nextEntries = buildQueueEntries(filePaths).filter(
+        (entry) => !queue.some((existing) => existing.filePath === entry.filePath)
+      );
+      if (nextEntries.length === 0) return;
+      const nextQueue = [...queue, ...nextEntries];
+      const nextIndex = queue.length === 0 ? 0 : currentIndex;
       userPausedRef.current = false;
-      await tryPlay();
-    }
-  }, [persist, queue.length, tryPlay]);
+      await setAndPersistQueue(nextQueue, nextIndex);
+    },
+    [currentIndex, queue, setAndPersistQueue]
+  );
 
-  const addTracks = useCallback(async (filePaths: string[]) => {
-    const nextEntries = buildQueueEntries(filePaths)
-      .filter((entry) => !queue.some((existing) => existing.filePath === entry.filePath));
-    if (nextEntries.length === 0) return;
-    const nextQueue = [...queue, ...nextEntries];
-    const nextIndex = queue.length === 0 ? 0 : currentIndex;
-    userPausedRef.current = false;
-    await setAndPersistQueue(nextQueue, nextIndex);
-  }, [currentIndex, queue, setAndPersistQueue]);
+  const removeTrack = useCallback(
+    async (id: string) => {
+      const targetIndex = queue.findIndex((entry) => entry.id === id);
+      if (targetIndex < 0) return;
+      const nextQueue = queue.filter((entry) => entry.id !== id);
+      const nextIndex =
+        nextQueue.length === 0
+          ? 0
+          : targetIndex < currentIndex
+            ? currentIndex - 1
+            : targetIndex === currentIndex
+              ? Math.min(currentIndex, nextQueue.length - 1)
+              : currentIndex;
+      if (nextQueue.length === 0) {
+        userPausedRef.current = true;
+        audioRef.current?.pause();
+      }
+      await setAndPersistQueue(nextQueue, nextIndex);
+    },
+    [currentIndex, queue, setAndPersistQueue]
+  );
 
-  const removeTrack = useCallback(async (id: string) => {
-    const targetIndex = queue.findIndex((entry) => entry.id === id);
-    if (targetIndex < 0) return;
-    const nextQueue = queue.filter((entry) => entry.id !== id);
-    const nextIndex = nextQueue.length === 0
-      ? 0
-      : targetIndex < currentIndex
-        ? currentIndex - 1
-        : targetIndex === currentIndex
-          ? Math.min(currentIndex, nextQueue.length - 1)
-          : currentIndex;
-    if (nextQueue.length === 0) {
-      userPausedRef.current = true;
-      audioRef.current?.pause();
-    }
-    await setAndPersistQueue(nextQueue, nextIndex);
-  }, [currentIndex, queue, setAndPersistQueue]);
-
-  const moveTrack = useCallback(async (id: string, direction: "up" | "down") => {
-    const index = queue.findIndex((entry) => entry.id === id);
-    if (index < 0) return;
-    const swapIndex = direction === "up" ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= queue.length) return;
-    const nextQueue = [...queue];
-    [nextQueue[index], nextQueue[swapIndex]] = [nextQueue[swapIndex]!, nextQueue[index]!];
-    let nextCurrentIndex = currentIndex;
-    if (currentIndex === index) nextCurrentIndex = swapIndex;
-    else if (currentIndex === swapIndex) nextCurrentIndex = index;
-    await setAndPersistQueue(nextQueue, nextCurrentIndex);
-  }, [currentIndex, queue, setAndPersistQueue]);
+  const moveTrack = useCallback(
+    async (id: string, direction: "up" | "down") => {
+      const index = queue.findIndex((entry) => entry.id === id);
+      if (index < 0) return;
+      const swapIndex = direction === "up" ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= queue.length) return;
+      const nextQueue = [...queue];
+      [nextQueue[index], nextQueue[swapIndex]] = [nextQueue[swapIndex]!, nextQueue[index]!];
+      let nextCurrentIndex = currentIndex;
+      if (currentIndex === index) nextCurrentIndex = swapIndex;
+      else if (currentIndex === swapIndex) nextCurrentIndex = index;
+      await setAndPersistQueue(nextQueue, nextCurrentIndex);
+    },
+    [currentIndex, queue, setAndPersistQueue]
+  );
 
   const clearQueue = useCallback(async () => {
     userPausedRef.current = true;
@@ -368,83 +431,111 @@ export function GlobalMusicProvider({ children }: { children: React.ReactNode })
 
   const previous = useCallback(async () => {
     if (queue.length === 0) return;
-    const nextIndex = currentIndex > 0 ? currentIndex - 1 : loopMode === "queue" ? queue.length - 1 : 0;
+    const nextIndex =
+      currentIndex > 0 ? currentIndex - 1 : loopMode === "queue" ? queue.length - 1 : 0;
     userPausedRef.current = false;
     setCurrentIndex(nextIndex);
     await persist(MUSIC_CURRENT_INDEX_KEY, nextIndex);
   }, [currentIndex, loopMode, persist, queue.length]);
 
-  const setCurrentTrack = useCallback(async (id: string) => {
-    const nextIndex = queue.findIndex((entry) => entry.id === id);
-    if (nextIndex < 0) return;
-    userPausedRef.current = false;
-    setCurrentIndex(nextIndex);
-    await persist(MUSIC_CURRENT_INDEX_KEY, nextIndex);
-  }, [persist, queue]);
+  const setCurrentTrack = useCallback(
+    async (id: string) => {
+      const nextIndex = queue.findIndex((entry) => entry.id === id);
+      if (nextIndex < 0) return;
+      userPausedRef.current = false;
+      setCurrentIndex(nextIndex);
+      await persist(MUSIC_CURRENT_INDEX_KEY, nextIndex);
+    },
+    [persist, queue]
+  );
 
-  const setVolume = useCallback(async (next: number) => {
-    const normalized = clampMusicVolume(next);
-    setVolumeState(normalized);
-    await persist(MUSIC_VOLUME_KEY, normalized);
-  }, [persist]);
+  const setVolume = useCallback(
+    async (next: number) => {
+      const normalized = clampMusicVolume(next);
+      setVolumeState(normalized);
+      await persist(MUSIC_VOLUME_KEY, normalized);
+    },
+    [persist]
+  );
 
-  const setShuffle = useCallback(async (next: boolean) => {
-    setShuffleState(next);
-    await persist(MUSIC_SHUFFLE_KEY, next);
-  }, [persist]);
+  const setShuffle = useCallback(
+    async (next: boolean) => {
+      setShuffleState(next);
+      await persist(MUSIC_SHUFFLE_KEY, next);
+    },
+    [persist]
+  );
 
-  const setLoopMode = useCallback(async (next: MusicLoopMode) => {
-    setLoopModeState(next);
-    await persist(MUSIC_LOOP_MODE_KEY, next);
-  }, [persist]);
+  const setLoopMode = useCallback(
+    async (next: MusicLoopMode) => {
+      setLoopModeState(next);
+      await persist(MUSIC_LOOP_MODE_KEY, next);
+    },
+    [persist]
+  );
 
-  const value = useMemo<GlobalMusicContextValue>(() => ({
-    enabled,
-    queue,
-    currentIndex,
-    currentTrack,
-    isPlaying,
-    isSuppressedByVideo,
-    volume,
-    shuffle,
-    loopMode,
-    setEnabled,
-    addTracks,
-    removeTrack,
-    moveTrack,
-    clearQueue,
-    play,
-    pause,
-    next,
-    previous,
-    setCurrentTrack,
-    setVolume,
-    setShuffle,
-    setLoopMode,
-  }), [
-    addTracks,
-    clearQueue,
-    currentIndex,
-    currentTrack,
-    enabled,
-    isPlaying,
-    isSuppressedByVideo,
-    loopMode,
-    moveTrack,
-    next,
-    pause,
-    play,
-    previous,
-    queue,
-    removeTrack,
-    setCurrentTrack,
-    setEnabled,
-    setLoopMode,
-    setShuffle,
-    setVolume,
-    shuffle,
-    volume,
-  ]);
+  const seek = useCallback((time: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.max(0, Math.min(time, audio.duration || 0));
+  }, []);
+
+  const value = useMemo<GlobalMusicContextValue>(
+    () => ({
+      enabled,
+      queue,
+      currentIndex,
+      currentTrack,
+      isPlaying,
+      isSuppressedByVideo,
+      volume,
+      shuffle,
+      loopMode,
+      currentTime,
+      duration,
+      setEnabled,
+      addTracks,
+      removeTrack,
+      moveTrack,
+      clearQueue,
+      play,
+      pause,
+      next,
+      previous,
+      setCurrentTrack,
+      setVolume,
+      setShuffle,
+      setLoopMode,
+      seek,
+    }),
+    [
+      addTracks,
+      clearQueue,
+      currentIndex,
+      currentTrack,
+      currentTime,
+      duration,
+      enabled,
+      isPlaying,
+      isSuppressedByVideo,
+      loopMode,
+      moveTrack,
+      next,
+      pause,
+      play,
+      previous,
+      queue,
+      removeTrack,
+      seek,
+      setCurrentTrack,
+      setEnabled,
+      setLoopMode,
+      setShuffle,
+      setVolume,
+      shuffle,
+      volume,
+    ]
+  );
 
   return <GlobalMusicContext.Provider value={value}>{children}</GlobalMusicContext.Provider>;
 }

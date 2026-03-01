@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
         name: "Test Lobby",
         status: "waiting",
         isOpen: true,
+        isPublic: false,
         allowLateJoin: false,
         serverLabel: "F-Land Online",
         playlistSnapshotJson: {
@@ -39,7 +40,7 @@ const mocks = vi.hoisted(() => ({
               initialAntiPerkProbability: 0,
               intermediaryIncreasePerRound: 0.02,
               antiPerkIncreasePerRound: 0.015,
-              maxIntermediaryProbability: 0.85,
+              maxIntermediaryProbability: 1,
               maxAntiPerkProbability: 0.75,
             },
             economy: {
@@ -107,6 +108,7 @@ const mocks = vi.hoisted(() => ({
     kickLobbyPlayer: vi.fn(),
     markDisconnected: vi.fn(),
     resolvePlaylistConflicts: vi.fn(),
+    setLobbyPublicState: vi.fn(),
     setLobbyOpenState: vi.fn(),
     setLobbyReady: vi.fn(),
     startLobbyForAll: vi.fn(),
@@ -133,15 +135,24 @@ vi.mock("../services/db", () => ({
 
 vi.mock("../services/multiplayer", () => mocks.multiplayer);
 
+vi.mock("../hooks/useMultiplayerSfwGuard", () => ({
+  assertMultiplayerAllowed: vi.fn(),
+  useMultiplayerSfwRedirect: () => false,
+}));
+
 import { Route } from "./multiplayer-lobby";
 
 beforeEach(() => {
   window.localStorage.clear();
+  mocks.loaderData.initialSnapshot.lobby.hostUserId = "host-1";
+  mocks.loaderData.initialSnapshot.lobby.isPublic = false;
+  mocks.loaderData.initialOwnPlayer.role = "player";
   mocks.multiplayer.getLobbySnapshot.mockResolvedValue(mocks.loaderData.initialSnapshot);
   mocks.multiplayer.getOwnLobbyPlayer.mockResolvedValue(mocks.loaderData.initialOwnPlayer);
   mocks.multiplayer.heartbeat.mockResolvedValue(undefined);
   mocks.multiplayer.sweepForfeits.mockResolvedValue(undefined);
   mocks.multiplayer.setLobbyReady.mockResolvedValue(undefined);
+  mocks.multiplayer.setLobbyPublicState.mockResolvedValue(undefined);
   mocks.multiplayer.resolvePlaylistConflicts.mockReturnValue({
     exactMapping: {},
     suggestedMapping: {},
@@ -205,6 +216,18 @@ describe("MultiplayerLobbyRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Ready (Manual Retry)" }).hasAttribute("disabled")).toBe(false);
+    });
+  });
+
+  it("shows a host visibility toggle for public advertising", async () => {
+    mocks.loaderData.initialSnapshot.lobby.hostUserId = "user-1";
+    mocks.loaderData.initialOwnPlayer.role = "host";
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Private Lobby (Click to Advertise)" })).toBeDefined();
     });
   });
 });

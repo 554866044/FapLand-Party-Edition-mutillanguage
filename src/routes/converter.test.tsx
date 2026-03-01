@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
     },
   },
   storeGet: vi.fn(),
+  selectConverterVideoFile: vi.fn(),
+  selectConverterFunscriptFile: vi.fn(),
+  file: {
+    convertFileSrc: vi.fn((path: string) => `converted://${path}`),
+  },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -91,11 +96,89 @@ vi.mock("../hooks/usePlayableVideoFallback", () => ({
   }),
 }));
 
-import { Route } from "./converter";
+vi.mock("../features/converter/HeroPanel", () => ({
+  HeroPanel: ({
+    heroName,
+    heroAuthor,
+    heroDescription,
+  }: {
+    heroName: string;
+    heroAuthor: string;
+    heroDescription: string;
+  }) => (
+    <div data-testid="hero-panel">
+      <input defaultValue={heroName} />
+      <input defaultValue={heroAuthor} />
+      <textarea defaultValue={heroDescription} />
+    </div>
+  ),
+  pickHeroPanelProps: (state: unknown) => state,
+}));
 
-function expectTextContent(node: HTMLElement, expected: string) {
-  expect(node.textContent ?? "").toContain(expected);
-}
+vi.mock("../features/converter/VideoPreview", () => ({
+  VideoPreview: () => <div data-testid="video-preview" />,
+  pickVideoPreviewProps: (state: unknown) => state,
+}));
+
+vi.mock("../features/converter/Timeline", () => ({
+  Timeline: () => <div data-testid="timeline" />,
+  pickTimelineProps: (state: unknown) => state,
+}));
+
+vi.mock("../features/converter/AutoDetectionPanel", () => ({
+  AutoDetectionPanel: () => <div data-testid="auto-detection-panel" />,
+  pickAutoDetectionPanelProps: (state: unknown) => state,
+}));
+
+vi.mock("../features/converter/SegmentList", () => ({
+  SegmentList: ({
+    sortedSegments,
+  }: {
+    sortedSegments: Array<{ id: string; customName?: string }>;
+  }) => (
+    <div data-testid="segment-list">
+      {sortedSegments.map((seg, i) => (
+        <span key={seg.id}>{seg.customName ?? `Round ${i + 1}`}</span>
+      ))}
+    </div>
+  ),
+}));
+
+vi.mock("../features/converter/StatusBar", () => ({
+  StatusBar: ({ message, error }: { message: string | null; error: string | null }) => (
+    <div data-testid="status-bar">
+      {message && <span data-testid="status-message">{message}</span>}
+      {error && <span data-testid="status-error">{error}</span>}
+    </div>
+  ),
+}));
+
+vi.mock("../features/converter/HotkeyOverlay", () => ({
+  HotkeyOverlay: ({ visible }: { visible: boolean }) =>
+    visible ? <div data-testid="hotkey-overlay" /> : null,
+}));
+
+vi.mock("../features/converter/ConverterHeader", () => ({
+  ConverterHeader: ({
+    selectedSourceInfo,
+    onGoToSelect,
+  }: {
+    selectedSourceInfo: { kind: string; id: string; name: string } | null;
+    onGoToSelect: () => void;
+  }) => (
+    <div data-testid="converter-header">
+      <span>{selectedSourceInfo?.name}</span>
+      <button type="button" onClick={onGoToSelect}>
+        Change Source
+      </button>
+    </div>
+  ),
+  pickConverterHeaderProps: (state: { selectedSourceInfo?: { kind: string; id: string; name: string } | null }) => ({
+    selectedSourceInfo: state.selectedSourceInfo ?? null,
+  }),
+}));
+
+import { Route } from "./converter";
 
 function makeRound(
   id: string,
@@ -114,6 +197,7 @@ function makeRound(
     endTime: number | null;
     createdAt: Date;
     updatedAt: Date;
+    previewImage: string | null;
   }> = {},
 ) {
   return {
@@ -143,12 +227,21 @@ function makeRound(
       },
     ],
     installSourceKey: null,
-    previewImage: null,
+    previewImage: overrides.previewImage ?? null,
     phash: null,
   };
 }
 
 beforeEach(() => {
+  window.electronAPI = {
+    file: {
+      convertFileSrc: mocks.file.convertFileSrc,
+    },
+    dialog: {
+      selectConverterVideoFile: mocks.selectConverterVideoFile,
+      selectConverterFunscriptFile: mocks.selectConverterFunscriptFile,
+    },
+  } as unknown as typeof window.electronAPI;
   mocks.db.round.findInstalled.mockResolvedValue([makeRound("round-1", "Installed Round")]);
   mocks.db.hero.findMany.mockResolvedValue([
     {
@@ -167,240 +260,297 @@ afterEach(() => {
 });
 
 describe("ConverterPage", () => {
-  it("shows a go back button in the header and falls back to home navigation", () => {
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
+  describe("Selection Step", () => {
+    it("shows sidebar navigation sections", () => {
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
-
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
-  });
-
-  it("excludes hero-backed rounds from the installed source dropdown", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-standalone", "Standalone Source"),
-      makeRound("round-hero", "Hero Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-      }),
-    ]);
-
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
-
-    await waitFor(() => {
-      expect(mocks.db.round.findInstalled).toHaveBeenCalledWith(true);
+      expect(screen.getByRole("button", { name: /From Round/ })).toBeDefined();
+      expect(screen.getByRole("button", { name: /From Hero/ })).toBeDefined();
+      expect(screen.getByRole("button", { name: /From File/ })).toBeDefined();
     });
 
-    expect(screen.getByRole("option", { name: "Standalone Source" })).toBeDefined();
-    expect(screen.queryByRole("option", { name: "Hero Source [Existing Hero]" })).toBeNull();
-  });
+    it("shows back button in sidebar that navigates home", () => {
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-  it("loads an attached round source and hero metadata into the converter", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-hero", "Hero Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-        videoUri: "file:///tmp/hero-source.mp4",
-        funscriptUri: "file:///tmp/hero-source.funscript",
-        startTime: 1000,
-        endTime: 9000,
-      }),
-    ]);
+      fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
-
-    await waitFor(() => {
-      expect(mocks.db.hero.findMany).toHaveBeenCalled();
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
     });
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hero-1" },
+    it("shows round selection cards when on 'From Round' section", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-standalone", "Standalone Source"),
+        makeRound("round-hero", "Hero Source", {
+          heroId: "hero-1",
+          hero: {
+            id: "hero-1",
+            name: "Existing Hero",
+            author: "Author A",
+            description: "Loaded from library",
+          },
+        }),
+      ]);
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      await waitFor(() => {
+        expect(mocks.db.round.findInstalled).toHaveBeenCalledWith(true);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Standalone Source/ })).toBeDefined();
+      });
+
+      expect(screen.queryByRole("button", { name: /Hero Source/ })).toBeNull();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Load Hero" }));
+    it("renders the round media preview in the converter picker", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-preview", "Preview Source", {
+          videoUri: "file:///tmp/preview-source.mp4",
+          previewImage: "data:image/png;base64,preview",
+          startTime: 1000,
+          endTime: 5000,
+        }),
+      ]);
 
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("Existing Hero")).toBeDefined();
-      expect(screen.getByDisplayValue("Author A")).toBeDefined();
-      expect(screen.getByDisplayValue("Loaded from library")).toBeDefined();
-      expectTextContent(screen.getByText(/Video:/), "file:///tmp/hero-source.mp4");
-      expectTextContent(screen.getByText(/Funscript:/), "file:///tmp/hero-source.funscript");
-      expect(screen.getByText(/Loaded hero "Existing Hero" from attached round "Hero Source \[Existing Hero\]"\./)).toBeDefined();
-      expect(screen.getByText("Round 1")).toBeDefined();
-    });
-  });
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-  it("chooses the earliest attached round deterministically when multiple exist", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-late", "Later Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-        videoUri: "file:///tmp/later.mp4",
-        startTime: 5000,
-        endTime: 9000,
-        createdAt: new Date("2026-03-04T11:00:00.000Z"),
-      }),
-      makeRound("round-early", "Earlier Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-        videoUri: "file:///tmp/earlier.mp4",
-        startTime: 1000,
-        endTime: 5000,
-        createdAt: new Date("2026-03-02T11:00:00.000Z"),
-      }),
-    ]);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Preview Source/ })).toBeDefined();
+      });
 
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
-
-    await waitFor(() => {
-      expect(mocks.db.hero.findMany).toHaveBeenCalled();
+      expect(screen.getByAltText("Preview Source preview")).toBeDefined();
     });
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hero-1" },
+    it("replaces the converter picker preview with the safe mode guard", async () => {
+      mocks.storeGet.mockResolvedValue(true);
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-preview", "Preview Source", {
+          videoUri: "file:///tmp/preview-source.mp4",
+          previewImage: "data:image/png;base64,preview",
+        }),
+      ]);
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Preview Source/ })).toBeDefined();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Safe Mode Enabled")).toBeDefined();
+        expect(screen.queryByAltText("Preview Source preview")).toBeNull();
+      });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Load Hero" }));
+    it("shows hero selection cards when switching to 'From Hero' section", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-hero", "Hero Source", {
+          heroId: "hero-1",
+          hero: {
+            id: "hero-1",
+            name: "Existing Hero",
+            author: "Author A",
+            description: "Loaded from library",
+          },
+          startTime: 1000,
+          endTime: 9000,
+        }),
+      ]);
 
-    await waitFor(() => {
-      expectTextContent(screen.getByText(/Video:/), "file:///tmp/earlier.mp4");
-      expect(screen.getByText(/Loaded hero "Existing Hero" from attached round "Earlier Source \[Existing Hero\]"\./)).toBeDefined();
-      expect(screen.getByText("Round 1")).toBeDefined();
-      expect(screen.getByText("Round 2")).toBeDefined();
-    });
-  });
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-  it("loads attached round timing metadata into segments when loading a hero source", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-timed", "Timed Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-        videoUri: "file:///tmp/timed.mp4",
-        funscriptUri: "file:///tmp/timed.funscript",
-        startTime: 1000,
-        endTime: 9000,
-      }),
-    ]);
+      fireEvent.click(screen.getByRole("button", { name: /From Hero/ }));
 
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
-
-    await waitFor(() => {
-      expect(mocks.db.hero.findMany).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Existing Hero/ })).toBeDefined();
+      });
     });
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hero-1" },
-    });
+    it("shows file picker buttons when switching to 'From File' section", () => {
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Load Hero" }));
+      fireEvent.click(screen.getByRole("button", { name: /From File/ }));
 
-    await waitFor(() => {
-      expectTextContent(screen.getByText(/Video:/), "file:///tmp/timed.mp4");
-      expectTextContent(screen.getByText(/Funscript:/), "file:///tmp/timed.funscript");
-      expect(screen.getByText("Round 1")).toBeDefined();
-      expect(screen.getByText(/00:01.00/)).toBeDefined();
-      expect(screen.getByText(/00:09.00/)).toBeDefined();
+      expect(screen.getByRole("button", { name: "Select Video File" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Select Funscript File" })).toBeDefined();
     });
   });
 
-  it("supports external installed resources when loading a hero source", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-external", "Stash Source", {
-        heroId: "hero-1",
-        hero: {
-          id: "hero-1",
-          name: "Existing Hero",
-          author: "Author A",
-          description: "Loaded from library",
-        },
-        videoUri: "app://external/stash?sourceId=stash-1&target=https%3A%2F%2Fstash.example.com%2Fscene%2F1%2Fstream",
-        funscriptUri: "app://external/stash?sourceId=stash-1&target=https%3A%2F%2Fstash.example.com%2Fscene%2F1%2Ffunscript",
-      }),
-    ]);
+  describe("Edit Step - Round Selection", () => {
+    it("transitions to edit mode when clicking a round card", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-1", "Standalone Source", {
+          startTime: 1000,
+          endTime: 9000,
+        }),
+      ]);
 
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-    await waitFor(() => {
-      expect(mocks.db.hero.findMany).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Standalone Source/ })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Standalone Source/ }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      expect(screen.getByDisplayValue("Standalone Source")).toBeDefined();
     });
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hero-1" },
-    });
+    it("shows 'Change Source' button in edit mode that returns to selection", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-1", "Test Round", {
+          startTime: 1000,
+          endTime: 9000,
+        }),
+      ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Load Hero" }));
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-    await waitFor(() => {
-      expectTextContent(screen.getByText(/Video:/), "app://external/stash?sourceId=stash-1");
-      expectTextContent(screen.getByText(/Funscript:/), "app://external/stash?sourceId=stash-1");
-      expect(screen.getByText(/Loaded hero "Existing Hero" from attached round "Stash Source \[Existing Hero\]"\./)).toBeDefined();
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Test Round/ })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Test Round/ }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Change Source" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /From Round/ })).toBeDefined();
+      });
     });
   });
 
-  it("shows an error and leaves the current source unchanged when the hero has no usable attached round", async () => {
-    mocks.db.round.findInstalled.mockResolvedValue([
-      makeRound("round-other", "Other Source", {
-        heroId: "hero-2",
-        hero: {
-          id: "hero-2",
-          name: "Other Hero",
-          author: "Author B",
-          description: "Other description",
-        },
-        videoUri: "file:///tmp/other.mp4",
-      }),
-    ]);
+  describe("Edit Step - Hero Selection", () => {
+    it("loads hero metadata and rounds when clicking a hero card", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-hero", "Hero Source", {
+          heroId: "hero-1",
+          hero: {
+            id: "hero-1",
+            name: "Existing Hero",
+            author: "Author A",
+            description: "Loaded from library",
+          },
+          videoUri: "file:///tmp/hero-source.mp4",
+          funscriptUri: "file:///tmp/hero-source.funscript",
+          startTime: 1000,
+          endTime: 9000,
+        }),
+      ]);
 
-    const Component = (Route as unknown as { component: React.FC }).component;
-    render(<Component />);
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
 
-    await waitFor(() => {
-      expect(mocks.db.hero.findMany).toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /From Hero/ }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Existing Hero/ })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Existing Hero/ }));
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Existing Hero")).toBeDefined();
+        expect(screen.getByDisplayValue("Author A")).toBeDefined();
+        expect(screen.getByDisplayValue("Loaded from library")).toBeDefined();
+      });
     });
 
-    expectTextContent(screen.getByText(/Video:/), "Not selected");
+    it("loads all attached rounds as segments when selecting a hero", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([
+        makeRound("round-early", "Earlier Source", {
+          heroId: "hero-1",
+          hero: {
+            id: "hero-1",
+            name: "Existing Hero",
+            author: "Author A",
+            description: "Loaded from library",
+          },
+          videoUri: "file:///tmp/earlier.mp4",
+          startTime: 1000,
+          endTime: 5000,
+          createdAt: new Date("2026-03-02T11:00:00.000Z"),
+        }),
+        makeRound("round-late", "Later Source", {
+          heroId: "hero-1",
+          hero: {
+            id: "hero-1",
+            name: "Existing Hero",
+            author: "Author A",
+            description: "Loaded from library",
+          },
+          videoUri: "file:///tmp/later.mp4",
+          startTime: 5000,
+          endTime: 9000,
+          createdAt: new Date("2026-03-04T11:00:00.000Z"),
+        }),
+      ]);
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hero-1" },
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From Hero/ }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Existing Hero/ })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Existing Hero/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Earlier Source")).toBeDefined();
+        expect(screen.getByText("Later Source")).toBeDefined();
+      });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Load Hero" }));
+    it("shows error when hero has no usable rounds", async () => {
+      mocks.db.round.findInstalled.mockResolvedValue([]);
 
-    await waitFor(() => {
-      expect(screen.getByText('Hero "Existing Hero" has no attached round with usable resources.')).toBeDefined();
-      expectTextContent(screen.getByText(/Video:/), "Not selected");
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From Hero/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/No heroes with rounds available/)).toBeDefined();
+      });
     });
+  });
 
-    expect(screen.queryByDisplayValue("Existing Hero")).toBeNull();
+  describe("Edit Step - Local File", () => {
+    it("transitions to edit mode when selecting a local video file", async () => {
+      mocks.selectConverterVideoFile.mockResolvedValue("/path/to/local-video.mp4");
+
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From File/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Select Video File" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      expect(screen.getByText("local-video.mp4")).toBeDefined();
+    });
   });
 });

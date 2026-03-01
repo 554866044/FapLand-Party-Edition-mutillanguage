@@ -253,46 +253,16 @@ function dct2dFast64(input: Float64Array): Float64Array {
     return flattens;
 }
 
-function quickSelectMedian(sequence: number[], low: number, hi: number, k: number): number {
-    if (low === hi) return sequence[k] ?? 0;
-
-    let currentLow = low;
-    let currentHi = hi;
-
-    while (currentLow < currentHi) {
-        const pivot = Math.floor(currentLow / 2) + Math.floor(currentHi / 2);
-        const pivotValue = sequence[pivot] ?? 0;
-        let storeIdx = currentLow;
-
-        [sequence[pivot], sequence[currentHi]] = [sequence[currentHi] ?? 0, sequence[pivot] ?? 0];
-
-        for (let i = currentLow; i < currentHi; i += 1) {
-            if ((sequence[i] ?? 0) < pivotValue) {
-                [sequence[storeIdx], sequence[i]] = [sequence[i] ?? 0, sequence[storeIdx] ?? 0];
-                storeIdx += 1;
-            }
-        }
-
-        [sequence[currentHi], sequence[storeIdx]] = [sequence[storeIdx] ?? 0, sequence[currentHi] ?? 0];
-
-        if (k <= storeIdx) {
-            currentHi = storeIdx;
-        } else {
-            currentLow = storeIdx + 1;
-        }
-    }
-
-    if (sequence.length % 2 === 0) {
-        return ((sequence[k - 1] ?? 0) / 2) + ((sequence[k] ?? 0) / 2);
-    }
-
-    return sequence[k] ?? 0;
-}
-
 function medianOfPixelsFast64(values: Float64Array): number {
     const sequence = Array.from(values);
-    const pos = Math.floor(sequence.length / 2);
-    return quickSelectMedian(sequence, 0, sequence.length - 1, pos);
+    // For 64 elements, a simple sort is fast and robust against infinite loops/bugs.
+    sequence.sort((a, b) => a - b);
+
+    const mid = Math.floor(sequence.length / 2);
+    if (sequence.length % 2 === 0) {
+        return ((sequence[mid - 1] ?? 0) / 2) + ((sequence[mid] ?? 0) / 2);
+    }
+    return sequence[mid] ?? 0;
 }
 
 export function generateSpritePhashHex(sprite: DecodedFrame): string {

@@ -302,6 +302,7 @@ export const ZPlaylistConfig = z
   .object({
     playlistVersion: z.number().int().min(1).default(CURRENT_PLAYLIST_VERSION),
     boardConfig: ZBoardConfig,
+    roundStartDelayMs: z.number().int().min(0).max(300000).default(20000),
     perkSelection: z
       .object({
         optionsPerPick: z.number().int().min(1).max(10).default(3),
@@ -320,7 +321,7 @@ export const ZPlaylistConfig = z
         initialAntiPerkProbability: z.number().min(0).max(1).default(0.1),
         intermediaryIncreasePerRound: z.number().min(0).max(1).default(0.02),
         antiPerkIncreasePerRound: z.number().min(0).max(1).default(0.015),
-        maxIntermediaryProbability: z.number().min(0).max(1).default(0.85),
+        maxIntermediaryProbability: z.number().min(0).max(1).default(1),
         maxAntiPerkProbability: z.number().min(0).max(1).default(0.75),
       })
       .strict(),

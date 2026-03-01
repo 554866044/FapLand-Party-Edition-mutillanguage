@@ -43,7 +43,7 @@ function makeConfig(): GameConfig {
       initialAntiPerkProbability: 0,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     singlePlayer: {

@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { playHoverSound, resolveAssetUrl } from "./audio";
 
+vi.mock("../services/trpc", () => ({
+    trpc: {
+        store: {
+            get: {
+                query: vi.fn(async () => 1.0),
+            },
+        },
+    },
+}));
+
 class FakeAudio {
     currentTime = 0;
     playbackRate = 1;
@@ -73,17 +83,19 @@ describe("resolveAssetUrl", () => {
         }));
         vi.stubGlobal(
             "Audio",
-            vi.fn((src?: string) => {
+            function (src?: string) {
                 const audio = new FakeAudio(src);
                 instances.push(audio);
                 return audio;
-            }),
+            },
         );
         vi.stubGlobal("document", {
             baseURI: "http://localhost:3000/",
         });
 
         playHoverSound();
+        await Promise.resolve();
+        await Promise.resolve();
         await Promise.resolve();
 
         expect(instances).toHaveLength(1);
@@ -92,5 +104,33 @@ describe("resolveAssetUrl", () => {
         expect(instances[0]!.pause).toHaveBeenCalledTimes(1);
         expect(instances[0]!.removeAttribute).toHaveBeenCalledWith("src");
         expect(instances[0]!.load).toHaveBeenCalledTimes(1);
+    });
+
+    it("respects the global SFX volume multiplier", async () => {
+        const instances: FakeAudio[] = [];
+        vi.stubGlobal("fetch", vi.fn(async () => {
+            throw new Error("decode unavailable");
+        }));
+        vi.stubGlobal(
+            "Audio",
+            function (src?: string) {
+                const audio = new FakeAudio(src);
+                instances.push(audio);
+                return audio;
+            },
+        );
+
+        // Set global volume to 50%
+        const { setGlobalSfxVolume, playHoverSound } = await import("./audio");
+        setGlobalSfxVolume(0.5);
+
+        playHoverSound(); // Base volume is 0.28
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(instances).toHaveLength(1);
+        // 0.28 * 0.5 = 0.14
+        expect(instances[0]!.volume).toBeCloseTo(0.14);
     });
 });

@@ -20,8 +20,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../services/booru", () => ({
-  ensureBooruMediaCache: vi.fn(async () => []),
   getCachedBooruMedia: vi.fn(async () => []),
+  getCachedBooruMediaForDisplay: vi.fn(async () => []),
+  refreshBooruMediaCache: vi.fn(async () => []),
   isVideoMedia: vi.fn(() => false),
 }));
 
@@ -154,8 +155,14 @@ describe("RoundVideoOverlay", () => {
     mocks.handy.appApiKey = "";
     mocks.handy.connected = false;
     mocks.handy.manuallyStopped = false;
-    vi.mocked(booru.ensureBooruMediaCache).mockClear();
     vi.mocked(booru.getCachedBooruMedia).mockClear();
+    vi.mocked(booru.getCachedBooruMediaForDisplay).mockClear();
+    vi.mocked(booru.refreshBooruMediaCache).mockClear();
+    vi.mocked(handyRuntime.issueHandySession).mockClear();
+    vi.mocked(handyRuntime.pauseHandyPlayback).mockClear();
+    vi.mocked(handyRuntime.preloadHspScript).mockClear();
+    vi.mocked(handyRuntime.sendHspSync).mockClear();
+    vi.mocked(handyRuntime.stopHandyPlayback).mockClear();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async () => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
@@ -174,6 +181,64 @@ describe("RoundVideoOverlay", () => {
 
     expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
     expect(screen.queryByText("Segment: Main")).toBeNull();
+  });
+
+  it("prefers persisted booru cache for display reads", async () => {
+    vi.mocked(booru.getCachedBooruMediaForDisplay).mockResolvedValueOnce([
+      {
+        id: "cached-1",
+        source: "rule34",
+        url: "https://cdn.example.com/cached-1.gif",
+        previewUrl: "https://cdn.example.com/cached-1.jpg",
+      },
+    ]);
+
+    renderOverlay({ activeRound: null, boardSequence: "milker" });
+
+    await waitFor(() => {
+      expect(vi.mocked(booru.getCachedBooruMediaForDisplay)).toHaveBeenCalledWith(
+        "animated gif webm",
+        18,
+      );
+    });
+    await waitFor(() => {
+      expect(vi.mocked(booru.refreshBooruMediaCache)).toHaveBeenCalledWith(
+        "animated gif webm",
+        18,
+      );
+    });
+  });
+
+  it("does not re-read persisted booru cache on rerender with the same prompt", async () => {
+    vi.mocked(booru.getCachedBooruMediaForDisplay).mockResolvedValue([
+      {
+        id: "cached-1",
+        source: "rule34",
+        url: "https://cdn.example.com/cached-1.gif",
+        previewUrl: "https://cdn.example.com/cached-1.jpg",
+      },
+    ]);
+
+    const view = renderOverlay({ activeRound: null, boardSequence: "milker" });
+    await waitFor(() => {
+      expect(vi.mocked(booru.getCachedBooruMediaForDisplay)).toHaveBeenCalledTimes(1);
+    });
+
+    view.rerender(
+      <RoundVideoOverlay
+        activeRound={null}
+        installedRounds={[createInstalledRound()]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        boardSequence="milker"
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={vi.fn()}
+      />,
+    );
+
+    expect(vi.mocked(booru.getCachedBooruMediaForDisplay)).toHaveBeenCalledTimes(1);
   });
 
   it("can transition from no active round to an active round without changing hook order", async () => {
@@ -197,6 +262,97 @@ describe("RoundVideoOverlay", () => {
     expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
   });
 
+  it("shows proceed and close actions in the cum round dialog", async () => {
+    const onFinishRound = vi.fn();
+    const onClose = vi.fn();
+    const view = render(
+      <RoundVideoOverlay
+        activeRound={{ ...createActiveRound(), phaseKind: "cum" }}
+        installedRounds={[createInstalledRound()]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={onFinishRound}
+        onClose={onClose}
+        cumRequestSignal={0}
+        showCumRoundOutcomeMenuOnCumRequest
+      />,
+    );
+
+    view.rerender(
+      <RoundVideoOverlay
+        activeRound={{ ...createActiveRound(), phaseKind: "cum" }}
+        installedRounds={[createInstalledRound()]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={onFinishRound}
+        onClose={onClose}
+        cumRequestSignal={1}
+        showCumRoundOutcomeMenuOnCumRequest
+      />,
+    );
+
+    const proceedButton = await screen.findByRole("button", { name: "Proceed round" });
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(proceedButton).not.toBeNull();
+    expect(closeButton).not.toBeNull();
+
+    proceedButton.click();
+
+    await waitFor(() => {
+      expect(onFinishRound).toHaveBeenCalledWith({
+        intermediaryCount: 0,
+        activeAntiPerkCount: 0,
+      });
+    });
+
+    cleanup();
+
+    const secondView = render(
+      <RoundVideoOverlay
+        activeRound={{ ...createActiveRound(), phaseKind: "cum" }}
+        installedRounds={[createInstalledRound()]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={vi.fn()}
+        onClose={onClose}
+        cumRequestSignal={0}
+        showCumRoundOutcomeMenuOnCumRequest
+      />,
+    );
+
+    secondView.rerender(
+      <RoundVideoOverlay
+        activeRound={{ ...createActiveRound(), phaseKind: "cum" }}
+        installedRounds={[createInstalledRound()]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={vi.fn()}
+        onClose={onClose}
+        cumRequestSignal={1}
+        showCumRoundOutcomeMenuOnCumRequest
+      />,
+    );
+
+    (await screen.findByRole("button", { name: "Close" })).click();
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
   it("allows gameplay video audio to play through the round player", async () => {
     const { container } = renderOverlay();
 
@@ -205,6 +361,24 @@ describe("RoundVideoOverlay", () => {
     expect(mainVideo?.muted).toBe(false);
     expect(mainVideo?.defaultMuted).toBe(false);
     expect(mainVideo?.volume).toBe(1);
+  });
+
+  it("does not apply an opaque black backdrop during active round playback", () => {
+    const { container } = renderOverlay();
+    const root = container.firstChild as HTMLElement | null;
+
+    expect(root).not.toBeNull();
+    expect(root?.className).toContain("bg-transparent");
+    expect(root?.className).not.toContain("bg-black");
+  });
+
+  it("keeps the board visible during board-only anti-perk sequences", () => {
+    const { container } = renderOverlay({ activeRound: null, boardSequence: "milker" });
+    const root = container.firstChild as HTMLElement | null;
+
+    expect(root).not.toBeNull();
+    expect(root?.className).toContain("bg-transparent");
+    expect(root?.className).not.toContain("bg-black");
   });
 
   it("shows the debug panel only when debug controls are enabled", async () => {
@@ -259,7 +433,7 @@ describe("RoundVideoOverlay", () => {
 
     expect(screen.queryByTestId("anti-perk-sequence-card")).toBeNull();
     expect(screen.queryByAltText("loading media")).toBeNull();
-    expect(vi.mocked(booru.ensureBooruMediaCache)).not.toHaveBeenCalled();
+    expect(vi.mocked(booru.refreshBooruMediaCache)).not.toHaveBeenCalled();
   });
 
   it("starts handy sync for no-rest idle filler without rendering a countdown overlay", async () => {
@@ -448,22 +622,20 @@ describe("RoundVideoOverlay", () => {
     expect(staleResetCountAfter).toBe(staleResetCountAtSync);
   }, 10_000);
 
-  it("plays synchronized beat sounds from beatbar downstroke impacts rather than every raw action", async () => {
+  it("does not play beatbar impact sounds during manual anti-perk overlays", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     renderOverlay({ activeRound: null, boardSequence: "jackhammer" });
     const definition = getAntiPerkSequenceDefinition("jackhammer");
-    const actions = definition.createActions(definition.durationSec * 1000, () => 0.37);
 
     await vi.advanceTimersByTimeAsync(definition.durationSec * 1000 + 250);
 
-    expect(mocks.playAntiPerkBeatSound).toHaveBeenCalled();
-    expect(mocks.playAntiPerkBeatSound.mock.calls.length).toBeLessThan(actions.length);
+    expect(mocks.playAntiPerkBeatSound).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("waits for the first downstroke impact before playing the drum sound", async () => {
+  it("keeps the manual beatbar silent before and after the first downstroke impact", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now());
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16));
@@ -481,7 +653,7 @@ describe("RoundVideoOverlay", () => {
     expect(mocks.playAntiPerkBeatSound).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(2);
-    expect(mocks.playAntiPerkBeatSound).toHaveBeenCalledTimes(1);
+    expect(mocks.playAntiPerkBeatSound).not.toHaveBeenCalled();
   }, 10_000);
 
   it("does not play anti-perk beat sounds when only the Handy position ball is shown", async () => {

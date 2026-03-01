@@ -9,6 +9,7 @@ const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const BOORU_MEDIA_CACHE_KEY = "game.intermediary.booruMediaCache.v1";
 const BOORU_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const BOORU_CACHE_WARM_LIMIT = 8;
+const BOORU_RANDOM_SORT_TAG = "sort:random";
 
 type BooruMediaCacheEntry = {
   updatedAtMs: number;
@@ -28,6 +29,7 @@ function createEmptyBooruMediaCacheStore(): BooruMediaCacheStore {
 }
 
 const inFlightRefreshByPrompt = new Map<string, Promise<BooruMediaItem[]>>();
+const viewedCacheGenerations = new Set<string>();
 const warmedMediaUrls = new Set<string>();
 let startupCacheRefreshPromise: Promise<void> | null = null;
 
@@ -37,6 +39,15 @@ function normalizePrompt(prompt: string): string {
 
 function toPromptCacheKey(prompt: string): string {
   return normalizePrompt(prompt).toLowerCase();
+}
+
+export function appendRandomSortTagForBooruSearch(prompt: string): string {
+  const normalizedPrompt = normalizePrompt(prompt);
+  if (!normalizedPrompt) return "";
+  const tags = normalizedPrompt.split(" ");
+  return tags.includes(BOORU_RANDOM_SORT_TAG)
+    ? normalizedPrompt
+    : `${normalizedPrompt} ${BOORU_RANDOM_SORT_TAG}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,6 +152,18 @@ async function persistBooruMediaForPrompt(prompt: string, media: BooruMediaItem[
   await writeBooruMediaCacheStore(store);
 }
 
+async function getCachedBooruMediaEntry(prompt: string): Promise<BooruMediaCacheEntry | null> {
+  const promptKey = toPromptCacheKey(prompt);
+  if (!promptKey) return null;
+
+  const store = await readBooruMediaCacheStore();
+  return store.entries[promptKey] ?? null;
+}
+
+function toViewedGenerationKey(prompt: string, updatedAtMs: number): string {
+  return `${toPromptCacheKey(prompt)}:${updatedAtMs}`;
+}
+
 async function getIntermediaryLoadingPromptFromStore(): Promise<string> {
   try {
     const stored = await trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY });
@@ -154,21 +177,17 @@ async function getIntermediaryLoadingPromptFromStore(): Promise<string> {
 }
 
 export async function getCachedBooruMedia(prompt: string): Promise<BooruMediaItem[]> {
-  const promptKey = toPromptCacheKey(prompt);
-  if (!promptKey) return [];
-
-  const store = await readBooruMediaCacheStore();
-  const entry = store.entries[promptKey];
+  const entry = await getCachedBooruMediaEntry(prompt);
   if (!entry) return [];
   warmBooruMediaAssets(entry.media);
   return entry.media;
 }
 
 export async function searchBooruMedia(prompt: string, limitPerSource = 20): Promise<BooruMediaItem[]> {
-  const normalizedPrompt = normalizePrompt(prompt);
-  if (!normalizedPrompt) return [];
+  const searchPrompt = appendRandomSortTagForBooruSearch(prompt);
+  if (!searchPrompt) return [];
   try {
-    const media = await trpc.booru.searchMedia.query({ prompt: normalizedPrompt, limitPerSource });
+    const media = await trpc.booru.searchMedia.query({ prompt: searchPrompt, limitPerSource });
     warmBooruMediaAssets(media);
     return media;
   } catch (error) {
@@ -177,17 +196,12 @@ export async function searchBooruMedia(prompt: string, limitPerSource = 20): Pro
   }
 }
 
-export async function ensureBooruMediaCache(prompt: string, limitPerSource = 20): Promise<BooruMediaItem[]> {
+export async function refreshBooruMediaCache(prompt: string, limitPerSource = 20): Promise<BooruMediaItem[]> {
   const normalizedPrompt = normalizePrompt(prompt);
   const promptKey = toPromptCacheKey(normalizedPrompt);
   if (!promptKey) return [];
 
-  const store = await readBooruMediaCacheStore();
-  const cachedEntry = store.entries[promptKey];
-  if (cachedEntry && Date.now() - cachedEntry.updatedAtMs < BOORU_CACHE_MAX_AGE_MS) {
-    warmBooruMediaAssets(cachedEntry.media);
-    return cachedEntry.media;
-  }
+  const cachedEntry = await getCachedBooruMediaEntry(normalizedPrompt);
 
   const inFlightRefresh = inFlightRefreshByPrompt.get(promptKey);
   if (inFlightRefresh) return inFlightRefresh;
@@ -213,6 +227,36 @@ export async function ensureBooruMediaCache(prompt: string, limitPerSource = 20)
   }
 }
 
+export async function ensureBooruMediaCache(prompt: string, limitPerSource = 20): Promise<BooruMediaItem[]> {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const cachedEntry = await getCachedBooruMediaEntry(normalizedPrompt);
+  if (cachedEntry && Date.now() - cachedEntry.updatedAtMs < BOORU_CACHE_MAX_AGE_MS) {
+    warmBooruMediaAssets(cachedEntry.media);
+    return cachedEntry.media;
+  }
+
+  return refreshBooruMediaCache(normalizedPrompt, limitPerSource);
+}
+
+export async function getCachedBooruMediaForDisplay(
+  prompt: string,
+  limitPerSource = 20,
+): Promise<BooruMediaItem[]> {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const entry = await getCachedBooruMediaEntry(normalizedPrompt);
+  if (!entry) return [];
+
+  warmBooruMediaAssets(entry.media);
+
+  const viewedGenerationKey = toViewedGenerationKey(normalizedPrompt, entry.updatedAtMs);
+  if (!viewedCacheGenerations.has(viewedGenerationKey)) {
+    viewedCacheGenerations.add(viewedGenerationKey);
+    void refreshBooruMediaCache(normalizedPrompt, limitPerSource);
+  }
+
+  return entry.media;
+}
+
 export async function refreshStartupBooruMediaCache(): Promise<void> {
   if (startupCacheRefreshPromise) return startupCacheRefreshPromise;
 
@@ -228,4 +272,11 @@ export async function refreshStartupBooruMediaCache(): Promise<void> {
 
 export function isVideoMedia(url: string): boolean {
   return isLikelyVideoUrl(url);
+}
+
+export function __resetBooruCachesForTests(): void {
+  inFlightRefreshByPrompt.clear();
+  viewedCacheGenerations.clear();
+  warmedMediaUrls.clear();
+  startupCacheRefreshPromise = null;
 }

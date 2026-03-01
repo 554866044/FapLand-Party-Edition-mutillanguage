@@ -8,8 +8,10 @@ import type {
   MultiplayerBanRecord,
   MultiplayerCreateLobbyResult,
   MultiplayerJoinLobbyResult,
+  MultiplayerLobbyJoinPreview,
   MultiplayerLobby,
   MultiplayerLobbyPlayer,
+  MultiplayerPublicLobbySummary,
   MultiplayerLobbySnapshot,
   MultiplayerMatchHistory,
   MultiplayerPlayerProgress,
@@ -43,6 +45,7 @@ function mapLobby(row: Record<string, unknown>): MultiplayerLobby {
     name: String(row.name),
     status: String(row.status) as MultiplayerLobby["status"],
     isOpen: Boolean(row.is_open),
+    isPublic: Boolean(row.is_public),
     allowLateJoin: Boolean(row.allow_late_join),
     serverLabel: row.server_label ? String(row.server_label) : null,
     playlistSnapshotJson: row.playlist_snapshot_json,
@@ -118,6 +121,44 @@ function mapHistory(row: Record<string, unknown>): MultiplayerMatchHistory {
     resultsJson: row.results_json,
     playlistSnapshotJson: row.playlist_snapshot_json,
     participantsJson: row.participants_json,
+  };
+}
+
+function mapPublicLobbySummary(row: Record<string, unknown>): MultiplayerPublicLobbySummary {
+  return {
+    lobbyId: String(row.lobby_id),
+    inviteCode: String(row.invite_code),
+    name: String(row.name),
+    playlistName: String(row.playlist_name ?? "Unknown Playlist"),
+    playerCount:
+      typeof row.player_count === "number" ? row.player_count : Number(row.player_count ?? 0),
+    status: String(row.status) as MultiplayerPublicLobbySummary["status"],
+    isOpen: Boolean(row.is_open),
+    allowLateJoin: Boolean(row.allow_late_join),
+    requiredRoundCount:
+      typeof row.required_round_count === "number"
+        ? row.required_round_count
+        : Number(row.required_round_count ?? 0),
+    createdAt: String(row.created_at),
+  };
+}
+
+function mapLobbyJoinPreview(row: Record<string, unknown>): MultiplayerLobbyJoinPreview {
+  return {
+    lobbyId: String(row.lobby_id),
+    inviteCode: String(row.invite_code),
+    name: String(row.name),
+    playlistName: String(row.playlist_name ?? "Unknown Playlist"),
+    playerCount:
+      typeof row.player_count === "number" ? row.player_count : Number(row.player_count ?? 0),
+    status: String(row.status) as MultiplayerLobbyJoinPreview["status"],
+    isOpen: Boolean(row.is_open),
+    allowLateJoin: Boolean(row.allow_late_join),
+    requiredRoundCount:
+      typeof row.required_round_count === "number"
+        ? row.required_round_count
+        : Number(row.required_round_count ?? 0),
+    createdAt: String(row.created_at),
   };
 }
 
@@ -224,6 +265,7 @@ export async function createLobby(input: {
   playlistSnapshotJson: unknown;
   displayName: string;
   allowLateJoin?: boolean;
+  isPublic?: boolean;
   serverLabel?: string | null;
 }, profile?: MultiplayerServerProfile): Promise<MultiplayerCreateLobbyResult> {
   const { client, machineIdHash } = await withClient(profile);
@@ -233,6 +275,7 @@ export async function createLobby(input: {
     p_machine_id_hash: machineIdHash,
     p_display_name: input.displayName,
     p_allow_late_join: input.allowLateJoin ?? true,
+    p_is_public: input.isPublic ?? false,
     p_server_label: input.serverLabel ?? null,
   });
 
@@ -304,6 +347,20 @@ export async function setLobbyOpenState(lobbyId: string, isOpen: boolean, profil
   });
 
   assertNoSupabaseError(error, "Failed to update lobby state.");
+}
+
+export async function setLobbyPublicState(
+  lobbyId: string,
+  isPublic: boolean,
+  profile?: MultiplayerServerProfile
+): Promise<void> {
+  const { client } = await withClient(profile);
+  const { error } = await client.rpc("mp_set_lobby_public", {
+    p_lobby_id: lobbyId,
+    p_is_public: isPublic,
+  });
+
+  assertNoSupabaseError(error, "Failed to update lobby visibility.");
 }
 
 export async function kickLobbyPlayer(lobbyId: string, targetPlayerId: string, profile?: MultiplayerServerProfile): Promise<void> {
@@ -498,6 +555,32 @@ export async function listMatchHistory(profile?: MultiplayerServerProfile): Prom
 
   assertNoSupabaseError(error, "Failed to fetch match history.");
   return (data ?? []).map((row) => mapHistory(row as Record<string, unknown>));
+}
+
+export async function listPublicLobbies(
+  profile?: MultiplayerServerProfile
+): Promise<MultiplayerPublicLobbySummary[]> {
+  const { client } = await withClient(profile);
+  const { data, error } = await client.rpc("mp_list_public_lobbies");
+
+  assertNoSupabaseError(error, "Failed to list public lobbies.");
+  return (Array.isArray(data) ? data : []).map((row) =>
+    mapPublicLobbySummary(row as Record<string, unknown>)
+  );
+}
+
+export async function getLobbyJoinPreview(
+  inviteCode: string,
+  profile?: MultiplayerServerProfile
+): Promise<MultiplayerLobbyJoinPreview | null> {
+  const { client } = await withClient(profile);
+  const { data, error } = await client.rpc("mp_get_lobby_join_preview", {
+    p_invite_code: inviteCode.trim().toUpperCase(),
+  });
+
+  assertNoSupabaseError(error, "Failed to load lobby preview.");
+  if (!data) return null;
+  return mapLobbyJoinPreview(data as Record<string, unknown>);
 }
 
 export async function getMatchHistoryByLobby(lobbyId: string, profile?: MultiplayerServerProfile): Promise<MultiplayerMatchHistory | null> {

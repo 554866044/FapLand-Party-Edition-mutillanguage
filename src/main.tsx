@@ -1,3 +1,4 @@
+import "pixi.js/browser";
 import "pixi.js/unsafe-eval";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -7,6 +8,7 @@ import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
 import { handleMultiplayerAuthCallback } from "./services/multiplayer";
 import { importOpenedFile } from "./services/openedFiles";
+import { initializeSfxVolume } from "./utils/audio";
 
 const router = getRouter();
 const rootElement = document.getElementById("root");
@@ -16,6 +18,7 @@ if (!rootElement) {
 }
 
 void refreshStartupBooruMediaCache();
+void initializeSfxVolume();
 
 function registerOpenedFileHandler() {
     if (typeof window === "undefined" || !window.electronAPI?.appOpen) {

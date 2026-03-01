@@ -69,7 +69,8 @@ export const PERK_LIBRARY: PerkDefinition[] = [
   {
     id: "heal",
     name: "Heal",
-    description: "Reduce intermediary chance by 10%; in singleplayer also reduce anti-perk chance by 10%.",
+    description:
+      "Reduce intermediary chance by 10%; in singleplayer also reduce anti-perk chance by 10%.",
     iconKey: "heal",
     cost: 220,
     rarity: "rare",
@@ -78,7 +79,14 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     application: "immediate",
     effects: [
       { kind: "probabilityDelta", stat: "intermediaryProbability", amount: -0.1, min: 0, max: 1 },
-      { kind: "probabilityDelta", stat: "antiPerkProbability", amount: -0.1, min: 0, max: 1, singlePlayerOnly: true },
+      {
+        kind: "probabilityDelta",
+        stat: "antiPerkProbability",
+        amount: -0.1,
+        min: 0,
+        max: 1,
+        singlePlayerOnly: true,
+      },
     ],
   },
   {
@@ -153,6 +161,7 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     target: "self",
     application: "immediate",
     effects: [{ kind: "setPendingIntensityCap", cap: 0.5 }],
+    requiresHandy: true,
   },
   {
     id: "treasure-magnet",
@@ -181,20 +190,19 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     effects: [{ kind: "numericDelta", stat: "perkLuck", amount: 0.4, min: -1, max: 1 }],
   },
   {
-    id: "high-roller",
-    name: "High Roller",
-    description: "Increase luck, but reduce random perk offer chance by 10%.",
-    iconKey: "highRoller",
+    id: "no-rest",
+    name: "No Rest",
+    description:
+      "Handy performs a low-intensity filler sequence while you are on the board. Persistent until a round or another intermediary starts.",
+    iconKey: "noRest",
     cost: 220,
     rarity: "rare",
-    kind: "perk",
+    kind: "antiPerk",
     target: "self",
     durationRounds: null,
     application: "persistent",
-    effects: [
-      { kind: "numericDelta", stat: "perkLuck", amount: 0.55, min: -1, max: 1 },
-      { kind: "numericDelta", stat: "perkFrequency", amount: -0.1, min: -0.5, max: 0.5 },
-    ],
+    effects: [],
+    requiresHandy: true,
   },
   {
     id: "coupon-clipper",
@@ -215,7 +223,8 @@ export const PERK_LIBRARY: PerkDefinition[] = [
   {
     id: "no-rest",
     name: "No Rest",
-    description: "Handy performs a low-intensity filler sequence while you are on the board. Persistent until a round or another intermediary starts.",
+    description:
+      "Handy performs a low-intensity filler sequence while you are on the board. Persistent until a round or another intermediary starts.",
     iconKey: "noRest",
     cost: 220,
     rarity: "rare",
@@ -237,6 +246,7 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     durationRounds: 2,
     application: "persistent",
     effects: [],
+    requiresHandy: true,
   },
   {
     id: "virus",
@@ -287,6 +297,7 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     durationRounds: 2,
     application: "persistent",
     effects: [],
+    requiresHandy: true,
   },
   {
     id: "jackhammer",
@@ -300,6 +311,7 @@ export const PERK_LIBRARY: PerkDefinition[] = [
     durationRounds: 2,
     application: "persistent",
     effects: [],
+    requiresHandy: true,
   },
   {
     id: "cold-streak",
@@ -317,7 +329,8 @@ export const PERK_LIBRARY: PerkDefinition[] = [
   {
     id: "jammed-dice",
     name: "Jammed Dice",
-    description: "Anti-perk: reduce max dice, increase resting period, and spawn intermediary clips for 2 rounds.",
+    description:
+      "Anti-perk: reduce max dice, increase resting period, and spawn intermediary clips for 2 rounds.",
     iconKey: "jammedDice",
     cost: 240,
     rarity: "epic",
@@ -461,4 +474,17 @@ export function getSinglePlayerAntiPerkPool(): PerkDefinition[] {
 
 export function getPerkById(perkId: string): PerkDefinition | undefined {
   return PERK_LIBRARY.find((perk) => perk.id === perkId);
+}
+
+export function getPerksRequiringHandy(): Set<string> {
+  return new Set(PERK_LIBRARY.filter((perk) => perk.requiresHandy).map((perk) => perk.id));
+}
+
+export function filterPerkIdsByHandyConnection(
+  perkIds: string[],
+  handyConnected: boolean
+): string[] {
+  if (handyConnected) return perkIds;
+  const requiresHandy = getPerksRequiringHandy();
+  return perkIds.filter((id) => !requiresHandy.has(id));
 }

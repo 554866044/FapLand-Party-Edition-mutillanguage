@@ -1,14 +1,31 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
+import { InventoryDockButton } from "../components/game/InventoryDockButton";
 import { PerkIcon } from "../components/game/PerkIcon";
 import { PerkInventoryPanel } from "../components/game/PerkInventoryPanel";
 import { GameScene } from "../components/game/GameScene";
+import {
+  assertMultiplayerAllowed,
+  useMultiplayerSfwRedirect,
+} from "../hooks/useMultiplayerSfwGuard";
 import { createInitialGameState } from "../game/engine";
-import { getPerkById } from "../game/data/perks";
-import { PERK_RARITY_META, fallbackRarityFromCost, resolvePerkRarity } from "../game/data/perkRarity";
+import { getPerkById, filterPerkIdsByHandyConnection } from "../game/data/perks";
+import {
+  PERK_RARITY_META,
+  fallbackRarityFromCost,
+  resolvePerkRarity,
+} from "../game/data/perkRarity";
 import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
-import type { ActivePerkEffect, GameCompletionReason, GameState, InventoryItem, PerkIconKey, PerkRarity, PlayerStats } from "../game/types";
+import type {
+  ActivePerkEffect,
+  GameCompletionReason,
+  GameState,
+  InventoryItem,
+  PerkIconKey,
+  PerkRarity,
+  PlayerStats,
+} from "../game/types";
 import { db } from "../services/db";
 import {
   extractPlaylistConfigFromSnapshot,
@@ -30,7 +47,10 @@ import {
   type MultiplayerAntiPerkEvent,
   type MultiplayerLobbySnapshot,
 } from "../services/multiplayer";
-import { getMultiplayerSessionNotifications, type MultiplayerSessionNotification } from "../services/multiplayer/sessionNotifications";
+import {
+  getMultiplayerSessionNotifications,
+  type MultiplayerSessionNotification,
+} from "../services/multiplayer/sessionNotifications";
 import { trpc } from "../services/trpc";
 import {
   DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE,
@@ -38,6 +58,7 @@ import {
   normalizeRoundProgressBarAlwaysVisible,
 } from "../constants/roundVideoOverlaySettings";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
+import { useHandy } from "../contexts/HandyContext";
 
 const MatchSearchSchema = z.object({
   lobbyId: z.string().min(1),
@@ -76,7 +97,12 @@ function buildInventoryStacks(items: InventoryItem[]): Array<{
 }> {
   if (items.length === 0) return [];
 
-  const grouped = items.reduce<Map<string, { perkId: string; name: string; iconKey: PerkIconKey; rarity: PerkRarity; count: number }>>((acc, item) => {
+  const grouped = items.reduce<
+    Map<
+      string,
+      { perkId: string; name: string; iconKey: PerkIconKey; rarity: PerkRarity; count: number }
+    >
+  >((acc, item) => {
     const key = item.perkId;
     const perk = getPerkById(item.perkId);
     const existing = acc.get(key);
@@ -94,29 +120,35 @@ function buildInventoryStacks(items: InventoryItem[]): Array<{
     return acc;
   }, new Map());
 
-  return Array.from(grouped.values())
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return Array.from(grouped.values()).sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+  );
 }
 
 function toSafeStats(value: unknown, fallback: PlayerStats): PlayerStats {
   if (!value || typeof value !== "object") return fallback;
   const raw = value as Partial<PlayerStats>;
-  const diceMin = typeof raw.diceMin === "number" && Number.isFinite(raw.diceMin)
-    ? Math.max(1, Math.floor(raw.diceMin))
-    : fallback.diceMin;
-  const diceMaxRaw = typeof raw.diceMax === "number" && Number.isFinite(raw.diceMax)
-    ? Math.max(1, Math.floor(raw.diceMax))
-    : fallback.diceMax;
+  const diceMin =
+    typeof raw.diceMin === "number" && Number.isFinite(raw.diceMin)
+      ? Math.max(1, Math.floor(raw.diceMin))
+      : fallback.diceMin;
+  const diceMaxRaw =
+    typeof raw.diceMax === "number" && Number.isFinite(raw.diceMax)
+      ? Math.max(1, Math.floor(raw.diceMax))
+      : fallback.diceMax;
   const diceMax = Math.max(diceMin, diceMaxRaw);
-  const roundPauseMs = typeof raw.roundPauseMs === "number" && Number.isFinite(raw.roundPauseMs)
-    ? Math.max(250, Math.floor(raw.roundPauseMs))
-    : fallback.roundPauseMs;
-  const perkFrequency = typeof raw.perkFrequency === "number" && Number.isFinite(raw.perkFrequency)
-    ? Math.max(-0.5, Math.min(0.5, raw.perkFrequency))
-    : fallback.perkFrequency;
-  const perkLuck = typeof raw.perkLuck === "number" && Number.isFinite(raw.perkLuck)
-    ? Math.max(-1, Math.min(1, raw.perkLuck))
-    : fallback.perkLuck;
+  const roundPauseMs =
+    typeof raw.roundPauseMs === "number" && Number.isFinite(raw.roundPauseMs)
+      ? Math.max(250, Math.floor(raw.roundPauseMs))
+      : fallback.roundPauseMs;
+  const perkFrequency =
+    typeof raw.perkFrequency === "number" && Number.isFinite(raw.perkFrequency)
+      ? Math.max(-0.5, Math.min(0.5, raw.perkFrequency))
+      : fallback.perkFrequency;
+  const perkLuck =
+    typeof raw.perkLuck === "number" && Number.isFinite(raw.perkLuck)
+      ? Math.max(-1, Math.min(1, raw.perkLuck))
+      : fallback.perkLuck;
 
   return { diceMin, diceMax, roundPauseMs, perkFrequency, perkLuck };
 }
@@ -128,7 +160,7 @@ function toSafeActiveEffects(value: unknown): ActivePerkEffect[] {
     const raw = entry as Partial<ActivePerkEffect>;
     if (typeof raw.id !== "string" || raw.id.trim().length === 0) return false;
     if (raw.kind !== "perk" && raw.kind !== "antiPerk") return false;
-    if (!(Array.isArray(raw.effects))) return false;
+    if (!Array.isArray(raw.effects)) return false;
     return true;
   });
 }
@@ -142,18 +174,24 @@ function toSafeInventory(value: unknown): InventoryItem[] {
     if (typeof raw.perkId !== "string" || raw.perkId.trim().length === 0) return [];
     if (raw.kind !== "perk" && raw.kind !== "antiPerk") return [];
     const name = typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : raw.perkId;
-    const cost = typeof raw.cost === "number" && Number.isFinite(raw.cost) ? Math.max(0, Math.floor(raw.cost)) : 0;
-    const acquiredTurn = typeof raw.acquiredTurn === "number" && Number.isFinite(raw.acquiredTurn)
-      ? Math.max(1, Math.floor(raw.acquiredTurn))
-      : 1;
-    return [{
-      itemId: raw.itemId,
-      perkId: raw.perkId,
-      kind: raw.kind,
-      name,
-      cost,
-      acquiredTurn,
-    }];
+    const cost =
+      typeof raw.cost === "number" && Number.isFinite(raw.cost)
+        ? Math.max(0, Math.floor(raw.cost))
+        : 0;
+    const acquiredTurn =
+      typeof raw.acquiredTurn === "number" && Number.isFinite(raw.acquiredTurn)
+        ? Math.max(1, Math.floor(raw.acquiredTurn))
+        : 1;
+    return [
+      {
+        itemId: raw.itemId,
+        perkId: raw.perkId,
+        kind: raw.kind,
+        name,
+        cost,
+        acquiredTurn,
+      },
+    ];
   });
 }
 
@@ -163,7 +201,9 @@ function deriveInitialMultiplayerState(input: {
   ownPlayerName: string;
   installedRounds: Awaited<ReturnType<typeof db.round.findInstalled>>;
 }): GameState {
-  const playlistConfig = extractPlaylistConfigFromSnapshot(input.snapshot.lobby.playlistSnapshotJson);
+  const playlistConfig = extractPlaylistConfigFromSnapshot(
+    input.snapshot.lobby.playlistSnapshotJson
+  );
   const baseConfig = toGameConfigFromPlaylist(playlistConfig, input.installedRounds);
   const config = {
     ...baseConfig,
@@ -191,9 +231,10 @@ function deriveInitialMultiplayerState(input: {
     : fallbackPlayer.position;
 
   const resolvedNodeId =
-    ownProgress?.positionNodeId && base.config.runtimeGraph.nodeIndexById[ownProgress.positionNodeId] !== undefined
+    ownProgress?.positionNodeId &&
+    base.config.runtimeGraph.nodeIndexById[ownProgress.positionNodeId] !== undefined
       ? ownProgress.positionNodeId
-      : base.config.board[resolvedPosition]?.id ?? fallbackPlayer.currentNodeId;
+      : (base.config.board[resolvedPosition]?.id ?? fallbackPlayer.currentNodeId);
 
   const nextPlayer = {
     ...fallbackPlayer,
@@ -219,12 +260,13 @@ function deriveInitialMultiplayerState(input: {
 
 async function getIntermediarySettings() {
   try {
-    const [rawPrompt, rawDuration, rawReturnPause, rawRoundProgressBarAlwaysVisible] = await Promise.all([
-      trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
-      trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
-      trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
-      trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
-    ]);
+    const [rawPrompt, rawDuration, rawReturnPause, rawRoundProgressBarAlwaysVisible] =
+      await Promise.all([
+        trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
+        trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
+        trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
+        trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
+      ]);
 
     const prompt =
       typeof rawPrompt === "string" && rawPrompt.trim().length > 0
@@ -232,7 +274,8 @@ async function getIntermediarySettings() {
         : DEFAULT_INTERMEDIARY_LOADING_PROMPT;
 
     const parsedDuration = typeof rawDuration === "number" ? rawDuration : Number(rawDuration);
-    const parsedReturnPause = typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
+    const parsedReturnPause =
+      typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
 
     return {
       intermediaryLoadingPrompt: prompt,
@@ -242,7 +285,9 @@ async function getIntermediarySettings() {
       intermediaryReturnPauseSec: Number.isFinite(parsedReturnPause)
         ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause)))
         : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC,
-      roundProgressBarAlwaysVisible: normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible),
+      roundProgressBarAlwaysVisible: normalizeRoundProgressBarAlwaysVisible(
+        rawRoundProgressBarAlwaysVisible
+      ),
     };
   } catch {
     return {
@@ -260,17 +305,25 @@ async function getApplyDirectlySetting(): Promise<boolean> {
     if (typeof raw === "boolean") return raw;
     if (typeof raw === "number") return raw !== 0;
     if (typeof raw === "string") return raw.trim().toLowerCase() !== "false";
-    return true;
+    return false;
   } catch {
-    return true;
+    return false;
   }
 }
 
 export const Route = createFileRoute("/multiplayer-match")({
   validateSearch: (search) => MatchSearchSchema.parse(search),
   loader: async ({ location }) => {
+    await assertMultiplayerAllowed();
     const search = MatchSearchSchema.parse(location.search);
-    const [snapshot, ownPlayer, initialAntiPerkFeed, installedRounds, intermediarySettings, initialApplyDirectly] = await Promise.all([
+    const [
+      snapshot,
+      ownPlayer,
+      initialAntiPerkFeed,
+      installedRounds,
+      intermediarySettings,
+      initialApplyDirectly,
+    ] = await Promise.all([
       getLobbySnapshot(search.lobbyId),
       getOwnLobbyPlayer(search.lobbyId),
       listRecentAntiPerkEvents(search.lobbyId),
@@ -306,6 +359,7 @@ export const Route = createFileRoute("/multiplayer-match")({
 
 function MultiplayerMatchRoute() {
   const navigate = useNavigate();
+  const sfwModeEnabled = useMultiplayerSfwRedirect();
   const {
     search,
     initialSnapshot,
@@ -320,6 +374,32 @@ function MultiplayerMatchRoute() {
     roundProgressBarAlwaysVisible,
   } = Route.useLoaderData();
 
+  if (sfwModeEnabled) {
+    return null;
+  }
+
+  const { connected: handyConnected } = useHandy();
+
+  const filteredInitialState = useMemo(() => {
+    if (handyConnected) return initialState;
+    return {
+      ...initialState,
+      config: {
+        ...initialState.config,
+        perkPool: {
+          enabledPerkIds: filterPerkIdsByHandyConnection(
+            initialState.config.perkPool.enabledPerkIds,
+            false
+          ),
+          enabledAntiPerkIds: filterPerkIdsByHandyConnection(
+            initialState.config.perkPool.enabledAntiPerkIds,
+            false
+          ),
+        },
+      },
+    };
+  }, [initialState, handyConnected]);
+
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);
   const [ownPlayerId, setOwnPlayerId] = useState(ownPlayer.id);
   const [error, setError] = useState<string | null>(null);
@@ -327,24 +407,33 @@ function MultiplayerMatchRoute() {
   const [antiPerkFeed, setAntiPerkFeed] = useState<MultiplayerAntiPerkEvent[]>(initialAntiPerkFeed);
   const [selectedTargetId, setSelectedTargetId] = useState("");
   const [selectedInventoryItemId, setSelectedInventoryItemId] = useState<string | null>(null);
-  const [localState, setLocalState] = useState<GameState>(initialState);
+  const [localState, setLocalState] = useState<GameState>(filteredInitialState);
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [isLobbyControlOpen, setIsLobbyControlOpen] = useState(false);
   const [isVideoHudHotzoneActive, setIsVideoHudHotzoneActive] = useState(false);
   const [applyPerkDirectly, setApplyPerkDirectly] = useState(initialApplyDirectly);
   const [videoUiVisible, setVideoUiVisible] = useState(true);
-  const [sessionNotificationQueue, setSessionNotificationQueue] = useState<MultiplayerSessionNotification[]>([]);
-  const [activeSessionNotification, setActiveSessionNotification] = useState<MultiplayerSessionNotification | null>(null);
+  const [sessionNotificationQueue, setSessionNotificationQueue] = useState<
+    MultiplayerSessionNotification[]
+  >([]);
+  const [activeSessionNotification, setActiveSessionNotification] =
+    useState<MultiplayerSessionNotification | null>(null);
   const [incomingAntiPerkEvent, setIncomingAntiPerkEvent] = useState<{
     eventId: string;
     targetPlayerId: string;
     perkId: string;
     sourcePlayerName?: string;
   } | null>(null);
-  const [pendingInventoryAction, setPendingInventoryAction] = useState<ExternalInventoryAction | null>(null);
-  const [inventoryFxQueue, setInventoryFxQueue] = useState<Array<{ fxId: string; item: InventoryItem }>>([]);
-  const [activeInventoryFx, setActiveInventoryFx] = useState<{ fxId: string; item: InventoryItem } | null>(null);
+  const [pendingInventoryAction, setPendingInventoryAction] =
+    useState<ExternalInventoryAction | null>(null);
+  const [inventoryFxQueue, setInventoryFxQueue] = useState<
+    Array<{ fxId: string; item: InventoryItem }>
+  >([]);
+  const [activeInventoryFx, setActiveInventoryFx] = useState<{
+    fxId: string;
+    item: InventoryItem;
+  } | null>(null);
   const [inventoryBadgePulse, setInventoryBadgePulse] = useState(false);
 
   const sessionStartedAtMsRef = useRef(Date.now());
@@ -361,7 +450,9 @@ function MultiplayerMatchRoute() {
   const snapshotRefreshQueuedRef = useRef(false);
   const finishSubmittedRef = useRef(false);
   const resultNavigationSubmittedRef = useRef(false);
-  const prevInventoryIdsRef = useRef<Set<string>>(new Set(initialState.players[0]?.inventory.map((entry: InventoryItem) => entry.itemId) ?? []));
+  const prevInventoryIdsRef = useRef<Set<string>>(
+    new Set(initialState.players[0]?.inventory.map((entry: InventoryItem) => entry.itemId) ?? [])
+  );
   const previousPlayersRef = useRef(initialSnapshot.players);
   const sessionNotificationTimerRef = useRef<number | null>(null);
 
@@ -380,7 +471,11 @@ function MultiplayerMatchRoute() {
       const recentEvents = await listRecentAntiPerkEvents(search.lobbyId);
       setAntiPerkFeed(recentEvents);
     } catch (recentEventsError) {
-      setError(recentEventsError instanceof Error ? recentEventsError.message : "Failed to refresh anti-perk feed.");
+      setError(
+        recentEventsError instanceof Error
+          ? recentEventsError.message
+          : "Failed to refresh anti-perk feed."
+      );
     }
   }, [search.lobbyId]);
 
@@ -510,7 +605,9 @@ function MultiplayerMatchRoute() {
             setAntiPerkFeed((prev) => [event, ...prev].slice(0, 30));
 
             const currentSnapshot = snapshotRef.current;
-            const sourceName = currentSnapshot?.players.find((player) => player.id === event.senderPlayerId)?.displayName;
+            const sourceName = currentSnapshot?.players.find(
+              (player) => player.id === event.senderPlayerId
+            )?.displayName;
             if (event.targetPlayerId === ownPlayerId) {
               setIncomingAntiPerkEvent({
                 eventId: event.id,
@@ -523,7 +620,11 @@ function MultiplayerMatchRoute() {
         });
       } catch (subscribeError) {
         if (!mounted) return;
-        setError(subscribeError instanceof Error ? subscribeError.message : "Failed to subscribe to match updates.");
+        setError(
+          subscribeError instanceof Error
+            ? subscribeError.message
+            : "Failed to subscribe to match updates."
+        );
       }
     })();
 
@@ -547,7 +648,11 @@ function MultiplayerMatchRoute() {
 
   useEffect(() => {
     if (!snapshot) return;
-    const notifications = getMultiplayerSessionNotifications(previousPlayersRef.current, snapshot.players, ownPlayerId);
+    const notifications = getMultiplayerSessionNotifications(
+      previousPlayersRef.current,
+      snapshot.players,
+      ownPlayerId
+    );
     previousPlayersRef.current = snapshot.players;
     if (notifications.length === 0) return;
     setSessionNotificationQueue((prev) => [...prev, ...notifications]);
@@ -574,7 +679,9 @@ function MultiplayerMatchRoute() {
         .then(() => sweepForfeits(search.lobbyId, 300))
         .then(() => finalizeMatchIfComplete(search.lobbyId))
         .catch((heartbeatError) => {
-          setError(heartbeatError instanceof Error ? heartbeatError.message : "Failed to update heartbeat.");
+          setError(
+            heartbeatError instanceof Error ? heartbeatError.message : "Failed to update heartbeat."
+          );
         });
     }, 15000);
 
@@ -624,7 +731,9 @@ function MultiplayerMatchRoute() {
       .catch((finishError) => {
         finishSubmittedRef.current = false;
         resultNavigationSubmittedRef.current = false;
-        setError(finishError instanceof Error ? finishError.message : "Failed to finalize completed run.");
+        setError(
+          finishError instanceof Error ? finishError.message : "Failed to finalize completed run."
+        );
       });
   }, [localState, navigate, ownPlayerId, search.lobbyId]);
 
@@ -666,7 +775,11 @@ function MultiplayerMatchRoute() {
                 });
                 await requestSnapshotRefresh();
               } catch (directError) {
-                setError(directError instanceof Error ? directError.message : "Failed to directly send anti-perk.");
+                setError(
+                  directError instanceof Error
+                    ? directError.message
+                    : "Failed to directly send anti-perk."
+                );
               } finally {
                 setPending(false);
               }
@@ -676,7 +789,14 @@ function MultiplayerMatchRoute() {
     }
 
     prevInventoryIdsRef.current = nextIds;
-  }, [applyPerkDirectly, localState, ownPlayerId, requestSnapshotRefresh, search.lobbyId, selectedTargetId]);
+  }, [
+    applyPerkDirectly,
+    localState,
+    ownPlayerId,
+    requestSnapshotRefresh,
+    search.lobbyId,
+    selectedTargetId,
+  ]);
 
   useEffect(() => {
     if (activeInventoryFx || inventoryFxQueue.length === 0) return;
@@ -704,7 +824,7 @@ function MultiplayerMatchRoute() {
   const progressByPlayerId = snapshot?.progressByPlayerId ?? EMPTY_PROGRESS_BY_PLAYER_ID;
   const ownLobbyPlayer = useMemo(
     () => players.find((player) => player.id === ownPlayerId) ?? null,
-    [ownPlayerId, players],
+    [ownPlayerId, players]
   );
   const isHost = ownLobbyPlayer?.role === "host";
 
@@ -725,14 +845,15 @@ function MultiplayerMatchRoute() {
   }, [navigate, ownLobbyPlayer, ownPlayerId, search.lobbyId]);
 
   const remotePlayers = useMemo(
-    () => players
-      .filter((player) => player.id !== ownPlayerId && player.state !== "kicked")
-      .map((player) => ({
-        id: player.id,
-        name: player.displayName,
-        position: progressByPlayerId[player.id]?.positionIndex ?? 0,
-      })),
-    [ownPlayerId, players, progressByPlayerId],
+    () =>
+      players
+        .filter((player) => player.id !== ownPlayerId && player.state !== "kicked")
+        .map((player) => ({
+          id: player.id,
+          name: player.displayName,
+          position: progressByPlayerId[player.id]?.positionIndex ?? 0,
+        })),
+    [ownPlayerId, players, progressByPlayerId]
   );
 
   const remoteHudPlayers = useMemo(() => {
@@ -740,12 +861,16 @@ function MultiplayerMatchRoute() {
     const maxIndex = Math.max(1, localState.config.singlePlayer.totalIndices);
     const scoreCap = Math.max(
       1,
-      ...players.map((player) => Math.max(0, Math.floor(progressByPlayerId[player.id]?.score ?? player.finalScore ?? 0))),
+      ...players.map((player) =>
+        Math.max(0, Math.floor(progressByPlayerId[player.id]?.score ?? player.finalScore ?? 0))
+      )
     );
     const moneyCap = Math.max(
       localState.config.economy.startingMoney * 2,
-      ...players.map((player) => Math.max(0, Math.floor(progressByPlayerId[player.id]?.money ?? 0))),
-      1,
+      ...players.map((player) =>
+        Math.max(0, Math.floor(progressByPlayerId[player.id]?.money ?? 0))
+      ),
+      1
     );
 
     return players
@@ -777,28 +902,40 @@ function MultiplayerMatchRoute() {
           activeEffectsCount,
         };
       })
-      .sort((a, b) => b.score - a.score || b.positionIndex - a.positionIndex || a.name.localeCompare(b.name));
-  }, [localState.config.board, localState.config.economy.startingMoney, localState.config.singlePlayer.totalIndices, ownPlayerId, players, progressByPlayerId]);
+      .sort(
+        (a, b) =>
+          b.score - a.score || b.positionIndex - a.positionIndex || a.name.localeCompare(b.name)
+      );
+  }, [
+    localState.config.board,
+    localState.config.economy.startingMoney,
+    localState.config.singlePlayer.totalIndices,
+    ownPlayerId,
+    players,
+    progressByPlayerId,
+  ]);
 
   const targetPlayers = useMemo(
-    () => players.filter((player) => player.id !== ownPlayerId && !isTerminalPlayerState(player.state)),
-    [ownPlayerId, players],
+    () =>
+      players.filter((player) => player.id !== ownPlayerId && !isTerminalPlayerState(player.state)),
+    [ownPlayerId, players]
   );
   const targetPlayerOptions = useMemo(
-    () => targetPlayers.map((player) => {
-      const progress = progressByPlayerId[player.id];
-      return {
-        id: player.id,
-        label: player.displayName,
-        description: `Pos ${progress?.positionIndex ?? 0} • $${progress?.money ?? 0} • Score ${progress?.score ?? player.finalScore ?? 0}`,
-      };
-    }),
-    [progressByPlayerId, targetPlayers],
+    () =>
+      targetPlayers.map((player) => {
+        const progress = progressByPlayerId[player.id];
+        return {
+          id: player.id,
+          label: player.displayName,
+          description: `Pos ${progress?.positionIndex ?? 0} • $${progress?.money ?? 0} • Score ${progress?.score ?? player.finalScore ?? 0}`,
+        };
+      }),
+    [progressByPlayerId, targetPlayers]
   );
 
   const localPlayer = useMemo(
     () => localState.players[localState.currentPlayerIndex],
-    [localState.currentPlayerIndex, localState.players],
+    [localState.currentPlayerIndex, localState.players]
   );
 
   const selectedInventoryItem = useMemo(() => {
@@ -817,7 +954,10 @@ function MultiplayerMatchRoute() {
       setSelectedInventoryItemId(null);
       return;
     }
-    if (selectedInventoryItemId && localPlayer.inventory.some((entry) => entry.itemId === selectedInventoryItemId)) {
+    if (
+      selectedInventoryItemId &&
+      localPlayer.inventory.some((entry) => entry.itemId === selectedInventoryItemId)
+    ) {
       return;
     }
     setSelectedInventoryItemId(localPlayer.inventory[0]?.itemId ?? null);
@@ -882,26 +1022,31 @@ function MultiplayerMatchRoute() {
   };
 
   const inventoryCount = localPlayer?.inventory.length ?? 0;
-  const activeInventoryPerk = activeInventoryFx ? getPerkById(activeInventoryFx.item.perkId) : undefined;
-  const activeInventoryRarityMeta = PERK_RARITY_META[
-    activeInventoryPerk
-      ? resolvePerkRarity(activeInventoryPerk)
-      : activeInventoryFx
-        ? fallbackRarityFromCost(activeInventoryFx.item.cost)
-        : "common"
-  ];
+  const activeInventoryPerk = activeInventoryFx
+    ? getPerkById(activeInventoryFx.item.perkId)
+    : undefined;
+  const activeInventoryRarityMeta =
+    PERK_RARITY_META[
+      activeInventoryPerk
+        ? resolvePerkRarity(activeInventoryPerk)
+        : activeInventoryFx
+          ? fallbackRarityFromCost(activeInventoryFx.item.cost)
+          : "common"
+    ];
   const inVideoView = Boolean(localState.activeRound);
   const controlsVisible = !inVideoView || videoUiVisible;
-  const otherPlayersVisible = controlsVisible && !isOverlayOpen && (!inVideoView || isVideoHudHotzoneActive);
-  const showVideoHotzoneHint = inVideoView
-    && controlsVisible
-    && !isOverlayOpen
-    && !isLobbyControlOpen
-    && !isVideoHudHotzoneActive;
+  const otherPlayersVisible =
+    controlsVisible && !isOverlayOpen && (!inVideoView || isVideoHudHotzoneActive);
+  const showVideoHotzoneHint =
+    inVideoView &&
+    controlsVisible &&
+    !isOverlayOpen &&
+    !isLobbyControlOpen &&
+    !isVideoHudHotzoneActive;
 
   const hostControllablePlayers = useMemo(
     () => players.filter((player) => player.role !== "host" && player.state !== "kicked"),
-    [players],
+    [players]
   );
 
   const handleKickPlayer = async (targetPlayerId: string) => {
@@ -938,20 +1083,22 @@ function MultiplayerMatchRoute() {
     setError(null);
     try {
       await setLobbyOpenState(search.lobbyId, !currentLobby.isOpen);
-      setSnapshot((prev) => (
+      setSnapshot((prev) =>
         prev
           ? {
-            ...prev,
-            lobby: {
-              ...prev.lobby,
-              isOpen: !prev.lobby.isOpen,
-            },
-          }
+              ...prev,
+              lobby: {
+                ...prev.lobby,
+                isOpen: !prev.lobby.isOpen,
+              },
+            }
           : prev
-      ));
+      );
       await requestSnapshotRefresh();
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : "Failed to update lobby lock state.");
+      setError(
+        openError instanceof Error ? openError.message : "Failed to update lobby lock state."
+      );
     } finally {
       setPending(false);
     }
@@ -1002,11 +1149,15 @@ function MultiplayerMatchRoute() {
 
       {activeInventoryFx && (
         <div className="pointer-events-none fixed inset-0 z-[121]">
-          <div className={`inventory-fly-item rounded-lg border bg-zinc-950/92 px-3 py-2 text-xs shadow-[0_0_24px_rgba(0,0,0,0.35)] ${activeInventoryRarityMeta.tailwind.inventorySelected}`}>
+          <div
+            className={`inventory-fly-item rounded-lg border bg-zinc-950/92 px-3 py-2 text-xs shadow-[0_0_24px_rgba(0,0,0,0.35)] ${activeInventoryRarityMeta.tailwind.inventorySelected}`}
+          >
             <div className="flex items-center gap-2">
               <PerkIcon iconKey={activeInventoryPerk?.iconKey ?? "unknown"} className="h-4 w-4" />
               <span>Stored: {activeInventoryFx.item.name}</span>
-              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${activeInventoryRarityMeta.tailwind.badge}`}>
+              <span
+                className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${activeInventoryRarityMeta.tailwind.badge}`}
+              >
                 {activeInventoryRarityMeta.label}
               </span>
             </div>
@@ -1021,14 +1172,20 @@ function MultiplayerMatchRoute() {
         installedRounds={installedRounds}
         multiplayerRemotePlayers={remotePlayers}
         showMultiplayerPlayerNames
-        optionsActions={isHost ? [{
-          id: "toggle-lobby-lock",
-          label: snapshot?.lobby.isOpen ? "Lock Lobby" : "Unlock Lobby",
-          onClick: () => {
-            void handleToggleLobbyOpen();
-          },
-          disabled: pending,
-        }] : []}
+        optionsActions={
+          isHost
+            ? [
+                {
+                  id: "toggle-lobby-lock",
+                  label: snapshot?.lobby.isOpen ? "Lock Lobby" : "Unlock Lobby",
+                  onClick: () => {
+                    void handleToggleLobbyOpen();
+                  },
+                  disabled: pending,
+                },
+              ]
+            : []
+        }
         externalAntiPerkEvent={incomingAntiPerkEvent}
         externalInventoryAction={pendingInventoryAction}
         onExternalAntiPerkEventHandled={(eventId) => {
@@ -1083,6 +1240,7 @@ function MultiplayerMatchRoute() {
         intermediaryLoadingDurationSec={intermediaryLoadingDurationSec}
         intermediaryReturnPauseSec={intermediaryReturnPauseSec}
         initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
+        hideInventoryButton
       />
 
       {showVideoHotzoneHint && (
@@ -1107,16 +1265,23 @@ function MultiplayerMatchRoute() {
 
       {remoteHudPlayers.length > 0 && (
         <aside
-          className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${inVideoView
+          className={`fixed z-[114] overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300 ${
+            inVideoView
               ? "border-cyan-200/25 bg-[linear-gradient(150deg,rgba(5,20,44,0.5),rgba(4,10,26,0.34))] shadow-[0_14px_34px_rgba(2,8,22,0.35),0_0_18px_rgba(34,211,238,0.09)]"
               : "border-cyan-300/35 bg-[linear-gradient(150deg,rgba(5,20,44,0.92),rgba(4,10,26,0.88))] shadow-[0_18px_48px_rgba(2,8,22,0.6),0_0_26px_rgba(34,211,238,0.15)]"
-            } ${otherPlayersVisible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-2 opacity-0"
-            } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
+          } ${
+            otherPlayersVisible
+              ? "translate-x-0 opacity-100"
+              : "pointer-events-none -translate-x-2 opacity-0"
+          } ${isNarrowViewport ? "bottom-20 left-2 right-2 max-h-[40vh]" : "left-4 top-16 w-[340px] max-h-[calc(100vh-5.5rem)]"}`}
         >
-          <div className={`flex items-center justify-between border-b px-4 py-2.5 ${inVideoView
-              ? "border-cyan-200/15 bg-[linear-gradient(180deg,rgba(10,30,56,0.46),rgba(7,18,38,0.42))]"
-              : "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(10,30,56,0.78),rgba(7,18,38,0.75))]"
-            }`}>
+          <div
+            className={`flex items-center justify-between border-b px-4 py-2.5 ${
+              inVideoView
+                ? "border-cyan-200/15 bg-[linear-gradient(180deg,rgba(10,30,56,0.46),rgba(7,18,38,0.42))]"
+                : "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(10,30,56,0.78),rgba(7,18,38,0.75))]"
+            }`}
+          >
             <div className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.22em] text-cyan-100">
               Other Players
             </div>
@@ -1128,10 +1293,11 @@ function MultiplayerMatchRoute() {
             {remoteHudPlayers.map((remote) => (
               <div
                 key={remote.id}
-                className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${inVideoView
+                className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-[inset_0_1px_0_rgba(160,210,255,0.16)] ${
+                  inVideoView
                     ? "border-blue-200/20 bg-[linear-gradient(145deg,rgba(8,26,53,0.56),rgba(6,16,34,0.52))]"
                     : "border-blue-300/30 bg-[linear-gradient(145deg,rgba(8,26,53,0.9),rgba(6,16,34,0.9))]"
-                  }`}
+                }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="truncate text-[27px] leading-none font-semibold text-zinc-100 [font-size:clamp(1rem,1.5vw,1.65rem)]">
@@ -1160,15 +1326,25 @@ function MultiplayerMatchRoute() {
 
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <div className="rounded-lg border border-sky-300/25 bg-[#091b37]/75 px-2 py-1.5">
-                    <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-sky-200">Score {remote.score}</div>
+                    <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-sky-200">
+                      Score {remote.score}
+                    </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#0b213e]">
-                      <div className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#7dd3fc)]" style={{ width: `${remote.scoreRatio * 100}%` }} />
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#7dd3fc)]"
+                        style={{ width: `${remote.scoreRatio * 100}%` }}
+                      />
                     </div>
                   </div>
                   <div className="rounded-lg border border-emerald-300/25 bg-[#081f31]/75 px-2 py-1.5">
-                    <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-emerald-200">$ {remote.money}</div>
+                    <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.08em] text-emerald-200">
+                      $ {remote.money}
+                    </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#06322b]">
-                      <div className="h-full rounded-full bg-[linear-gradient(90deg,#34d399,#6ee7b7)]" style={{ width: `${remote.moneyRatio * 100}%` }} />
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#34d399,#6ee7b7)]"
+                        style={{ width: `${remote.moneyRatio * 100}%` }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1189,13 +1365,20 @@ function MultiplayerMatchRoute() {
                       {remote.inventoryStacks.slice(0, 6).map((stack) => {
                         const rarityMeta = PERK_RARITY_META[stack.rarity];
                         return (
-                          <div key={`${remote.id}-${stack.perkId}`} className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${rarityMeta.tailwind.chip}`}>
+                          <div
+                            key={`${remote.id}-${stack.perkId}`}
+                            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${rarityMeta.tailwind.chip}`}
+                          >
                             <PerkIcon iconKey={stack.iconKey} className="h-3 w-3" />
                             <span className="max-w-[108px] truncate">{stack.name}</span>
-                            <span className={`rounded border px-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}>
+                            <span
+                              className={`rounded border px-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
+                            >
                               {rarityMeta.label}
                             </span>
-                            {stack.count > 1 && <span className="text-zinc-100/90">x{stack.count}</span>}
+                            {stack.count > 1 && (
+                              <span className="text-zinc-100/90">x{stack.count}</span>
+                            )}
                           </div>
                         );
                       })}
@@ -1213,36 +1396,26 @@ function MultiplayerMatchRoute() {
         </aside>
       )}
 
-      <button
-        type="button"
-        aria-label={isOverlayOpen ? "Close inventory controls" : "Open inventory controls"}
-        title={isOverlayOpen ? "Close Inventory" : "Open Inventory"}
-        className={`fixed z-[115] flex h-12 w-12 items-center justify-center rounded-full border backdrop-blur transition-all duration-200 ${inVideoView ? "bottom-24 right-4" : "bottom-4 left-4"
-          } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          } ${inventoryBadgePulse ? "inventory-dock-pulse" : ""} ${isOverlayOpen
-            ? "border-cyan-400/70 bg-cyan-500/20 text-cyan-100"
-            : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
-          }`}
+      <InventoryDockButton
+        count={inventoryCount}
+        isOpen={isOverlayOpen}
         onClick={() => setIsOverlayOpen((prev) => !prev)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-          <path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-        <span className="absolute -right-1 -top-1 min-w-5 rounded-full border border-cyan-200/65 bg-cyan-500/30 px-1 text-[10px] font-bold text-cyan-50">
-          {inventoryCount}
-        </span>
-      </button>
+        position={inVideoView ? "video-view" : "default"}
+        pulse={inventoryBadgePulse}
+        controlsVisible={controlsVisible}
+      />
       {isHost && (
         <button
           type="button"
           aria-label={isLobbyControlOpen ? "Close lobby control" : "Open lobby control"}
           title={isLobbyControlOpen ? "Close Lobby Control" : "Open Lobby Control"}
-          className={`fixed z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${inVideoView ? "bottom-24 right-20" : "bottom-4 left-20"
-            } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-            } ${isLobbyControlOpen
+          className={`fixed z-[115] flex h-12 min-w-12 items-center justify-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur transition-all duration-200 ${
+            inVideoView ? "bottom-24 right-20" : "bottom-4 left-20"
+          } ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"} ${
+            isLobbyControlOpen
               ? "border-amber-300/80 bg-amber-500/20 text-amber-100"
               : "border-zinc-600 bg-zinc-950/95 text-zinc-100 hover:border-zinc-400"
-            }`}
+          }`}
           onClick={() => setIsLobbyControlOpen((prev) => !prev)}
         >
           Host
@@ -1250,10 +1423,15 @@ function MultiplayerMatchRoute() {
       )}
 
       {isOverlayOpen && (
-        <aside className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          } ${isNarrowViewport
-            ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[58vh]`
-            : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)]`}`}>
+        <aside
+          className={`fixed z-[110] space-y-3 overflow-y-auto transition-opacity duration-200 ${
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          } ${
+            isNarrowViewport
+              ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[58vh]`
+              : `${inVideoView ? "bottom-40" : "bottom-20"} left-4 w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)]`
+          }`}
+        >
           <PerkInventoryPanel
             title="Lobby Inventory"
             subtitle="Use perks on yourself, fire anti-perks at opponents, or discard stored items."
@@ -1265,8 +1443,12 @@ function MultiplayerMatchRoute() {
               void handleUseInventoryItem();
             }}
             onDiscardSelectedItem={handleDiscardInventoryItem}
-            useActionLabel={selectedInventoryItem?.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"}
-            useDisabled={pending || (selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId)}
+            useActionLabel={
+              selectedInventoryItem?.kind === "antiPerk" ? "Send Anti-Perk" : "Apply Perk"
+            }
+            useDisabled={
+              pending || (selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId)
+            }
             useDisabledReason={
               selectedInventoryItem?.kind === "antiPerk" && !selectedTargetId
                 ? "Pick a target player before sending this anti-perk."
@@ -1276,18 +1458,33 @@ function MultiplayerMatchRoute() {
             selectedTargetId={selectedTargetId}
             onSelectTarget={setSelectedTargetId}
             headerBadge={`Lobby ${search.lobbyId.slice(0, 8)} • ${applyPerkDirectly ? "Direct" : "Store"}`}
+            applyDirectly={applyPerkDirectly}
+            onApplyDirectlyChange={(value) => {
+              setApplyPerkDirectly(value);
+              void trpc.store.set
+                .mutate({ key: MULTIPLAYER_APPLY_DIRECTLY_KEY, value })
+                .catch(() => {});
+            }}
           />
 
           <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
-            <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">Player Standings</div>
-            <div className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-40" : "max-h-56"}`}>
+            <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
+              Player Standings
+            </div>
+            <div
+              className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-40" : "max-h-56"}`}
+            >
               {players.map((player) => {
                 const progress = snapshot?.progressByPlayerId[player.id];
                 return (
-                  <div key={player.id} className="rounded border border-zinc-800 bg-zinc-900/65 p-2">
+                  <div
+                    key={player.id}
+                    className="rounded border border-zinc-800 bg-zinc-900/65 p-2"
+                  >
                     <div className="font-semibold text-zinc-100">{player.displayName}</div>
                     <div className="mt-1 text-zinc-300">
-                      {player.state} | Pos {progress?.positionIndex ?? 0} | $ {progress?.money ?? 0} | Score {progress?.score ?? player.finalScore ?? 0}
+                      {player.state} | Pos {progress?.positionIndex ?? 0} | $ {progress?.money ?? 0}{" "}
+                      | Score {progress?.score ?? player.finalScore ?? 0}
                     </div>
                   </div>
                 );
@@ -1296,8 +1493,12 @@ function MultiplayerMatchRoute() {
           </div>
 
           <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/88 p-3 backdrop-blur">
-            <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">Anti-Perk Feed</div>
-            <div className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-28" : "max-h-44"}`}>
+            <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-300">
+              Anti-Perk Feed
+            </div>
+            <div
+              className={`space-y-2 overflow-auto pr-1 text-xs ${isNarrowViewport ? "max-h-28" : "max-h-44"}`}
+            >
               {antiPerkFeed.map((event) => {
                 const perk = getPerkById(event.perkId);
                 const rarityMeta = PERK_RARITY_META[perk ? resolvePerkRarity(perk) : "common"];
@@ -1306,11 +1507,15 @@ function MultiplayerMatchRoute() {
                     <div className="flex items-center gap-2 font-semibold text-zinc-100">
                       <PerkIcon iconKey={perk?.iconKey ?? "unknown"} className="h-4 w-4" />
                       <span>{perk?.name ?? event.perkId}</span>
-                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}>
+                      <span
+                        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${rarityMeta.tailwind.badge}`}
+                      >
                         {rarityMeta.label}
                       </span>
                     </div>
-                    <div className="text-zinc-300">{event.senderPlayerId.slice(0, 6)} {"->"} {event.targetPlayerId.slice(0, 6)}</div>
+                    <div className="text-zinc-300">
+                      {event.senderPlayerId.slice(0, 6)} {"->"} {event.targetPlayerId.slice(0, 6)}
+                    </div>
                   </div>
                 );
               })}
@@ -1319,10 +1524,14 @@ function MultiplayerMatchRoute() {
         </aside>
       )}
       {isHost && isLobbyControlOpen && (
-        <aside className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          } ${isNarrowViewport
-            ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[40vh]`
-            : `${inVideoView ? "bottom-40" : "bottom-20"} left-[412px] w-[380px] max-h-[calc(100vh-7rem)]`}`}
+        <aside
+          className={`fixed z-[112] overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/92 p-3 backdrop-blur ${
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          } ${
+            isNarrowViewport
+              ? `${inVideoView ? "bottom-40" : "bottom-20"} left-2 right-2 max-h-[40vh]`
+              : `${inVideoView ? "bottom-40" : "bottom-20"} left-[412px] w-[380px] max-h-[calc(100vh-7rem)]`
+          }`}
         >
           <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-amber-200">
             <span>Lobby Control</span>
@@ -1337,12 +1546,16 @@ function MultiplayerMatchRoute() {
             {hostControllablePlayers.map((player) => {
               const progress = snapshot?.progressByPlayerId[player.id];
               return (
-                <div key={`lobby-control-${player.id}`} className="rounded border border-zinc-700 bg-zinc-900/75 px-3 py-2">
+                <div
+                  key={`lobby-control-${player.id}`}
+                  className="rounded border border-zinc-700 bg-zinc-900/75 px-3 py-2"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="font-semibold text-zinc-100">{player.displayName}</div>
                       <div className="text-zinc-400">
-                        {player.state} | Pos {progress?.positionIndex ?? 0} | Score {progress?.score ?? player.finalScore ?? 0}
+                        {player.state} | Pos {progress?.positionIndex ?? 0} | Score{" "}
+                        {progress?.score ?? player.finalScore ?? 0}
                       </div>
                     </div>
                     <div className="flex gap-2">

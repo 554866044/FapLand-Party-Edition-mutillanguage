@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { useControllerSurface } from "../controller";
 import { DEFAULT_THEHANDY_APP_API_KEY } from "../constants/theHandy";
 import {
   DEFAULT_MUSIC_LOOP_MODE,
@@ -12,8 +13,13 @@ import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { ensureBooruMediaCache } from "../services/booru";
-import { db } from "../services/db";
-import { integrations, type ExternalSource, type IntegrationSyncStatus, type StashTagResult } from "../services/integrations";
+import { db, type PhashScanStatus } from "../services/db";
+import {
+  integrations,
+  type ExternalSource,
+  type IntegrationSyncStatus,
+  type StashTagResult,
+} from "../services/integrations";
 import { trpc } from "../services/trpc";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import {
@@ -45,17 +51,52 @@ import {
   CONTROLLER_SUPPORT_ENABLED_KEY,
   DEFAULT_CONTROLLER_SUPPORT_ENABLED,
   normalizeControllerSupportEnabled,
+  CHEAT_MODE_ENABLED_EVENT,
+  CHEAT_MODE_ENABLED_KEY,
+  DEFAULT_CHEAT_MODE_ENABLED,
+  normalizeCheatModeEnabled,
+  SFW_MODE_ENABLED_EVENT,
+  SFW_MODE_ENABLED_KEY,
+  DEFAULT_SFW_MODE_ENABLED,
+  normalizeSfwModeEnabled,
+  MULTIPLAYER_SKIP_ROUNDS_CHECK_EVENT,
+  MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
+  DEFAULT_MULTIPLAYER_SKIP_ROUNDS_CHECK,
+  normalizeMultiplayerSkipRoundsCheck,
 } from "../constants/experimentalFeatures";
+import {
+  SFX_VOLUME_CHANGED_EVENT,
+  SFX_VOLUME_KEY,
+  DEFAULT_SFX_VOLUME,
+  clampSfxVolume,
+} from "../constants/audioSettings";
+import {
+  BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
+  normalizeBackgroundPhashScanningEnabled,
+} from "../constants/phashSettings";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
 const INTERMEDIARY_RETURN_PAUSE_KEY = "game.intermediary.returnPauseSec";
+const APPLY_PERK_DIRECTLY_KEY = "game.singleplayer.applyPerkDirectly";
 const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
+const DEFAULT_APPLY_PERK_DIRECTLY = true;
 const ACTIVE_STASH_VERSION = "30.1";
 const LEGACY_LOGIN_AUTH_VALUE = "__legacy_login__";
 const HANDY_USER_PORTAL_URL = "https://user.handyfeeling.com";
-const SETTINGS_SECTION_IDS = ["general", "gameplay", "hardware", "experimental", "music", "sources", "app", "help", "credits"] as const;
+const SETTINGS_SECTION_IDS = [
+  "general",
+  "gameplay",
+  "hardware",
+  "experimental",
+  "music",
+  "sources",
+  "app",
+  "help",
+  "credits",
+] as const;
 
 type ShortcutDefinition = {
   keys: string;
@@ -80,13 +121,17 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: "F11", description: "Toggle fullscreen for the app window." },
       { keys: "Ctrl/Cmd+= or Ctrl/Cmd++", description: "Zoom the app window in." },
       { keys: "Ctrl/Cmd+-", description: "Zoom the app window out." },
-      { keys: "Ctrl/Cmd+0 or Ctrl/Cmd+O", description: "Reset the app window zoom level to default." },
+      {
+        keys: "Ctrl/Cmd+0 or Ctrl/Cmd+O",
+        description: "Reset the app window zoom level to default.",
+      },
     ],
   },
   {
     id: "controller",
     title: "Keyboard Controller Navigation",
-    description: "Keyboard mappings that mirror controller input when controller support surfaces are active.",
+    description:
+      "Keyboard mappings that mirror controller input when controller support surfaces are active.",
     shortcuts: [
       { keys: "Arrow Keys", description: "Move focus between controller-navigable controls." },
       { keys: "Enter or Space", description: "Trigger the primary action on the focused control." },
@@ -110,7 +155,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     id: "game-debug",
     title: "Game Debug",
-    description: "Development-only shortcuts that are only active when round debug controls are enabled.",
+    description:
+      "Development-only shortcuts that are only active when round debug controls are enabled.",
     shortcuts: [
       { keys: "I", description: "Trigger a test intermediary immediately." },
       { keys: "J", description: "End the current intermediary early and resume the main round." },
@@ -128,7 +174,10 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: "O", description: "Set the OUT marker at the current time." },
       { keys: "Enter", description: "Create a segment from the current IN and OUT markers." },
       { keys: "Delete or Backspace", description: "Remove the currently selected segment." },
-      { keys: "1 / 2 / 3", description: "Set the selected segment type to Normal, Interjection, or Cum." },
+      {
+        keys: "1 / 2 / 3",
+        description: "Set the selected segment type to Normal, Interjection, or Cum.",
+      },
       { keys: "Left / Right", description: "Seek backward or forward by 1 second." },
       { keys: "Shift+Left / Shift+Right", description: "Seek backward or forward by 5 seconds." },
       { keys: ", / .", description: "Nudge the selected segment earlier or later by 100 ms." },
@@ -149,7 +198,10 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: "Ctrl/Cmd+S", description: "Save the current playlist." },
       { keys: "X", description: "Delete the current selection." },
       { keys: "1-9", description: "Arm one of the first nine visible tile types for placement." },
-      { keys: "Escape", description: "Clear the current selection and cancel a pending connection." },
+      {
+        keys: "Escape",
+        description: "Clear the current selection and cancel a pending connection.",
+      },
       { keys: "V", description: "Switch to the Select tool." },
       { keys: "P", description: "Switch to the Place tool." },
       { keys: "C", description: "Switch to the Connect tool." },
@@ -160,7 +212,9 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   },
 ];
 
-export function getVisibleShortcutGroups(isProductionBuild = import.meta.env.PROD): ShortcutGroup[] {
+export function getVisibleShortcutGroups(
+  isProductionBuild = import.meta.env.PROD
+): ShortcutGroup[] {
   if (isProductionBuild) {
     return SHORTCUT_GROUPS.filter((group) => group.id !== "game-debug");
   }
@@ -168,7 +222,7 @@ export function getVisibleShortcutGroups(isProductionBuild = import.meta.env.PRO
   return SHORTCUT_GROUPS;
 }
 
-type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number];
+type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 function normalizeSettingsSectionId(value: unknown): SettingsSectionId | undefined {
   if (typeof value !== "string") return undefined;
@@ -231,13 +285,20 @@ type FolderImportNotice = {
   message: string;
 };
 
-function toFolderImportMessage(result: Awaited<ReturnType<typeof db.install.addAutoScanFolderAndScan>>["result"]): FolderImportNotice["message"] {
+function toFolderImportMessage(
+  result: Awaited<ReturnType<typeof db.install.addAutoScanFolderAndScan>>["result"]
+): FolderImportNotice["message"] {
   const { status, legacyImport } = result;
   const summary = `Installed ${status.stats.installed} rounds, imported ${status.stats.playlistsImported} playlists, updated ${status.stats.updated}, failed ${status.stats.failed}.`;
   if (legacyImport) {
     return `Imported immediately via legacy fallback. ${summary}`;
   }
-  if (status.stats.sidecarsSeen > 0 || status.stats.installed > 0 || status.stats.playlistsImported > 0 || status.stats.updated > 0) {
+  if (
+    status.stats.sidecarsSeen > 0 ||
+    status.stats.installed > 0 ||
+    status.stats.playlistsImported > 0 ||
+    status.stats.updated > 0
+  ) {
     return `Imported immediately. ${summary}`;
   }
   return `Folder saved for startup rescans. Nothing importable was found right now. ${summary}`;
@@ -256,27 +317,59 @@ export function SettingsPage() {
   const appUpdate = useAppUpdate();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingFullscreen, setIsLoadingFullscreen] = useState(true);
-  const [intermediaryLoadingPrompt, setIntermediaryLoadingPrompt] = useState(DEFAULT_INTERMEDIARY_LOADING_PROMPT);
-  const [intermediaryLoadingDurationSec, setIntermediaryLoadingDurationSec] = useState(DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC);
-  const [intermediaryReturnPauseSec, setIntermediaryReturnPauseSec] = useState(DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC);
-  const [videoHashFfmpegSourcePreference, setVideoHashFfmpegSourcePreference] = useState<VideoHashFfmpegSourcePreference>("auto");
-  const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(DEFAULT_BACKGROUND_VIDEO_ENABLED);
-  const [autofixBrokenFunscripts, setAutofixBrokenFunscripts] = useState(DEFAULT_AUTOFIX_BROKEN_FUNSCRIPTS);
-  const [roundProgressBarAlwaysVisible, setRoundProgressBarAlwaysVisible] = useState(DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE);
-  const [antiPerkBeatbarEnabled, setAntiPerkBeatbarEnabled] = useState(DEFAULT_ANTI_PERK_BEATBAR_ENABLED);
-  const [controllerSupportEnabled, setControllerSupportEnabled] = useState(DEFAULT_CONTROLLER_SUPPORT_ENABLED);
+  const [intermediaryLoadingPrompt, setIntermediaryLoadingPrompt] = useState(
+    DEFAULT_INTERMEDIARY_LOADING_PROMPT
+  );
+  const [intermediaryLoadingDurationSec, setIntermediaryLoadingDurationSec] = useState(
+    DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC
+  );
+  const [intermediaryReturnPauseSec, setIntermediaryReturnPauseSec] = useState(
+    DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC
+  );
+  const [videoHashFfmpegSourcePreference, setVideoHashFfmpegSourcePreference] =
+    useState<VideoHashFfmpegSourcePreference>("auto");
+  const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(
+    DEFAULT_BACKGROUND_VIDEO_ENABLED
+  );
+  const [autofixBrokenFunscripts, setAutofixBrokenFunscripts] = useState(
+    DEFAULT_AUTOFIX_BROKEN_FUNSCRIPTS
+  );
+  const [roundProgressBarAlwaysVisible, setRoundProgressBarAlwaysVisible] = useState(
+    DEFAULT_ROUND_PROGRESS_BAR_ALWAYS_VISIBLE
+  );
+  const [antiPerkBeatbarEnabled, setAntiPerkBeatbarEnabled] = useState(
+    DEFAULT_ANTI_PERK_BEATBAR_ENABLED
+  );
+  const [applyPerkDirectly, setApplyPerkDirectly] = useState(DEFAULT_APPLY_PERK_DIRECTLY);
+  const [controllerSupportEnabled, setControllerSupportEnabled] = useState(
+    DEFAULT_CONTROLLER_SUPPORT_ENABLED
+  );
+  const [cheatModeEnabled, setCheatModeEnabled] = useState(DEFAULT_CHEAT_MODE_ENABLED);
+  const [sfwModeEnabled, setSfwModeEnabled] = useState(DEFAULT_SFW_MODE_ENABLED);
+  const [multiplayerSkipRoundsCheck, setMultiplayerSkipRoundsCheck] = useState(
+    DEFAULT_MULTIPLAYER_SKIP_ROUNDS_CHECK
+  );
+  const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
+    DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
+  );
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isLoadingVideoHashPreference, setIsLoadingVideoHashPreference] = useState(true);
   const [isLoadingBackgroundVideoEnabled, setIsLoadingBackgroundVideoEnabled] = useState(true);
   const [isLoadingAutofixBrokenFunscripts, setIsLoadingAutofixBrokenFunscripts] = useState(true);
-  const [isLoadingRoundProgressBarAlwaysVisible, setIsLoadingRoundProgressBarAlwaysVisible] = useState(true);
+  const [isLoadingRoundProgressBarAlwaysVisible, setIsLoadingRoundProgressBarAlwaysVisible] =
+    useState(true);
   const [isLoadingAntiPerkBeatbarEnabled, setIsLoadingAntiPerkBeatbarEnabled] = useState(true);
   const [isLoadingControllerSupportEnabled, setIsLoadingControllerSupportEnabled] = useState(true);
+  const [isLoadingCheatModeEnabled, setIsLoadingCheatModeEnabled] = useState(true);
+  const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
+    useState(true);
   const [autoScanFolders, setAutoScanFolders] = useState<string[]>([]);
   const [isLoadingAutoScanFolders, setIsLoadingAutoScanFolders] = useState(true);
   const [isUpdatingAutoScanFolders, setIsUpdatingAutoScanFolders] = useState(false);
   const [folderImportNotices, setFolderImportNotices] = useState<FolderImportNotice[]>([]);
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false);
+  const [isCheatModeConfirmDialogOpen, setIsCheatModeConfirmDialogOpen] = useState(false);
+  const [isSkipRoundsCheckDialogOpen, setIsSkipRoundsCheckDialogOpen] = useState(false);
   const [isClearingData, setIsClearingData] = useState(false);
   const [clearDataError, setClearDataError] = useState<string | null>(null);
   const [clearSelections, setClearSelections] = useState({
@@ -292,7 +385,24 @@ export function SettingsPage() {
     let mounted = true;
     const loadSettings = async () => {
       try {
-        const [fullscreen, rawPrompt, rawDuration, rawReturnPause, rawVideoHashPreference, rawBackgroundVideoEnabled, rawAutofixBrokenFunscripts, rawRoundProgressBarAlwaysVisible, rawAntiPerkBeatbarEnabled, rawControllerSupportEnabled, folders] = await Promise.all([
+        const [
+          fullscreen,
+          rawPrompt,
+          rawDuration,
+          rawReturnPause,
+          rawVideoHashPreference,
+          rawBackgroundVideoEnabled,
+          rawAutofixBrokenFunscripts,
+          rawRoundProgressBarAlwaysVisible,
+          rawAntiPerkBeatbarEnabled,
+          rawControllerSupportEnabled,
+          rawCheatModeEnabled,
+          rawSfwModeEnabled,
+          rawBackgroundPhashScanningEnabled,
+          rawApplyPerkDirectly,
+          rawMultiplayerSkipRoundsCheck,
+          folders,
+        ] = await Promise.all([
           window.electronAPI.window.isFullscreen(),
           trpc.store.get.query({ key: INTERMEDIARY_LOADING_PROMPT_KEY }),
           trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
@@ -303,6 +413,11 @@ export function SettingsPage() {
           trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
           trpc.store.get.query({ key: ANTI_PERK_BEATBAR_ENABLED_KEY }),
           trpc.store.get.query({ key: CONTROLLER_SUPPORT_ENABLED_KEY }),
+          trpc.store.get.query({ key: CHEAT_MODE_ENABLED_KEY }),
+          trpc.store.get.query({ key: SFW_MODE_ENABLED_KEY }),
+          trpc.store.get.query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY }),
+          trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY }),
+          trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
           db.install.getAutoScanFolders(),
         ]);
 
@@ -313,22 +428,49 @@ export function SettingsPage() {
               ? rawPrompt.trim()
               : DEFAULT_INTERMEDIARY_LOADING_PROMPT;
           setIntermediaryLoadingPrompt(nextPrompt);
-          const parsedDuration = typeof rawDuration === "number" ? rawDuration : Number(rawDuration);
-          const nextDuration =
-            Number.isFinite(parsedDuration) ? Math.max(1, Math.min(60, Math.floor(parsedDuration))) : DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC;
+          const parsedDuration =
+            typeof rawDuration === "number" ? rawDuration : Number(rawDuration);
+          const nextDuration = Number.isFinite(parsedDuration)
+            ? Math.max(1, Math.min(60, Math.floor(parsedDuration)))
+            : DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC;
           setIntermediaryLoadingDurationSec(nextDuration);
-          const parsedReturnPause = typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
-          const nextReturnPause =
-            Number.isFinite(parsedReturnPause) ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause))) : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC;
+          const parsedReturnPause =
+            typeof rawReturnPause === "number" ? rawReturnPause : Number(rawReturnPause);
+          const nextReturnPause = Number.isFinite(parsedReturnPause)
+            ? Math.max(0, Math.min(60, Math.floor(parsedReturnPause)))
+            : DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC;
           setIntermediaryReturnPauseSec(nextReturnPause);
-          setVideoHashFfmpegSourcePreference(normalizeVideoHashFfmpegSourcePreference(rawVideoHashPreference));
+          setVideoHashFfmpegSourcePreference(
+            normalizeVideoHashFfmpegSourcePreference(rawVideoHashPreference)
+          );
           setBackgroundVideoEnabled(
-            typeof rawBackgroundVideoEnabled === "boolean" ? rawBackgroundVideoEnabled : DEFAULT_BACKGROUND_VIDEO_ENABLED,
+            typeof rawBackgroundVideoEnabled === "boolean"
+              ? rawBackgroundVideoEnabled
+              : DEFAULT_BACKGROUND_VIDEO_ENABLED
           );
           setAutofixBrokenFunscripts(normalizeAutofixBrokenFunscripts(rawAutofixBrokenFunscripts));
-          setRoundProgressBarAlwaysVisible(normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible));
+          setRoundProgressBarAlwaysVisible(
+            normalizeRoundProgressBarAlwaysVisible(rawRoundProgressBarAlwaysVisible)
+          );
           setAntiPerkBeatbarEnabled(normalizeAntiPerkBeatbarEnabled(rawAntiPerkBeatbarEnabled));
-          setControllerSupportEnabled(normalizeControllerSupportEnabled(rawControllerSupportEnabled));
+          setControllerSupportEnabled(
+            normalizeControllerSupportEnabled(rawControllerSupportEnabled)
+          );
+          setCheatModeEnabled(normalizeCheatModeEnabled(rawCheatModeEnabled));
+          setSfwModeEnabled(normalizeSfwModeEnabled(rawSfwModeEnabled));
+          setMultiplayerSkipRoundsCheck(
+            normalizeMultiplayerSkipRoundsCheck(rawMultiplayerSkipRoundsCheck)
+          );
+          setBackgroundPhashScanningEnabled(
+            normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
+          );
+          setApplyPerkDirectly(
+            rawApplyPerkDirectly === true || rawApplyPerkDirectly === "true"
+              ? true
+              : rawApplyPerkDirectly === false || rawApplyPerkDirectly === "false"
+                ? false
+                : DEFAULT_APPLY_PERK_DIRECTLY
+          );
           setAutoScanFolders(folders);
         }
       } catch (error) {
@@ -343,6 +485,8 @@ export function SettingsPage() {
           setIsLoadingRoundProgressBarAlwaysVisible(false);
           setIsLoadingAntiPerkBeatbarEnabled(false);
           setIsLoadingControllerSupportEnabled(false);
+          setIsLoadingCheatModeEnabled(false);
+          setIsLoadingBackgroundPhashScanningEnabled(false);
           setIsLoadingAutoScanFolders(false);
         }
       }
@@ -378,19 +522,23 @@ export function SettingsPage() {
             id: "background-video-enabled",
             type: "toggle",
             label: "Load Background Videos",
-            description: "When disabled, animated backgrounds keep the visual effects but skip loading video files.",
+            description:
+              "When disabled, animated backgrounds keep the visual effects but skip loading video files.",
             value: backgroundVideoEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: BACKGROUND_VIDEO_ENABLED_KEY, value: next });
               setBackgroundVideoEnabled(next);
-              window.dispatchEvent(new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, { detail: next }));
+              window.dispatchEvent(
+                new CustomEvent<boolean>(BACKGROUND_VIDEO_ENABLED_EVENT, { detail: next })
+              );
             },
           },
           {
             id: "videohash-ffmpeg-source",
             type: "select",
             label: "VideoHash FFmpeg Source",
-            description: "Auto keeps current behavior (prefer newer system binaries). Use Bundled/System to force source selection.",
+            description:
+              "Auto keeps current behavior (prefer newer system binaries). Use Bundled/System to force source selection.",
             value: videoHashFfmpegSourcePreference,
             options: [
               { value: "auto", label: "Auto (Default)" },
@@ -401,6 +549,21 @@ export function SettingsPage() {
               const value = normalizeVideoHashFfmpegSourcePreference(next);
               await trpc.store.set.mutate({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY, value });
               setVideoHashFfmpegSourcePreference(value);
+            },
+          },
+          {
+            id: "background-phash-scanning-enabled",
+            type: "toggle",
+            label: "Background Phash Scanning",
+            description:
+              "Automatically compute visual fingerprints for rounds in the background. Highly recommended for accurate similarity matching.",
+            value: backgroundPhashScanningEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({
+                key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+                value: next,
+              });
+              setBackgroundPhashScanningEnabled(next);
             },
           },
         ],
@@ -415,7 +578,8 @@ export function SettingsPage() {
             id: "anti-perk-beatbar-enabled",
             type: "toggle",
             label: "Show Anti-Perk Beatbar",
-            description: "Shows a synchronized manual beatbar and kick hits during jackhammer and milker anti-perk sequences.",
+            description:
+              "Shows a synchronized manual beatbar and kick hits during jackhammer and milker anti-perk sequences.",
             value: antiPerkBeatbarEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: ANTI_PERK_BEATBAR_ENABLED_KEY, value: next });
@@ -426,11 +590,27 @@ export function SettingsPage() {
             id: "round-progress-bar-always-visible",
             type: "toggle",
             label: "Pin Round Progress Bar",
-            description: "Keep the round playback progress bar visible even after the rest of the HUD fades out.",
+            description:
+              "Keep the round playback progress bar visible even after the rest of the HUD fades out.",
             value: roundProgressBarAlwaysVisible,
             onChange: async (next: boolean) => {
-              await trpc.store.set.mutate({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY, value: next });
+              await trpc.store.set.mutate({
+                key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY,
+                value: next,
+              });
               setRoundProgressBarAlwaysVisible(next);
+            },
+          },
+          {
+            id: "apply-perk-directly",
+            type: "toggle",
+            label: "Auto-Apply Perks",
+            description:
+              "When enabled, perks (not anti-perks) are applied immediately when received instead of being stored in inventory.",
+            value: applyPerkDirectly,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: APPLY_PERK_DIRECTLY_KEY, value: next });
+              setApplyPerkDirectly(next);
             },
           },
           {
@@ -452,7 +632,8 @@ export function SettingsPage() {
             id: "intermediary-loading-duration",
             type: "number",
             label: "Intermediary Loading Duration (s)",
-            description: "How long the intermediary loading countdown runs before switching videos.",
+            description:
+              "How long the intermediary loading countdown runs before switching videos.",
             value: intermediaryLoadingDurationSec,
             min: 1,
             max: 60,
@@ -488,7 +669,8 @@ export function SettingsPage() {
             id: "autofix-broken-funscripts",
             type: "toggle",
             label: "Autofix Broken Funscripts",
-            description: "When enabled, funscripts with `range: 90` are normalized to `100` in memory so TheHandy playback keeps working.",
+            description:
+              "When enabled, funscripts with `range: 90` are normalized to `100` in memory so TheHandy playback keeps working.",
             value: autofixBrokenFunscripts,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY, value: next });
@@ -514,12 +696,73 @@ export function SettingsPage() {
             id: "controller-support-enabled",
             type: "toggle",
             label: "Controller Support",
-            description: "Experimental gamepad navigation and input support. Disabled by default until it is more stable.",
+            description:
+              "Experimental gamepad navigation and input support. Disabled by default until it is more stable. Expect some things to not work as expected.",
             value: controllerSupportEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: CONTROLLER_SUPPORT_ENABLED_KEY, value: next });
               setControllerSupportEnabled(next);
-              window.dispatchEvent(new CustomEvent<boolean>(CONTROLLER_SUPPORT_ENABLED_EVENT, { detail: next }));
+              window.dispatchEvent(
+                new CustomEvent<boolean>(CONTROLLER_SUPPORT_ENABLED_EVENT, { detail: next })
+              );
+            },
+          },
+          {
+            id: "cheat-mode-enabled",
+            type: "toggle",
+            label: "Cheat Mode",
+            description:
+              "Enables dev menu features in singleplayer. Any highscore achieved will be permanently marked with 🎭. Does not work in multiplayer.",
+            value: cheatModeEnabled,
+            onChange: async (next: boolean) => {
+              if (next) {
+                setIsCheatModeConfirmDialogOpen(true);
+              } else {
+                await trpc.store.set.mutate({ key: CHEAT_MODE_ENABLED_KEY, value: false });
+                setCheatModeEnabled(false);
+                window.dispatchEvent(
+                  new CustomEvent<boolean>(CHEAT_MODE_ENABLED_EVENT, { detail: false })
+                );
+              }
+            },
+          },
+          {
+            id: "sfw-mode-enabled",
+            type: "toggle",
+            label: "SFW Mode",
+            description:
+              "Prevents all media from loading. Videos, images, previews, and booru media are replaced with a placeholder banner. Does not affect gameplay logic.",
+            value: sfwModeEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({ key: SFW_MODE_ENABLED_KEY, value: next });
+              setSfwModeEnabled(next);
+              window.dispatchEvent(
+                new CustomEvent<boolean>(SFW_MODE_ENABLED_EVENT, { detail: next })
+              );
+            },
+          },
+          {
+            id: "multiplayer-skip-rounds-check",
+            type: "toggle",
+            label: "Skip Multiplayer Safeguards",
+            description:
+              "Allow multiplayer access regardless of the global minimum and playlist-specific round requirements. Disabling these safeguards may result in a bad user experience.",
+            value: multiplayerSkipRoundsCheck,
+            onChange: async (next: boolean) => {
+              if (next) {
+                setIsSkipRoundsCheckDialogOpen(true);
+              } else {
+                await trpc.store.set.mutate({
+                  key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
+                  value: false,
+                });
+                setMultiplayerSkipRoundsCheck(false);
+                window.dispatchEvent(
+                  new CustomEvent<boolean>(MULTIPLAYER_SKIP_ROUNDS_CHECK_EVENT, {
+                    detail: false,
+                  })
+                );
+              }
             },
           },
         ],
@@ -556,6 +799,7 @@ export function SettingsPage() {
     [
       backgroundVideoEnabled,
       antiPerkBeatbarEnabled,
+      applyPerkDirectly,
       autofixBrokenFunscripts,
       intermediaryLoadingDurationSec,
       intermediaryLoadingPrompt,
@@ -563,10 +807,16 @@ export function SettingsPage() {
       isFullscreen,
       roundProgressBarAlwaysVisible,
       controllerSupportEnabled,
+      cheatModeEnabled,
+      sfwModeEnabled,
+      multiplayerSkipRoundsCheck,
       videoHashFfmpegSourcePreference,
+      backgroundPhashScanningEnabled,
     ]
   );
-  const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(search.section ?? sections[0]?.id ?? "general");
+  const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(
+    search.section ?? sections[0]?.id ?? "general"
+  );
 
   useEffect(() => {
     if (search.section && search.section !== activeSectionId) {
@@ -581,6 +831,19 @@ export function SettingsPage() {
   }, [sections, activeSectionId]);
 
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
+
+  const handleControllerBack = useCallback(() => {
+    playSelectSound();
+    navigate({ to: "/" });
+    return true;
+  }, [navigate]);
+
+  useControllerSurface({
+    id: "settings-page",
+    priority: 10,
+    enabled: controllerSupportEnabled,
+    onBack: handleControllerBack,
+  });
 
   const addFolders = async () => {
     if (isUpdatingAutoScanFolders) return;
@@ -670,12 +933,21 @@ export function SettingsPage() {
             </h1>
           </div>
 
-          {sections.map((section) => {
+          {sections.map((section, index) => {
             const active = section.id === activeSectionId;
             return (
               <button
                 key={section.id}
                 type="button"
+                data-controller-focus-id={`settings-sidebar-${section.id}`}
+                data-controller-down={
+                  index < sections.length - 1
+                    ? `settings-sidebar-${sections[index + 1].id}`
+                    : undefined
+                }
+                data-controller-up={
+                  index > 0 ? `settings-sidebar-${sections[index - 1].id}` : undefined
+                }
                 onMouseEnter={playHoverSound}
                 onFocus={playHoverSound}
                 onClick={() => {
@@ -694,6 +966,7 @@ export function SettingsPage() {
           <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
             <MenuButton
               label="← Back"
+              controllerFocusId="settings-back"
               onHover={playHoverSound}
               onClick={() => {
                 playSelectSound();
@@ -717,7 +990,10 @@ export function SettingsPage() {
             )}
 
             {/* Section content */}
-            <div className="settings-panel-enter flex flex-col gap-5" key={`content-${activeSection?.id}`}>
+            <div
+              className="settings-panel-enter flex flex-col gap-5"
+              key={`content-${activeSection?.id}`}
+            >
               {activeSection && activeSection.id === "sources" ? (
                 <>
                   <SourceIntegrationsCard />
@@ -741,16 +1017,18 @@ export function SettingsPage() {
                   <SettingsSectionCard
                     section={activeSection}
                     loading={
-                      isLoadingFullscreen
-                      || isLoadingPrompt
-                      || isLoadingVideoHashPreference
-                      || isLoadingBackgroundVideoEnabled
-                      || isLoadingAutofixBrokenFunscripts
-                      || isLoadingRoundProgressBarAlwaysVisible
-                      || isLoadingAntiPerkBeatbarEnabled
-                      || isLoadingControllerSupportEnabled
+                      isLoadingFullscreen ||
+                      isLoadingPrompt ||
+                      isLoadingVideoHashPreference ||
+                      isLoadingBackgroundVideoEnabled ||
+                      isLoadingAutofixBrokenFunscripts ||
+                      isLoadingRoundProgressBarAlwaysVisible ||
+                      isLoadingAntiPerkBeatbarEnabled ||
+                      isLoadingControllerSupportEnabled ||
+                      isLoadingBackgroundPhashScanningEnabled
                     }
                   />
+                  <PhashScanCard />
                   <OnboardingCard />
                 </>
               ) : activeSection && activeSection.id === "music" ? (
@@ -775,14 +1053,15 @@ export function SettingsPage() {
                 <HardwareSettingsCard
                   section={activeSection}
                   loading={
-                    isLoadingFullscreen
-                    || isLoadingPrompt
-                    || isLoadingVideoHashPreference
-                    || isLoadingBackgroundVideoEnabled
-                    || isLoadingAutofixBrokenFunscripts
-                    || isLoadingRoundProgressBarAlwaysVisible
-                    || isLoadingAntiPerkBeatbarEnabled
-                    || isLoadingControllerSupportEnabled
+                    isLoadingFullscreen ||
+                    isLoadingPrompt ||
+                    isLoadingVideoHashPreference ||
+                    isLoadingBackgroundVideoEnabled ||
+                    isLoadingAutofixBrokenFunscripts ||
+                    isLoadingRoundProgressBarAlwaysVisible ||
+                    isLoadingAntiPerkBeatbarEnabled ||
+                    isLoadingControllerSupportEnabled ||
+                    isLoadingBackgroundPhashScanningEnabled
                   }
                 />
               ) : activeSection && activeSection.id === "credits" ? (
@@ -791,14 +1070,16 @@ export function SettingsPage() {
                 <SettingsSectionCard
                   section={activeSection}
                   loading={
-                    isLoadingFullscreen
-                    || isLoadingPrompt
-                    || isLoadingVideoHashPreference
-                    || isLoadingBackgroundVideoEnabled
-                    || isLoadingAutofixBrokenFunscripts
-                    || isLoadingRoundProgressBarAlwaysVisible
-                    || isLoadingAntiPerkBeatbarEnabled
-                    || isLoadingControllerSupportEnabled
+                    isLoadingFullscreen ||
+                    isLoadingPrompt ||
+                    isLoadingVideoHashPreference ||
+                    isLoadingBackgroundVideoEnabled ||
+                    isLoadingAutofixBrokenFunscripts ||
+                    isLoadingRoundProgressBarAlwaysVisible ||
+                    isLoadingAntiPerkBeatbarEnabled ||
+                    isLoadingControllerSupportEnabled ||
+                    isLoadingCheatModeEnabled ||
+                    isLoadingBackgroundPhashScanningEnabled
                   }
                 />
               ) : null}
@@ -834,31 +1115,232 @@ export function SettingsPage() {
           void clearData();
         }}
       />
+      <CheatModeConfirmDialog
+        isOpen={isCheatModeConfirmDialogOpen}
+        onCancel={() => {
+          playSelectSound();
+          setIsCheatModeConfirmDialogOpen(false);
+        }}
+        onConfirm={async () => {
+          playSelectSound();
+          await trpc.store.set.mutate({ key: CHEAT_MODE_ENABLED_KEY, value: true });
+          setCheatModeEnabled(true);
+          window.dispatchEvent(
+            new CustomEvent<boolean>(CHEAT_MODE_ENABLED_EVENT, { detail: true })
+          );
+          setIsCheatModeConfirmDialogOpen(false);
+        }}
+      />
+      <SkipRoundsCheckConfirmDialog
+        isOpen={isSkipRoundsCheckDialogOpen}
+        onCancel={() => {
+          playSelectSound();
+          setIsSkipRoundsCheckDialogOpen(false);
+        }}
+        onConfirm={async () => {
+          playSelectSound();
+          await trpc.store.set.mutate({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY, value: true });
+          setMultiplayerSkipRoundsCheck(true);
+          window.dispatchEvent(
+            new CustomEvent<boolean>(MULTIPLAYER_SKIP_ROUNDS_CHECK_EVENT, { detail: true })
+          );
+          setIsSkipRoundsCheckDialogOpen(false);
+        }}
+      />
     </div>
   );
 }
 
-function AppUpdateCard({
-  appUpdate,
-}: {
-  appUpdate: ReturnType<typeof useAppUpdate>;
-}) {
-  const statusTone = appUpdate.state.status === "update_available"
-    ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
-    : appUpdate.state.status === "up_to_date"
-      ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
-      : appUpdate.state.status === "error"
-        ? "border-rose-300/30 bg-rose-500/10 text-rose-100"
-        : "border-zinc-600/40 bg-black/35 text-zinc-200";
-  const statusLabel = appUpdate.state.status === "checking"
-    ? "Checking"
-    : appUpdate.state.status === "update_available"
-      ? "Update Available"
+function PhashScanCard() {
+  const [scanStatus, setScanStatus] = useState<PhashScanStatus | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const pollStatus = async () => {
+      try {
+        const status = await db.phash.getScanStatus();
+        if (mounted) {
+          setScanStatus(status);
+        }
+      } catch (error) {
+        console.error("Failed to poll phash scan status", error);
+      }
+    };
+
+    void pollStatus();
+    const interval = window.setInterval(pollStatus, 2000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const handleStartScan = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    playSelectSound();
+    try {
+      await db.phash.startScanManual();
+    } catch (error) {
+      console.error("Failed to start phash scan", error);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handleAbortScan = async () => {
+    playSelectSound();
+    try {
+      await db.phash.abortScan();
+    } catch (error) {
+      console.error("Failed to abort phash scan", error);
+    }
+  };
+
+  const isRunning = scanStatus?.state === "running";
+  const progress =
+    scanStatus && scanStatus.totalCount > 0
+      ? (scanStatus.completedCount / scanStatus.totalCount) * 100
+      : 0;
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.09s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Video Fingerprint Scanner
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Manually trigger a scan to compute perceptual hashes for rounds that don't have them yet.
+        </p>
+      </div>
+
+      <div
+        className="rounded-2xl border border-violet-300/25 bg-black/35 p-4"
+        onMouseEnter={playHoverSound}
+      >
+        {isRunning && scanStatus && (
+          <>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-full border border-cyan-300/40 bg-cyan-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100">
+                Scanning
+              </span>
+            </div>
+
+            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-cyan-950/60">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-cyan-400 to-teal-400"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            {scanStatus.currentRoundName && (
+              <div className="mb-2 truncate font-[family-name:var(--font-jetbrains-mono)] text-xs text-cyan-100/90">
+                Processing: {scanStatus.currentRoundName}
+              </div>
+            )}
+
+            <div className="mb-3 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-xs">
+              <span className="text-cyan-400/60">
+                {scanStatus.completedCount} / {scanStatus.totalCount} videos
+              </span>
+              <span className="text-cyan-300/80">{Math.round(progress)}%</span>
+            </div>
+          </>
+        )}
+
+        {!isRunning &&
+          scanStatus &&
+          (scanStatus.state === "done" ||
+            scanStatus.state === "aborted" ||
+            scanStatus.state === "error") && (
+            <div className="mb-3 flex items-center gap-2">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+                  scanStatus.state === "done"
+                    ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+                    : scanStatus.state === "aborted"
+                      ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
+                      : "border-rose-300/40 bg-rose-500/15 text-rose-100"
+                }`}
+              >
+                {scanStatus.state === "done"
+                  ? "Complete"
+                  : scanStatus.state === "aborted"
+                    ? "Aborted"
+                    : "Error"}
+              </span>
+              <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
+                {scanStatus.completedCount} hashed
+                {scanStatus.skippedCount > 0 && <span>, {scanStatus.skippedCount} skipped</span>}
+              </span>
+            </div>
+          )}
+
+        {!isRunning && scanStatus?.state === "idle" && (
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full border border-zinc-500/40 bg-zinc-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-300">
+              Idle
+            </span>
+            <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
+              Ready to scan
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isRunning || isStarting}
+            onClick={handleStartScan}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isRunning || isStarting
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            }`}
+          >
+            {isStarting ? "Starting..." : isRunning ? "Scanning..." : "Scan Now"}
+          </button>
+
+          {isRunning && (
+            <button
+              type="button"
+              onClick={handleAbortScan}
+              className="rounded-xl border border-rose-300/60 bg-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-100 transition-all duration-200 hover:border-rose-200/80 hover:bg-rose-500/45"
+            >
+              Abort
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AppUpdateCard({ appUpdate }: { appUpdate: ReturnType<typeof useAppUpdate> }) {
+  const statusTone =
+    appUpdate.state.status === "update_available"
+      ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
       : appUpdate.state.status === "up_to_date"
-        ? "Up to Date"
+        ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
         : appUpdate.state.status === "error"
-          ? "Check Failed"
-          : "Not Checked Yet";
+          ? "border-rose-300/30 bg-rose-500/10 text-rose-100"
+          : "border-zinc-600/40 bg-black/35 text-zinc-200";
+  const statusLabel =
+    appUpdate.state.status === "checking"
+      ? "Checking"
+      : appUpdate.state.status === "update_available"
+        ? "Update Available"
+        : appUpdate.state.status === "up_to_date"
+          ? "Up to Date"
+          : appUpdate.state.status === "error"
+            ? "Check Failed"
+            : "Not Checked Yet";
 
   return (
     <section
@@ -892,10 +1374,11 @@ function AppUpdateCard({
               playSelectSound();
               void appUpdate.triggerPrimaryAction();
             }}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${appUpdate.isBusy
-              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-              }`}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              appUpdate.isBusy
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            }`}
           >
             {appUpdate.actionLabel}
           </button>
@@ -914,9 +1397,12 @@ function OnboardingCard() {
       style={{ animationDelay: "0.1s" }}
     >
       <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">First Start Workflow</h2>
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          First Start Workflow
+        </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Run the guided introduction again if you want a refresher on play modes, content installs, editors, Handy setup, music, and booru search.
+          Run the guided introduction again if you want a refresher on play modes, content installs,
+          editors, Handy setup, music, and booru search.
         </p>
       </div>
 
@@ -935,7 +1421,13 @@ function OnboardingCard() {
   );
 }
 
-function HardwareSettingsCard({ section, loading }: { section: SettingsSection; loading: boolean }) {
+function HardwareSettingsCard({
+  section,
+  loading,
+}: {
+  section: SettingsSection;
+  loading: boolean;
+}) {
   const {
     connectionKey,
     appApiKeyOverride,
@@ -985,12 +1477,19 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
           <SettingRow key={setting.id} setting={setting} disabled={loading} />
         ))}
 
-        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+        <div
+          className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+          onMouseEnter={playHoverSound}
+        >
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${connected ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100" : "border-rose-300/35 bg-rose-500/10 text-rose-100"}`}>
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${connected ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100" : "border-rose-300/35 bg-rose-500/10 text-rose-100"}`}
+            >
               {connected ? "Connected" : "Disconnected"}
             </span>
-            <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${synced ? "border-cyan-300/40 bg-cyan-500/15 text-cyan-100" : "border-zinc-500/40 bg-zinc-800/70 text-zinc-300"}`}>
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${synced ? "border-cyan-300/40 bg-cyan-500/15 text-cyan-100" : "border-zinc-500/40 bg-zinc-800/70 text-zinc-300"}`}
+            >
               {synced ? "Synced" : "Not Synced"}
             </span>
             {isConnecting ? (
@@ -1002,7 +1501,10 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
 
           <div className="space-y-4 text-left">
             <div className="flex flex-col gap-2">
-              <label className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300" htmlFor="settings-handy-connection-key">
+              <label
+                className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
+                htmlFor="settings-handy-connection-key"
+              >
                 Connection Key / Channel Ref
               </label>
               <input
@@ -1027,7 +1529,9 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
                     App Key
                   </p>
                   <p className="mt-1 text-sm text-cyan-50">
-                    {useCustomApiKey ? "Using your custom TheHandy app key." : "Using the built-in TheHandy app key automatically."}
+                    {useCustomApiKey
+                      ? "Using your custom TheHandy app key."
+                      : "Using the built-in TheHandy app key automatically."}
                   </p>
                 </div>
                 <button
@@ -1050,7 +1554,10 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
 
               {useCustomApiKey ? (
                 <div className="mt-4 flex flex-col gap-2">
-                  <label className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300" htmlFor="settings-handy-api-key">
+                  <label
+                    className="ml-1 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-wider text-zinc-300"
+                    htmlFor="settings-handy-api-key"
+                  >
                     Application ID
                   </label>
                   <input
@@ -1071,10 +1578,12 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
                     Open Handy User Portal
                   </a>
                   <p className="ml-1 text-xs text-zinc-400">
-                    Do not use your access token here. Create or select an app at Handy and paste the application ID instead.
+                    Do not use your access token here. Create or select an app at Handy and paste
+                    the application ID instead.
                   </p>
                   <p className="ml-1 text-xs text-zinc-400">
-                    Leave custom mode off unless you explicitly want to override the built-in app identity.
+                    Leave custom mode off unless you explicitly want to override the built-in app
+                    identity.
                   </p>
                 </div>
               ) : (
@@ -1086,7 +1595,8 @@ function HardwareSettingsCard({ section, loading }: { section: SettingsSection; 
 
             {DEFAULT_THEHANDY_APP_API_KEY.trim().length === 0 ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-[family-name:var(--font-jetbrains-mono)] text-amber-300">
-                No bundled TheHandy app key is configured in this build. Enable custom mode and enter one manually.
+                No bundled TheHandy app key is configured in this build. Enable custom mode and
+                enter one manually.
               </div>
             ) : null}
 
@@ -1158,6 +1668,19 @@ function MusicSettingsCard() {
   const [isAddingTracks, setIsAddingTracks] = useState(false);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(DEFAULT_MUSIC_VOLUME * 100));
   const [loopDraft, setLoopDraft] = useState<MusicLoopMode>(DEFAULT_MUSIC_LOOP_MODE);
+  const [sfxVolumeDraft, setSfxVolumeDraft] = useState(() => Math.round(DEFAULT_SFX_VOLUME * 100));
+
+  useEffect(() => {
+    let mounted = true;
+    void trpc.store.get.query({ key: SFX_VOLUME_KEY }).then((val) => {
+      if (!mounted) return;
+      const vol = clampSfxVolume(val);
+      setSfxVolumeDraft(Math.round(vol * 100));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setVolumeDraft(Math.round(volume * 100));
@@ -1169,6 +1692,12 @@ function MusicSettingsCard() {
 
   const commitVolumeDraft = async () => {
     await setVolume(volumeDraft / 100);
+  };
+
+  const commitSfxVolumeDraft = async () => {
+    const next = sfxVolumeDraft / 100;
+    await trpc.store.set.mutate({ key: SFX_VOLUME_KEY, value: next });
+    window.dispatchEvent(new CustomEvent(SFX_VOLUME_CHANGED_EVENT, { detail: next }));
   };
 
   const addSelectedTracks = async () => {
@@ -1193,92 +1722,150 @@ function MusicSettingsCard() {
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Music</h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Build a global queue from local audio files. Music pauses for foreground video playback and resumes from the same spot.
+          Build a global queue from local audio files. Music pauses for foreground video playback
+          and resumes from the same spot.
         </p>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-          <div>
-            <p className="font-semibold text-zinc-100">Enable Global Music</p>
-            <p className="text-sm text-zinc-400">Keep background music running across navigation when no foreground video is active.</p>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-violet-300/15 pb-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              aria-label="Toggle Enable Global Music"
+              role="switch"
+              aria-checked={enabled}
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void setEnabled(!enabled);
+              }}
+              className={`relative h-7 w-14 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-7" : "translate-x-0"}`}
+              />
+            </button>
+            <span className={`text-sm font-medium ${enabled ? "text-zinc-100" : "text-zinc-400"}`}>
+              Music {enabled ? "Enabled" : "Disabled"}
+            </span>
           </div>
-          <button
-            type="button"
-            aria-label="Toggle Enable Global Music"
-            role="switch"
-            aria-checked={enabled}
-            onMouseEnter={playHoverSound}
-            onClick={() => {
-              playSelectSound();
-              void setEnabled(!enabled);
-            }}
-            className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${enabled ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
-          >
-            <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${enabled ? "translate-x-8" : "translate-x-0"}`} />
-          </button>
-        </div>
-
-        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-zinc-100">Playback</p>
-              <p className="text-sm text-zinc-400">
-                {currentTrack ? `Current track: ${currentTrack.name}` : "No track selected."}
-              </p>
-              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500">
-                {isSuppressedByVideo ? "Paused by foreground video" : isPlaying ? "Playing" : enabled ? "Ready" : "Disabled"}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  void previous();
-                }}
-                className="rounded-xl border border-zinc-600 bg-black/45 px-3 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-400"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  if (isPlaying) {
-                    pause();
-                    return;
-                  }
-                  void play();
-                }}
-                className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-3 py-2 text-sm font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-              >
-                {isPlaying ? "Pause" : "Play"}
-              </button>
-              <button
-                type="button"
-                onMouseEnter={playHoverSound}
-                onClick={() => {
-                  playSelectSound();
-                  void next();
-                }}
-                className="rounded-xl border border-zinc-600 bg-black/45 px-3 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-400"
-              >
-                Next
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void previous();
+              }}
+              className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                if (isPlaying) {
+                  pause();
+                  return;
+                }
+                void play();
+              }}
+              className="rounded-lg border border-violet-300/60 bg-violet-500/30 px-2.5 py-1.5 text-xs font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            >
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void next();
+              }}
+              className="rounded-lg border border-zinc-600 bg-black/45 px-2.5 py-1.5 text-xs font-semibold text-zinc-100 hover:border-zinc-400"
+            >
+              Next
+            </button>
+            <span className="text-xs text-zinc-400">
+              {currentTrack ? currentTrack.name : "No track"}
+            </span>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+        <div className="flex flex-wrap items-center gap-6 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="text-zinc-400">Volume:</span>
+            <input
+              aria-label="Music volume"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={volumeDraft}
+              onChange={(event) => setVolumeDraft(Number(event.target.value))}
+              onMouseUp={() => void commitVolumeDraft()}
+              onTouchEnd={() => void commitVolumeDraft()}
+              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
+            />
+            <span className="w-8 text-zinc-300">{volumeDraft}%</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="text-zinc-400">SFX:</span>
+            <input
+              aria-label="Sound effects volume"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={sfxVolumeDraft}
+              onChange={(event) => setSfxVolumeDraft(Number(event.target.value))}
+              onMouseUp={() => void commitSfxVolumeDraft()}
+              onTouchEnd={() => void commitSfxVolumeDraft()}
+              className="h-1.5 w-20 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-violet-400"
+            />
+            <span className="w-8 text-zinc-300">{sfxVolumeDraft}%</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Toggle Shuffle"
+              role="switch"
+              aria-checked={shuffle}
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSelectSound();
+                void setShuffle(!shuffle);
+              }}
+              className={`relative h-5 w-10 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${shuffle ? "border-violet-300/80 bg-violet-500/50" : "border-zinc-600 bg-zinc-800"}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-md transition-transform duration-200 ${shuffle ? "translate-x-5" : "translate-x-0"}`}
+              />
+            </button>
+            <span className="text-zinc-400">Shuffle</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="text-zinc-400">Loop:</span>
+            <select
+              value={loopDraft}
+              onChange={(event) => setLoopDraft(event.target.value as MusicLoopMode)}
+              className="rounded-lg border border-violet-300/30 bg-black/45 px-2 py-1 text-xs text-zinc-100 outline-none"
+            >
+              <option value="queue">Queue</option>
+              <option value="track">Track</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="border-t border-violet-300/15 pt-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-zinc-100">Queue</p>
-              <p className="text-sm text-zinc-400">Add local audio files and reorder them without changing the shuffle mode.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+            <span className="text-sm font-semibold text-zinc-100">
+              Queue ({queue.length} tracks)
+            </span>
+            <div className="flex gap-2">
               <button
                 type="button"
                 disabled={isAddingTracks}
@@ -1287,10 +1874,11 @@ function MusicSettingsCard() {
                   playSelectSound();
                   void addSelectedTracks();
                 }}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isAddingTracks
-                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                  : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-                  }`}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  isAddingTracks
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+                }`}
               >
                 {isAddingTracks ? "Adding..." : "Add Tracks"}
               </button>
@@ -1302,28 +1890,27 @@ function MusicSettingsCard() {
                   playSelectSound();
                   void clearQueue();
                 }}
-                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${queue.length === 0
-                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                  : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                  }`}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  queue.length === 0
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                }`}
               >
-                Clear Queue
+                Clear
               </button>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="divide-y divide-violet-300/10">
             {queue.length === 0 ? (
-              <div className="rounded-xl border border-zinc-700 bg-black/30 px-3 py-2 text-sm text-zinc-400">
-                No music tracks configured.
-              </div>
+              <div className="py-3 text-sm text-zinc-400">No music tracks configured.</div>
             ) : (
               queue.map((entry, index) => {
                 const isCurrent = currentTrack?.id === entry.id;
                 return (
                   <div
                     key={entry.id}
-                    className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 ${isCurrent ? "border-violet-300/55 bg-violet-500/10" : "border-zinc-700 bg-black/30"}`}
+                    className={`flex flex-wrap items-center justify-between gap-2 py-2 ${isCurrent ? "text-violet-100" : ""}`}
                   >
                     <button
                       type="button"
@@ -1333,10 +1920,14 @@ function MusicSettingsCard() {
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <div className="truncate text-sm font-semibold text-zinc-100">{entry.name}</div>
-                      <div className="truncate text-xs text-zinc-500">{entry.filePath}</div>
+                      <span
+                        className={`truncate text-sm ${isCurrent ? "font-semibold text-violet-100" : "text-zinc-200"}`}
+                      >
+                        {isCurrent ? "▶ " : ""}
+                        {entry.name}
+                      </span>
                     </button>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-1">
                       <button
                         type="button"
                         disabled={index === 0}
@@ -1344,12 +1935,9 @@ function MusicSettingsCard() {
                           playSelectSound();
                           void moveTrack(entry.id, "up");
                         }}
-                        className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${index === 0
-                          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                          : "border-zinc-600 bg-black/45 text-zinc-100 hover:border-zinc-400"
-                          }`}
+                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
                       >
-                        Up
+                        ↑
                       </button>
                       <button
                         type="button"
@@ -1358,12 +1946,9 @@ function MusicSettingsCard() {
                           playSelectSound();
                           void moveTrack(entry.id, "down");
                         }}
-                        className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${index === queue.length - 1
-                          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                          : "border-zinc-600 bg-black/45 text-zinc-100 hover:border-zinc-400"
-                          }`}
+                        className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
                       >
-                        Down
+                        ↓
                       </button>
                       <button
                         type="button"
@@ -1371,94 +1956,15 @@ function MusicSettingsCard() {
                           playSelectSound();
                           void removeTrack(entry.id);
                         }}
-                        className="rounded-lg border border-rose-300/60 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-rose-100 hover:bg-rose-500/35"
+                        className="rounded px-2 py-0.5 text-xs text-rose-300 hover:text-rose-200"
                       >
-                        Remove
+                        ✕
                       </button>
                     </div>
                   </div>
                 );
               })
             )}
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-            <div className="mb-3">
-              <p className="font-semibold text-zinc-100">Volume</p>
-              <p className="text-sm text-zinc-400">Current: {volumeDraft}%</p>
-            </div>
-            <input
-              aria-label="Music volume"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={volumeDraft}
-              onChange={(event) => setVolumeDraft(Number(event.target.value))}
-              onMouseUp={() => {
-                void commitVolumeDraft();
-              }}
-              onTouchEnd={() => {
-                void commitVolumeDraft();
-              }}
-              onKeyUp={() => {
-                void commitVolumeDraft();
-              }}
-              onBlur={() => {
-                void commitVolumeDraft();
-              }}
-              className="w-full accent-cyan-300"
-            />
-          </div>
-
-          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-            <div className="mb-3">
-              <p className="font-semibold text-zinc-100">Shuffle</p>
-              <p className="text-sm text-zinc-400">Randomize which track advances next without reordering the visible queue.</p>
-            </div>
-            <button
-              type="button"
-              aria-label="Toggle Shuffle"
-              role="switch"
-              aria-checked={shuffle}
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void setShuffle(!shuffle);
-              }}
-              className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${shuffle ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"}`}
-            >
-              <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${shuffle ? "translate-x-8" : "translate-x-0"}`} />
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-            <div className="mb-3">
-              <p className="font-semibold text-zinc-100">Loop Mode</p>
-              <p className="text-sm text-zinc-400">Control what happens when a track finishes.</p>
-            </div>
-            <select
-              value={loopDraft}
-              onChange={(event) => setLoopDraft(event.target.value as MusicLoopMode)}
-              className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75 focus:ring-2 focus:ring-violet-400/30"
-            >
-              <option value="queue">Loop Queue</option>
-              <option value="track">Loop Track</option>
-              <option value="off">Off</option>
-            </select>
-            <button
-              type="button"
-              onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSelectSound();
-                void setLoopMode(loopDraft);
-              }}
-              className="mt-3 rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            >
-              Save Loop Mode
-            </button>
           </div>
         </div>
       </div>
@@ -1498,10 +2004,11 @@ function DangerZoneCard({
         disabled={isPending}
         onMouseEnter={playHoverSound}
         onClick={onOpenConfirm}
-        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-          : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-          }`}
+        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+          isPending
+            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+            : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
+        }`}
       >
         {isPending ? "Clearing..." : "Manage & Clear Data"}
       </button>
@@ -1534,12 +2041,28 @@ function SelectiveClearDialog({
   if (!isOpen) return null;
 
   const categories = [
-    { id: "rounds", label: "Installed Rounds & Heroes", description: "All downloaded/imported game content." },
+    {
+      id: "rounds",
+      label: "Installed Rounds & Heroes",
+      description: "All downloaded/imported game content.",
+    },
     { id: "playlists", label: "Playlists", description: "Your custom and imported playlists." },
-    { id: "history", label: "Run History", description: "Records of your past games and sessions." },
+    {
+      id: "history",
+      label: "Run History",
+      description: "Records of your past games and sessions.",
+    },
     { id: "stats", label: "Global Stats", description: "Highscores and overall career progress." },
-    { id: "cache", label: "Multiplayer Cache", description: "Downloaded match results and sync queue." },
-    { id: "settings", label: "App Settings & Preference", description: "Preferences, hardware keys, and window state." },
+    {
+      id: "cache",
+      label: "Multiplayer Cache",
+      description: "Downloaded match results and sync queue.",
+    },
+    {
+      id: "settings",
+      label: "App Settings & Preference",
+      description: "Preferences, hardware keys, and window state.",
+    },
   ] as const;
 
   const toggle = (id: keyof typeof selections) => {
@@ -1555,7 +2078,9 @@ function SelectiveClearDialog({
           Selective Maintenance
         </p>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">Clear Data</h2>
-        <p className="mt-2 text-sm text-zinc-400">Choose which categories of information to wipe from this device.</p>
+        <p className="mt-2 text-sm text-zinc-400">
+          Choose which categories of information to wipe from this device.
+        </p>
 
         <div className="mt-6 space-y-3">
           {categories.map((cat) => (
@@ -1564,14 +2089,23 @@ function SelectiveClearDialog({
               type="button"
               disabled={isPending}
               onClick={() => toggle(cat.id as keyof typeof selections)}
-              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${selections[cat.id as keyof typeof selections]
-                ? "border-rose-400/40 bg-rose-500/10"
-                : "border-zinc-800 bg-black/20 hover:border-zinc-700"
-                }`}
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all duration-200 ${
+                selections[cat.id as keyof typeof selections]
+                  ? "border-rose-400/40 bg-rose-500/10"
+                  : "border-zinc-800 bg-black/20 hover:border-zinc-700"
+              }`}
             >
-              <div className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${selections[cat.id as keyof typeof selections] ? "border-rose-400 bg-rose-500 text-white" : "border-zinc-700 bg-zinc-900"}`}>
+              <div
+                className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${selections[cat.id as keyof typeof selections] ? "border-rose-400 bg-rose-500 text-white" : "border-zinc-700 bg-zinc-900"}`}
+              >
                 {selections[cat.id as keyof typeof selections] && (
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={4}
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -1592,10 +2126,11 @@ function SelectiveClearDialog({
             disabled={isPending}
             onMouseEnter={playHoverSound}
             onClick={onCancel}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-              ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
-              : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
-              }`}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isPending
+                ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
+                : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+            }`}
           >
             Cancel
           </button>
@@ -1604,12 +2139,135 @@ function SelectiveClearDialog({
             disabled={isPending || !hasSelection}
             onMouseEnter={playHoverSound}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending || !hasSelection
-              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-              : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
-              }`}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isPending || !hasSelection
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
+            }`}
           >
             {isPending ? "Clearing..." : "Confirm Deletion"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheatModeConfirmDialog({
+  isOpen,
+  onCancel,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-amber-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(251,191,36,0.28)]">
+        <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-amber-200/80">
+          Experimental Feature
+        </p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-amber-50">
+          Enable Cheat Mode?
+        </h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          This will enable developer menu features in singleplayer sessions, giving you access to
+          debug controls and shortcuts.
+        </p>
+
+        <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4">
+          <p className="text-sm font-semibold text-amber-100">Important consequences:</p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-200/90">
+            <li>Any highscore you achieve will be permanently marked with 🎭</li>
+            <li>Cheat mode has no effect in multiplayer</li>
+            <li>The mark on your highscores cannot be removed later</li>
+          </ul>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onMouseEnter={playHoverSound}
+            onClick={onCancel}
+            className="rounded-xl border border-zinc-600 bg-zinc-900/80 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all duration-200 hover:border-zinc-400 hover:text-zinc-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onMouseEnter={playHoverSound}
+            onClick={onConfirm}
+            className="rounded-xl border border-amber-300/70 bg-amber-500/25 px-4 py-2 text-sm font-semibold text-amber-100 transition-all duration-200 hover:border-amber-200/90 hover:bg-amber-500/40"
+          >
+            I Understand, Enable
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkipRoundsCheckConfirmDialog({
+  isOpen,
+  onCancel,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-amber-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(251,191,36,0.28)]">
+        <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-amber-200/80">
+          Experimental Feature
+        </p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-amber-50">
+          Skip Multiplayer Safeguards?
+        </h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          This will allow you to access multiplayer regardless of the general minimum round count
+          and any playlist-specific round requirement.
+        </p>
+
+        <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4">
+          <p className="text-sm font-semibold text-amber-100">
+            These safeguards are not here to annoy you:
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-200/90">
+            <li>
+              The global multiplayer minimum helps ensure everyone starts from a baseline good
+              experience
+            </li>
+            <li>Large playlists can still require more installed rounds than the global minimum</li>
+            <li>You may encounter empty rounds, repeated content, or broken match flows</li>
+            <li>
+              Disabling both checks may result in a bad user experience for you and other players
+            </li>
+          </ul>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onMouseEnter={playHoverSound}
+            onClick={onCancel}
+            className="rounded-xl border border-zinc-600 bg-zinc-900/80 px-4 py-2 text-sm font-semibold text-zinc-200 transition-all duration-200 hover:border-zinc-400 hover:text-zinc-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onMouseEnter={playHoverSound}
+            onClick={onConfirm}
+            className="rounded-xl border border-amber-300/70 bg-amber-500/25 px-4 py-2 text-sm font-semibold text-amber-100 transition-all duration-200 hover:border-amber-200/90 hover:bg-amber-500/40"
+          >
+            I Understand, Disable Safeguards
           </button>
         </div>
       </div>
@@ -1640,7 +2298,8 @@ function AutoScanFoldersCard({
       <div className="mb-4">
         <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Library</h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Added folders import immediately, including legacy video-folder fallback, and are rescanned on startup.
+          Added folders import immediately, including legacy video-folder fallback, and are
+          rescanned on startup.
         </p>
       </div>
 
@@ -1649,10 +2308,11 @@ function AutoScanFoldersCard({
           {notices.map((notice) => (
             <div
               key={`${notice.folderPath}:${notice.message}`}
-              className={`rounded-xl border px-3 py-2 text-xs ${notice.tone === "error"
-                ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
-                : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
-                }`}
+              className={`rounded-xl border px-3 py-2 text-xs ${
+                notice.tone === "error"
+                  ? "border-rose-300/35 bg-rose-500/10 text-rose-100"
+                  : "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
+              }`}
             >
               <div className="truncate font-semibold">{notice.folderPath}</div>
               <div className="mt-1 text-zinc-200">{notice.message}</div>
@@ -1681,10 +2341,11 @@ function AutoScanFoldersCard({
                 type="button"
                 disabled={isPending}
                 onClick={() => onRemoveFolder(folderPath)}
-                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${isPending
-                  ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-                  : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
-                  }`}
+                className={`rounded-lg border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${
+                  isPending
+                    ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                    : "border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35"
+                }`}
               >
                 Remove
               </button>
@@ -1698,10 +2359,11 @@ function AutoScanFoldersCard({
         onMouseEnter={playHoverSound}
         disabled={isPending}
         onClick={onAddFolders}
-        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isPending
-          ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-          : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-          }`}
+        className={`mt-4 rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+          isPending
+            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+            : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+        }`}
       >
         {isPending ? "Updating..." : "Add Folder"}
       </button>
@@ -1717,7 +2379,11 @@ type SourceDraft = {
   username: string;
   password: string;
   enabled: boolean;
-  tagSelections: Array<{ id: string; name: string; roundTypeFallback: "Normal" | "Interjection" | "Cum" }>;
+  tagSelections: Array<{
+    id: string;
+    name: string;
+    roundTypeFallback: "Normal" | "Interjection" | "Cum";
+  }>;
 };
 
 function toSourceDraft(source: ExternalSource): SourceDraft {
@@ -1737,7 +2403,9 @@ function toSourceDraft(source: ExternalSource): SourceDraft {
   };
 }
 
-function getSelectableAuthModeValue(authMode: SourceDraft["authMode"]): "none" | "apiKey" | typeof LEGACY_LOGIN_AUTH_VALUE {
+function getSelectableAuthModeValue(
+  authMode: SourceDraft["authMode"]
+): "none" | "apiKey" | typeof LEGACY_LOGIN_AUTH_VALUE {
   return authMode === "login" ? LEGACY_LOGIN_AUTH_VALUE : authMode;
 }
 
@@ -1750,8 +2418,12 @@ function SourceIntegrationsCard() {
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tagSearchQueryBySource, setTagSearchQueryBySource] = useState<Record<string, string>>({});
-  const [tagSearchResultsBySource, setTagSearchResultsBySource] = useState<Record<string, StashTagResult["tags"]>>({});
-  const [tagSearchPendingBySource, setTagSearchPendingBySource] = useState<Record<string, boolean>>({});
+  const [tagSearchResultsBySource, setTagSearchResultsBySource] = useState<
+    Record<string, StashTagResult["tags"]>
+  >({});
+  const [tagSearchPendingBySource, setTagSearchPendingBySource] = useState<Record<string, boolean>>(
+    {}
+  );
   const [newSourceDraft, setNewSourceDraft] = useState<SourceDraft>({
     name: "",
     baseUrl: "",
@@ -1764,14 +2436,17 @@ function SourceIntegrationsCard() {
   });
 
   const refresh = async () => {
-    const [nextSources, nextSyncStatus] = await Promise.all([integrations.listSources(), integrations.getSyncStatus()]);
+    const [nextSources, nextSyncStatus] = await Promise.all([
+      integrations.listSources(),
+      integrations.getSyncStatus(),
+    ]);
     setSources(nextSources);
     setSyncStatus(nextSyncStatus);
     setDrafts(
       nextSources.reduce<Record<string, SourceDraft>>((acc, source) => {
         acc[source.id] = toSourceDraft(source);
         return acc;
-      }, {}),
+      }, {})
     );
   };
 
@@ -1932,7 +2607,10 @@ function SourceIntegrationsCard() {
     if (!draft) return;
     if (draft.tagSelections.some((entry) => entry.id === tag.id)) return;
     patchDraft(sourceId, {
-      tagSelections: [...draft.tagSelections, { id: tag.id, name: tag.name, roundTypeFallback: "Normal" }],
+      tagSelections: [
+        ...draft.tagSelections,
+        { id: tag.id, name: tag.name, roundTypeFallback: "Normal" },
+      ],
     });
   };
 
@@ -1949,7 +2627,9 @@ function SourceIntegrationsCard() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Sources</h2>
-          <p className="mt-1 text-sm text-zinc-300">Configure Stash instances, tags, and run sync.</p>
+          <p className="mt-1 text-sm text-zinc-300">
+            Configure Stash instances, tags, and run sync.
+          </p>
         </div>
         <button
           type="button"
@@ -1959,10 +2639,11 @@ function SourceIntegrationsCard() {
             playSelectSound();
             void syncNow();
           }}
-          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${isSyncing
-            ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
-            : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
-            }`}
+          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+            isSyncing
+              ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+              : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+          }`}
         >
           {isSyncing ? "Syncing..." : "Sync Now"}
         </button>
@@ -1971,9 +2652,14 @@ function SourceIntegrationsCard() {
       {syncStatus && (
         <div className="mb-4 rounded-xl border border-violet-300/25 bg-black/35 p-3 text-xs text-zinc-300">
           <div>State: {syncStatus.state}</div>
-          <div>Sources: {syncStatus.stats.sourcesSynced}/{syncStatus.stats.sourcesSeen}</div>
+          <div>
+            Sources: {syncStatus.stats.sourcesSynced}/{syncStatus.stats.sourcesSeen}
+          </div>
           <div>Scenes: {syncStatus.stats.scenesSeen}</div>
-          <div>Created/Updated/Linked: {syncStatus.stats.roundsCreated}/{syncStatus.stats.roundsUpdated}/{syncStatus.stats.roundsLinked}</div>
+          <div>
+            Created/Updated/Linked: {syncStatus.stats.roundsCreated}/
+            {syncStatus.stats.roundsUpdated}/{syncStatus.stats.roundsLinked}
+          </div>
           <div>Resources Added: {syncStatus.stats.resourcesAdded}</div>
         </div>
       )}
@@ -1987,25 +2673,35 @@ function SourceIntegrationsCard() {
       <div className="mb-6 rounded-2xl border border-violet-300/25 bg-black/35 p-4">
         <p className="mb-3 text-sm font-semibold text-zinc-100">Add Stash Source</p>
         <div className="mb-3 rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively supported.
+          Only the newest Stash release, currently version {ACTIVE_STASH_VERSION}, is actively
+          supported.
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           <input
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
             placeholder="Source name"
             value={newSourceDraft.name}
-            onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, name: event.target.value }))}
+            onChange={(event) =>
+              setNewSourceDraft((prev) => ({ ...prev, name: event.target.value }))
+            }
           />
           <input
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
             placeholder="https://stash.example.com"
             value={newSourceDraft.baseUrl}
-            onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
+            onChange={(event) =>
+              setNewSourceDraft((prev) => ({ ...prev, baseUrl: event.target.value }))
+            }
           />
           <select
             className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
             value={newSourceDraft.authMode}
-            onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, authMode: event.target.value as "none" | "apiKey" }))}
+            onChange={(event) =>
+              setNewSourceDraft((prev) => ({
+                ...prev,
+                authMode: event.target.value as "none" | "apiKey",
+              }))
+            }
           >
             <option value="none">No Auth</option>
             <option value="apiKey">API Key</option>
@@ -2015,7 +2711,9 @@ function SourceIntegrationsCard() {
               className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
               placeholder="API key"
               value={newSourceDraft.apiKey}
-              onChange={(event) => setNewSourceDraft((prev) => ({ ...prev, apiKey: event.target.value }))}
+              onChange={(event) =>
+                setNewSourceDraft((prev) => ({ ...prev, apiKey: event.target.value }))
+              }
             />
           ) : (
             <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
@@ -2047,7 +2745,10 @@ function SourceIntegrationsCard() {
             if (!draft) return null;
 
             return (
-              <div key={source.id} className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+              <div
+                key={source.id}
+                className="rounded-2xl border border-violet-300/25 bg-black/35 p-4"
+              >
                 <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   <input
                     className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
@@ -2064,11 +2765,17 @@ function SourceIntegrationsCard() {
                   <select
                     className="rounded-xl border border-violet-300/30 bg-black/45 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-300/75"
                     value={getSelectableAuthModeValue(draft.authMode)}
-                    onChange={(event) => patchDraft(source.id, { authMode: event.target.value as "none" | "apiKey" })}
+                    onChange={(event) =>
+                      patchDraft(source.id, { authMode: event.target.value as "none" | "apiKey" })
+                    }
                   >
                     <option value="none">No Auth</option>
                     <option value="apiKey">API Key</option>
-                    {draft.authMode === "login" ? <option value={LEGACY_LOGIN_AUTH_VALUE} disabled>Legacy Login</option> : null}
+                    {draft.authMode === "login" ? (
+                      <option value={LEGACY_LOGIN_AUTH_VALUE} disabled>
+                        Legacy Login
+                      </option>
+                    ) : null}
                   </select>
                   {draft.authMode === "apiKey" ? (
                     <input
@@ -2079,7 +2786,8 @@ function SourceIntegrationsCard() {
                     />
                   ) : draft.authMode === "login" ? (
                     <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-                      Legacy username/password login is no longer offered for Stash sources. Switch this source to No Auth or API Key.
+                      Legacy username/password login is no longer offered for Stash sources. Switch
+                      this source to No Auth or API Key.
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-violet-300/25 bg-black/20 px-3 py-2 text-sm text-zinc-400">
@@ -2096,7 +2804,10 @@ function SourceIntegrationsCard() {
                       placeholder="Search tags"
                       value={tagSearchQueryBySource[source.id] ?? ""}
                       onChange={(event) =>
-                        setTagSearchQueryBySource((prev) => ({ ...prev, [source.id]: event.target.value }))
+                        setTagSearchQueryBySource((prev) => ({
+                          ...prev,
+                          [source.id]: event.target.value,
+                        }))
                       }
                       onKeyDown={(event) => {
                         if (event.key !== "Enter") return;
@@ -2128,8 +2839,13 @@ function SourceIntegrationsCard() {
 
                   <div className="mt-3 space-y-2">
                     {draft.tagSelections.map((entry) => (
-                      <div key={entry.id} className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-black/30 px-2 py-2">
-                        <div className="min-w-0 flex-1 truncate text-xs text-zinc-200">{entry.name}</div>
+                      <div
+                        key={entry.id}
+                        className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-black/30 px-2 py-2"
+                      >
+                        <div className="min-w-0 flex-1 truncate text-xs text-zinc-200">
+                          {entry.name}
+                        </div>
                         <select
                           className="rounded border border-zinc-600 bg-black px-2 py-1 text-xs text-zinc-100"
                           value={entry.roundTypeFallback}
@@ -2137,8 +2853,14 @@ function SourceIntegrationsCard() {
                             patchDraft(source.id, {
                               tagSelections: draft.tagSelections.map((selection) =>
                                 selection.id === entry.id
-                                  ? { ...selection, roundTypeFallback: event.target.value as "Normal" | "Interjection" | "Cum" }
-                                  : selection,
+                                  ? {
+                                      ...selection,
+                                      roundTypeFallback: event.target.value as
+                                        | "Normal"
+                                        | "Interjection"
+                                        | "Cum",
+                                    }
+                                  : selection
                               ),
                             })
                           }
@@ -2151,7 +2873,9 @@ function SourceIntegrationsCard() {
                           type="button"
                           onClick={() =>
                             patchDraft(source.id, {
-                              tagSelections: draft.tagSelections.filter((selection) => selection.id !== entry.id),
+                              tagSelections: draft.tagSelections.filter(
+                                (selection) => selection.id !== entry.id
+                              ),
                             })
                           }
                           className="rounded border border-rose-400/60 bg-rose-500/20 px-2 py-1 text-xs text-rose-100"
@@ -2183,7 +2907,9 @@ function SourceIntegrationsCard() {
                   <button
                     type="button"
                     disabled={pendingSourceId === source.id}
-                    onClick={() => void integrations.setSourceEnabled(source.id, !source.enabled).then(refresh)}
+                    onClick={() =>
+                      void integrations.setSourceEnabled(source.id, !source.enabled).then(refresh)
+                    }
                     className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-3 py-2 text-xs font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {source.enabled ? "Disable" : "Enable"}
@@ -2235,33 +2961,37 @@ function HelpShortcutsCard() {
       style={{ animationDelay: "0.08s" }}
     >
       <div className="mb-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">Keyboard Shortcuts</h2>
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Keyboard Shortcuts
+        </h2>
         <p className="mt-1 text-sm text-zinc-300">
-          Every shortcut currently wired into the app is listed here, including game-only and development-only bindings.
+          Every shortcut currently wired into the app is listed here.
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="divide-y divide-violet-300/15">
         {shortcutGroups.map((group) => (
-          <section key={group.id} className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-100">{group.title}</h3>
-              <p className="mt-1 text-sm text-zinc-400">{group.description}</p>
-            </div>
-            <div className="space-y-2">
+          <details key={group.id} className="group py-3" open>
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
+              <span>{group.title}</span>
+              <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">
+                ▾
+              </span>
+            </summary>
+            <div className="mt-3 space-y-2 pl-2">
               {group.shortcuts.map((shortcut) => (
                 <div
                   key={`${group.id}-${shortcut.keys}`}
-                  className="flex flex-col gap-2 rounded-xl border border-white/8 bg-black/25 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                  className="flex items-center justify-between gap-3 py-1"
                 >
-                  <kbd className="w-fit rounded-lg border border-violet-300/20 bg-violet-500/10 px-2.5 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-xs font-bold uppercase tracking-[0.16em] text-violet-100">
+                  <kbd className="rounded border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-bold uppercase tracking-[0.16em] text-violet-100">
                     {shortcut.keys}
                   </kbd>
-                  <p className="text-sm text-zinc-300 sm:max-w-[70%]">{shortcut.description}</p>
+                  <span className="text-xs text-zinc-400">{shortcut.description}</span>
                 </div>
               ))}
             </div>
-          </section>
+          </details>
         ))}
       </div>
     </section>
@@ -2307,7 +3037,10 @@ function SelectRow({ setting, disabled }: { setting: SelectSetting; disabled: bo
   };
 
   return (
-    <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+    <div
+      className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+      onMouseEnter={playHoverSound}
+    >
       <div className="mb-3">
         <p className="font-semibold text-zinc-100">{setting.label}</p>
         <p className="text-sm text-zinc-400">{setting.description}</p>
@@ -2365,7 +3098,10 @@ function NumberRow({ setting, disabled }: { setting: NumberSetting; disabled: bo
   };
 
   return (
-    <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+    <div
+      className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+      onMouseEnter={playHoverSound}
+    >
       <div className="mb-3">
         <p className="font-semibold text-zinc-100">{setting.label}</p>
         <p className="text-sm text-zinc-400">{setting.description}</p>
@@ -2418,7 +3154,10 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
   const switchedOn = setting.value;
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+    <div
+      className="flex items-center justify-between gap-4 rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+      onMouseEnter={playHoverSound}
+    >
       <div>
         <p className="font-semibold text-zinc-100">{setting.label}</p>
         <p className="text-sm text-zinc-400">{setting.description}</p>
@@ -2431,7 +3170,7 @@ function ToggleRow({ setting, disabled }: { setting: ToggleSetting; disabled: bo
         aria-checked={switchedOn}
         disabled={disabled || isPending}
         onClick={() => void handleToggle()}
-        className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${switchedOn ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"} ${(disabled || isPending) ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+        className={`relative h-8 w-16 shrink-0 overflow-hidden rounded-full border transition-all duration-200 ${switchedOn ? "border-violet-300/80 bg-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.45)]" : "border-zinc-600 bg-zinc-800"} ${disabled || isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span
           className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${switchedOn ? "translate-x-8" : "translate-x-0"}`}
@@ -2463,7 +3202,10 @@ function TextRow({ setting, disabled }: { setting: TextSetting; disabled: boolea
   };
 
   return (
-    <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45" onMouseEnter={playHoverSound}>
+    <div
+      className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
+      onMouseEnter={playHoverSound}
+    >
       <div className="mb-3">
         <p className="font-semibold text-zinc-100">{setting.label}</p>
         <p className="text-sm text-zinc-400">{setting.description}</p>
@@ -2500,123 +3242,93 @@ function CreditsCard() {
   const playtesters = ["Kyral", "VladTheImplier", "Aodin"];
 
   return (
-    <div className="animate-entrance space-y-6" style={{ animationDelay: "0.12s" }}>
-      <section className="rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl transition-all duration-300 hover:border-purple-400/40">
-        <div className="mb-6">
-          <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Credits</h2>
-          <p className="mt-1 text-sm text-zinc-300">
-            Special thanks to the community and creators who inspired this project.
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.12s" }}
+    >
+      <div className="mb-5">
+        <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Credits & License</h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Special thanks to the community and creators who inspired this project.
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-500/18 via-violet-500/14 to-black/45 p-4">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-fuchsia-200/80">
+          Playtesters
+        </p>
+        <p className="mt-1 text-sm text-fuchsia-50/90">
+          They helped improving and polishing the game.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {playtesters.map((playtester) => (
+            <span
+              key={playtester}
+              className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white"
+            >
+              {playtester}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="divide-y divide-violet-300/10">
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">anon fapland inventor</h3>
+          <p className="text-xs text-zinc-400">
+            The person who came up with the original fap land idea.
           </p>
         </div>
-
-        <div className="space-y-4">
-          <div
-            className="rounded-2xl border border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-500/18 via-violet-500/14 to-black/45 p-5 shadow-[0_0_28px_rgba(192,38,211,0.16)] transition-colors duration-200 hover:border-fuchsia-200/60"
-            onMouseEnter={playHoverSound}
-          >
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-fuchsia-200/80">Playtesters</p>
-            <h3 className="mt-2 text-lg font-extrabold tracking-tight text-white">Special thanks to our playtesters</h3>
-            <p className="mt-2 text-sm leading-6 text-fuchsia-50/90">They helped improving and polishing the game.</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {playtesters.map((playtester) => (
-                <span
-                  key={playtester}
-                  className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm font-semibold text-white"
-                >
-                  {playtester}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">anon fapland inventor</h3>
-            <p className="mt-1 text-sm text-zinc-400">The person who came up with the original idea.</p>
-          </div>
-
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">FapLandPartyDev</h3>
-            <p className="mt-1 text-sm text-zinc-400">Creator of the game.</p>
-          </div>
-
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">nakkub</h3>
-            <p className="mt-1 text-sm text-zinc-400">Credit for the original Godot version.</p>
-          </div>
-
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">tomper</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              For{" "}
-              <a
-                href="https://discuss.eroscripts.com/t/fapland-handy-edition/260780"
-                target="_blank"
-                rel="noreferrer"
-                className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
-                onMouseEnter={playHoverSound}
-                onClick={playSelectSound}
-              >
-                TheHandy version
-              </a>{" "}
-              that inspired this project.
-            </p>
-          </div>
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">FapLandPartyDev</h3>
+          <p className="text-xs text-zinc-400">Creator of the game.</p>
         </div>
-      </section>
-
-      <section className="rounded-3xl border border-violet-400/20 bg-zinc-950/45 p-5 backdrop-blur-xl transition-all duration-300 hover:border-violet-400/35">
-        <div className="mb-6">
-          <h2 className="text-xl font-extrabold tracking-tight text-violet-100">Software & License</h2>
-          <p className="mt-1 text-sm text-zinc-300">
-            Open source information and legal licensing.
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">nakkub</h3>
+          <p className="text-xs text-zinc-400">Credit for the original Godot version.</p>
+        </div>
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">tomper</h3>
+          <p className="text-xs text-zinc-400">
+            For{" "}
+            <a
+              href="https://discuss.eroscripts.com/t/fapland-handy-edition/260780"
+              target="_blank"
+              rel="noreferrer"
+              className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
+              onMouseEnter={playHoverSound}
+              onClick={playSelectSound}
+            >
+              TheHandy version
+            </a>{" "}
+            that inspired this project.
           </p>
         </div>
-
-        <div className="space-y-4">
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">Source Code</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Available on{" "}
-              <a
-                href="https://github.com/FapLandPartyDev/FapLand-Party-Edition"
-                target="_blank"
-                rel="noreferrer"
-                className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
-                onMouseEnter={playHoverSound}
-                onClick={playSelectSound}
-              >
-                GitHub
-              </a>
-            </p>
-          </div>
-
-          <div
-            className="rounded-2xl border border-violet-300/25 bg-black/35 p-4 transition-colors duration-200 hover:border-violet-300/45"
-            onMouseEnter={playHoverSound}
-          >
-            <h3 className="font-semibold text-zinc-100">License</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              This project is licensed under the{" "}
-              <span className="text-violet-100 font-bold">GNU Affero General Public License v3.0 (AGPL-3.0)</span>.
-            </p>
-          </div>
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">Source Code</h3>
+          <p className="text-xs text-zinc-400">
+            Available on{" "}
+            <a
+              href="https://github.com/FapLandPartyDev/FapLand-Party-Edition"
+              target="_blank"
+              rel="noreferrer"
+              className="text-violet-300 hover:text-violet-200 underline decoration-violet-300/50 underline-offset-2"
+              onMouseEnter={playHoverSound}
+              onClick={playSelectSound}
+            >
+              GitHub
+            </a>
+          </p>
         </div>
-      </section>
-    </div>
+        <div className="py-3">
+          <h3 className="font-semibold text-zinc-100">License</h3>
+          <p className="text-xs text-zinc-400">
+            <span className="text-violet-100 font-bold">
+              GNU Affero General Public License v3.0 (AGPL-3.0)
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -1,8 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { z } from "zod";
+import * as z from "zod";
 import { AnimatedBackground } from "../components/AnimatedBackground";
+import { useControllerSurface } from "../controller";
 import { PlaylistResolutionModal } from "../components/PlaylistResolutionModal";
+import {
+  assertMultiplayerAllowed,
+  useMultiplayerSfwRedirect,
+} from "../hooks/useMultiplayerSfwGuard";
 import { db } from "../services/db";
 import {
   banLobbyPlayer,
@@ -13,6 +18,7 @@ import {
   kickLobbyPlayer,
   markDisconnected,
   resolvePlaylistConflicts,
+  setLobbyPublicState,
   setLobbyOpenState,
   setLobbyReady,
   startLobbyForAll,
@@ -32,6 +38,7 @@ const LobbySearchSchema = z.object({
 export const Route = createFileRoute("/multiplayer-lobby")({
   validateSearch: (search) => LobbySearchSchema.parse(search),
   loader: async ({ location }) => {
+    await assertMultiplayerAllowed();
     const search = LobbySearchSchema.parse(location.search);
     const [snapshot, ownPlayer, installedRounds] = await Promise.all([
       getLobbySnapshot(search.lobbyId),
@@ -54,7 +61,11 @@ function formatRole(player: MultiplayerLobbyPlayer): string {
   return "Player";
 }
 
-function getResolutionStorageKey(lobbyId: string, playerId: string, snapshot: MultiplayerLobbySnapshot | null): string | null {
+function getResolutionStorageKey(
+  lobbyId: string,
+  playerId: string,
+  snapshot: MultiplayerLobbySnapshot | null
+): string | null {
   if (!playerId || !snapshot) return null;
   const playlistSnapshot = snapshot.lobby.playlistSnapshotJson;
   const exportedAt =
@@ -66,7 +77,31 @@ function getResolutionStorageKey(lobbyId: string, playerId: string, snapshot: Mu
 
 function MultiplayerLobbyRoute() {
   const navigate = useNavigate();
-  const { search, initialSnapshot, initialOwnPlayer, installedRounds: initialInstalledRounds } = Route.useLoaderData();
+  const sfwModeEnabled = useMultiplayerSfwRedirect();
+  const {
+    search,
+    initialSnapshot,
+    initialOwnPlayer,
+    installedRounds: initialInstalledRounds,
+  } = Route.useLoaderData();
+
+  if (sfwModeEnabled) {
+    return null;
+  }
+
+  const handleControllerBack = () => {
+    void navigate({ to: "/multiplayer" });
+    return true;
+  };
+
+  useControllerSurface({
+    id: "multiplayer-lobby-page",
+    priority: 10,
+    enabled:
+      typeof window !== "undefined" &&
+      localStorage.getItem("experimental.controllerSupportEnabled") === "true",
+    onBack: handleControllerBack,
+  });
 
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);
   const [ownPlayer, setOwnPlayer] = useState<MultiplayerLobbyPlayer | null>(initialOwnPlayer);
@@ -76,7 +111,9 @@ function MultiplayerLobbyRoute() {
   const [copiedTarget, setCopiedTarget] = useState<"code" | "link" | null>(null);
   const [antiPerkFeed, setAntiPerkFeed] = useState<MultiplayerAntiPerkEvent[]>([]);
   const [resolutionModalOpen, setResolutionModalOpen] = useState(false);
-  const [manualOverrides, setManualOverrides] = useState<Record<string, string | null | undefined>>({});
+  const [manualOverrides, setManualOverrides] = useState<Record<string, string | null | undefined>>(
+    {}
+  );
   const [manualOverridesLoaded, setManualOverridesLoaded] = useState(false);
   const autoEnterInFlightRef = useRef(false);
   const autoEnterNavigatedRef = useRef(false);
@@ -89,7 +126,7 @@ function MultiplayerLobbyRoute() {
   const ownPlayerId = ownPlayer?.id ?? search.playerId ?? "";
   const resolutionStorageKey = useMemo(
     () => getResolutionStorageKey(search.lobbyId, ownPlayerId, snapshot),
-    [ownPlayerId, search.lobbyId, snapshot],
+    [ownPlayerId, search.lobbyId, snapshot]
   );
 
   const refreshLobby = useCallback(async () => {
@@ -115,7 +152,9 @@ function MultiplayerLobbyRoute() {
             if (!mounted) return;
             void refreshLobby().catch((refreshError) => {
               if (!mounted) return;
-              setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh lobby.");
+              setError(
+                refreshError instanceof Error ? refreshError.message : "Failed to refresh lobby."
+              );
             });
           },
           onAntiPerkEvent: (event) => {
@@ -125,7 +164,11 @@ function MultiplayerLobbyRoute() {
         });
       } catch (subscribeError) {
         if (!mounted) return;
-        setError(subscribeError instanceof Error ? subscribeError.message : "Failed to subscribe to lobby updates.");
+        setError(
+          subscribeError instanceof Error
+            ? subscribeError.message
+            : "Failed to subscribe to lobby updates."
+        );
       }
     })();
 
@@ -144,7 +187,11 @@ function MultiplayerLobbyRoute() {
       void heartbeat(search.lobbyId, ownPlayerId)
         .then(() => sweepForfeits(search.lobbyId, 300))
         .catch((heartbeatError) => {
-          setError(heartbeatError instanceof Error ? heartbeatError.message : "Failed to send lobby heartbeat.");
+          setError(
+            heartbeatError instanceof Error
+              ? heartbeatError.message
+              : "Failed to send lobby heartbeat."
+          );
         });
     }, 15000);
 
@@ -192,19 +239,18 @@ function MultiplayerLobbyRoute() {
         setManualOverridesLoaded(true);
         return;
       }
-      const nextOverrides = Object.entries(parsed as Record<string, unknown>).reduce<Record<string, string | null | undefined>>(
-        (acc, [key, value]) => {
-          if (value === null) {
-            acc[key] = null;
-            return acc;
-          }
-          if (typeof value === "string" && value.trim().length > 0) {
-            acc[key] = value;
-          }
+      const nextOverrides = Object.entries(parsed as Record<string, unknown>).reduce<
+        Record<string, string | null | undefined>
+      >((acc, [key, value]) => {
+        if (value === null) {
+          acc[key] = null;
           return acc;
-        },
-        {},
-      );
+        }
+        if (typeof value === "string" && value.trim().length > 0) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
       setManualOverrides(nextOverrides);
       setManualOverridesLoaded(true);
     } catch {
@@ -219,11 +265,14 @@ function MultiplayerLobbyRoute() {
     window.localStorage.setItem(resolutionStorageKey, JSON.stringify(manualOverrides));
   }, [manualOverrides, manualOverridesLoaded, resolutionStorageKey]);
 
-  useEffect(() => () => {
-    if (copyResetTimeoutRef.current !== null) {
-      window.clearTimeout(copyResetTimeoutRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -270,7 +319,7 @@ function MultiplayerLobbyRoute() {
   }, [manualOverrides, resolution.exactMapping, resolution.suggestedMapping]);
   const unresolvedIssues = useMemo(
     () => resolution.issues.filter((issue) => !effectiveMapping[issue.key]),
-    [effectiveMapping, resolution.issues],
+    [effectiveMapping, resolution.issues]
   );
   const unresolvedCount = unresolvedIssues.length;
 
@@ -278,8 +327,11 @@ function MultiplayerLobbyRoute() {
   const ownPlayerState = ownPlayer?.state ?? null;
   const ownPlayerIsTerminal = ownPlayerState ? isTerminalPlayerState(ownPlayerState) : false;
   const activePlayerCount = useMemo(
-    () => (snapshot?.players ?? []).filter((player) => player.state !== "kicked" && !isTerminalPlayerState(player.state)).length,
-    [snapshot],
+    () =>
+      (snapshot?.players ?? []).filter(
+        (player) => player.state !== "kicked" && !isTerminalPlayerState(player.state)
+      ).length,
+    [snapshot]
   );
 
   useEffect(() => {
@@ -290,7 +342,15 @@ function MultiplayerLobbyRoute() {
     if (autoOpenedResolutionRef.current === autoOpenKey) return;
     autoOpenedResolutionRef.current = autoOpenKey;
     setResolutionModalOpen(true);
-  }, [manualOverridesLoaded, ownPlayerId, resolution.counts.missing, resolutionStorageKey, search.lobbyId, snapshot, unresolvedCount]);
+  }, [
+    manualOverridesLoaded,
+    ownPlayerId,
+    resolution.counts.missing,
+    resolutionStorageKey,
+    search.lobbyId,
+    snapshot,
+    unresolvedCount,
+  ]);
 
   const handleReady = async () => {
     if (!ownPlayerId) {
@@ -327,7 +387,9 @@ function MultiplayerLobbyRoute() {
       await startLobbyForAll(snapshot.lobby.id);
       await refreshLobby();
     } catch (startError) {
-      setError(startError instanceof Error ? startError.message : "Failed to start for all players.");
+      setError(
+        startError instanceof Error ? startError.message : "Failed to start for all players."
+      );
     } finally {
       setPending(false);
     }
@@ -357,12 +419,24 @@ function MultiplayerLobbyRoute() {
         });
         await refreshLobby();
       } catch (readyError) {
-        setError(readyError instanceof Error ? readyError.message : "Failed to auto-set ready state.");
+        setError(
+          readyError instanceof Error ? readyError.message : "Failed to auto-set ready state."
+        );
       } finally {
         autoReadyInFlightRef.current = false;
       }
     })();
-  }, [effectiveMapping, ownPlayer, ownPlayerId, ownPlayerIsTerminal, pending, refreshLobby, search.lobbyId, snapshot, unresolvedCount]);
+  }, [
+    effectiveMapping,
+    ownPlayer,
+    ownPlayerId,
+    ownPlayerIsTerminal,
+    pending,
+    refreshLobby,
+    search.lobbyId,
+    snapshot,
+    unresolvedCount,
+  ]);
 
   useEffect(() => {
     const lobby = snapshot?.lobby;
@@ -380,7 +454,11 @@ function MultiplayerLobbyRoute() {
 
     void (async () => {
       try {
-        if (ownPlayer.state === "joined" || ownPlayer.state === "disconnected" || ownPlayer.state === "ready") {
+        if (
+          ownPlayer.state === "joined" ||
+          ownPlayer.state === "disconnected" ||
+          ownPlayer.state === "ready"
+        ) {
           await setLobbyReady({
             lobbyId: search.lobbyId,
             playerId: ownPlayerId,
@@ -401,21 +479,34 @@ function MultiplayerLobbyRoute() {
         });
       } catch (autoEnterError) {
         autoEnterNavigatedRef.current = false;
-        setError(autoEnterError instanceof Error ? autoEnterError.message : "Failed to join running match.");
+        setError(
+          autoEnterError instanceof Error ? autoEnterError.message : "Failed to join running match."
+        );
       } finally {
         autoEnterInFlightRef.current = false;
       }
     })();
-  }, [activePlayerCount, effectiveMapping, navigate, ownPlayer, ownPlayerId, ownPlayerIsTerminal, refreshLobby, search.lobbyId, snapshot, unresolvedCount]);
+  }, [
+    activePlayerCount,
+    effectiveMapping,
+    navigate,
+    ownPlayer,
+    ownPlayerId,
+    ownPlayerIsTerminal,
+    refreshLobby,
+    search.lobbyId,
+    snapshot,
+    unresolvedCount,
+  ]);
 
   const lobby = snapshot?.lobby ?? null;
   const players = snapshot?.players ?? [];
   const inviteCode = (search.inviteCode ?? lobby?.inviteCode ?? "").trim().toUpperCase();
   const showRunningConflictBlocker =
-    lobby?.status === "running"
-    && unresolvedCount > 0
-    && ownPlayerState !== "kicked"
-    && !ownPlayerIsTerminal;
+    lobby?.status === "running" &&
+    unresolvedCount > 0 &&
+    ownPlayerState !== "kicked" &&
+    !ownPlayerIsTerminal;
 
   const copyFallback = useCallback((text: string) => {
     const textarea = document.createElement("textarea");
@@ -432,26 +523,29 @@ function MultiplayerLobbyRoute() {
     }
   }, []);
 
-  const copyToClipboard = useCallback(async (text: string, target: "code" | "link") => {
-    if (!text) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        copyFallback(text);
+  const copyToClipboard = useCallback(
+    async (text: string, target: "code" | "link") => {
+      if (!text) return;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          copyFallback(text);
+        }
+        setCopiedTarget(target);
+        if (copyResetTimeoutRef.current !== null) {
+          window.clearTimeout(copyResetTimeoutRef.current);
+        }
+        copyResetTimeoutRef.current = window.setTimeout(() => {
+          setCopiedTarget(null);
+          copyResetTimeoutRef.current = null;
+        }, 1200);
+      } catch (copyError) {
+        setError(copyError instanceof Error ? copyError.message : "Failed to copy invite info.");
       }
-      setCopiedTarget(target);
-      if (copyResetTimeoutRef.current !== null) {
-        window.clearTimeout(copyResetTimeoutRef.current);
-      }
-      copyResetTimeoutRef.current = window.setTimeout(() => {
-        setCopiedTarget(null);
-        copyResetTimeoutRef.current = null;
-      }, 1200);
-    } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : "Failed to copy invite info.");
-    }
-  }, [copyFallback]);
+    },
+    [copyFallback]
+  );
 
   return (
     <div className="relative h-screen overflow-y-auto px-4 py-6 text-zinc-100 sm:px-6 sm:py-8">
@@ -469,7 +563,13 @@ function MultiplayerLobbyRoute() {
                 Lobby <span className="text-cyan-400">{inviteCode || "Unknown"}</span>
               </h1>
               <p className="mt-2 text-sm font-medium tracking-wide text-zinc-300">
-                Status: <span className={lobby?.status === "running" ? "text-emerald-400" : "text-amber-400"}>{lobby?.status ?? "unknown"}</span> | Lobby: {lobby?.name ?? "-"}
+                Status:{" "}
+                <span
+                  className={lobby?.status === "running" ? "text-emerald-400" : "text-amber-400"}
+                >
+                  {lobby?.status ?? "unknown"}
+                </span>{" "}
+                | Lobby: {lobby?.name ?? "-"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -540,7 +640,15 @@ function MultiplayerLobbyRoute() {
               Lobby Controls
             </h2>
             <p className="mt-1 text-xs text-zinc-300 font-medium tracking-wide">
-              Invite code only join flow. Late join is <span className="font-semibold text-cyan-300">{lobby.allowLateJoin ? "enabled" : "disabled"}</span>.
+              Visibility is{" "}
+              <span className="font-semibold text-cyan-300">
+                {lobby.isPublic ? "public" : "private"}
+              </span>
+              . Late join is{" "}
+              <span className="font-semibold text-cyan-300">
+                {lobby.allowLateJoin ? "enabled" : "disabled"}
+              </span>
+              . {lobby.isPublic ? "Public lobbies appear in the browser when they are also open and joinable." : "Private lobbies are invite-code only."}
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
@@ -567,6 +675,31 @@ function MultiplayerLobbyRoute() {
               {isHost && (
                 <button
                   type="button"
+                  className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-5 py-3 text-sm font-bold uppercase tracking-wider text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.05)] transition-all hover:bg-emerald-500/20 hover:shadow-[0_0_20px_rgba(16,185,129,0.2)] active:scale-[0.98]"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await setLobbyPublicState(lobby.id, !lobby.isPublic);
+                        await refreshLobby();
+                      } catch (visibilityError) {
+                        setError(
+                          visibilityError instanceof Error
+                            ? visibilityError.message
+                            : "Failed to update public lobby visibility."
+                        );
+                      }
+                    })();
+                  }}
+                >
+                  {lobby.isPublic
+                    ? "Public Listing Enabled (Click to Hide)"
+                    : "Private Lobby (Click to Advertise)"}
+                </button>
+              )}
+
+              {isHost && (
+                <button
+                  type="button"
                   className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-5 py-3 text-sm font-bold uppercase tracking-wider text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.05)] transition-all hover:bg-amber-500/20 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] active:scale-[0.98]"
                   onClick={() => {
                     void (async () => {
@@ -574,12 +707,18 @@ function MultiplayerLobbyRoute() {
                         await setLobbyOpenState(lobby.id, !lobby.isOpen);
                         await refreshLobby();
                       } catch (openError) {
-                        setError(openError instanceof Error ? openError.message : "Failed to update lobby lock state.");
+                        setError(
+                          openError instanceof Error
+                            ? openError.message
+                            : "Failed to update lobby lock state."
+                        );
                       }
                     })();
                   }}
                 >
-                  {lobby.isOpen ? "Lobby Unlocked (Click to Lock)" : "Lobby Locked (Click to Unlock)"}
+                  {lobby.isOpen
+                    ? "Lobby Unlocked (Click to Lock)"
+                    : "Lobby Locked (Click to Unlock)"}
                 </button>
               )}
             </div>
@@ -587,11 +726,14 @@ function MultiplayerLobbyRoute() {
             {(resolution.issues.length > 0 || unresolvedCount > 0) && (
               <div className="mt-5 rounded-xl border border-rose-500/30 bg-rose-950/40 p-4">
                 <div className="text-xs font-semibold uppercase tracking-widest text-rose-300">
-                  Exact: <span className="font-bold text-emerald-300">{resolution.counts.exact}</span>
+                  Exact:{" "}
+                  <span className="font-bold text-emerald-300">{resolution.counts.exact}</span>
                   {" • "}
-                  Suggested: <span className="font-bold text-cyan-300">{resolution.counts.suggested}</span>
+                  Suggested:{" "}
+                  <span className="font-bold text-cyan-300">{resolution.counts.suggested}</span>
                   {" • "}
-                  Remaining missing: <span className="font-bold text-rose-400">{unresolvedCount}</span>
+                  Remaining missing:{" "}
+                  <span className="font-bold text-rose-400">{unresolvedCount}</span>
                 </div>
                 <div className="mt-3">
                   <button
@@ -604,9 +746,15 @@ function MultiplayerLobbyRoute() {
                 </div>
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2 text-xs font-medium text-zinc-300">
                   {unresolvedIssues.slice(0, 10).map((item) => (
-                    <li key={item.key} className="flex items-center gap-2 rounded-lg bg-black/40 px-3 py-2">
+                    <li
+                      key={item.key}
+                      className="flex items-center gap-2 rounded-lg bg-black/40 px-3 py-2"
+                    >
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.8)]"></span>
-                      <span className="truncate">{item.ref.name} <span className="opacity-50">({item.ref.type ?? "Unknown"})</span></span>
+                      <span className="truncate">
+                        {item.ref.name}{" "}
+                        <span className="opacity-50">({item.ref.type ?? "Unknown"})</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -630,28 +778,51 @@ function MultiplayerLobbyRoute() {
                 const progress = snapshot?.progressByPlayerId[player.id];
                 const isReady = player.state === "ready" || player.state === "joined";
                 const isHostPlayer = player.role === "host";
-                const borderClass = isReady ? "border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]" : "border-white/10";
+                const borderClass = isReady
+                  ? "border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
+                  : "border-white/10";
                 const bgClass = isReady ? "bg-emerald-500/10" : "bg-black/30";
 
                 return (
-                  <div key={player.id} className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border ${borderClass} ${bgClass} p-4 transition-all hover:scale-[1.02] hover:bg-black/40`}>
+                  <div
+                    key={player.id}
+                    className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border ${borderClass} ${bgClass} p-4 transition-all hover:scale-[1.02] hover:bg-black/40`}
+                  >
                     <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-white/5 to-transparent rounded-bl-full pointer-events-none" />
 
                     <div className="flex items-start justify-between gap-3 relative z-10">
                       <div className="min-w-0 flex-1">
                         <div className="font-[family-name:var(--font-jetbrains-mono)] text-xl font-bold text-zinc-100 truncate flex items-center gap-2">
-                          {isHostPlayer && <span title="Host" className="text-amber-400">★</span>}
+                          {isHostPlayer && (
+                            <span title="Host" className="text-amber-400">
+                              ★
+                            </span>
+                          )}
                           {player.displayName}
                         </div>
                         <div className="mt-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                          <span className={isHostPlayer ? "text-amber-400" : ""}>{formatRole(player)}</span>
+                          <span className={isHostPlayer ? "text-amber-400" : ""}>
+                            {formatRole(player)}
+                          </span>
                           <span className="h-1 w-1 rounded-full bg-zinc-600"></span>
-                          <span className={isReady ? "text-emerald-400" : "text-amber-400"}>{player.state}</span>
+                          <span className={isReady ? "text-emerald-400" : "text-amber-400"}>
+                            {player.state}
+                          </span>
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-col items-end text-right text-[11px] font-semibold tracking-widest text-zinc-400 bg-black/40 rounded-lg p-2 border border-white/5">
-                        <span className="mb-1">POS <span className="text-zinc-200 text-xs">{progress?.positionIndex ?? 0}</span></span>
-                        <span className="mb-1">PTS <span className="text-zinc-200 text-xs">{progress?.score ?? player.finalScore ?? 0}</span></span>
+                        <span className="mb-1">
+                          POS{" "}
+                          <span className="text-zinc-200 text-xs">
+                            {progress?.positionIndex ?? 0}
+                          </span>
+                        </span>
+                        <span className="mb-1">
+                          PTS{" "}
+                          <span className="text-zinc-200 text-xs">
+                            {progress?.score ?? player.finalScore ?? 0}
+                          </span>
+                        </span>
                         <span className="text-amber-400">₪ {progress?.money ?? 0}</span>
                       </div>
                     </div>
@@ -667,7 +838,11 @@ function MultiplayerLobbyRoute() {
                                 await kickLobbyPlayer(search.lobbyId, player.id);
                                 await refreshLobby();
                               } catch (kickError) {
-                                setError(kickError instanceof Error ? kickError.message : "Failed to kick player.");
+                                setError(
+                                  kickError instanceof Error
+                                    ? kickError.message
+                                    : "Failed to kick player."
+                                );
                               }
                             })();
                           }}
@@ -683,7 +858,11 @@ function MultiplayerLobbyRoute() {
                                 await banLobbyPlayer(search.lobbyId, player.id, "Host ban");
                                 await refreshLobby();
                               } catch (banError) {
-                                setError(banError instanceof Error ? banError.message : "Failed to ban player.");
+                                setError(
+                                  banError instanceof Error
+                                    ? banError.message
+                                    : "Failed to ban player."
+                                );
                               }
                             })();
                           }}
@@ -713,7 +892,10 @@ function MultiplayerLobbyRoute() {
                 </div>
               )}
               {antiPerkFeed.map((event) => (
-                <div key={event.id} className="relative overflow-hidden rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 shadow-[0_0_15px_rgba(244,63,94,0.05)] transition-all hover:border-rose-400/50">
+                <div
+                  key={event.id}
+                  className="relative overflow-hidden rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 shadow-[0_0_15px_rgba(244,63,94,0.05)] transition-all hover:border-rose-400/50"
+                >
                   <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-rose-400 to-pink-600"></div>
                   <div className="pl-3 flex flex-col gap-1">
                     <div className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-bold tracking-wider text-rose-100">

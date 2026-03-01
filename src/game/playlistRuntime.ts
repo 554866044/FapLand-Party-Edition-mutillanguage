@@ -11,6 +11,7 @@ import {
   resolvePortableRoundRefExact,
   toPortableRoundRefFromRound,
 } from "./playlistResolution";
+import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "./data/perks";
 import type {
   BoardField,
   BoardFieldKind,
@@ -193,15 +194,15 @@ function buildLinearConfig(
       triggerChancePerCompletedRound: 0.35,
     },
     perkPool: {
-      enabledPerkIds: [],
-      enabledAntiPerkIds: [],
+      enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+      enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
     },
     probabilityScaling: {
       initialIntermediaryProbability: 0.1,
       initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     singlePlayer: {
@@ -219,6 +220,7 @@ function buildLinearConfig(
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
@@ -291,15 +293,15 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
       triggerChancePerCompletedRound: 0.35,
     },
     perkPool: {
-      enabledPerkIds: [],
-      enabledAntiPerkIds: [],
+      enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+      enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
     },
     probabilityScaling: {
       initialIntermediaryProbability: 0.1,
       initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     singlePlayer: {
@@ -317,6 +319,7 @@ function buildGraphConfig(config: GraphBoardConfig, installedRounds: ReadonlyArr
       scorePerActiveAntiPerk: 25,
       scorePerCumRoundSuccess: 420,
     },
+    roundStartDelayMs: 20000,
   };
 }
 
@@ -343,6 +346,7 @@ export function toGameConfigFromPlaylist(
 
   return {
     ...config,
+    roundStartDelayMs: playlistConfig.roundStartDelayMs,
     perkSelection: playlistConfig.perkSelection,
     perkPool: playlistConfig.perkPool,
     probabilityScaling: playlistConfig.probabilityScaling,
@@ -370,20 +374,21 @@ export function createDefaultPlaylistConfig(installedRounds: ReadonlyArray<Insta
       normalRoundOrder,
       cumRoundRefs,
     },
+    roundStartDelayMs: 20000,
     perkSelection: {
       optionsPerPick: 3,
       triggerChancePerCompletedRound: 0.35,
     },
     perkPool: {
-      enabledPerkIds: [],
-      enabledAntiPerkIds: [],
+      enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+      enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
     },
     probabilityScaling: {
       initialIntermediaryProbability: 0.1,
       initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     economy: {

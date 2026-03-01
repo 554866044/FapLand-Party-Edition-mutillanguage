@@ -23,8 +23,6 @@ import { playlists, type PlaylistExportPackageStatus, type StoredPlaylist } from
 import {
   playHoverSound,
   playMapConnectNodesSound,
-  playMapDeleteNodeSound,
-  playMapDisconnectNodesSound,
   playMapInvalidActionSound,
   playMapPlaceNodeSound,
   playMapUndoRedoSound,
@@ -185,15 +183,15 @@ const makeStartingConfig = (): EditorGraphConfig => ({
     triggerChancePerCompletedRound: 0.35,
   },
   perkPool: {
-    enabledPerkIds: [],
-    enabledAntiPerkIds: [],
+    enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+    enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
   },
   probabilityScaling: {
     initialIntermediaryProbability: 0.1,
     initialAntiPerkProbability: 0.1,
     intermediaryIncreasePerRound: 0.02,
     antiPerkIncreasePerRound: 0.015,
-    maxIntermediaryProbability: 0.85,
+    maxIntermediaryProbability: 1,
     maxAntiPerkProbability: 0.75,
   },
   economy: {
@@ -757,7 +755,6 @@ export function MapEditorRoute() {
       playMapInvalidActionSound();
       return;
     }
-    playMapDisconnectNodesSound();
     if (removedEdgeId) {
       flashTouchedEdge(removedEdgeId);
     }
@@ -780,7 +777,6 @@ export function MapEditorRoute() {
       return;
     }
 
-    playMapDisconnectNodesSound();
     flashTouchedEdge(edgeId);
     if (selection.selectedEdgeId === edgeId) {
       commitSelection(EMPTY_EDITOR_SELECTION);
@@ -871,22 +867,10 @@ export function MapEditorRoute() {
   }, [commitSelection, flashPlacedNode, perkOptions, tilesByKind, updateGraphConfig]);
 
   const deleteSelection = useCallback(() => {
-    if (selection.selectedNodeIds.length === 0 && !selection.selectedEdgeId) {
-      playMapInvalidActionSound();
-      return;
-    }
-
     const selectedNodeIds = new Set(selection.selectedNodeIds);
     const changed = updateGraphConfig((previous) => deleteSelectionFromConfig(previous, selection));
     if (!changed) {
-      playMapInvalidActionSound();
       return;
-    }
-
-    if (selection.selectedNodeIds.length > 0) {
-      playMapDeleteNodeSound();
-    } else {
-      playMapDisconnectNodesSound();
     }
 
     if (connectFromNodeId && selectedNodeIds.has(connectFromNodeId)) {

@@ -1,17 +1,45 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { useControllerSurface } from "../controller";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { useConverterState } from "../features/converter/useConverterState";
 import { ConverterHeader, pickConverterHeaderProps } from "../features/converter/ConverterHeader";
-import { SourcePanel, pickSourcePanelProps } from "../features/converter/SourcePanel";
 import { HeroPanel, pickHeroPanelProps } from "../features/converter/HeroPanel";
 import { VideoPreview, pickVideoPreviewProps } from "../features/converter/VideoPreview";
 import { Timeline, pickTimelineProps } from "../features/converter/Timeline";
-import { AutoDetectionPanel, pickAutoDetectionPanelProps } from "../features/converter/AutoDetectionPanel";
+import {
+  AutoDetectionPanel,
+  pickAutoDetectionPanelProps,
+} from "../features/converter/AutoDetectionPanel";
 import { SegmentList } from "../features/converter/SegmentList";
 import { StatusBar } from "../features/converter/StatusBar";
 import { HotkeyOverlay } from "../features/converter/HotkeyOverlay";
+import { ConverterSourcePicker } from "../features/converter/ConverterSourcePicker";
+
+type SourceSection = "round" | "hero" | "file";
+
+const SOURCE_SECTIONS: { id: SourceSection; icon: string; title: string; description: string }[] = [
+  {
+    id: "round",
+    icon: "🎬",
+    title: "From Round",
+    description: "Convert a standalone round into a hero with segments.",
+  },
+  {
+    id: "hero",
+    icon: "🦸",
+    title: "From Hero",
+    description: "Edit an existing hero and add or modify segments.",
+  },
+  {
+    id: "file",
+    icon: "📂",
+    title: "From File",
+    description: "Load a local video file and convert manually.",
+  },
+];
 
 export const Route = createFileRoute("/converter")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -25,6 +53,8 @@ function ConverterPage() {
   const navigate = useNavigate();
   const { sourceRoundId, heroName } = Route.useSearch();
   const state = useConverterState({ sourceRoundId, heroName });
+  const [activeSectionId, setActiveSectionId] = useState<SourceSection>("round");
+
   const goBack = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -33,70 +63,189 @@ function ConverterPage() {
     void navigate({ to: "/" });
   };
 
+  const handleControllerBack = () => {
+    playSelectSound();
+    goBack();
+    return true;
+  };
+
+  useControllerSurface({
+    id: "converter-page",
+    priority: 10,
+    enabled:
+      typeof window !== "undefined" &&
+      localStorage.getItem("experimental.controllerSupportEnabled") === "true",
+    onBack: handleControllerBack,
+  });
+
+  const activeSection = SOURCE_SECTIONS.find((s) => s.id === activeSectionId) ?? SOURCE_SECTIONS[0];
+
+  if (state.step === "select") {
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+        <AnimatedBackground />
+
+        <div className="relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row">
+          <nav className="animate-entrance flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-purple-400/20 bg-zinc-950/70 px-3 py-2 backdrop-blur-xl lg:w-60 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
+            <div className="hidden lg:mb-5 lg:block lg:px-3">
+              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[0.6rem] uppercase tracking-[0.45em] text-purple-200/70">
+                Conversion Lab
+              </p>
+              <h1 className="mt-1.5 text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]">
+                Round Converter
+              </h1>
+            </div>
+
+            {SOURCE_SECTIONS.map((section, index) => {
+              const active = section.id === activeSectionId;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  data-controller-focus-id={`converter-sidebar-${section.id}`}
+                  data-controller-down={
+                    index < SOURCE_SECTIONS.length - 1
+                      ? `converter-sidebar-${SOURCE_SECTIONS[index + 1].id}`
+                      : undefined
+                  }
+                  data-controller-up={
+                    index > 0 ? `converter-sidebar-${SOURCE_SECTIONS[index - 1].id}` : undefined
+                  }
+                  onMouseEnter={playHoverSound}
+                  onFocus={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setActiveSectionId(section.id);
+                  }}
+                  className={`settings-sidebar-item whitespace-nowrap ${active ? "is-active" : ""}`}
+                >
+                  <span className="settings-sidebar-icon">{section.icon}</span>
+                  <span>{section.title}</span>
+                </button>
+              );
+            })}
+
+            <div className="hidden lg:mt-auto lg:block lg:px-1 lg:pt-4">
+              <MenuButton
+                label="← Back"
+                controllerFocusId="converter-back"
+                onHover={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  goBack();
+                }}
+              />
+            </div>
+          </nav>
+
+          <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10 lg:py-8">
+            <main className="parallax-ui-none mx-auto flex w-full max-w-4xl flex-col gap-5">
+              <header className="settings-panel-enter mb-1" key={`header-${activeSection.id}`}>
+                <h2 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-200 via-purple-100 to-indigo-200 drop-shadow-[0_0_20px_rgba(139,92,246,0.4)] sm:text-3xl">
+                  {activeSection.title}
+                </h2>
+                <p className="mt-1.5 text-sm text-zinc-400">{activeSection.description}</p>
+              </header>
+
+              <div className="settings-panel-enter" key={`content-${activeSection.id}`}>
+                <ConverterSourcePicker
+                  section={activeSectionId}
+                  onSelectRound={(roundId) => void state.selectRoundAndEdit(roundId)}
+                  onSelectHero={(heroId) => void state.selectHeroAndEdit(heroId)}
+                  onSelectLocalVideo={() => void state.selectLocalAndEdit()}
+                  onSelectLocalFunscript={() => void state.attachLocalFunscript()}
+                />
+              </div>
+
+              <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6 lg:hidden">
+                <MenuButton
+                  label="Back to Main Menu"
+                  onHover={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    goBack();
+                  }}
+                />
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       <AnimatedBackground />
 
       <div className="relative z-10 h-screen overflow-y-auto px-4 py-8 sm:px-8">
         <main className="parallax-ui-none mx-auto flex w-full max-w-7xl flex-col gap-6 pb-6">
-          {/* Header */}
           <ConverterHeader
             {...pickConverterHeaderProps(state)}
-            onGoBack={() => {
-              playSelectSound();
-              goBack();
-            }}
+            onGoToSelect={() => state.goToSelectStep()}
           />
 
-          {/* Source + Hero setup */}
-          <section className="animate-entrance converter-panel-glass rounded-3xl p-4 sm:p-6">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <SourcePanel {...pickSourcePanelProps(state)} />
-              <HeroPanel {...pickHeroPanelProps(state)} />
-            </div>
-          </section>
-
-          {/* Preview + Timeline + Segments */}
-          <section className="animate-entrance converter-panel-glass rounded-3xl p-4 sm:p-6">
+          <section className="animate-entrance">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-3 space-y-4">
                 <VideoPreview {...pickVideoPreviewProps(state)} />
                 <Timeline {...pickTimelineProps(state)} />
               </div>
 
-              <div className="space-y-4 lg:col-span-2">
-                <AutoDetectionPanel {...pickAutoDetectionPanelProps(state)} />
-                <SegmentList
-                  sortedSegments={state.sortedSegments}
-                  selectedSegmentId={state.selectedSegmentId}
-                  selectedSegment={state.selectedSegment}
-                  heroName={state.heroName}
-                  onSelectSegment={state.setSelectedSegmentId}
-                  onRemoveSegment={state.removeSegment}
-                  onSeekToMs={(ms) => {
-                    state.seekToMs(ms);
-                    playSelectSound();
-                  }}
-                  onMergeSegmentWithNext={state.mergeSegmentWithNext}
-                  onSetSegmentCustomName={state.setSegmentCustomName}
-                  onSetSegmentBpm={state.setSegmentBpm}
-                  onResetSegmentBpm={state.resetSegmentBpm}
-                  onSetSegmentDifficulty={state.setSegmentDifficulty}
-                  onResetSegmentDifficulty={state.resetSegmentDifficulty}
-                  onSetSegmentType={state.setSegmentType}
-                  onUpdateSegmentTiming={state.updateSegmentTiming}
-                  setMessage={() => { }}
-                  setError={() => { }}
-                />
+              <div className="lg:col-span-2">
+                <div className="rounded-2xl border border-purple-400/25 bg-zinc-950/55 backdrop-blur-xl overflow-hidden">
+                  <div className="flex border-b border-zinc-700/50">
+                    <button
+                      type="button"
+                      onClick={() => {}}
+                      className="flex-1 px-4 py-2.5 text-sm font-medium border-b-2 border-violet-400 text-violet-100"
+                    >
+                      Segments{" "}
+                      {state.sortedSegments.length > 0 && (
+                        <span className="ml-1 text-xs text-violet-300">
+                          ({state.sortedSegments.length})
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <SegmentList
+                      sortedSegments={state.sortedSegments}
+                      selectedSegmentId={state.selectedSegmentId}
+                      selectedSegment={state.selectedSegment}
+                      heroName={state.heroName}
+                      onSelectSegment={state.setSelectedSegmentId}
+                      onRemoveSegment={state.removeSegment}
+                      onSeekToMs={(ms) => {
+                        state.seekToMs(ms);
+                        playSelectSound();
+                      }}
+                      onMergeSegmentWithNext={state.mergeSegmentWithNext}
+                      onSetSegmentCustomName={state.setSegmentCustomName}
+                      onSetSegmentBpm={state.setSegmentBpm}
+                      onResetSegmentBpm={state.resetSegmentBpm}
+                      onSetSegmentDifficulty={state.setSegmentDifficulty}
+                      onResetSegmentDifficulty={state.resetSegmentDifficulty}
+                      onSetSegmentType={state.setSegmentType}
+                      onUpdateSegmentTiming={state.updateSegmentTiming}
+                      setMessage={() => {}}
+                      setError={() => {}}
+                    />
+                    <div className="border-t border-zinc-700/50 pt-4">
+                      <HeroPanel {...pickHeroPanelProps(state)} />
+                    </div>
+                    <div className="border-t border-zinc-700/50 pt-4">
+                      <AutoDetectionPanel {...pickAutoDetectionPanelProps(state)} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
 
-          {/* Status + Hotkeys */}
           <StatusBar message={state.message} error={state.error} />
           <HotkeyOverlay visible={state.showHotkeys} />
 
-          {/* Back */}
           <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-2 pb-6">
             <MenuButton
               label="Back to Main Menu"

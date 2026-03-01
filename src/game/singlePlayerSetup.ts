@@ -1,10 +1,6 @@
 import * as z from "zod";
 import type { InstalledRound } from "../services/db";
-import {
-  PERK_LIBRARY,
-  getSinglePlayerAntiPerkPool,
-  getSinglePlayerPerkPool,
-} from "./data/perks";
+import { PERK_LIBRARY, getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "./data/perks";
 
 export const SINGLE_PLAYER_SETUP_STORE_KEY = "game.singlePlayer.setup.v1";
 
@@ -28,12 +24,12 @@ export const ZSinglePlayerSetup = z.object({
   enabledCumRoundIds: z.array(z.string()).default([]),
   enabledPerkIds: z.array(z.string()).default([]),
   enabledAntiPerkIds: z.array(z.string()).default([]),
-  perkTriggerChancePerRound: z.number().min(0).max(1).default(0.35),
+  perkTriggerChancePerRound: z.number().min(0).max(1).default(0.5),
   probabilities: z.object({
     intermediary: ZProbabilityConfig.default({
       initial: 0.1,
       increasePerRound: 0.02,
-      max: 0.85,
+      max: 1,
     }),
     antiPerk: ZProbabilityConfig.default({
       initial: 0.1,
@@ -86,7 +82,9 @@ const toRoundBuckets = (installedRounds: InstalledRound[]) => {
   return { normals, cums };
 };
 
-export function createDefaultSinglePlayerSetup(installedRounds: InstalledRound[]): SinglePlayerSetup {
+export function createDefaultSinglePlayerSetup(
+  installedRounds: InstalledRound[]
+): SinglePlayerSetup {
   const { normals, cums } = toRoundBuckets(installedRounds);
   const allowedPerkIds = getSinglePlayerPerkPool().map((perk) => perk.id);
   const allowedAntiPerkIds = getSinglePlayerAntiPerkPool().map((perk) => perk.id);
@@ -106,7 +104,7 @@ export function createDefaultSinglePlayerSetup(installedRounds: InstalledRound[]
       intermediary: {
         initial: 0.1,
         increasePerRound: 0.02,
-        max: 0.85,
+        max: 1,
       },
       antiPerk: {
         initial: 0.1,
@@ -119,7 +117,7 @@ export function createDefaultSinglePlayerSetup(installedRounds: InstalledRound[]
 
 export function normalizeSinglePlayerSetup(
   input: unknown,
-  installedRounds: InstalledRound[],
+  installedRounds: InstalledRound[]
 ): SinglePlayerSetup {
   const defaults = createDefaultSinglePlayerSetup(installedRounds);
   const parsed = ZSinglePlayerSetup.safeParse(input);
@@ -170,7 +168,7 @@ export function normalizeSinglePlayerSetup(
 export function buildSinglePlayerSessionPlan(
   setup: SinglePlayerSetup,
   installedRounds: InstalledRound[],
-  randomValue: () => number = Math.random,
+  randomValue: () => number = Math.random
 ): SinglePlayerSessionPlan {
   const { normals, cums } = toRoundBuckets(installedRounds);
   const normalById = new Map(normals.map((round) => [round.id, round]));
@@ -200,10 +198,10 @@ export function buildSinglePlayerSessionPlan(
   const cumById = new Map(cums.map((round) => [round.id, round]));
   const cumRoundIds = setup.enabledCumRoundIds.filter((id) => cumById.has(id));
 
-  const perkIdSet = new Set(PERK_LIBRARY.filter((perk) => perk.kind === "perk").map((perk) => perk.id));
-  const antiPerkIdSet = new Set(
-    getSinglePlayerAntiPerkPool().map((perk) => perk.id),
+  const perkIdSet = new Set(
+    PERK_LIBRARY.filter((perk) => perk.kind === "perk").map((perk) => perk.id)
   );
+  const antiPerkIdSet = new Set(getSinglePlayerAntiPerkPool().map((perk) => perk.id));
 
   return {
     totalIndices: setup.roundCount,

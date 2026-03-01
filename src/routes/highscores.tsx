@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { InlineMetrics } from "../components/ui";
 import { useControllerSurface } from "../controller";
 import { db, type SinglePlayerRunHistoryRow } from "../services/db";
 import { playHoverSound, playSelectSound } from "../utils/audio";
@@ -122,15 +123,19 @@ async function buildCachedViews(limit = 100): Promise<HighscoreMatchView[]> {
 
 export const Route = createFileRoute("/highscores")({
   loader: async () => {
-    const [localHighscore, singleRuns, cachedViews, queued] = await Promise.all([
-      db.gameProfile.getLocalHighscore().catch(() => 0),
+    const [localHighscoreResult, singleRuns, cachedViews, queued] = await Promise.all([
+      db.gameProfile.getLocalHighscore().catch(() => ({ highscore: 0, highscoreCheatMode: false })),
       db.singlePlayerHistory.listRuns(100).catch(() => []),
       buildCachedViews().catch(() => []),
       db.multiplayer.listResultSyncLobbies().catch(() => []),
     ]);
 
+    const localHighscore = typeof localHighscoreResult === "number" ? localHighscoreResult : localHighscoreResult.highscore;
+    const localHighscoreCheatMode = typeof localHighscoreResult === "number" ? false : localHighscoreResult.highscoreCheatMode;
+
     return {
       localHighscore,
+      localHighscoreCheatMode,
       singleRuns,
       cachedViews,
       initialSyncQueueCount: queued.length,
@@ -143,17 +148,21 @@ export function HighscoresRoute() {
   const navigate = useNavigate();
   const {
     localHighscore: initialHighscore,
+    localHighscoreCheatMode: initialHighscoreCheatMode,
     singleRuns: initialSingleRuns,
     cachedViews,
     initialSyncQueueCount,
   } = Route.useLoaderData();
 
   const [localHighscore, setLocalHighscore] = useState(initialHighscore);
+  const [localHighscoreCheatMode, setLocalHighscoreCheatMode] = useState(initialHighscoreCheatMode);
   const [singleRuns, setSingleRuns] = useState<SinglePlayerRunHistoryRow[]>(initialSingleRuns);
   const [matches, setMatches] = useState<HighscoreMatchView[]>(cachedViews);
   const [syncQueueCount, setSyncQueueCount] = useState(initialSyncQueueCount);
   const [expandedLobbyId, setExpandedLobbyId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
+  const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<HighscoreSectionId>("overview");
   const scopeRef = useRef<HTMLDivElement | null>(null);
@@ -175,13 +184,19 @@ export function HighscoresRoute() {
     setError(null);
 
     try {
-      const [freshHighscore, freshSingleRuns, queuedRows] = await Promise.all([
+      const [freshHighscoreResult, freshSingleRuns, queuedRows] = await Promise.all([
         db.gameProfile.getLocalHighscore().catch(() => null),
         db.singlePlayerHistory.listRuns(100).catch(() => []),
         db.multiplayer.listResultSyncLobbies().catch(() => []),
       ]);
-      if (typeof freshHighscore === "number") {
-        setLocalHighscore(Math.max(0, Math.floor(freshHighscore)));
+      if (freshHighscoreResult) {
+        if (typeof freshHighscoreResult === "number") {
+          setLocalHighscore(Math.max(0, Math.floor(freshHighscoreResult)));
+          setLocalHighscoreCheatMode(false);
+        } else {
+          setLocalHighscore(Math.max(0, Math.floor(freshHighscoreResult.highscore)));
+          setLocalHighscoreCheatMode(freshHighscoreResult.highscoreCheatMode ?? false);
+        }
       }
       setSingleRuns(freshSingleRuns);
 
@@ -246,6 +261,28 @@ export function HighscoresRoute() {
       window.clearInterval(interval);
     };
   }, [syncNow]);
+
+  const handleDeleteRun = useCallback(async (runId: string) => {
+    setDeletingRunId(runId);
+    setError(null);
+
+    try {
+      const result = await db.singlePlayerHistory.deleteRun(runId);
+      setSingleRuns((current) => current.filter((run) => run.id !== runId));
+      setLocalHighscore(Math.max(0, Math.floor(result.highscore ?? 0)));
+      setLocalHighscoreCheatMode(result.highscoreCheatMode ?? false);
+      setPendingDeleteRunId((current) => (current === runId ? null : current));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete single-player run.");
+    } finally {
+      setDeletingRunId(null);
+    }
+  }, []);
+
+  const pendingDeleteRun = useMemo(
+    () => singleRuns.find((run) => run.id === pendingDeleteRunId) ?? null,
+    [pendingDeleteRunId, singleRuns],
+  );
 
   const finalMatchCount = useMemo(
     () => matches.filter((match) => match.isFinal).length,
@@ -342,7 +379,7 @@ export function HighscoresRoute() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-xl border border-violet-200/30 bg-violet-400/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-violet-100">
-                    Local Best {localHighscore}
+                    Local Best {localHighscore}{localHighscoreCheatMode ? " 🎭" : ""}
                   </div>
                   <div className="rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.24em] text-cyan-100">
                     Queue {syncQueueCount}
@@ -379,12 +416,15 @@ export function HighscoresRoute() {
                         The fastest read on current local progress and multiplayer cache health.
                       </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <HighscoreStatCard label="🏆 Local Best" value={localHighscore} description="Best single-player score stored in the local profile." tone="violet" />
-                      <HighscoreStatCard label="🎯 Single Runs" value={singleRunCount} description="Completed local single-player sessions in history." tone="cyan" />
-                      <HighscoreStatCard label="🌐 Final Matches" value={finalMatchCount} description="Multiplayer lobbies with finalized cached standings." tone="emerald" />
-                      <HighscoreStatCard label="📡 Sync Queue" value={syncQueueCount} description={syncing ? "A sync is currently running." : "Queued multiplayer results still waiting to sync."} tone="amber" />
-                    </div>
+                    <InlineMetrics
+                      className="mb-5"
+                      metrics={[
+                        { label: "Local Best", value: localHighscore, tone: "violet" },
+                        { label: "Single Runs", value: singleRunCount, tone: "cyan" },
+                        { label: "Final Matches", value: finalMatchCount, tone: "emerald" },
+                        { label: "Sync Queue", value: syncQueueCount, tone: "amber" },
+                      ]}
+                    />
                   </section>
 
                   <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
@@ -471,12 +511,15 @@ export function HighscoresRoute() {
                         Local run history is stored directly in the app database, including legacy rows and newer survival-time data.
                       </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <HighscoreStatCard label="🏆 Best Score" value={localHighscore} description="Highest recorded single-player score." tone="violet" />
-                      <HighscoreStatCard label="🎮 Run Count" value={singleRunCount} description="Completed runs stored in local history." tone="cyan" />
-                      <HighscoreStatCard label="✨ New Bests" value={singleRunNewBestCount} description="Runs that pushed the local best score upward." tone="emerald" />
-                      <HighscoreStatCard label="⏱ Latest Survival" value={latestSingleRun ? formatRunSurvival(latestSingleRun) : "N/A"} description="Survival time of the newest recorded run." tone="amber" />
-                    </div>
+                    <InlineMetrics
+                      className="mb-5"
+                      metrics={[
+                        { label: "Best Score", value: localHighscore, tone: "violet" },
+                        { label: "Run Count", value: singleRunCount, tone: "cyan" },
+                        { label: "New Bests", value: singleRunNewBestCount, tone: "emerald" },
+                        { label: "Latest Survival", value: latestSingleRun ? formatRunSurvival(latestSingleRun) : "N/A", tone: "amber" },
+                      ]}
+                    />
                   </section>
 
                   <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
@@ -486,40 +529,52 @@ export function HighscoresRoute() {
                         Each row preserves score progression, completion reason, playlist reference, and survival duration when available.
                       </p>
                     </div>
-                    <div className="space-y-3">
-                      {singleRuns.length === 0 && (
-                        <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
-                          No single-player history yet.
-                        </div>
-                      )}
-                      {singleRuns.map((run) => (
-                        <article key={run.id} className="rounded-2xl border border-violet-300/20 bg-black/25 p-4 transition-all duration-200 hover:border-violet-200/40 hover:bg-violet-500/[0.06]">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-bold text-zinc-100">{singlePlayerReasonLabel[run.completionReason] ?? run.completionReason}</p>
-                              <p className="mt-1 text-xs text-zinc-400">
-                                {new Date(run.finishedAt).toLocaleString()} | Playlist: {run.playlistName}
-                              </p>
+                    {singleRuns.length === 0 && (
+                      <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
+                        No single-player history yet.
+                      </div>
+                    )}
+                    {singleRuns.length > 0 && (
+                      <div className="divide-y divide-violet-300/10">
+                        {singleRuns.map((run) => (
+                          <div
+                            key={run.id}
+                            className="py-3 transition-colors hover:bg-violet-500/5 -mx-2 px-2"
+                            title={run.cheatModeActive ? "This run was completed with cheat mode active" : undefined}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-zinc-100">{run.score}{run.cheatModeActive ? " 🎭" : ""}</span>
+                                <span className="text-xs text-zinc-400">{singlePlayerReasonLabel[run.completionReason] ?? run.completionReason}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-zinc-500">{new Date(run.finishedAt).toLocaleDateString()}</span>
+                                <button
+                                  type="button"
+                                  onMouseEnter={playHover}
+                                  onFocus={playHover}
+                                  onClick={() => {
+                                    playClick();
+                                    setPendingDeleteRunId(run.id);
+                                  }}
+                                  disabled={deletingRunId === run.id}
+                                  className="rounded-lg border border-rose-300/35 bg-rose-500/10 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.14em] text-rose-100 transition-all duration-200 hover:border-rose-200/70 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label={`Delete run ${run.score}`}
+                                >
+                                  {deletingRunId === run.id ? "Deleting..." : "Delete"}
+                                </button>
+                              </div>
                             </div>
-                            <p className="rounded-lg border border-violet-300/30 bg-violet-500/12 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-violet-100">
-                              Score {run.score}
-                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+                              <span>Survived: <span className="text-zinc-200">{formatRunSurvival(run)}</span></span>
+                              <span>Playlist: <span className="text-zinc-200">{formatPlaylistLabel(run)}</span></span>
+                              <span>Before: <span className="text-zinc-200">{run.highscoreBefore}</span> → After: <span className="text-zinc-200">{run.highscoreAfter}</span></span>
+                              <span className={run.wasNewHighscore ? "text-emerald-300" : ""}>{run.wasNewHighscore ? "New Best!" : ""}</span>
+                            </div>
                           </div>
-                          <div className="mt-3 grid gap-2 text-xs text-zinc-300 sm:grid-cols-4">
-                            <p>Survived: <span className="text-zinc-100">{formatRunSurvival(run)}</span></p>
-                            <p>Highscore Before: <span className="text-zinc-100">{run.highscoreBefore}</span></p>
-                            <p>Highscore After: <span className="text-zinc-100">{run.highscoreAfter}</span></p>
-                            <p>Ending Position: <span className="text-zinc-100">{run.endingPosition}</span></p>
-                          </div>
-                          <div className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-4">
-                            <p>Turn: <span className="text-zinc-100">{run.turn}</span></p>
-                            <p>New Best: <span className="text-zinc-100">{run.wasNewHighscore ? "Yes" : "No"}</span></p>
-                            <p>Playlist: <span className="text-zinc-100">{formatPlaylistLabel(run)}</span></p>
-                            <p>Playlist Format: <span className="text-zinc-100">{run.playlistFormatVersion ?? "N/A"}</span></p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 </>
               )}
@@ -533,12 +588,15 @@ export function HighscoresRoute() {
                         Cached standings let you revisit prior lobbies even when the remote service is unavailable.
                       </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <HighscoreStatCard label="🌐 Cached Matches" value={matches.length} description="All cached multiplayer result snapshots." tone="cyan" />
-                      <HighscoreStatCard label="✅ Finalized" value={finalMatchCount} description="Matches that finished with final standings." tone="emerald" />
-                      <HighscoreStatCard label="📡 Pending Queue" value={syncQueueCount} description="Remote lobbies still waiting for cache sync." tone="amber" />
-                      <HighscoreStatCard label="🔥 Top Score" value={topMultiplayerScore} description="Highest player score currently present in cached standings." tone="violet" />
-                    </div>
+                    <InlineMetrics
+                      className="mb-5"
+                      metrics={[
+                        { label: "Cached Matches", value: matches.length, tone: "cyan" },
+                        { label: "Finalized", value: finalMatchCount, tone: "emerald" },
+                        { label: "Pending Queue", value: syncQueueCount, tone: "amber" },
+                        { label: "Top Score", value: topMultiplayerScore, tone: "violet" },
+                      ]}
+                    />
                   </section>
 
                   <section className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl" style={{ animationDelay: "0.08s" }}>
@@ -559,23 +617,17 @@ export function HighscoresRoute() {
                         }}
                       />
                     </div>
-                    <div className="space-y-3">
-                      {matches.length === 0 && (
-                        <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
-                          No multiplayer result cache yet.
-                        </div>
-                      )}
-                      {matches.map((match) => {
-                        const expanded = expandedLobbyId === match.lobbyId;
-                        return (
-                          <article key={match.lobbyId} className="rounded-2xl border border-cyan-300/20 bg-black/25 p-4 transition-all duration-200 hover:border-cyan-200/40 hover:bg-cyan-500/[0.05]">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-bold text-zinc-100">Lobby {match.lobbyId.slice(0, 12)}</p>
-                                <p className="mt-1 text-xs text-zinc-400">
-                                  {match.isFinal ? "Final result" : "Temporary snapshot"} | {new Date(match.finishedAtIso).toLocaleString()}
-                                </p>
-                              </div>
+                    {matches.length === 0 && (
+                      <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-300">
+                        No multiplayer result cache yet.
+                      </div>
+                    )}
+                    {matches.length > 0 && (
+                      <div className="divide-y divide-cyan-300/10">
+                        {matches.map((match) => {
+                          const expanded = expandedLobbyId === match.lobbyId;
+                          return (
+                            <div key={match.lobbyId} className="py-2">
                               <button
                                 type="button"
                                 onMouseEnter={playHover}
@@ -584,33 +636,33 @@ export function HighscoresRoute() {
                                   if (!expanded) playReveal();
                                   setExpandedLobbyId(expanded ? null : match.lobbyId);
                                 }}
-                                className="rounded-xl border border-cyan-300/40 bg-cyan-500/12 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.14em] text-cyan-100 transition-all duration-200 hover:border-cyan-200/75 hover:bg-cyan-500/25"
+                                className="flex w-full items-center justify-between gap-3 py-2 text-left transition-colors hover:bg-cyan-500/5 -mx-2 px-2 rounded-lg"
                                 data-controller-focus-id={`highscores-match-${match.lobbyId}`}
                               >
-                                {expanded ? "Hide Players" : "Show Players"}
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-xs text-cyan-200 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>▾</span>
+                                  <span className="font-semibold text-zinc-100">Lobby {match.lobbyId.slice(0, 12)}</span>
+                                  <span className="text-xs text-zinc-400">{match.isFinal ? "Final" : "Draft"}</span>
+                                </div>
+                                <span className="text-xs text-zinc-500">{new Date(match.finishedAtIso).toLocaleDateString()}</span>
                               </button>
+                              {expanded && (
+                                <div className="ml-6 mt-2 space-y-1 border-l-2 border-cyan-500/30 pl-3">
+                                  {match.rows.map((row) => (
+                                    <div key={row.playerId} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                                      <span className="text-zinc-100">
+                                        <span className="text-cyan-300">#{row.place}</span> {row.displayName}
+                                      </span>
+                                      <span className="font-bold text-cyan-200">{row.finalScore}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            {expanded && (
-                              <div className="mt-3 grid gap-2">
-                                {match.rows.map((row) => (
-                                  <div key={row.playerId} className="rounded-xl border border-cyan-300/18 bg-black/35 px-3 py-3">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <p className="font-semibold text-zinc-100">#{row.place} {row.displayName}</p>
-                                      <p className="text-sm font-bold text-cyan-200">Score {row.finalScore}</p>
-                                    </div>
-                                    <div className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-3">
-                                      <p>state: <span className="text-zinc-100">{row.state}</span></p>
-                                      <p>player_id: <span className="text-zinc-100">{row.playerId}</span></p>
-                                      <p>user_id: <span className="text-zinc-100">{row.userId}</span></p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </article>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </section>
                 </>
               )}
@@ -631,6 +683,19 @@ export function HighscoresRoute() {
           </main>
         </div>
       </div>
+      <DeleteRunConfirmDialog
+        run={pendingDeleteRun}
+        isPending={pendingDeleteRunId !== null && deletingRunId === pendingDeleteRunId}
+        onCancel={() => {
+          if (deletingRunId) return;
+          setPendingDeleteRunId(null);
+        }}
+        onConfirm={() => {
+          if (!pendingDeleteRunId) return;
+          playClick();
+          void handleDeleteRun(pendingDeleteRunId);
+        }}
+      />
     </div>
   );
 }
@@ -640,11 +705,13 @@ function HighscoreStatCard({
   value,
   description,
   tone = "violet",
+  cheatMode,
 }: {
   label: string;
   value: string | number;
   description: string;
   tone?: "violet" | "cyan" | "emerald" | "amber";
+  cheatMode?: boolean;
 }) {
   const toneClass =
     tone === "cyan"
@@ -656,9 +723,15 @@ function HighscoreStatCard({
           : "border-violet-300/25 bg-violet-500/10";
 
   return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+    <div
+      className={`rounded-2xl border p-4 ${toneClass}`}
+      title={cheatMode ? "This highscore was achieved with cheat mode active" : undefined}
+    >
       <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">{label}</p>
-      <p className="mt-2 text-2xl font-black tracking-tight text-zinc-50">{value}</p>
+      <p className="mt-2 text-2xl font-black tracking-tight text-zinc-50">
+        {value}
+        {cheatMode && <span className="ml-1.5 text-lg cursor-help">🎭</span>}
+      </p>
       <p className="mt-2 text-sm text-zinc-400">{description}</p>
     </div>
   );
@@ -693,5 +766,68 @@ function HighscoreActionButton({
       <div>{label}</div>
       {description && <div className="mt-2 text-[11px] normal-case tracking-normal opacity-80">{description}</div>}
     </button>
+  );
+}
+
+function DeleteRunConfirmDialog({
+  run,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  run: SinglePlayerRunHistoryRow | null;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!run) return null;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-rose-300/35 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(244,63,94,0.28)]">
+        <p className="font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.35em] text-rose-200/80">
+          Confirm Deletion
+        </p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-rose-50">Delete Highscore Entry?</h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          This removes the stored single-player run from local history and may lower your local best score.
+        </p>
+
+        <div className="mt-5 rounded-2xl border border-rose-300/25 bg-rose-500/10 p-4">
+          <p className="text-sm text-zinc-100">Score: <span className="font-semibold">{run.score}</span></p>
+          <p className="mt-1 text-sm text-zinc-300">Playlist: {formatPlaylistLabel(run)}</p>
+          <p className="mt-1 text-sm text-zinc-300">Finished: {new Date(run.finishedAt).toLocaleString()}</p>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isPending}
+            onMouseEnter={playHoverSound}
+            onClick={onCancel}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isPending
+                ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
+                : "border-zinc-600 bg-zinc-900/80 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+            }`}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onMouseEnter={playHoverSound}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isPending
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-rose-300/70 bg-rose-500/25 text-rose-100 hover:border-rose-200/90 hover:bg-rose-500/40"
+            }`}
+          >
+            {isPending ? "Deleting..." : "Confirm Deletion"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -7,6 +7,8 @@ export type ControllerAction =
   | "RIGHT"
   | "PRIMARY"
   | "SECONDARY"
+  | "ACTION_X"
+  | "ACTION_Y"
   | "LB"
   | "RB"
   | "START"

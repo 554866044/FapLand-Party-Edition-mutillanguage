@@ -2,6 +2,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useControllerSurface } from "../controller";
 import {
+  assertMultiplayerAllowed,
+  useMultiplayerSfwRedirect,
+} from "../hooks/useMultiplayerSfwGuard";
+import {
   listActiveBans,
   listMatchHistory,
   unbanPlayer,
@@ -11,6 +15,7 @@ import {
 
 export const Route = createFileRoute("/multiplayer-bans")({
   loader: async () => {
+    await assertMultiplayerAllowed();
     const [bans, history] = await Promise.all([
       listActiveBans(),
       listMatchHistory(),
@@ -26,8 +31,13 @@ export const Route = createFileRoute("/multiplayer-bans")({
 
 function MultiplayerBansRoute() {
   const navigate = useNavigate();
+  const sfwModeEnabled = useMultiplayerSfwRedirect();
   const { bans, history } = Route.useLoaderData();
   const scopeRef = useRef<HTMLDivElement | null>(null);
+
+  if (sfwModeEnabled) {
+    return null;
+  }
 
   const [banList, setBanList] = useState<MultiplayerBanRecord[]>(bans);
   const [historyList, setHistoryList] = useState<MultiplayerMatchHistory[]>(history);

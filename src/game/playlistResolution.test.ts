@@ -3,6 +3,7 @@ import {
   analyzePlaylistResolution,
   applyPlaylistResolutionMapping,
   collectPlaylistRefs,
+  createPortableRoundRefResolver,
   resolvePortableRoundRefExact,
   type PlaylistResolutionRoundLike,
 } from "./playlistResolution";
@@ -47,7 +48,7 @@ function makeLinearConfig(): PlaylistConfig {
       initialAntiPerkProbability: 0,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     economy: {
@@ -103,7 +104,7 @@ function makeGraphConfig(): PlaylistConfig {
       initialAntiPerkProbability: 0,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     economy: {
@@ -227,6 +228,19 @@ describe("playlistResolution", () => {
     expect(graphResolved.boardConfig.nodes[1]?.roundRef?.idHint).toBe("graph-node");
     expect(graphResolved.boardConfig.randomRoundPools[0]?.candidates[0]?.roundRef.idHint).toBe("graph-pool");
     expect(graphResolved.boardConfig.cumRoundRefs[0]?.idHint).toBe("graph-cum");
+  });
+
+  it("creates a reusable resolver that keeps exact match precedence", () => {
+    const installedRounds = [
+      makeRound({ id: "id-only", name: "Target", author: "Other", phash: "other-phash" }),
+      makeRound({ id: "metadata", name: "Target", author: "Dex", type: "Normal" }),
+      makeRound({ id: "phash", name: "Different", author: "Alice", phash: "match-1" }),
+    ];
+    const resolver = createPortableRoundRefResolver(installedRounds);
+
+    expect(resolver.resolve({ name: "Ignored", author: "Nope", type: "Normal", phash: "match-1" })?.id).toBe("phash");
+    expect(resolver.resolve({ name: "Target", author: "Dex", type: "Normal" })?.id).toBe("metadata");
+    expect(resolver.resolve({ idHint: "id-only", name: "Unknown", type: "Normal" })?.id).toBe("id-only");
   });
 
   it("keeps exact resolution behavior aligned with playlist runtime", () => {

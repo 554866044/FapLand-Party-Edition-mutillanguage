@@ -43,9 +43,9 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
         setMessage,
         setError,
     }) => (
-        <div className="converter-panel-glass rounded-2xl p-4">
-            <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-violet-100">
+        <div>
+            <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-violet-100">
                     Segments
                     {sortedSegments.length > 0 && (
                         <span className="ml-2 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-normal text-violet-200">
@@ -57,18 +57,18 @@ export const SegmentList: React.FC<SegmentListProps> = React.memo(
                     <button
                         type="button"
                         onClick={() => onRemoveSegment(selectedSegment.id)}
-                        className="converter-mini-button border-rose-300/60 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30"
+                        className="text-[10px] text-rose-300 hover:text-rose-200"
                     >
-                        Delete
+                        Delete selected
                     </button>
                 )}
             </div>
 
-            <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[32rem] overflow-y-auto divide-y divide-violet-300/10">
                 {sortedSegments.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 py-8 text-zinc-500">
-                        <span className="text-2xl opacity-30">📎</span>
-                        <p className="text-sm">No segments yet. Mark IN/OUT and add one.</p>
+                    <div className="flex flex-col items-center gap-2 py-6 text-zinc-500">
+                        <span className="text-lg opacity-30">📎</span>
+                        <p className="text-xs">No segments. Mark IN/OUT and add one.</p>
                     </div>
                 ) : (
                     sortedSegments.map((segment, index) => (

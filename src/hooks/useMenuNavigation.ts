@@ -5,6 +5,7 @@ export interface MenuOption {
     id: string;
     label: string;
     primary?: boolean;
+    disabled?: boolean;
     experimental?: boolean;
     badge?: string;
     subLabel?: string;
@@ -49,8 +50,10 @@ export function useMenuNavigation(rootOptions: MenuOption[]) {
     }, []);
 
     const executeCurrentOption = useCallback((index: number) => {
-        playSelectSound();
         const option = currentOptions[index];
+        if (!option || option.disabled) return;
+
+        playSelectSound();
         if (option.submenu) {
             // Dive into submenu
             setPath((prev) => [...prev, index]);

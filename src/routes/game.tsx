@@ -1,11 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { GameScene } from "../components/game/GameScene";
-import { clearMapEditorTestSession, getMapEditorTestPlaylistId, setMapEditorTestSession } from "../features/map-editor/testSession";
+import {
+  clearMapEditorTestSession,
+  getMapEditorTestPlaylistId,
+  setMapEditorTestSession,
+} from "../features/map-editor/testSession";
 import { createInitialGameState } from "../game/engine";
 import type { GameConfig, GameState } from "../game/types";
 import { toGameConfigFromPlaylist } from "../game/playlistRuntime";
+import { filterPerkIdsByHandyConnection } from "../game/data/perks";
 import {
   ANTI_PERK_BEATBAR_ENABLED_KEY,
   DEFAULT_ANTI_PERK_BEATBAR_ENABLED,
@@ -18,13 +23,21 @@ import { db, type InstalledRound } from "../services/db";
 import { playlists } from "../services/playlists";
 import { trpc } from "../services/trpc";
 import { isGameDevelopmentMode } from "../utils/devFeatures";
+import {
+  CHEAT_MODE_ENABLED_KEY,
+  DEFAULT_CHEAT_MODE_ENABLED,
+  normalizeCheatModeEnabled,
+} from "../constants/experimentalFeatures";
 import { DEFAULT_INTERMEDIARY_LOADING_PROMPT } from "../constants/booruSettings";
+import { useHandy } from "../contexts/HandyContext";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
 const INTERMEDIARY_RETURN_PAUSE_KEY = "game.intermediary.returnPauseSec";
+const APPLY_PERK_DIRECTLY_KEY = "game.singleplayer.applyPerkDirectly";
 const DEFAULT_INTERMEDIARY_LOADING_DURATION_SEC = 5;
 const DEFAULT_INTERMEDIARY_RETURN_PAUSE_SEC = 4;
+const DEFAULT_APPLY_PERK_DIRECTLY = true;
 const ECONOMY_STORE_KEYS = {
   startingMoney: "game.economy.startingMoney",
   moneyPerCompletedRound: "game.economy.moneyPerCompletedRound",
@@ -39,13 +52,19 @@ const GameSearchSchema = z.object({
   launchNonce: z.coerce.number().int().nonnegative().optional(),
 });
 
-const getInitialHighscore = async (): Promise<number> => {
+const getInitialHighscore = async (): Promise<{
+  highscore: number;
+  highscoreCheatMode: boolean;
+}> => {
   try {
-    const highscore = await db.gameProfile.getLocalHighscore();
-    return Math.max(0, Math.floor(highscore));
+    const result = await db.gameProfile.getLocalHighscore();
+    return {
+      highscore: Math.max(0, Math.floor(result.highscore)),
+      highscoreCheatMode: result.highscoreCheatMode ?? false,
+    };
   } catch (error) {
     console.warn("Failed to read highscore from DB", error);
-    return 0;
+    return { highscore: 0, highscoreCheatMode: false };
   }
 };
 
@@ -61,7 +80,7 @@ const getEconomyOverrides = async (): Promise<Partial<GameConfig["economy"]>> =>
       Object.entries(ECONOMY_STORE_KEYS).map(async ([name, key]) => {
         const value = await trpc.store.get.query({ key });
         return [name, toSafeNumber(value)] as const;
-      }),
+      })
     );
 
     return entries.reduce<Partial<GameConfig["economy"]>>((acc, [name, value]) => {
@@ -141,6 +160,28 @@ const getAntiPerkBeatbarEnabled = async (): Promise<boolean> => {
   }
 };
 
+const getCheatModeEnabled = async (): Promise<boolean> => {
+  try {
+    const stored = await trpc.store.get.query({ key: CHEAT_MODE_ENABLED_KEY });
+    return normalizeCheatModeEnabled(stored);
+  } catch (error) {
+    console.warn("Failed to read cheat mode from store", error);
+    return DEFAULT_CHEAT_MODE_ENABLED;
+  }
+};
+
+const getApplyPerkDirectly = async (): Promise<boolean> => {
+  try {
+    const stored = await trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY });
+    if (stored === true || stored === "true") return true;
+    if (stored === false || stored === "false") return false;
+    return DEFAULT_APPLY_PERK_DIRECTLY;
+  } catch (error) {
+    console.warn("Failed to read apply perk directly from store", error);
+    return DEFAULT_APPLY_PERK_DIRECTLY;
+  }
+};
+
 export const Route = createFileRoute("/game")({
   validateSearch: (search) => GameSearchSchema.parse(search),
   loaderDeps: ({ search }) => ({
@@ -148,7 +189,19 @@ export const Route = createFileRoute("/game")({
     launchNonce: search.launchNonce ?? null,
   }),
   loader: async ({ deps }) => {
-    const [installedRounds, initialHighscore, economyOverrides, intermediaryLoadingPrompt, intermediaryLoadingDurationSec, intermediaryReturnPauseSec, roundProgressBarAlwaysVisible, antiPerkBeatbarEnabled, activePlaylist] = await Promise.all([
+    const [
+      installedRounds,
+      initialHighscoreResult,
+      economyOverrides,
+      intermediaryLoadingPrompt,
+      intermediaryLoadingDurationSec,
+      intermediaryReturnPauseSec,
+      roundProgressBarAlwaysVisible,
+      antiPerkBeatbarEnabled,
+      cheatModeEnabled,
+      initialApplyPerkDirectly,
+      activePlaylist,
+    ] = await Promise.all([
       getInstalledRounds(),
       getInitialHighscore(),
       getEconomyOverrides(),
@@ -157,6 +210,8 @@ export const Route = createFileRoute("/game")({
       getIntermediaryReturnPauseSec(),
       getRoundProgressBarAlwaysVisible(),
       getAntiPerkBeatbarEnabled(),
+      getCheatModeEnabled(),
+      getApplyPerkDirectly(),
       deps.playlistId ? playlists.getById(deps.playlistId) : playlists.getActive(),
     ]);
     if (!activePlaylist) {
@@ -165,13 +220,16 @@ export const Route = createFileRoute("/game")({
     const playedByPool = await playlists.getDistinctPlayedByPool(activePlaylist.id);
     return {
       installedRounds,
-      initialHighscore,
+      initialHighscore: initialHighscoreResult.highscore,
+      initialHighscoreCheatMode: initialHighscoreResult.highscoreCheatMode,
       economyOverrides,
       intermediaryLoadingPrompt,
       intermediaryLoadingDurationSec,
       intermediaryReturnPauseSec,
       roundProgressBarAlwaysVisible,
       antiPerkBeatbarEnabled,
+      cheatModeEnabled,
+      initialApplyPerkDirectly,
       activePlaylist,
       playedByPool,
     };
@@ -183,12 +241,15 @@ function GameRoute() {
   const {
     installedRounds,
     initialHighscore,
+    initialHighscoreCheatMode,
     economyOverrides,
     intermediaryLoadingPrompt,
     intermediaryLoadingDurationSec,
     intermediaryReturnPauseSec,
     roundProgressBarAlwaysVisible,
     antiPerkBeatbarEnabled,
+    cheatModeEnabled,
+    initialApplyPerkDirectly,
     activePlaylist,
     playedByPool,
   } = Route.useLoaderData();
@@ -197,6 +258,8 @@ function GameRoute() {
   const sessionStartedAtMsRef = useRef(Date.now());
   const mapEditorTestPlaylistIdRef = useRef<string | null>(getMapEditorTestPlaylistId());
   const isMapEditorTestRun = mapEditorTestPlaylistIdRef.current !== null;
+  const [applyPerkDirectly, setApplyPerkDirectly] = useState(initialApplyPerkDirectly);
+  const { connected: handyConnected } = useHandy();
 
   const config = useMemo(() => {
     const baseConfig = toGameConfigFromPlaylist(activePlaylist.config, installedRounds);
@@ -206,20 +269,33 @@ function GameRoute() {
         ...baseConfig.economy,
         ...economyOverrides,
       },
+      perkPool: {
+        enabledPerkIds: filterPerkIdsByHandyConnection(
+          baseConfig.perkPool.enabledPerkIds,
+          handyConnected
+        ),
+        enabledAntiPerkIds: filterPerkIdsByHandyConnection(
+          baseConfig.perkPool.enabledAntiPerkIds,
+          handyConnected
+        ),
+      },
     };
-  }, [activePlaylist.config, economyOverrides, installedRounds]);
+  }, [activePlaylist.config, economyOverrides, installedRounds, handyConnected]);
   const initialState = useMemo(
     () => createInitialGameState(config, { initialHighscore, playedRoundIdsByPool: playedByPool }),
-    [config, initialHighscore, playedByPool],
+    [config, initialHighscore, playedByPool]
   );
 
-  const handleHighscoreChange = useCallback((highscore: number) => {
-    void db.gameProfile
-      .setLocalHighscore(Math.max(0, Math.floor(highscore)))
-      .catch((error) => {
-        console.warn("Failed to persist highscore to DB", error);
-      });
-  }, []);
+  const handleHighscoreChange = useCallback(
+    (highscore: number) => {
+      void db.gameProfile
+        .setLocalHighscore(Math.max(0, Math.floor(highscore)), cheatModeEnabled)
+        .catch((error) => {
+          console.warn("Failed to persist highscore to DB", error);
+        });
+    },
+    [cheatModeEnabled]
+  );
 
   const handleBack = useMemo(
     () => () => {
@@ -230,66 +306,92 @@ function GameRoute() {
       }
       void navigate({ to: "/" });
     },
-    [navigate],
+    [navigate]
   );
 
-  const handleRoundPlayed = useCallback((payload: { roundId: string; nodeId: string; poolId: string | null }) => {
-    void playlists.recordRoundPlay({
-      playlistId: activePlaylist.id,
-      roundId: payload.roundId,
-      nodeId: payload.nodeId,
-      poolId: payload.poolId,
-    }).catch((error) => {
-      console.warn("Failed to record played round", error);
+  const handleRoundPlayed = useCallback(
+    (payload: { roundId: string; nodeId: string; poolId: string | null }) => {
+      void playlists
+        .recordRoundPlay({
+          playlistId: activePlaylist.id,
+          roundId: payload.roundId,
+          nodeId: payload.nodeId,
+          poolId: payload.poolId,
+        })
+        .catch((error) => {
+          console.warn("Failed to record played round", error);
+        });
+    },
+    [activePlaylist.id]
+  );
+
+  const handleStateChange = useCallback(
+    (nextState: GameState) => {
+      if (hasNavigatedToResultRef.current) return;
+      if (nextState.sessionPhase !== "completed") return;
+      const player = nextState.players[nextState.currentPlayerIndex];
+      if (!player) return;
+      hasNavigatedToResultRef.current = true;
+      const score = Math.max(0, Math.floor(player.score));
+      const survivedDurationSec = Math.max(
+        0,
+        Math.floor((Date.now() - sessionStartedAtMsRef.current) / 1000)
+      );
+      const highscoreBefore = Math.max(0, Math.floor(initialHighscore));
+      const highscoreAfter = Math.max(0, Math.floor(nextState.highscore));
+
+      void db.singlePlayerHistory
+        .recordRun({
+          finishedAtIso: new Date().toISOString(),
+          score,
+          survivedDurationSec,
+          highscoreBefore,
+          highscoreAfter,
+          wasNewHighscore: score > highscoreBefore,
+          completionReason: nextState.completionReason ?? "finished",
+          playlistId: activePlaylist.id,
+          playlistName: activePlaylist.name,
+          playlistFormatVersion: activePlaylist.formatVersion,
+          endingPosition: Math.max(0, Math.floor(player.position)),
+          turn: Math.max(0, Math.floor(nextState.turn)),
+          cheatModeActive: cheatModeEnabled,
+        })
+        .catch((error) => {
+          console.warn("Failed to persist single-player run history", error);
+        });
+
+      if (isMapEditorTestRun) {
+        clearMapEditorTestSession();
+      }
+
+      void navigate({
+        to: "/single-result",
+        search: {
+          score,
+          highscore: highscoreAfter,
+          survivedDurationSec,
+          reason: nextState.completionReason ?? "finished",
+        },
+        replace: true,
+      });
+    },
+    [
+      activePlaylist.formatVersion,
+      activePlaylist.id,
+      activePlaylist.name,
+      initialHighscore,
+      isMapEditorTestRun,
+      navigate,
+      cheatModeEnabled,
+    ]
+  );
+
+  const handleApplyPerkDirectlyChange = useCallback((value: boolean) => {
+    setApplyPerkDirectly(value);
+    void trpc.store.set.mutate({ key: APPLY_PERK_DIRECTLY_KEY, value }).catch((error) => {
+      console.warn("Failed to persist apply perk directly preference", error);
     });
-  }, [activePlaylist.id]);
-
-  const handleStateChange = useCallback((nextState: GameState) => {
-    if (hasNavigatedToResultRef.current) return;
-    if (nextState.sessionPhase !== "completed") return;
-    const player = nextState.players[nextState.currentPlayerIndex];
-    if (!player) return;
-    hasNavigatedToResultRef.current = true;
-    const score = Math.max(0, Math.floor(player.score));
-    const survivedDurationSec = Math.max(
-      0,
-      Math.floor((Date.now() - sessionStartedAtMsRef.current) / 1000),
-    );
-    const highscoreBefore = Math.max(0, Math.floor(initialHighscore));
-    const highscoreAfter = Math.max(0, Math.floor(nextState.highscore));
-
-    void db.singlePlayerHistory.recordRun({
-      finishedAtIso: new Date().toISOString(),
-      score,
-      survivedDurationSec,
-      highscoreBefore,
-      highscoreAfter,
-      wasNewHighscore: score > highscoreBefore,
-      completionReason: nextState.completionReason ?? "finished",
-      playlistId: activePlaylist.id,
-      playlistName: activePlaylist.name,
-      playlistFormatVersion: activePlaylist.formatVersion,
-      endingPosition: Math.max(0, Math.floor(player.position)),
-      turn: Math.max(0, Math.floor(nextState.turn)),
-    }).catch((error) => {
-      console.warn("Failed to persist single-player run history", error);
-    });
-
-    if (isMapEditorTestRun) {
-      clearMapEditorTestSession();
-    }
-
-    void navigate({
-      to: "/single-result",
-      search: {
-        score,
-        highscore: highscoreAfter,
-        survivedDurationSec,
-        reason: nextState.completionReason ?? "finished",
-      },
-      replace: true,
-    });
-  }, [activePlaylist.formatVersion, activePlaylist.id, activePlaylist.name, initialHighscore, isMapEditorTestRun, navigate]);
+  }, []);
 
   return (
     <GameScene
@@ -299,7 +401,7 @@ function GameRoute() {
       onGiveUp={handleBack}
       giveUpLabel={isMapEditorTestRun ? "Back to Editor" : "Give Up"}
       allowDebugRoundControls={isMapEditorTestRun}
-      showDevPerkMenu={isGameDevelopmentMode()}
+      showDevPerkMenu={isGameDevelopmentMode() || cheatModeEnabled}
       onHighscoreChange={handleHighscoreChange}
       onRoundPlayed={handleRoundPlayed}
       onStateChange={handleStateChange}
@@ -308,6 +410,8 @@ function GameRoute() {
       intermediaryReturnPauseSec={intermediaryReturnPauseSec}
       initialShowProgressBarAlways={roundProgressBarAlwaysVisible}
       initialShowAntiPerkBeatbar={antiPerkBeatbarEnabled}
+      applyPerkDirectly={applyPerkDirectly}
+      onApplyPerkDirectlyChange={handleApplyPerkDirectlyChange}
     />
   );
 }

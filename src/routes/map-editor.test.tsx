@@ -34,7 +34,7 @@ function makePlaylist(id: string, name: string) {
         initialAntiPerkProbability: 0,
         intermediaryIncreasePerRound: 0.02,
         antiPerkIncreasePerRound: 0.015,
-        maxIntermediaryProbability: 0.85,
+        maxIntermediaryProbability: 1,
         maxAntiPerkProbability: 0.75,
       },
       economy: {
@@ -77,6 +77,16 @@ const mocks = vi.hoisted(() => ({
     getExportPackageStatus: vi.fn(),
     abortExportPackage: vi.fn(),
     setActive: vi.fn(),
+  },
+  audio: {
+    playHoverSound: vi.fn(),
+    playSelectSound: vi.fn(),
+    playMapConnectNodesSound: vi.fn(),
+    playMapDeleteNodeSound: vi.fn(),
+    playMapDisconnectNodesSound: vi.fn(),
+    playMapInvalidActionSound: vi.fn(),
+    playMapPlaceNodeSound: vi.fn(),
+    playMapUndoRedoSound: vi.fn(),
   },
   canvasProps: null as null | Record<string, unknown>,
 }));
@@ -175,16 +185,7 @@ vi.mock("../features/map-editor/tileCatalog", () => ({
   })),
 }));
 
-vi.mock("../utils/audio", () => ({
-  playHoverSound: vi.fn(),
-  playSelectSound: vi.fn(),
-  playMapConnectNodesSound: vi.fn(),
-  playMapDeleteNodeSound: vi.fn(),
-  playMapDisconnectNodesSound: vi.fn(),
-  playMapInvalidActionSound: vi.fn(),
-  playMapPlaceNodeSound: vi.fn(),
-  playMapUndoRedoSound: vi.fn(),
-}));
+vi.mock("../utils/audio", () => mocks.audio);
 
 import { MapEditorRoute } from "./map-editor";
 
@@ -226,11 +227,11 @@ beforeEach(() => {
       close: vi.fn(),
     },
     updates: {
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => () => { }),
     },
     appOpen: {
       consumePendingFiles: vi.fn(async () => []),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => () => { }),
     },
   };
   const playlist = makePlaylist("playlist-1", "Test Playlist");
@@ -464,6 +465,9 @@ describe("MapEditorRoute", () => {
       expect(screen.getByTestId("node-count").textContent).toBe("4");
     });
 
+    expect(mocks.audio.playMapDeleteNodeSound).not.toHaveBeenCalled();
+    expect(mocks.audio.playMapInvalidActionSound).not.toHaveBeenCalled();
+
     fireEvent.keyDown(window, { key: "z", code: "KeyZ", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByTestId("node-count").textContent).toBe("5");
@@ -489,6 +493,8 @@ describe("MapEditorRoute", () => {
       const props = mocks.canvasProps as { config: { edges: Array<{ id: string }> } } | null;
       expect(props?.config.edges.map((edge) => edge.id)).not.toContain("edge-start-path-1");
     });
+
+    expect(mocks.audio.playMapDisconnectNodesSound).not.toHaveBeenCalled();
   });
 
   it("shows layout controls and applies the selected layout strategy", async () => {
@@ -640,7 +646,7 @@ describe("MapEditorRoute", () => {
   it("shows a blocking export overlay with progress and allows aborting the export", async () => {
     vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue("/tmp");
     mocks.playlists.exportPackage.mockImplementation(
-      () => new Promise(() => {}),
+      () => new Promise(() => { }),
     );
     mocks.playlists.getExportPackageStatus.mockResolvedValue({
       state: "running",

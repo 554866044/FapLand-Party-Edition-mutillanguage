@@ -47,172 +47,94 @@ export const SegmentCard: React.FC<SegmentCardProps> = React.memo(
         onUpdateTiming,
     }) => {
         const durationSec = ((segment.endTimeMs - segment.startTimeMs) / 1000).toFixed(1);
+        const [expanded, setExpanded] = React.useState(true);
+        const difficultyLevel = segment.difficulty == null ? 0 : Math.max(1, Math.min(5, segment.difficulty));
 
         return (
             <div
-                className={`converter-segment-enter rounded-xl border-l-[3px] border p-3 transition-all duration-150 ${TYPE_ACCENT[segment.type]
-                    } ${isSelected
-                        ? "border-violet-300/60 bg-violet-500/10 shadow-[0_0_16px_rgba(139,92,246,0.12)]"
-                        : "border-zinc-700 bg-black/30 hover:border-zinc-600"
-                    }`}
+                className={`group border-l-[3px] py-2 pl-3 transition-all duration-150 ${TYPE_ACCENT[segment.type]} ${isSelected ? "bg-violet-500/10" : "hover:bg-white/[0.02]"}`}
                 onClick={onSelect}
             >
-                {/* Header row */}
-                <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-200">
-                        Round {index + 1}
-                    </span>
-                    <span className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] text-zinc-400">
-                        {formatMs(segment.startTimeMs)} – {formatMs(segment.endTimeMs)}{" "}
-                        <span className="text-zinc-500">({durationSec}s)</span>
-                    </span>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+                            className={`text-xs text-zinc-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+                        >
+                            ▸
+                        </button>
+                        <span className="text-xs font-semibold text-zinc-200 shrink-0">R{index + 1}</span>
+                        <input
+                            type="text"
+                            value={segment.customName ?? ""}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => onSetCustomName(e.target.value)}
+                            placeholder={`${heroName.trim() || "Hero"} - round ${index + 1}`}
+                            className="min-w-0 flex-1 bg-transparent text-xs text-zinc-100 outline-none border-b border-transparent focus:border-violet-400/50"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-zinc-500 shrink-0">
+                        <span>{formatMs(segment.startTimeMs)}–{formatMs(segment.endTimeMs)}</span>
+                        <span className="text-zinc-600">({durationSec}s)</span>
+                        <select
+                            value={segment.type}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => onSetType(e.target.value as SegmentType)}
+                            className="rounded border border-zinc-700 bg-black/45 px-1.5 py-0.5 text-[10px] text-zinc-200 outline-none"
+                        >
+                            <option value="Normal">Normal</option>
+                            <option value="Interjection">Interj</option>
+                            <option value="Cum">Cum</option>
+                        </select>
+                    </div>
                 </div>
 
-                {/* Custom name */}
-                <input
-                    type="text"
-                    value={segment.customName ?? ""}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => onSetCustomName(event.target.value)}
-                    placeholder={`Custom name • default: ${heroName.trim() || "Hero"} - round ${index + 1}`}
-                    className="converter-text-input mb-2 w-full text-xs"
-                />
-
-                {/* Jump + Merge row */}
-                <div className="mb-2 grid grid-cols-3 gap-1.5">
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            playSelectSound();
-                            onJumpStart();
-                        }}
-                        className="converter-mini-button border-cyan-300/50 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
-                    >
-                        ◀ Start
-                    </button>
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            playSelectSound();
-                            onJumpEnd();
-                        }}
-                        className="converter-mini-button border-indigo-300/50 bg-indigo-500/15 text-indigo-100 hover:bg-indigo-500/25"
-                    >
-                        End ▶
-                    </button>
-                    <button
-                        type="button"
-                        disabled={!hasNext}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onMergeWithNext();
-                        }}
-                        className={`converter-mini-button ${hasNext
-                            ? "border-violet-300/50 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25"
-                            : "cursor-not-allowed border-zinc-700 bg-zinc-900/40 text-zinc-500"
-                            }`}
-                    >
-                        Merge ↓
-                    </button>
-                </div>
-
-                {/* Timing inputs */}
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                    <input
-                        type="number"
-                        value={segment.startTimeMs}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) => {
-                            const nextStart = Number(event.target.value);
-                            if (!Number.isFinite(nextStart)) return;
-                            onUpdateTiming(nextStart, segment.endTimeMs);
-                        }}
-                        className="converter-number-input converter-text-input text-xs"
-                    />
-                    <input
-                        type="number"
-                        value={segment.endTimeMs}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) => {
-                            const nextEnd = Number(event.target.value);
-                            if (!Number.isFinite(nextEnd)) return;
-                            onUpdateTiming(segment.startTimeMs, nextEnd);
-                        }}
-                        className="converter-number-input converter-text-input text-xs"
-                    />
-                </div>
-
-                {/* BPM + Difficulty */}
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                    <label className="text-[11px] text-zinc-300">
-                        BPM
-                        <div className="mt-1 flex items-center gap-1">
-                            <input
-                                type="number"
-                                min={1}
-                                max={400}
-                                value={segment.bpm ?? ""}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => onSetBpm(event.target.value)}
-                                className="converter-number-input converter-text-input w-full text-xs"
-                            />
-                            <button
-                                type="button"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onResetBpm();
-                                }}
-                                className="converter-mini-button border-cyan-300/50 bg-cyan-500/15 text-[10px] text-cyan-100"
-                            >
-                                Auto
-                            </button>
+                {expanded && (
+                    <div className="mt-2 space-y-2 pl-5">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); playSelectSound(); onJumpStart(); }} className="text-[10px] text-cyan-300 hover:text-cyan-200">◀ Start</button>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); playSelectSound(); onJumpEnd(); }} className="text-[10px] text-indigo-300 hover:text-indigo-200">End ▶</button>
+                            <button type="button" disabled={!hasNext} onClick={(e) => { e.stopPropagation(); onMergeWithNext(); }} className={`text-[10px] ${hasNext ? "text-violet-300 hover:text-violet-200" : "text-zinc-600"}`}>Merge ↓</button>
+                            <div className="flex-1" />
+                            <div className="flex items-center gap-1 text-[10px]">
+                                <span className="text-zinc-500">BPM:</span>
+                                <input type="number" min={1} max={400} value={segment.bpm ?? ""} onClick={(e) => e.stopPropagation()} onChange={(e) => onSetBpm(e.target.value)} className="w-12 rounded border border-zinc-700 bg-black/45 px-1 py-0.5 text-zinc-200" />
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onResetBpm(); }} className="text-cyan-300">auto</button>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px]">
+                                <span className="text-zinc-500">Difficulty:</span>
+                                <div className="flex items-center gap-0.5 rounded border border-zinc-700 bg-black/45 px-1 py-0.5">
+                                    {[1, 2, 3, 4, 5].map((level) => {
+                                        const active = level <= difficultyLevel;
+                                        return (
+                                            <button
+                                                key={level}
+                                                type="button"
+                                                aria-label={`Set difficulty to ${level} star${level === 1 ? "" : "s"}`}
+                                                aria-pressed={segment.difficulty === level}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSetDifficulty(`${level}`);
+                                                }}
+                                                className={`leading-none transition-colors ${active ? "text-yellow-300" : "text-zinc-600 hover:text-zinc-400"}`}
+                                            >
+                                                ★
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onResetDifficulty(); }} className="text-cyan-300">auto</button>
+                            </div>
                         </div>
-                    </label>
-                    <label className="text-[11px] text-zinc-300">
-                        Difficulty
-                        <div className="mt-1 flex items-center gap-1">
-                            <input
-                                type="number"
-                                min={1}
-                                max={5}
-                                step={1}
-                                value={segment.difficulty ?? ""}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => onSetDifficulty(event.target.value)}
-                                className="converter-number-input converter-text-input w-full text-xs"
-                            />
-                            <button
-                                type="button"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onResetDifficulty();
-                                }}
-                                className="converter-mini-button border-cyan-300/50 bg-cyan-500/15 text-[10px] text-cyan-100"
-                            >
-                                Auto
-                            </button>
+                        <div className="flex items-center gap-2 text-[10px]">
+                            <span className="text-zinc-500">Timing:</span>
+                            <input type="number" value={segment.startTimeMs} onClick={(e) => e.stopPropagation()} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateTiming(v, segment.endTimeMs); }} className="w-20 rounded border border-zinc-700 bg-black/45 px-1 py-0.5 text-zinc-200" />
+                            <span className="text-zinc-600">–</span>
+                            <input type="number" value={segment.endTimeMs} onClick={(e) => e.stopPropagation()} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateTiming(segment.startTimeMs, v); }} className="w-20 rounded border border-zinc-700 bg-black/45 px-1 py-0.5 text-zinc-200" />
                         </div>
-                    </label>
-                </div>
-
-                {/* Type selector */}
-                <div className="relative">
-                    <select
-                        value={segment.type}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) => onSetType(event.target.value as SegmentType)}
-                        className="converter-native-select converter-select-field w-full border-zinc-600 focus:border-violet-300/70 focus:ring-violet-400/20"
-                    >
-                        <option value="Normal">Normal</option>
-                        <option value="Interjection">Interjection</option>
-                        <option value="Cum">Cum</option>
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-violet-200/80">
-                        ▾
-                    </span>
-                </div>
+                    </div>
+                )}
             </div>
         );
     },

@@ -2,7 +2,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requestInstallScanAbortMock, scanInstallFolderOnceWithLegacySupportMock, inspectInstallFolderMock, importLegacyFolderWithPlanMock, addAutoScanFolderAndScanMock } = vi.hoisted(() => ({
+const {
+  requestInstallScanAbortMock,
+  scanInstallFolderOnceWithLegacySupportMock,
+  inspectInstallFolderMock,
+  importLegacyFolderWithPlanMock,
+  addAutoScanFolderAndScanMock,
+} = vi.hoisted(() => ({
   requestInstallScanAbortMock: vi.fn(),
   scanInstallFolderOnceWithLegacySupportMock: vi.fn(),
   inspectInstallFolderMock: vi.fn(),
@@ -28,7 +34,15 @@ vi.mock("../../services/installer", () => ({
     triggeredBy: "manual",
     startedAt: null,
     finishedAt: null,
-    stats: { scannedFolders: 0, sidecarsSeen: 0, installed: 0, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+    stats: {
+      scannedFolders: 0,
+      sidecarsSeen: 0,
+      installed: 0,
+      playlistsImported: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+    },
     lastMessage: null,
     lastErrors: [],
   })),
@@ -53,8 +67,20 @@ describe("dbRouter scanInstallFolderOnce", () => {
       folderPath: "/tmp/legacy-pack",
       playlistNameHint: "Legacy Pack",
       legacySlots: [
-        { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", sourceLabel: "1", originalOrder: 0, defaultCheckpoint: false },
-        { id: "slot-1", sourcePath: "/tmp/legacy-pack/10.mp4", sourceLabel: "10", originalOrder: 1, defaultCheckpoint: true },
+        {
+          id: "slot-0",
+          sourcePath: "/tmp/legacy-pack/1.mp4",
+          sourceLabel: "1",
+          originalOrder: 0,
+          defaultCheckpoint: false,
+        },
+        {
+          id: "slot-1",
+          sourcePath: "/tmp/legacy-pack/10.mp4",
+          sourceLabel: "10",
+          originalOrder: 1,
+          defaultCheckpoint: true,
+        },
       ],
     });
 
@@ -73,7 +99,15 @@ describe("dbRouter scanInstallFolderOnce", () => {
         triggeredBy: "manual",
         startedAt: "2026-03-05T00:00:00.000Z",
         finishedAt: "2026-03-05T00:00:01.000Z",
-        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 2, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+        stats: {
+          scannedFolders: 1,
+          sidecarsSeen: 0,
+          installed: 2,
+          playlistsImported: 0,
+          updated: 0,
+          skipped: 0,
+          failed: 0,
+        },
         lastMessage: "ok",
         lastErrors: [],
       },
@@ -92,13 +126,35 @@ describe("dbRouter scanInstallFolderOnce", () => {
     const result = await caller.importLegacyFolderWithPlan({
       folderPath: "/tmp/legacy-pack",
       reviewedSlots: [
-        { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", originalOrder: 0, selectedAsCheckpoint: false, excludedFromImport: false },
-        { id: "slot-1", sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4", originalOrder: 1, selectedAsCheckpoint: true, excludedFromImport: false },
-        { id: "slot-2", sourcePath: "/tmp/legacy-pack/10.mp4", originalOrder: 2, selectedAsCheckpoint: false, excludedFromImport: true },
+        {
+          id: "slot-0",
+          sourcePath: "/tmp/legacy-pack/1.mp4",
+          originalOrder: 0,
+          selectedAsCheckpoint: false,
+          excludedFromImport: false,
+        },
+        {
+          id: "slot-1",
+          sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4",
+          originalOrder: 1,
+          selectedAsCheckpoint: true,
+          excludedFromImport: false,
+        },
+        {
+          id: "slot-2",
+          sourcePath: "/tmp/legacy-pack/10.mp4",
+          originalOrder: 2,
+          selectedAsCheckpoint: false,
+          excludedFromImport: true,
+        },
       ],
     });
 
-    expect(importLegacyFolderWithPlanMock).toHaveBeenCalledWith("/tmp/legacy-pack", expect.any(Array));
+    expect(importLegacyFolderWithPlanMock).toHaveBeenCalledWith(
+      "/tmp/legacy-pack",
+      expect.any(Array),
+      { deferPhash: undefined }
+    );
     expect(result.legacyImport?.orderedSlots).toHaveLength(3);
   });
 
@@ -109,7 +165,15 @@ describe("dbRouter scanInstallFolderOnce", () => {
         triggeredBy: "manual",
         startedAt: "2026-03-05T00:00:00.000Z",
         finishedAt: "2026-03-05T00:00:01.000Z",
-        stats: { scannedFolders: 1, sidecarsSeen: 0, installed: 3, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+        stats: {
+          scannedFolders: 1,
+          sidecarsSeen: 0,
+          installed: 3,
+          playlistsImported: 0,
+          updated: 0,
+          skipped: 0,
+          failed: 0,
+        },
         lastMessage: "ok",
         lastErrors: [],
       },
@@ -127,13 +191,17 @@ describe("dbRouter scanInstallFolderOnce", () => {
     const caller = dbRouter.createCaller({} as never);
     const result = await caller.scanInstallFolderOnce({ folderPath: "/tmp/legacy-pack" });
 
-    expect(scanInstallFolderOnceWithLegacySupportMock).toHaveBeenCalledWith("/tmp/legacy-pack", { omitCheckpointRounds: true });
+    expect(scanInstallFolderOnceWithLegacySupportMock).toHaveBeenCalledWith("/tmp/legacy-pack", {
+      omitCheckpointRounds: true,
+    });
     expect(result.legacyImport?.roundIds).toEqual(["r1", "r2", "r3"]);
     expect(result.status.stats.installed).toBe(3);
   });
 
   it("maps installer errors to BAD_REQUEST", async () => {
-    scanInstallFolderOnceWithLegacySupportMock.mockRejectedValue(new Error("No supported video files found in selected folder."));
+    scanInstallFolderOnceWithLegacySupportMock.mockRejectedValue(
+      new Error("No supported video files found in selected folder.")
+    );
     const caller = dbRouter.createCaller({} as never);
 
     await expect(caller.scanInstallFolderOnce({ folderPath: "/tmp/empty" })).rejects.toMatchObject({
@@ -148,7 +216,15 @@ describe("dbRouter scanInstallFolderOnce", () => {
       triggeredBy: "manual",
       startedAt: "2026-03-06T00:00:00.000Z",
       finishedAt: null,
-      stats: { scannedFolders: 1, sidecarsSeen: 4, installed: 1, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+      stats: {
+        scannedFolders: 1,
+        sidecarsSeen: 4,
+        installed: 1,
+        playlistsImported: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
+      },
       lastMessage: "Abort requested. Waiting for the current import step to finish...",
       lastErrors: [],
     });
@@ -169,7 +245,15 @@ describe("dbRouter scanInstallFolderOnce", () => {
           triggeredBy: "manual",
           startedAt: "2026-03-10T00:00:00.000Z",
           finishedAt: "2026-03-10T00:00:01.000Z",
-          stats: { scannedFolders: 1, sidecarsSeen: 2, installed: 2, playlistsImported: 0, updated: 0, skipped: 0, failed: 0 },
+          stats: {
+            scannedFolders: 1,
+            sidecarsSeen: 2,
+            installed: 2,
+            playlistsImported: 0,
+            updated: 0,
+            skipped: 0,
+            failed: 0,
+          },
           lastMessage: "ok",
           lastErrors: [],
         },

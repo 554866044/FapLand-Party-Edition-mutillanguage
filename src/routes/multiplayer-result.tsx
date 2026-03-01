@@ -2,6 +2,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { useControllerSurface } from "../controller";
+import {
+  assertMultiplayerAllowed,
+  useMultiplayerSfwRedirect,
+} from "../hooks/useMultiplayerSfwGuard";
 import { db } from "../services/db";
 import {
   buildTemporaryStandings,
@@ -50,6 +54,7 @@ async function safe<T>(work: () => Promise<T>, fallback: T): Promise<T> {
 export const Route = createFileRoute("/multiplayer-result")({
   validateSearch: (search) => MultiplayerResultSearchSchema.parse(search),
   loader: async ({ location }) => {
+    await assertMultiplayerAllowed();
     const search = MultiplayerResultSearchSchema.parse(location.search);
     const [snapshot, ownPlayer, finalHistory, cached] = await Promise.all([
       safe(() => getLobbySnapshot(search.lobbyId), null),
@@ -85,8 +90,13 @@ export const Route = createFileRoute("/multiplayer-result")({
 
 function MultiplayerResultRoute() {
   const navigate = useNavigate();
+  const sfwModeEnabled = useMultiplayerSfwRedirect();
   const { search, initialRows, initialIsFinal, initialSnapshot, ownPlayerId, finishedAtIso } = Route.useLoaderData();
   const scopeRef = useRef<HTMLDivElement | null>(null);
+
+  if (sfwModeEnabled) {
+    return null;
+  }
 
   const [rows, setRows] = useState<MultiplayerStandingRow[]>(initialRows);
   const [snapshot, setSnapshot] = useState<MultiplayerLobbySnapshot | null>(initialSnapshot);

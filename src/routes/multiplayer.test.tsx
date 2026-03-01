@@ -2,21 +2,57 @@ import type { ReactElement } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+function createLinearPlaylistConfig(totalIndices: number) {
+  return {
+    playlistVersion: 1,
+    boardConfig: {
+      mode: "linear" as const,
+      totalIndices,
+      safePointIndices: [],
+      safePointRestMsByIndex: {},
+      normalRoundRefsByIndex: {},
+      normalRoundOrder: [],
+      cumRoundRefs: [],
+    },
+    perkSelection: { optionsPerPick: 3, triggerChancePerCompletedRound: 0.35 },
+    perkPool: { enabledPerkIds: [], enabledAntiPerkIds: [] },
+    probabilityScaling: {
+      initialIntermediaryProbability: 0,
+      initialAntiPerkProbability: 0,
+      intermediaryIncreasePerRound: 0.02,
+      antiPerkIncreasePerRound: 0.015,
+      maxIntermediaryProbability: 1,
+      maxAntiPerkProbability: 0.75,
+    },
+    economy: {
+      startingMoney: 120,
+      moneyPerCompletedRound: 50,
+      startingScore: 0,
+      scorePerCompletedRound: 100,
+      scorePerIntermediary: 30,
+      scorePerActiveAntiPerk: 25,
+      scorePerCumRoundSuccess: 420,
+    },
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   loaderData: {
     activePlaylist: {
       id: "playlist-1",
       name: "Playlist One",
-      config: { playlistVersion: 1 },
+      config: createLinearPlaylistConfig(100),
     },
     availablePlaylists: [
       {
         id: "playlist-1",
         name: "Playlist One",
-        config: { playlistVersion: 1 },
+        config: createLinearPlaylistConfig(100),
       },
     ],
-    installedRounds: [],
+    installedRounds: Array.from({ length: 100 }, (_, index) => ({
+      id: `round-${index + 1}`,
+    })),
     profiles: [
       {
         id: "default-server",
@@ -39,6 +75,7 @@ const mocks = vi.hoisted(() => ({
       createdAtIso: "2026-03-08T00:00:00.000Z",
       updatedAtIso: "2026-03-08T00:00:00.000Z",
     },
+    skipRoundsCheck: false,
   },
   search: {
     inviteCode: "",
@@ -52,11 +89,24 @@ const mocks = vi.hoisted(() => ({
   saveMultiplayerServerProfile: vi.fn(),
   removeMultiplayerServerProfile: vi.fn(),
   joinLobby: vi.fn(),
+  getLobbyJoinPreview: vi.fn(),
+  listPublicLobbies: vi.fn(),
   createLobby: vi.fn(),
   startDiscordMultiplayerLink: vi.fn(),
-  subscribeToMultiplayerAuthRefresh: vi.fn(() => () => {}),
+  subscribeToMultiplayerAuthRefresh: vi.fn(() => () => { }),
   buildMultiplayerPlaylistSnapshot: vi.fn(() => ({ playlistVersion: 1 })),
   isLikelyConfiguredSupabaseServer: vi.fn((profile: { url: string; anonKey: string }) => profile.url.length > 0 && profile.anonKey.length > 0),
+  useAppUpdate: vi.fn(() => ({
+    state: { status: "up_to_date" },
+    isBusy: false,
+    actionLabel: "Check Again",
+    menuBadge: undefined,
+    menuTone: "success",
+    systemMessage: "Installed build is current.",
+    triggerPrimaryAction: vi.fn(),
+  })),
+  sfwModeEnabled: false,
+  assertMultiplayerAllowed: vi.fn(),
 }));
 
 function createAuthStatus(overrides: Record<string, unknown> = {}) {
@@ -102,7 +152,9 @@ vi.mock("../services/multiplayer", () => ({
   getOptionalActiveMultiplayerServerProfile: mocks.getOptionalActiveMultiplayerServerProfile,
   getPreferredMultiplayerServerProfile: mocks.getPreferredMultiplayerServerProfile,
   isLikelyConfiguredSupabaseServer: mocks.isLikelyConfiguredSupabaseServer,
+  getLobbyJoinPreview: mocks.getLobbyJoinPreview,
   joinLobby: mocks.joinLobby,
+  listPublicLobbies: mocks.listPublicLobbies,
   listMultiplayerServerProfiles: mocks.listMultiplayerServerProfiles,
   removeMultiplayerServerProfile: mocks.removeMultiplayerServerProfile,
   resolveMultiplayerAuthStatus: mocks.resolveMultiplayerAuthStatus,
@@ -124,17 +176,58 @@ vi.mock("../utils/audio", () => ({
   playSelectSound: vi.fn(),
 }));
 
+vi.mock("../hooks/useAppUpdate", () => ({
+  useAppUpdate: mocks.useAppUpdate,
+}));
+
+vi.mock("../hooks/useMultiplayerSfwGuard", () => ({
+  assertMultiplayerAllowed: mocks.assertMultiplayerAllowed,
+  useMultiplayerSfwRedirect: () => mocks.sfwModeEnabled,
+}));
+
 import { Route } from "./multiplayer";
 
 beforeEach(() => {
   mocks.navigate.mockReset();
+  mocks.sfwModeEnabled = false;
+  mocks.loaderData.activePlaylist = {
+    id: "playlist-1",
+    name: "Playlist One",
+    config: createLinearPlaylistConfig(100),
+  };
+  mocks.loaderData.availablePlaylists = [
+    {
+      id: "playlist-1",
+      name: "Playlist One",
+      config: createLinearPlaylistConfig(100),
+    },
+  ];
+  mocks.loaderData.installedRounds = Array.from({ length: 100 }, (_, index) => ({
+    id: `round-${index + 1}`,
+  }));
+  mocks.loaderData.skipRoundsCheck = false;
+  mocks.search.inviteCode = "";
+  mocks.assertMultiplayerAllowed.mockResolvedValue(undefined);
   mocks.resolveMultiplayerAuthStatus.mockResolvedValue(createAuthStatus());
   mocks.getPreferredMultiplayerServerProfile.mockResolvedValue(mocks.loaderData.activeProfile);
   mocks.getOptionalActiveMultiplayerServerProfile.mockResolvedValue(mocks.loaderData.activeProfile);
   mocks.listMultiplayerServerProfiles.mockResolvedValue(mocks.loaderData.profiles);
+  mocks.listPublicLobbies.mockResolvedValue([]);
   mocks.setActiveMultiplayerServerProfile.mockResolvedValue(mocks.loaderData.activeProfile);
   mocks.saveMultiplayerServerProfile.mockResolvedValue(mocks.loaderData.activeProfile);
   mocks.removeMultiplayerServerProfile.mockResolvedValue(undefined);
+  mocks.getLobbyJoinPreview.mockResolvedValue({
+    lobbyId: "lobby-1",
+    inviteCode: "ABCD",
+    name: "Preview Lobby",
+    playlistName: "Playlist One",
+    playerCount: 2,
+    status: "waiting",
+    isOpen: true,
+    allowLateJoin: true,
+    requiredRoundCount: 100,
+    createdAt: "2026-03-29T00:00:00.000Z",
+  });
   mocks.joinLobby.mockResolvedValue({
     lobbyId: "lobby-1",
     inviteCode: "ABCD",
@@ -146,7 +239,7 @@ beforeEach(() => {
     playerId: "player-1",
   });
   mocks.startDiscordMultiplayerLink.mockResolvedValue(undefined);
-  mocks.subscribeToMultiplayerAuthRefresh.mockReturnValue(() => {});
+  mocks.subscribeToMultiplayerAuthRefresh.mockReturnValue(() => { });
   mocks.isLikelyConfiguredSupabaseServer.mockImplementation((profile: { url: string; anonKey: string }) => profile.url.length > 0 && profile.anonKey.length > 0);
 });
 
@@ -165,6 +258,15 @@ describe("MultiplayerRoute", () => {
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
   });
 
+  it("renders nothing while sfw mode is enabled", () => {
+    mocks.sfwModeEnabled = true;
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    const { container } = render(<Component />);
+
+    expect(container.innerHTML).toBe("");
+  });
+
   it("allows anonymous-only servers to play after bootstrap", async () => {
     const Component = (Route as unknown as { component: () => ReactElement }).component;
     render(<Component />);
@@ -172,11 +274,132 @@ describe("MultiplayerRoute", () => {
     await waitFor(() => {
       expect(mocks.resolveMultiplayerAuthStatus).toHaveBeenCalledWith(mocks.loaderData.activeProfile);
       expect(screen.getByText("Ready")).toBeDefined();
-      expect(screen.getByText("This server allows anonymous multiplayer")).toBeDefined();
+      expect(screen.getByText("Ready to join or host")).toBeDefined();
     });
 
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(false);
     expect(screen.getByRole("button", { name: "Join Lobby" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("forwards public visibility when creating a lobby", async () => {
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ready")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByLabelText("Advertise on Public List"));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby" }));
+
+    await waitFor(() => {
+      expect(mocks.createLobby).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isPublic: true,
+        }),
+        mocks.loaderData.activeProfile,
+      );
+      expect(mocks.buildMultiplayerPlaylistSnapshot).toHaveBeenCalledWith(
+        mocks.loaderData.activePlaylist.config,
+        mocks.loaderData.installedRounds,
+        { name: "Playlist One" },
+      );
+    });
+  });
+
+  it("blocks lobby creation when the playlist requirement exceeds installed rounds", async () => {
+    mocks.loaderData.activePlaylist = {
+      id: "playlist-1",
+      name: "Playlist One",
+      config: createLinearPlaylistConfig(140),
+    };
+    mocks.loaderData.availablePlaylists = [mocks.loaderData.activePlaylist];
+    mocks.loaderData.installedRounds = Array.from({ length: 110 }, (_, index) => ({
+      id: `round-${index + 1}`,
+    }));
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Playlist One requires 140 installed rounds.")).toBeDefined();
+    });
+
+    expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText("This playlist requires at least 140 installed rounds. You have 110.")
+    ).toBeDefined();
+  });
+
+  it("blocks invite-code joins when the preview requires more rounds than installed", async () => {
+    mocks.loaderData.installedRounds = Array.from({ length: 110 }, (_, index) => ({
+      id: `round-${index + 1}`,
+    }));
+    mocks.getLobbyJoinPreview.mockResolvedValue({
+      lobbyId: "lobby-2",
+      inviteCode: "ROOM140",
+      name: "Big Lobby",
+      playlistName: "Huge Playlist",
+      playerCount: 3,
+      status: "waiting",
+      isOpen: true,
+      allowLateJoin: true,
+      requiredRoundCount: 140,
+      createdAt: "2026-03-29T00:00:00.000Z",
+    });
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ready")).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByLabelText("Invite Code"), { target: { value: "room140" } });
+    fireEvent.click(screen.getByRole("button", { name: "Join Lobby" }));
+
+    await waitFor(() => {
+      expect(mocks.getLobbyJoinPreview).toHaveBeenCalledWith("ROOM140", mocks.loaderData.activeProfile);
+      expect(screen.getByText("This lobby requires at least 140 installed rounds. You have 110.")).toBeDefined();
+    });
+
+    expect(mocks.joinLobby).not.toHaveBeenCalled();
+  });
+
+  it("lists and joins public lobbies in one click", async () => {
+    mocks.listPublicLobbies.mockResolvedValue([
+      {
+        lobbyId: "lobby-public",
+        inviteCode: "PUBLIC1",
+        name: "Public Lobby",
+        playlistName: "Playlist One",
+        playerCount: 4,
+        status: "waiting",
+        isOpen: true,
+        allowLateJoin: true,
+        requiredRoundCount: 100,
+        createdAt: "2026-03-29T00:00:00.000Z",
+      },
+    ]);
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Public Lobby")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Join Public Lobby" }));
+
+    await waitFor(() => {
+      expect(mocks.joinLobby).toHaveBeenCalledWith(
+        {
+          inviteCode: "PUBLIC1",
+          displayName: "Player",
+        },
+        mocks.loaderData.activeProfile,
+      );
+    });
   });
 
   it("hides built-in endpoint credentials from the editor", async () => {
@@ -207,7 +430,7 @@ describe("MultiplayerRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Link Discord" })).toBeDefined();
-      expect(screen.getByText("This server requires Discord")).toBeDefined();
+      expect(screen.getByText("Discord linking required")).toBeDefined();
     });
 
     expect(screen.getByRole("button", { name: "Create Lobby" }).hasAttribute("disabled")).toBe(true);
@@ -235,7 +458,7 @@ describe("MultiplayerRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Email Required")).toBeDefined();
-      expect(screen.getByText("Discord account has no email; multiplayer blocked")).toBeDefined();
+      expect(screen.getByText("Discord account needs an email")).toBeDefined();
     });
   });
 
@@ -310,6 +533,25 @@ describe("MultiplayerRoute", () => {
         url: "https://custom.supabase.co",
         anonKey: "custom-key",
       });
+    });
+  });
+
+  it("redirects to home if an update is available", async () => {
+    mocks.useAppUpdate.mockReturnValue({
+      state: { status: "update_available" },
+      isBusy: false,
+      actionLabel: "Download",
+      menuBadge: "v2",
+      menuTone: "warning",
+      systemMessage: "New version available.",
+      triggerPrimaryAction: vi.fn(),
+    } as any);
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/" });
     });
   });
 });

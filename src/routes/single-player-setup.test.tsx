@@ -30,7 +30,7 @@ function makePlaylist(id: string, name: string) {
         initialAntiPerkProbability: 0,
         intermediaryIncreasePerRound: 0.02,
         antiPerkIncreasePerRound: 0.015,
-        maxIntermediaryProbability: 0.85,
+        maxIntermediaryProbability: 1,
         maxAntiPerkProbability: 0.75,
       },
       economy: {
@@ -47,6 +47,8 @@ function makePlaylist(id: string, name: string) {
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   };
 }
+
+const PLAYLIST_LAUNCH_DURATION_MS = 2500;
 
 const mocks = vi.hoisted(() => ({
   loaderData: {
@@ -87,6 +89,7 @@ vi.mock("../services/playlists", () => ({
 
 vi.mock("../utils/audio", () => ({
   playHoverSound: vi.fn(),
+  playPlaylistLaunchSound: vi.fn(),
   playSelectSound: vi.fn(),
 }));
 
@@ -128,7 +131,7 @@ describe("SinglePlayerSetupRoute", () => {
 
     render(<SinglePlayerSetupRoute />);
     fireEvent.click(screen.getByRole("button", { name: "Start Selected Playlist" }));
-    await vi.advanceTimersByTimeAsync(900);
+    await vi.advanceTimersByTimeAsync(PLAYLIST_LAUNCH_DURATION_MS);
     await Promise.resolve();
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
     expect(mocks.navigate).toHaveBeenCalledWith({
@@ -175,7 +178,7 @@ describe("SinglePlayerSetupRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start Selected Playlist" }));
     await Promise.resolve();
     await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(900);
+    await vi.advanceTimersByTimeAsync(PLAYLIST_LAUNCH_DURATION_MS);
     await Promise.resolve();
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-active");
   });
@@ -196,7 +199,7 @@ describe("SinglePlayerSetupRoute", () => {
     fireEvent.click(startButton);
     await Promise.resolve();
     await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(900);
+    await vi.advanceTimersByTimeAsync(PLAYLIST_LAUNCH_DURATION_MS);
     await Promise.resolve();
     expect(mocks.playlists.setActive).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).toHaveBeenCalledTimes(1);

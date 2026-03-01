@@ -34,9 +34,10 @@ describe("RoundStartTransition", () => {
     expect(view.getByText("NORMAL ROUND")).toBeDefined();
     expect(view.getByTestId("cinematic-transition-title").textContent).toBe("Round One");
     expect(view.getByTestId("cinematic-transition-countdown").textContent).toBe("2");
+    expect(view.queryByTestId("cinematic-transition-hint")).toBeNull();
   });
 
-  it("renders cum round labels", () => {
+  it("renders cum round labels and hint", () => {
     const view = render(
       <RoundStartTransition
         queuedRound={{
@@ -55,6 +56,10 @@ describe("RoundStartTransition", () => {
     );
 
     expect(view.getByText("CUM ROUND")).toBeDefined();
+    expect(view.getByTestId("cinematic-transition-title").textContent).toBe("Finale");
+    expect(view.getByTestId("cinematic-transition-hint").textContent).toContain(
+      "In this round, you may cum when the video instructs you to do so.",
+    );
     expect(view.getByTestId("cinematic-transition-countdown").textContent).toBe("1");
   });
 });

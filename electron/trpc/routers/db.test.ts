@@ -57,6 +57,7 @@ type SinglePlayerRunRow = {
   playlistFormatVersion: number | null;
   endingPosition: number;
   turn: number;
+  cheatModeActive?: boolean;
   createdAt: Date;
 };
 
@@ -161,11 +162,10 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     const dbMock = {
       query: {
         singlePlayerRunHistory: {
-          findMany: vi.fn(async (input: { limit: number }) => (
-            [...singleRuns]
-              .sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime())
-              .slice(0, input.limit)
-          )),
+          findMany: vi.fn(async (input?: { limit?: number }) => {
+            const runs = [...singleRuns].sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime());
+            return typeof input?.limit === "number" ? runs.slice(0, input.limit) : runs;
+          }),
         },
         multiplayerMatchCache: {
           findFirst: vi.fn(async (input: { where: unknown }) => {
@@ -220,6 +220,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
                 get: async () => (highscore > 0 ? {
                   id: "local",
                   highscore,
+                  highscoreCheatMode: false,
                   createdAt: new Date("2026-03-05T00:00:00.000Z"),
                   updatedAt: new Date("2026-03-05T00:00:00.000Z"),
                 } : null),
@@ -244,12 +245,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
           onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => ({
             returning: async () => {
               if (getTableName(table) === "GameProfile") {
-                const nextHighscore = Math.max(
-                  highscore,
-                  Number((data as { highscore: number }).highscore ?? 0),
-                  Number(set.highscore ?? 0),
-                );
-                highscore = nextHighscore;
+                highscore = Number(set.highscore ?? (data as { highscore?: number }).highscore ?? 0);
                 return [];
               }
 
@@ -278,20 +274,13 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             },
             then: async (resolve: (value: unknown) => unknown) => {
               if (getTableName(table) !== "GameProfile") return resolve([]);
-              highscore = Math.max(
-                highscore,
-                Number((data as { highscore: number }).highscore ?? 0),
-                Number(set.highscore ?? 0),
-              );
+              highscore = Number(set.highscore ?? (data as { highscore?: number }).highscore ?? 0);
               return resolve([]);
             },
           }),
           then: async (resolve: (value: unknown) => unknown) => {
             if (getTableName(table) !== "GameProfile") return resolve([]);
-            highscore = Math.max(
-              highscore,
-              Number((data as { highscore: number }).highscore ?? 0),
-            );
+            highscore = Number((data as { highscore?: number }).highscore ?? 0);
             return resolve([]);
           },
           onConflictDoNothing: () => ({
@@ -381,6 +370,14 @@ describe("dbRouter local highscore and multiplayer cache", () => {
               if (!existing) return [];
               queueByLobby.delete(lobbyId);
               return [existing];
+            }
+            if (getTableName(table) === "SinglePlayerRunHistory") {
+              const runId = typeof value === "string" ? value : singleRuns[0]?.id;
+              if (typeof runId !== "string") return [];
+              const index = singleRuns.findIndex((entry) => entry.id === runId);
+              if (index < 0) return [];
+              const [deleted] = singleRuns.splice(index, 1);
+              return deleted ? [deleted] : [];
             }
             return [];
           },
@@ -475,10 +472,10 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   it("stores and returns max local highscore", async () => {
     const caller = dbRouter.createCaller({} as never);
 
-    expect(await caller.getLocalHighscore()).toBe(0);
-    expect(await caller.setLocalHighscore({ highscore: 120 })).toBe(120);
-    expect(await caller.setLocalHighscore({ highscore: 75 })).toBe(120);
-    expect(await caller.getLocalHighscore()).toBe(120);
+    expect(await caller.getLocalHighscore()).toMatchObject({ highscore: 0, highscoreCheatMode: false });
+    expect(await caller.setLocalHighscore({ highscore: 120 })).toMatchObject({ highscore: 120, highscoreCheatMode: false });
+    expect(await caller.setLocalHighscore({ highscore: 75 })).toMatchObject({ highscore: 120, highscoreCheatMode: false });
+    expect(await caller.getLocalHighscore()).toMatchObject({ highscore: 120, highscoreCheatMode: false });
   });
 
   it("supports multiplayer match cache CRUD and sync queue lifecycle", async () => {
@@ -556,6 +553,97 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     expect(runs[0]?.wasNewHighscore).toBe(true);
     expect(runs[1]?.survivedDurationSec).toBeNull();
     expect(runs[1]?.completionReason).toBe("self_reported_cum");
+  });
+
+  it("counts extracted cum loads from single-player run history", async () => {
+    const caller = dbRouter.createCaller({} as never);
+
+    await caller.recordSinglePlayerRun({
+      finishedAtIso: "2026-03-05T10:00:00.000Z",
+      score: 540,
+      highscoreBefore: 500,
+      highscoreAfter: 540,
+      wasNewHighscore: true,
+      completionReason: "finished",
+      playlistId: "playlist-1",
+      playlistName: "Default Playlist",
+      playlistFormatVersion: 1,
+      endingPosition: 100,
+      turn: 42,
+    });
+    await caller.recordSinglePlayerRun({
+      finishedAtIso: "2026-03-05T09:00:00.000Z",
+      score: 320,
+      highscoreBefore: 540,
+      highscoreAfter: 540,
+      wasNewHighscore: false,
+      completionReason: "self_reported_cum",
+      playlistId: "playlist-2",
+      playlistName: "Alt Playlist",
+      playlistFormatVersion: 1,
+      endingPosition: 74,
+      turn: 28,
+    });
+    await caller.recordSinglePlayerRun({
+      finishedAtIso: "2026-03-05T08:00:00.000Z",
+      score: 280,
+      highscoreBefore: 540,
+      highscoreAfter: 540,
+      wasNewHighscore: false,
+      completionReason: "cum_instruction_failed",
+      playlistId: "playlist-3",
+      playlistName: "Chaos Playlist",
+      playlistFormatVersion: 1,
+      endingPosition: 53,
+      turn: 19,
+    });
+
+    await expect(caller.getSinglePlayerCumLoadCount()).resolves.toBe(2);
+  });
+
+  it("deletes a single-player run and recomputes local highscore", async () => {
+    const caller = dbRouter.createCaller({} as never);
+
+    await caller.recordSinglePlayerRun({
+      finishedAtIso: "2026-03-05T10:00:00.000Z",
+      score: 540,
+      highscoreBefore: 500,
+      highscoreAfter: 540,
+      wasNewHighscore: true,
+      completionReason: "finished",
+      playlistId: "playlist-1",
+      playlistName: "Default Playlist",
+      playlistFormatVersion: 1,
+      endingPosition: 100,
+      turn: 42,
+      cheatModeActive: true,
+    });
+    await caller.recordSinglePlayerRun({
+      finishedAtIso: "2026-03-05T09:00:00.000Z",
+      score: 320,
+      highscoreBefore: 540,
+      highscoreAfter: 540,
+      wasNewHighscore: false,
+      completionReason: "self_reported_cum",
+      playlistId: "playlist-2",
+      playlistName: "Alt Playlist",
+      playlistFormatVersion: 1,
+      endingPosition: 74,
+      turn: 28,
+      cheatModeActive: false,
+    });
+
+    const runsBeforeDelete = await caller.listSinglePlayerRuns({ limit: 10 });
+    const deleted = await caller.deleteSinglePlayerRun({ id: runsBeforeDelete[0]!.id });
+
+    expect(deleted.deleted.id).toBe(runsBeforeDelete[0]!.id);
+    expect(deleted.highscore).toBe(320);
+    expect(deleted.highscoreCheatMode).toBe(false);
+    await expect(caller.getLocalHighscore()).resolves.toMatchObject({
+      highscore: 320,
+      highscoreCheatMode: false,
+    });
+    await expect(caller.listSinglePlayerRuns({ limit: 10 })).resolves.toHaveLength(1);
   });
 
   it("updates hero metadata with unique-name protection", async () => {
@@ -725,7 +813,7 @@ describe("dbRouter local highscore and multiplayer cache", () => {
 
     expect(dbMockRef.transaction).toHaveBeenCalledTimes(1);
     expect(storeMockRef.clear).toHaveBeenCalledTimes(1);
-    await expect(caller.getLocalHighscore()).resolves.toBe(0);
+    await expect(caller.getLocalHighscore()).resolves.toMatchObject({ highscore: 0, highscoreCheatMode: false });
     await expect(caller.listSinglePlayerRuns({ limit: 10 })).resolves.toHaveLength(0);
     await expect(caller.listMultiplayerMatchCache({ limit: 10 })).resolves.toHaveLength(0);
     await expect(caller.listResultSyncLobbies()).resolves.toHaveLength(0);

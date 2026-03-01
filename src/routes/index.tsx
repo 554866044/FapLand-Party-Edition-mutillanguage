@@ -1,14 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { useControllerSurface } from "../controller";
+import {
+  MULTIPLAYER_MINIMUM_ROUNDS,
+  MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
+} from "../constants/experimentalFeatures";
 import { useHandy } from "../contexts/HandyContext";
 import { useAppUpdate } from "../hooks/useAppUpdate";
+import { useSfwMode } from "../hooks/useSfwMode";
 import { useMenuNavigation, type MenuOption } from "../hooks/useMenuNavigation";
-import { db, type InstallScanStatus } from "../services/db";
+import { db } from "../services/db";
 import { parseStandingsJson } from "../services/multiplayer/results";
 import { trpc } from "../services/trpc";
+import { LibraryStatusPoller } from "../features/library/components/LibraryStatusPoller";
+import { PhashScanStatusPoller } from "../features/phash/components/PhashScanStatusPoller";
+import "../styles.css";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
 
@@ -22,12 +30,15 @@ const getVideos = async (): Promise<string[]> => {
   }
 };
 
-const getOverallHighscore = async (): Promise<number> => {
+const getOverallHighscore = async (): Promise<{ score: number; localCheatMode: boolean }> => {
   try {
-    const [localScore, cachedMatches] = await Promise.all([
-      db.gameProfile.getLocalHighscore().catch(() => 0),
+    const [localResult, cachedMatches] = await Promise.all([
+      db.gameProfile.getLocalHighscore().catch(() => ({ highscore: 0, highscoreCheatMode: false })),
       db.multiplayer.listMatchCache(100).catch(() => []),
     ]);
+
+    const localScore = typeof localResult === "number" ? localResult : localResult.highscore;
+    const localCheatMode = typeof localResult === "number" ? false : localResult.highscoreCheatMode;
 
     let maxRemote = 0;
     for (const match of cachedMatches) {
@@ -39,170 +50,127 @@ const getOverallHighscore = async (): Promise<number> => {
       }
     }
 
-    return Math.max(localScore, maxRemote);
+    const bestScore = Math.max(localScore, maxRemote);
+    const isFromLocal = localScore >= maxRemote;
+    return {
+      score: bestScore,
+      localCheatMode: isFromLocal ? localCheatMode : false,
+    };
   } catch (error) {
     console.error("Error fetching overall highscore", error);
-    return 0;
+    return { score: 0, localCheatMode: false };
   }
 };
 
-export const Route = createFileRoute("/")(({
-  loader: async () => {
-    const [videos, overallHighscore] = await Promise.all([
-      getVideos(),
-      getOverallHighscore()
-    ]);
-    return { videos, overallHighscore };
-  },
-  component: Home,
-}));
-
-function HighscoreDisplay({ score }: { score: number }) {
-  const [displayScore, setDisplayScore] = useState(0);
-
-  useEffect(() => {
-    if (score === 0) return;
-
-    let startTimestamp: number | null = null;
-    const duration = 1500; // 1.5 seconds
-
-    const step = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-
-      // easeOutExpo
-      const easing = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-
-      setDisplayScore(Math.floor(easing * score));
-
-      if (progress < 1) {
-        window.requestAnimationFrame(step);
-      }
-    };
-
-    window.requestAnimationFrame(step);
-  }, [score]);
-
-  if (score === 0) return null;
-
-  return (
-    <div className="absolute top-6 left-6 z-20 animate-entrance-fade" style={{ animationDelay: "0.5s", animationDuration: "1s" }}>
-      <div className="relative group overflow-hidden rounded-2xl border border-fuchsia-400/30 bg-black/40 p-4 backdrop-blur-md shadow-[0_0_20px_rgba(217,70,239,0.15)] transition-all duration-500 hover:border-fuchsia-400/60 hover:shadow-[0_0_30px_rgba(217,70,239,0.3)] hover:scale-105">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-fuchsia-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-        <div className="flex flex-col items-start gap-1">
-          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-fuchsia-200/80 drop-shadow-[0_0_5px_rgba(217,70,239,0.5)]">
-            Global Best
-          </p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-fuchsia-100 to-fuchsia-300 drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] tabular-nums">
-              {displayScore.toLocaleString()}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Home() {
-  const { videos, overallHighscore } = Route.useLoaderData();
+const Home = memo(() => {
+  const { videos, overallHighscore, cumLoadCount, installedRounds, skipRoundsCheck } = Route.useLoaderData();
   const navigate = useNavigate();
-  const [scanStatus, setScanStatus] = useState<InstallScanStatus | null>(null);
   const { connected, isConnecting, error, connectionKey } = useHandy();
   const appUpdate = useAppUpdate();
+  const sfwModeEnabled = useSfwMode();
   const scopeRef = useRef<HTMLDivElement | null>(null);
 
-  const options: MenuOption[] = useMemo(
-    () => {
-      const nextOptions: MenuOption[] = [
-        {
-          id: "play",
-          label: "Play",
-          primary: true,
-          submenu: [
-            {
-              id: "singleplayer",
-              label: "Single Player",
-              primary: true,
-              action: () => navigate({ to: "/single-player-setup" }),
-            },
-            {
-              id: "multiplayer",
-              label: "Multiplayer",
-              experimental: true,
-              action: () => navigate({ to: "/multiplayer" }),
-            },
-          ],
-        },
-        {
-          id: "creation",
-          label: "Creation & Workshop",
-          submenu: [
-            {
-              id: "installedrounds",
-              label: "Installed Rounds",
-              action: () => navigate({ to: "/rounds" }),
-            },
-            {
-              id: "converter",
-              label: "Round Converter",
-              action: () => navigate({ to: "/converter" }),
-            },
-            {
-              id: "playlist-workshop",
-              label: "Playlist Workshop",
-              action: () => navigate({ to: "/playlist-workshop" }),
-            },
-            {
-              id: "map-editor",
-              label: "Map Editor",
-              experimental: true,
-              action: () => navigate({ to: "/map-editor" }),
-            },
-          ],
-        },
-        {
-          id: "highscores",
-          label: "Highscores",
-          action: () => navigate({ to: "/highscores" }),
-        },
-        {
-          id: "settings",
-          label: "Settings",
-          action: () => navigate({ to: "/settings" }),
-        },
-      ];
-
-      if (appUpdate.state.status === "update_available") {
-        nextOptions.push({
-          id: "update",
-          label: appUpdate.actionLabel,
-          primary: true,
-          badge: appUpdate.menuBadge,
-          subLabel: appUpdate.state.latestVersion
-            ? `Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
-            : `Installed v${appUpdate.state.currentVersion}`,
-          statusTone: appUpdate.menuTone,
-          action: () => {
-            void appUpdate.triggerPrimaryAction();
+  const options: MenuOption[] = useMemo(() => {
+    const nextOptions: MenuOption[] = [
+      {
+        id: "play",
+        label: "Play",
+        primary: true,
+        submenu: [
+          {
+            id: "singleplayer",
+            label: "Single Player",
+            primary: true,
+            action: () => navigate({ to: "/single-player-setup" }),
           },
-        });
-      }
+          {
+            id: "multiplayer",
+            label: "Multiplayer",
+            experimental: true,
+            disabled:
+              sfwModeEnabled ||
+              appUpdate.state.status === "update_available" ||
+              (!skipRoundsCheck && installedRounds.length < MULTIPLAYER_MINIMUM_ROUNDS),
+            subLabel:
+              sfwModeEnabled
+                ? "Blocked By SFW Mode"
+                : appUpdate.state.status === "update_available"
+                ? "Update Required"
+                : !skipRoundsCheck && installedRounds.length < MULTIPLAYER_MINIMUM_ROUNDS
+                  ? `${MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required`
+                  : undefined,
+            action: () => navigate({ to: "/multiplayer" }),
+          },
+        ],
+      },
+      {
+        id: "creation",
+        label: "Creation & Workshop",
+        submenu: [
+          {
+            id: "installedrounds",
+            label: "Installed Rounds",
+            action: () => navigate({ to: "/rounds" }),
+          },
+          {
+            id: "converter",
+            label: "Round Converter",
+            action: () => navigate({ to: "/converter" }),
+          },
+          {
+            id: "playlist-workshop",
+            label: "Playlist Workshop",
+            action: () => navigate({ to: "/playlist-workshop" }),
+          },
+          {
+            id: "map-editor",
+            label: "Map Editor",
+            experimental: true,
+            action: () => navigate({ to: "/map-editor" }),
+          },
+        ],
+      },
+      {
+        id: "highscores",
+        label: "Highscores",
+        action: () => navigate({ to: "/highscores" }),
+      },
+      {
+        id: "settings",
+        label: "Settings",
+        action: () => navigate({ to: "/settings" }),
+      },
+    ];
 
+    if (appUpdate.state.status === "update_available") {
       nextOptions.push({
-        id: "close",
-        label: "Close",
+        id: "update",
+        label: appUpdate.actionLabel,
+        primary: true,
+        badge: appUpdate.menuBadge,
+        subLabel: appUpdate.state.latestVersion
+          ? `Installed v${appUpdate.state.currentVersion} -> Latest v${appUpdate.state.latestVersion}`
+          : `Installed v${appUpdate.state.currentVersion}`,
+        statusTone: appUpdate.menuTone,
         action: () => {
-          void window.electronAPI.window.close();
+          void appUpdate.triggerPrimaryAction();
         },
       });
+    }
 
-      return nextOptions;
-    },
-    [appUpdate, navigate]
-  );
+    nextOptions.push({
+      id: "close",
+      label: "Close",
+      action: () => {
+        void window.electronAPI.window.close();
+      },
+    });
 
-  const { selectedIndex, handleMouseEnter, handleClick, currentOptions, depth, goBack } = useMenuNavigation(options);
+    return nextOptions;
+  }, [appUpdate, navigate, installedRounds, sfwModeEnabled, skipRoundsCheck]);
+
+  const { selectedIndex, handleMouseEnter, handleClick, currentOptions, depth, goBack } =
+    useMenuNavigation(options);
 
   const handleFullscreenToggle = async () => {
     try {
@@ -223,80 +191,33 @@ function Home() {
           : "Disconnected";
   const handyWarning = !connected && error ? error : null;
 
-  const handyTone = connected
-    ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
-    : isConnecting
-      ? "border-cyan-300/55 bg-cyan-500/20 text-cyan-100"
-      : "border-amber-300/55 bg-amber-500/20 text-amber-100";
-  const scanTone = scanStatus
-    ? scanStatus.state === "running"
-      ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100"
-      : scanStatus.state === "error"
-        ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
-        : "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-    : "border-zinc-500/60 bg-zinc-700/30 text-zinc-100";
-  const scanStateLabel = scanStatus
-    ? scanStatus.state === "running"
-      ? "Running"
-      : scanStatus.state === "error"
-        ? "Error"
-        : "Complete"
-    : "Idle";
-  const updateTone = appUpdate.state.status === "update_available"
-    ? "border-amber-300/60 bg-amber-500/20 text-amber-100"
-    : appUpdate.state.status === "up_to_date"
-      ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-      : appUpdate.state.status === "error"
-        ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
-        : "border-zinc-500/60 bg-zinc-700/30 text-zinc-100";
-  const updateStateLabel = appUpdate.state.status === "checking"
-    ? "Checking"
-    : appUpdate.state.status === "update_available"
-      ? "Out of Date"
-      : appUpdate.state.status === "up_to_date"
-        ? "Current"
-        : appUpdate.state.status === "error"
-          ? "Retry Needed"
-          : "Idle";
+  const updateStateLabel =
+    appUpdate.state.status === "checking"
+      ? "Checking"
+      : appUpdate.state.status === "update_available"
+        ? "Out of Date"
+        : appUpdate.state.status === "up_to_date"
+          ? "Current"
+          : appUpdate.state.status === "error"
+            ? "Retry Needed"
+            : "Idle";
 
   useEffect(() => {
     let cancelled = false;
-    void trpc.store.get.query({ key: FIRST_START_COMPLETED_KEY }).then((value) => {
-      if (cancelled || value === true) return;
-      void navigate({ to: "/first-start", search: { returnTo: "menu" } });
-    }).catch((loadError) => {
-      console.error("Failed to read first-start workflow state", loadError);
-    });
+    void trpc.store.get
+      .query({ key: FIRST_START_COMPLETED_KEY })
+      .then((value) => {
+        if (cancelled || value === true) return;
+        void navigate({ to: "/first-start", search: { returnTo: "menu" } });
+      })
+      .catch((loadError) => {
+        console.error("Failed to read first-start workflow state", loadError);
+      });
 
     return () => {
       cancelled = true;
     };
   }, [navigate]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const pollScanStatus = async () => {
-      try {
-        const status = await db.install.getScanStatus();
-        if (mounted) {
-          setScanStatus(status);
-        }
-      } catch (error) {
-        console.error("Failed to poll install scan status", error);
-      }
-    };
-
-    void pollScanStatus();
-    const interval = window.setInterval(() => {
-      void pollScanStatus();
-    }, 2000);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
 
   // Construct options for rendering by appending "Back" if not at root
   const renderOptions = useMemo(() => {
@@ -316,26 +237,40 @@ function Home() {
     scopeRef,
     priority: 10,
     initialFocusId: renderOptions[0] ? `home-option-${renderOptions[0].id}` : undefined,
-    onBack: depth > 0 ? () => {
-      goBack();
-      return true;
-    } : undefined,
+    onBack:
+      depth > 0
+        ? () => {
+            goBack();
+            return true;
+          }
+        : undefined,
   });
 
   return (
-    <div ref={scopeRef} className="relative min-h-screen flex flex-col items-center justify-center select-none overflow-hidden">
+    <div
+      ref={scopeRef}
+      className="relative min-h-screen flex flex-col items-center justify-center select-none overflow-hidden"
+    >
       <AnimatedBackground videoUris={videos} />
 
-      <HighscoreDisplay score={overallHighscore} />
+      <HighscoreDisplay
+        score={overallHighscore.score}
+        cheatMode={overallHighscore.localCheatMode}
+        cumLoadCount={cumLoadCount}
+        hideCumLoadCount={sfwModeEnabled}
+      />
 
       <main className="parallax-ui z-10 flex flex-col items-center w-full max-w-lg px-6 text-center">
         {/* ── Game Title ── */}
-        <div className="relative h-32 mb-10 w-full flex justify-center animate-entrance-fade" style={{ animationDuration: "1.2s" }}>
+        <div
+          className="relative h-32 mb-10 w-full flex justify-center animate-entrance-fade"
+          style={{ animationDuration: "1.2s" }}
+        >
           <div
             className="absolute top-0 flex flex-col items-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{
-              transform: depth > 0 ? 'scale(0.85) translateY(-10px)' : 'scale(1) translateY(0)',
-              opacity: depth > 0 ? 0.6 : 1
+              transform: depth > 0 ? "scale(0.85) translateY(-10px)" : "scale(1) translateY(0)",
+              opacity: depth > 0 ? 0.6 : 1,
             }}
           >
             {/* Eyebrow */}
@@ -397,6 +332,7 @@ function Home() {
                   badge={opt.badge}
                   subLabel={opt.subLabel}
                   statusTone={opt.statusTone}
+                  disabled={opt.disabled}
                   selected={selectedIndex === index}
                   onHover={() => handleMouseEnter(index)}
                   onClick={() => handleClick(index)}
@@ -414,58 +350,195 @@ function Home() {
         className="absolute right-6 top-1/2 z-10 hidden w-80 -translate-y-1/2 animate-entrance-fade lg:block"
         style={{ animationDelay: "0.8s", animationDuration: "1.2s" }}
       >
-        <div className="rounded-xl border border-zinc-300/30 bg-zinc-900/35 p-4 backdrop-blur-md">
-          <p className="mb-3 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-zinc-200/75">
-            System
-          </p>
-          <div className="mb-3 rounded-lg border border-zinc-500/60 bg-zinc-700/30 px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] text-zinc-100">
-            Program Version
-            <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90">
-              v{import.meta.env.VITE_APP_VERSION}-alpha
-            </div>
-            <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90">
-              Early Access
-            </div>
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900/30 via-zinc-900/25 to-zinc-800/20 p-3 backdrop-blur-xl shadow-2xl">
+          <div className="mb-2 flex items-center gap-2">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-violet-200/80 font-semibold">
+              System
+            </p>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
           </div>
-          <div
-            className={`mb-3 rounded-lg border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] ${handyTone}`}
-          >
-            TheHandy {handyLabel}
-            {handyWarning && (
-              <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90 normal-case">
-                {handyWarning}
+
+          <div className="space-y-1.5">
+            <div className="rounded-lg border border-indigo-300/20 bg-indigo-950/8 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-indigo-300/80 text-[8px]">◆</span>
+                <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] text-indigo-200/70 font-medium">
+                  Program Version
+                </p>
               </div>
-            )}
-          </div>
-          <div
-            className={`rounded-lg border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] ${scanTone}`}
-          >
-            Library Scan {scanStateLabel}
-            {scanStatus && (
-              <>
-                <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90">
-                  {scanStatus.stats.sidecarsSeen} scanned
+              <div className="pl-3.5 space-y-0">
+                <div className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide text-indigo-100/90">
+                  v{import.meta.env.VITE_APP_VERSION}-alpha
                 </div>
-                <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90">
-                  {scanStatus.stats.installed} rounds, {scanStatus.stats.playlistsImported} playlists
+                <div className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide text-indigo-200/60">
+                  Early Access
                 </div>
-              </>
-            )}
-          </div>
-          <div
-            className={`mt-3 rounded-lg border px-3 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.14em] ${updateTone}`}
-          >
-            Update {updateStateLabel}
-            <div className="mt-2 text-[10px] tracking-[0.1em] text-current/90">
-              Installed v{appUpdate.state.currentVersion}
-            </div>
-            {appUpdate.state.latestVersion && (
-              <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90">
-                Latest v{appUpdate.state.latestVersion}
               </div>
-            )}
-            <div className="mt-1 text-[10px] tracking-[0.1em] text-current/90 normal-case">
-              {appUpdate.systemMessage}
+            </div>
+
+            <div
+              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${
+                connected
+                  ? "border-emerald-400/30 bg-emerald-950/8"
+                  : isConnecting
+                    ? "border-cyan-400/30 bg-cyan-950/8"
+                    : "border-amber-400/30 bg-amber-950/8"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span
+                  className={`text-[8px] ${
+                    connected
+                      ? "text-emerald-300/80"
+                      : isConnecting
+                        ? "text-cyan-300/80 animate-pulse"
+                        : "text-amber-300/80"
+                  }`}
+                >
+                  ◆
+                </span>
+                <p
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${
+                    connected
+                      ? "text-emerald-200/70"
+                      : isConnecting
+                        ? "text-cyan-200/70"
+                        : "text-amber-200/70"
+                  }`}
+                >
+                  TheHandy
+                </p>
+              </div>
+              <div className="pl-3.5">
+                <div
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${
+                    connected
+                      ? "text-emerald-100/90"
+                      : isConnecting
+                        ? "text-cyan-100/90"
+                        : "text-amber-100/90"
+                  }`}
+                >
+                  {handyLabel}
+                </div>
+                {handyWarning && (
+                  <div
+                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${
+                      connected
+                        ? "text-emerald-200/60"
+                        : isConnecting
+                          ? "text-cyan-200/60"
+                          : "text-amber-200/60"
+                    }`}
+                  >
+                    {handyWarning}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <LibraryStatusPoller />
+
+            <PhashScanStatusPoller />
+
+            <div
+              className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${
+                appUpdate.state.status === "update_available"
+                  ? "border-amber-400/30 bg-amber-950/8"
+                  : appUpdate.state.status === "up_to_date"
+                    ? "border-emerald-400/30 bg-emerald-950/8"
+                    : appUpdate.state.status === "error"
+                      ? "border-rose-400/30 bg-rose-950/8"
+                      : "border-zinc-400/20 bg-zinc-950/8"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span
+                  className={`text-[8px] ${
+                    appUpdate.state.status === "update_available"
+                      ? "text-amber-300/80"
+                      : appUpdate.state.status === "up_to_date"
+                        ? "text-emerald-300/80"
+                        : appUpdate.state.status === "error"
+                          ? "text-rose-300/80"
+                          : "text-zinc-300/80"
+                  }`}
+                >
+                  ◆
+                </span>
+                <p
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] font-medium ${
+                    appUpdate.state.status === "update_available"
+                      ? "text-amber-200/70"
+                      : appUpdate.state.status === "up_to_date"
+                        ? "text-emerald-200/70"
+                        : appUpdate.state.status === "error"
+                          ? "text-rose-200/70"
+                          : "text-zinc-200/70"
+                  }`}
+                >
+                  Update Status
+                </p>
+              </div>
+              <div className="pl-3.5 space-y-0">
+                <div
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-wide ${
+                    appUpdate.state.status === "update_available"
+                      ? "text-amber-100/90"
+                      : appUpdate.state.status === "up_to_date"
+                        ? "text-emerald-100/90"
+                        : appUpdate.state.status === "error"
+                          ? "text-rose-100/90"
+                          : "text-zinc-100/90"
+                  }`}
+                >
+                  {updateStateLabel}
+                </div>
+                <div
+                  className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${
+                    appUpdate.state.status === "update_available"
+                      ? "text-amber-200/60"
+                      : appUpdate.state.status === "up_to_date"
+                        ? "text-emerald-200/60"
+                        : appUpdate.state.status === "error"
+                          ? "text-rose-200/60"
+                          : "text-zinc-200/60"
+                  }`}
+                >
+                  Installed v{appUpdate.state.currentVersion}
+                </div>
+                {appUpdate.state.latestVersion && (
+                  <div
+                    className={`font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide ${
+                      appUpdate.state.status === "update_available"
+                        ? "text-amber-200/60"
+                        : appUpdate.state.status === "up_to_date"
+                          ? "text-emerald-200/60"
+                          : appUpdate.state.status === "error"
+                            ? "text-rose-200/60"
+                            : "text-zinc-200/60"
+                    }`}
+                  >
+                    Latest v{appUpdate.state.latestVersion}
+                  </div>
+                )}
+                {appUpdate.systemMessage && (
+                  <div
+                    className={`mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] tracking-wide normal-case ${
+                      appUpdate.state.status === "update_available"
+                        ? "text-amber-200/60"
+                        : appUpdate.state.status === "up_to_date"
+                          ? "text-emerald-200/60"
+                          : appUpdate.state.status === "error"
+                            ? "text-rose-200/60"
+                            : "text-zinc-200/60"
+                    }`}
+                  >
+                    {appUpdate.systemMessage}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -481,7 +554,101 @@ function Home() {
       >
         Fullscreen F11
       </button>
+    </div>
+  );
+});
 
+export const Route = createFileRoute("/")({
+  loader: async () => {
+    const [videos, overallHighscore, cumLoadCount, installedRounds, rawSkipRoundsCheck] = await Promise.all([
+      getVideos(),
+      getOverallHighscore(),
+      db.singlePlayerHistory.getCumLoadCount().catch(() => 0),
+      db.round.findInstalled(),
+      trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
+    ]);
+    const skipRoundsCheck =
+      rawSkipRoundsCheck === true || rawSkipRoundsCheck === "true"
+        ? true
+        : rawSkipRoundsCheck === false || rawSkipRoundsCheck === "false"
+          ? false
+          : false;
+    return { videos, overallHighscore, cumLoadCount, installedRounds, skipRoundsCheck };
+  },
+  component: Home,
+});
+
+function HighscoreDisplay({
+  score,
+  cheatMode,
+  cumLoadCount,
+  hideCumLoadCount,
+}: {
+  score: number;
+  cheatMode?: boolean;
+  cumLoadCount: number;
+  hideCumLoadCount?: boolean;
+}) {
+  const [displayScore, setDisplayScore] = useState(0);
+
+  useEffect(() => {
+    if (score === 0) return;
+
+    let startTimestamp: number | null = null;
+    const duration = 1500;
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+
+      const easing = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+
+      setDisplayScore(Math.floor(easing * score));
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [score]);
+
+  if (score === 0) return null;
+
+  return (
+    <div
+      className="absolute top-6 left-6 z-20 animate-entrance-fade"
+      style={{ animationDelay: "0.5s", animationDuration: "1s" }}
+    >
+      <div
+        className="relative group overflow-hidden rounded-2xl border border-fuchsia-400/30 bg-black/40 p-4 backdrop-blur-md shadow-[0_0_20px_rgba(217,70,239,0.15)] transition-all duration-500 hover:border-fuchsia-400/60 hover:shadow-[0_0_30px_rgba(217,70,239,0.3)] hover:scale-105"
+        title={cheatMode ? "This highscore was achieved with cheat mode active" : undefined}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-fuchsia-500/10 via-transparent to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
+        <div className="flex flex-col items-start gap-1">
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-fuchsia-200/80 drop-shadow-[0_0_5px_rgba(217,70,239,0.5)]">
+            Global Best
+          </p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-fuchsia-100 to-fuchsia-300 drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] tabular-nums">
+              {displayScore.toLocaleString()}
+            </span>
+            {cheatMode && (
+              <span
+                className="text-lg cursor-help"
+                title="This highscore was achieved with cheat mode active"
+              >
+                🎭
+              </span>
+            )}
+          </div>
+          {!hideCumLoadCount && (
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[11px] uppercase tracking-[0.12em] text-fuchsia-100/85">
+              💦 {cumLoadCount.toLocaleString()} cum loads extracted
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

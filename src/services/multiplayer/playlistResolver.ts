@@ -25,6 +25,9 @@ export type PlaylistResolutionReport = PlaylistResolutionAnalysis & {
 export type MultiplayerPlaylistSnapshot = {
   config: PlaylistConfig;
   difficultyHintsByRefKey: Record<string, number | null>;
+  metadata?: {
+    name: string;
+  };
   exportedAt: string;
 };
 
@@ -54,7 +57,11 @@ export function extractDifficultyHintsFromSnapshot(snapshot: unknown): Record<st
   }, {});
 }
 
-export function buildMultiplayerPlaylistSnapshot(config: PlaylistConfig, installedRounds: InstalledRound[]): MultiplayerPlaylistSnapshot {
+export function buildMultiplayerPlaylistSnapshot(
+  config: PlaylistConfig,
+  installedRounds: InstalledRound[],
+  metadata?: { name?: string | null }
+): MultiplayerPlaylistSnapshot {
   const difficultyHintsByRefKey = collectPlaylistRefs(config).reduce<Record<string, number | null>>((acc, entry) => {
     const resolved = resolvePortableRoundRef(entry.ref, installedRounds);
     acc[entry.key] = typeof resolved?.difficulty === "number" ? resolved.difficulty : null;
@@ -64,6 +71,7 @@ export function buildMultiplayerPlaylistSnapshot(config: PlaylistConfig, install
   return {
     config,
     difficultyHintsByRefKey,
+    metadata: metadata?.name ? { name: metadata.name } : undefined,
     exportedAt: new Date().toISOString(),
   };
 }

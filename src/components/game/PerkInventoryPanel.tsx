@@ -1,5 +1,9 @@
 import { getPerkById } from "../../game/data/perks";
-import { PERK_RARITY_META, fallbackRarityFromCost, resolvePerkRarity } from "../../game/data/perkRarity";
+import {
+  PERK_RARITY_META,
+  fallbackRarityFromCost,
+  resolvePerkRarity,
+} from "../../game/data/perkRarity";
 import type { ActivePerkEffect, InventoryItem, PerkIconKey } from "../../game/types";
 import { PerkIcon } from "./PerkIcon";
 
@@ -27,6 +31,8 @@ type PerkInventoryPanelProps = {
   selectedTargetId?: string | null;
   onSelectTarget?: (targetId: string) => void;
   headerBadge?: string;
+  applyDirectly?: boolean;
+  onApplyDirectlyChange?: (value: boolean) => void;
 };
 
 type InventoryGroup = {
@@ -55,9 +61,8 @@ function buildInventoryGroups(items: InventoryItem[]): InventoryGroup[] {
   return Array.from(grouped.values())
     .map(({ item, itemIds }) => {
       const perk = getPerkById(item.perkId);
-      const rarityMeta = PERK_RARITY_META[
-        perk ? resolvePerkRarity(perk) : fallbackRarityFromCost(item.cost)
-      ];
+      const rarityMeta =
+        PERK_RARITY_META[perk ? resolvePerkRarity(perk) : fallbackRarityFromCost(item.cost)];
       return {
         item,
         itemIds,
@@ -90,13 +95,20 @@ export function PerkInventoryPanel({
   selectedTargetId = null,
   onSelectTarget,
   headerBadge,
+  applyDirectly = false,
+  onApplyDirectlyChange,
 }: PerkInventoryPanelProps) {
   const groups = buildInventoryGroups(inventory);
   const selectedItem = inventory.find((item) => item.itemId === selectedItemId) ?? null;
   const selectedPerk = selectedItem ? getPerkById(selectedItem.perkId) : undefined;
-  const selectedRarityMeta = PERK_RARITY_META[
-    selectedPerk ? resolvePerkRarity(selectedPerk) : selectedItem ? fallbackRarityFromCost(selectedItem.cost) : "common"
-  ];
+  const selectedRarityMeta =
+    PERK_RARITY_META[
+      selectedPerk
+        ? resolvePerkRarity(selectedPerk)
+        : selectedItem
+          ? fallbackRarityFromCost(selectedItem.cost)
+          : "common"
+    ];
   const selectedIconKey = selectedPerk?.iconKey ?? "unknown";
 
   return (
@@ -108,6 +120,19 @@ export function PerkInventoryPanel({
           <p className="mt-1 max-w-xl text-sm text-slate-200/80">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
+          {onApplyDirectlyChange && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1 transition-colors hover:bg-cyan-400/20">
+              <input
+                type="checkbox"
+                checked={applyDirectly}
+                onChange={(event) => onApplyDirectlyChange(event.target.checked)}
+                className="h-3.5 w-3.5 accent-cyan-300"
+              />
+              <span className="text-xs uppercase tracking-[0.1em] text-cyan-100">
+                {applyDirectly ? "Auto-apply" : "Store"}
+              </span>
+            </label>
+          )}
           <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.14em] text-cyan-100">
             {inventory.length} items
           </span>
@@ -122,7 +147,9 @@ export function PerkInventoryPanel({
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <section className="rounded-[24px] border border-white/10 bg-black/20 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">Stored Items</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-100/70">
+              Stored Items
+            </div>
             <div className="text-xs text-zinc-400">{groups.length} stacks</div>
           </div>
           <div className="grid max-h-[52vh] gap-2 overflow-y-auto pr-1">
@@ -151,12 +178,16 @@ export function PerkInventoryPanel({
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-zinc-100">{group.displayName}</span>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${group.rarityMeta.tailwind.badge}`}>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${group.rarityMeta.tailwind.badge}`}
+                          >
                             {group.rarityMeta.label}
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-zinc-300">{group.kindLabel}</div>
-                        <div className="mt-2 line-clamp-2 text-xs text-zinc-400">{group.description}</div>
+                        <div className="mt-2 line-clamp-2 text-xs text-zinc-400">
+                          {group.description}
+                        </div>
                       </div>
                     </div>
                     <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1 text-[11px] font-semibold text-zinc-200">
@@ -171,7 +202,9 @@ export function PerkInventoryPanel({
 
         <section className="space-y-4">
           <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">Selected Item</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">
+              Selected Item
+            </div>
             {selectedItem ? (
               <>
                 <div className="mt-3 flex items-start gap-3">
@@ -179,9 +212,13 @@ export function PerkInventoryPanel({
                     <PerkIcon iconKey={selectedIconKey} className="h-6 w-6" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-zinc-100">{selectedPerk?.name ?? selectedItem.name}</div>
+                    <div className="font-semibold text-zinc-100">
+                      {selectedPerk?.name ?? selectedItem.name}
+                    </div>
                     <div className="mt-1 flex flex-wrap gap-2">
-                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selectedRarityMeta.tailwind.badge}`}>
+                      <span
+                        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${selectedRarityMeta.tailwind.badge}`}
+                      >
                         {selectedRarityMeta.label}
                       </span>
                       <span className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-200">
@@ -197,20 +234,25 @@ export function PerkInventoryPanel({
 
                 {selectedItem.kind === "antiPerk" && targets.length > 0 && (
                   <div className="mt-4">
-                    <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400">Target Player</div>
+                    <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                      Target Player
+                    </div>
                     <div className="grid gap-2">
                       {targets.map((target) => (
                         <button
                           key={target.id}
                           type="button"
                           onClick={() => onSelectTarget?.(target.id)}
-                          className={`rounded-2xl border px-3 py-2 text-left transition-colors ${selectedTargetId === target.id
-                            ? "border-cyan-300/80 bg-cyan-500/18 text-cyan-100"
-                            : "border-white/10 bg-black/20 text-zinc-200 hover:border-zinc-500"
-                            }`}
+                          className={`rounded-2xl border px-3 py-2 text-left transition-colors ${
+                            selectedTargetId === target.id
+                              ? "border-cyan-300/80 bg-cyan-500/18 text-cyan-100"
+                              : "border-white/10 bg-black/20 text-zinc-200 hover:border-zinc-500"
+                          }`}
                         >
                           <div className="font-semibold">{target.label}</div>
-                          {target.description && <div className="mt-1 text-xs text-zinc-400">{target.description}</div>}
+                          {target.description && (
+                            <div className="mt-1 text-xs text-zinc-400">{target.description}</div>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -250,7 +292,9 @@ export function PerkInventoryPanel({
 
           <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">Active Effects</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">
+                Active Effects
+              </div>
               <div className="text-xs text-zinc-400">{activeEffects.length} active</div>
             </div>
             <div className="mt-3 grid gap-2">
@@ -263,14 +307,21 @@ export function PerkInventoryPanel({
                 const perk = getPerkById(effect.id);
                 const rarityMeta = PERK_RARITY_META[perk ? resolvePerkRarity(perk) : "common"];
                 return (
-                  <div key={`${effect.kind}-${effect.id}-${effect.remainingRounds ?? "persist"}`} className={`rounded-[18px] border px-3 py-2 ${rarityMeta.tailwind.feed}`}>
+                  <div
+                    key={`${effect.kind}-${effect.id}-${effect.remainingRounds ?? "persist"}`}
+                    className={`rounded-[18px] border px-3 py-2 ${rarityMeta.tailwind.feed}`}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 font-semibold text-zinc-100">
                         <PerkIcon iconKey={perk?.iconKey ?? "unknown"} className="h-4 w-4" />
                         <span>{effect.name ?? perk?.name ?? effect.id}</span>
                       </div>
                       <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-300">
-                        {effect.remainingRounds === null ? "Permanent" : `${effect.remainingRounds} rounds`}
+                        {effect.remainingRounds === null
+                          ? "Permanent"
+                          : effect.remainingRounds === 0
+                            ? "Pending"
+                            : `${effect.remainingRounds} rounds`}
                       </span>
                     </div>
                   </div>

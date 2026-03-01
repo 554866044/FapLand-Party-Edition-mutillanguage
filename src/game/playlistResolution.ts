@@ -61,6 +61,10 @@ type AnalyzePlaylistResolutionOptions = {
   difficultyHintsByRefKey?: Record<string, number | null>;
 };
 
+export type PortableRoundRefResolver<T extends PlaylistResolutionRoundLike> = {
+  resolve: (ref: PortableRoundRef) => T | null;
+};
+
 function normalizeText(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -93,6 +97,10 @@ function normalizeRoundType(value: string | null | undefined): PlaylistRoundType
   return "Normal";
 }
 
+function toMetadataKey(name: string, type: PlaylistRoundType, author: string): string {
+  return `${name}\u0000${type}\u0000${author}`;
+}
+
 export function resolveRoundPhash(round: {
   phash: string | null;
   resources: Array<{ phash: string | null }>;
@@ -116,6 +124,79 @@ export function toPortableRoundRefFromRound(round: PlaylistResolutionRoundLike):
     name: round.name,
     author: round.author ?? undefined,
     type: normalizeRoundType(round.type),
+  };
+}
+
+export function createPortableRoundRefResolver<T extends PlaylistResolutionRoundLike>(
+  installedRounds: ReadonlyArray<T>,
+): PortableRoundRefResolver<T> {
+  const roundById = new Map<string, T>();
+  const roundByMetadata = new Map<string, T>();
+  const roundByNameAndType = new Map<string, T>();
+  const roundByPhash = new Map<string, T>();
+
+  for (const round of installedRounds) {
+    if (!roundById.has(round.id)) {
+      roundById.set(round.id, round);
+    }
+
+    const metadataKey = toMetadataKey(
+      normalizeText(round.name),
+      normalizeRoundType(round.type),
+      normalizeText(round.author),
+    );
+    if (!roundByMetadata.has(metadataKey)) {
+      roundByMetadata.set(metadataKey, round);
+    }
+    const nameAndTypeKey = toMetadataKey(
+      normalizeText(round.name),
+      normalizeRoundType(round.type),
+      "",
+    );
+    if (!roundByNameAndType.has(nameAndTypeKey)) {
+      roundByNameAndType.set(nameAndTypeKey, round);
+    }
+
+    const roundPhash = resolveRoundPhash(round);
+    if (roundPhash && !roundByPhash.has(roundPhash)) {
+      roundByPhash.set(roundPhash, round);
+    }
+  }
+
+  return {
+    resolve: (ref) => {
+      const phash = normalizeText(ref.phash);
+      if (phash.length > 0) {
+        const phashMatch = roundByPhash.get(phash);
+        if (phashMatch) return phashMatch;
+
+        const similarPhashMatch = findBestSimilarPhashMatch(
+          phash,
+          installedRounds,
+          (round) => resolveRoundPhash(round),
+        );
+        if (similarPhashMatch) return similarPhashMatch.item;
+      }
+
+      const name = normalizeText(ref.name);
+      const author = normalizeText(ref.author);
+      const type = normalizeRoundType(ref.type);
+      const exactMetadataKey = toMetadataKey(name, type, author);
+      if (author.length > 0) {
+        const authorMatch = roundByMetadata.get(exactMetadataKey);
+        if (authorMatch) return authorMatch;
+      } else {
+        const metadataMatch = roundByNameAndType.get(toMetadataKey(name, type, ""));
+        if (metadataMatch) return metadataMatch;
+      }
+
+      if (ref.idHint) {
+        const idMatch = roundById.get(ref.idHint);
+        if (idMatch) return idMatch;
+      }
+
+      return null;
+    },
   };
 }
 

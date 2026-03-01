@@ -6,6 +6,7 @@ import { PlaylistMapPreview } from "../components/PlaylistMapPreview";
 import { PlaylistLaunchTransition } from "../components/game/PlaylistLaunchTransition";
 import { useControllerSurface } from "../controller";
 import type { PlaylistConfig } from "../game/playlistSchema";
+import { describePlaylistBoard } from "../game/playlistStats";
 import { resolvePortableRoundRef } from "../game/playlistRuntime";
 import { db, type InstalledRound } from "../services/db";
 import { playlists, type StoredPlaylist } from "../services/playlists";
@@ -18,32 +19,6 @@ const withActivePlaylist = (playlistsToShow: StoredPlaylist[], activePlaylist: S
     return playlistsToShow;
   }
   return [activePlaylist, ...playlistsToShow];
-};
-
-const describeBoard = (config: PlaylistConfig): {
-  modeLabel: string;
-  nodeCount: number;
-  edgeCount: number;
-  safePointCount: number;
-  roundNodeCount: number;
-} => {
-  if (config.boardConfig.mode === "linear") {
-    return {
-      modeLabel: "Linear",
-      nodeCount: config.boardConfig.totalIndices + 1,
-      edgeCount: config.boardConfig.totalIndices,
-      safePointCount: config.boardConfig.safePointIndices.length,
-      roundNodeCount: config.boardConfig.totalIndices - config.boardConfig.safePointIndices.length,
-    };
-  }
-
-  return {
-    modeLabel: "Graph",
-    nodeCount: config.boardConfig.nodes.length,
-    edgeCount: config.boardConfig.edges.length,
-    safePointCount: config.boardConfig.nodes.filter((node) => node.kind === "safePoint").length,
-    roundNodeCount: config.boardConfig.nodes.filter((node) => node.kind === "round" || node.kind === "randomRound").length,
-  };
 };
 
 const estimatePlaylistDurationSec = (config: PlaylistConfig, installedRounds: InstalledRound[]): number => {
@@ -126,7 +101,7 @@ export function SinglePlayerSetupRoute() {
   );
 
   const boardSummary = useMemo(
-    () => (selectedPlaylist ? describeBoard(selectedPlaylist.config) : null),
+    () => (selectedPlaylist ? describePlaylistBoard(selectedPlaylist.config) : null),
     [selectedPlaylist],
   );
   const selectedPlaylistDurationSec = useMemo(
@@ -299,9 +274,9 @@ export function SinglePlayerSetupRoute() {
         className={`relative z-10 flex h-screen flex-col overflow-hidden lg:flex-row ${isLaunchAnimating ? "pointer-events-none" : ""
           }`}
         style={{
-          opacity: isLaunchAnimating ? 1 - launchProgress * 0.8 : 1,
-          filter: isLaunchAnimating ? `blur(${launchProgress * 20}px) saturate(${1 - launchProgress * 0.4}) brightness(${1 - launchProgress * 0.6})` : "none",
-          transform: isLaunchAnimating ? `scale(${1 + launchProgress * 0.08})` : "scale(1)",
+          opacity: isLaunchAnimating ? 1 - launchProgress * 0.3 : 1,
+          filter: isLaunchAnimating ? `blur(${launchProgress * 8}px) saturate(${1 - launchProgress * 0.18}) brightness(${1 - launchProgress * 0.22})` : "none",
+          transform: isLaunchAnimating ? `scale(${1 + launchProgress * 0.03})` : "scale(1)",
         }}
       >
         <aside className="animate-entrance flex shrink-0 flex-col border-b border-purple-400/20 bg-zinc-950/70 backdrop-blur-xl lg:w-[24rem] lg:border-b-0 lg:border-r">
@@ -331,7 +306,7 @@ export function SinglePlayerSetupRoute() {
               {availablePlaylists.map((playlist) => {
                 const isSelected = playlist.id === selectedPlaylist.id;
                 const isActive = playlist.id === activePlaylist?.id;
-                const summary = describeBoard(playlist.config);
+                const summary = describePlaylistBoard(playlist.config);
                 const estimatedDurationSec = estimatePlaylistDurationSec(playlist.config, installedRounds);
                 const isLinear = summary.modeLabel === "Linear";
 

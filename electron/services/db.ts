@@ -53,6 +53,18 @@ async function repairLegacyPlaylistSchema(dbInstance: ReturnType<typeof drizzle<
     }
 }
 
+async function repairCheatModeSchema(dbInstance: ReturnType<typeof drizzle<typeof schema>>): Promise<void> {
+    const gameProfileCheatModeExists = await hasColumn(dbInstance, "GameProfile", "highscoreCheatMode");
+    if (!gameProfileCheatModeExists) {
+        await dbInstance.$client.execute(`ALTER TABLE "GameProfile" ADD COLUMN "highscoreCheatMode" integer DEFAULT 0`);
+    }
+
+    const runHistoryCheatModeExists = await hasColumn(dbInstance, "SinglePlayerRunHistory", "cheatModeActive");
+    if (!runHistoryCheatModeExists) {
+        await dbInstance.$client.execute(`ALTER TABLE "SinglePlayerRunHistory" ADD COLUMN "cheatModeActive" integer DEFAULT 0`);
+    }
+}
+
 export function resolveDatabaseUrl(): string {
     const env = getNodeEnv();
     if (env.databaseUrlRaw) return env.databaseUrl;
@@ -80,6 +92,7 @@ export async function ensureAppDatabaseReady(): Promise<void> {
 
             await migrate(dbInstance, { migrationsFolder });
             await repairLegacyPlaylistSchema(dbInstance);
+            await repairCheatModeSchema(dbInstance);
         })();
     }
     return databaseReadyPromise;

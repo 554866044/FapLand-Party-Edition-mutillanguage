@@ -1,0 +1,356 @@
+import { isNull, and, eq } from "drizzle-orm";
+import { fromLocalMediaUri } from "./localMedia";
+import { getDb } from "./db";
+import { round, resource } from "./db/schema";
+import { getStore } from "./store";
+import {
+  BACKGROUND_PHASH_SCANNING_ENABLED_KEY,
+  normalizeBackgroundPhashScanningEnabled,
+} from "../../src/constants/phashSettings";
+import { generateVideoPhash } from "./phash";
+import { getInstallScanStatus } from "./installer";
+
+export type PhashScanState = "idle" | "running" | "done" | "aborted" | "error";
+
+export type PhashScanError = {
+  roundId: string;
+  roundName: string;
+  reason: string;
+};
+
+export type PhashScanStatus = {
+  state: PhashScanState;
+  startedAt: string | null;
+  finishedAt: string | null;
+  totalCount: number;
+  completedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  currentRoundName: string | null;
+  errors: PhashScanError[];
+};
+
+const MAX_TRACKED_ERRORS = 20;
+const INSTALL_SCAN_POLL_INTERVAL_MS = 500;
+const MAX_INSTALL_SCAN_WAIT_MS = 300000;
+const CONTINUOUS_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+
+let scanStatus: PhashScanStatus = {
+  state: "idle",
+  startedAt: null,
+  finishedAt: null,
+  totalCount: 0,
+  completedCount: 0,
+  skippedCount: 0,
+  failedCount: 0,
+  currentRoundName: null,
+  errors: [],
+};
+
+let activeScanPromise: Promise<void> | null = null;
+let abortRequested = false;
+let continuousScanTimer: ReturnType<typeof setInterval> | null = null;
+
+function cloneStatus(status: PhashScanStatus): PhashScanStatus {
+  return { ...status, errors: [...status.errors] };
+}
+
+type RoundWithoutPhash = {
+  roundId: string;
+  roundName: string;
+  resourceId: string;
+  videoUri: string;
+  startTime: number | null;
+  endTime: number | null;
+};
+
+async function waitForInstallScan(): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < MAX_INSTALL_SCAN_WAIT_MS) {
+    const installStatus = getInstallScanStatus();
+    if (installStatus.state !== "running") {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, INSTALL_SCAN_POLL_INTERVAL_MS));
+  }
+}
+
+async function findRoundsWithoutPhash(): Promise<RoundWithoutPhash[]> {
+  const db = getDb();
+
+  const rounds = await db
+    .select({
+      roundId: round.id,
+      roundName: round.name,
+      resourceId: resource.id,
+      videoUri: resource.videoUri,
+      startTime: round.startTime,
+      endTime: round.endTime,
+    })
+    .from(round)
+    .innerJoin(resource, eq(resource.roundId, round.id))
+    .where(and(isNull(round.phash), isNull(resource.phash), eq(resource.disabled, false)));
+
+  const seen = new Set<string>();
+  const unique: RoundWithoutPhash[] = [];
+
+  for (const row of rounds) {
+    if (seen.has(row.roundId)) continue;
+    seen.add(row.roundId);
+    unique.push(row);
+  }
+
+  return unique;
+}
+
+function pushScanError(roundId: string, roundName: string, reason: string): void {
+  scanStatus.failedCount += 1;
+  if (scanStatus.errors.length >= MAX_TRACKED_ERRORS) return;
+  scanStatus.errors.push({ roundId, roundName, reason });
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runPhashScan(): Promise<void> {
+  const roundsToProcess = await findRoundsWithoutPhash();
+
+  scanStatus.totalCount = roundsToProcess.length;
+
+  if (roundsToProcess.length === 0) {
+    scanStatus.state = "done";
+    scanStatus.finishedAt = new Date().toISOString();
+    return;
+  }
+
+  const db = getDb();
+
+  for (const row of roundsToProcess) {
+    if (abortRequested) {
+      scanStatus.state = "aborted";
+      scanStatus.finishedAt = new Date().toISOString();
+      return;
+    }
+
+    scanStatus.currentRoundName = row.roundName;
+
+    const localVideoPath = fromLocalMediaUri(row.videoUri);
+
+    if (!localVideoPath) {
+      pushScanError(row.roundId, row.roundName, "Video is not a local file, cannot compute phash.");
+      scanStatus.skippedCount += 1;
+      continue;
+    }
+
+    try {
+      const phash = await generateVideoPhash(
+        localVideoPath,
+        row.startTime ?? undefined,
+        row.endTime ?? undefined,
+        { lowPriority: true }
+      );
+
+      if (!phash || typeof phash !== "string" || phash.trim().length === 0) {
+        pushScanError(row.roundId, row.roundName, "Phash generation returned empty result.");
+        scanStatus.skippedCount += 1;
+        continue;
+      }
+
+      await db
+        .update(round)
+        .set({ phash: phash.trim(), updatedAt: new Date() })
+        .where(eq(round.id, row.roundId));
+
+      await db.update(resource).set({ phash: phash.trim() }).where(eq(resource.id, row.resourceId));
+
+      scanStatus.completedCount += 1;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error during phash generation.";
+      pushScanError(row.roundId, row.roundName, message);
+      scanStatus.skippedCount += 1;
+    }
+
+    await sleep(100);
+  }
+
+  scanStatus.state = "done";
+  scanStatus.finishedAt = new Date().toISOString();
+  scanStatus.currentRoundName = null;
+}
+
+export function getPhashScanStatus(): PhashScanStatus {
+  return cloneStatus(scanStatus);
+}
+
+export function requestPhashScanAbort(): PhashScanStatus {
+  if (!activeScanPromise || scanStatus.state !== "running") {
+    return cloneStatus(scanStatus);
+  }
+
+  abortRequested = true;
+  scanStatus = {
+    ...scanStatus,
+    currentRoundName: null,
+  };
+
+  return cloneStatus(scanStatus);
+}
+
+export async function startPhashScan(): Promise<PhashScanStatus> {
+  const store = getStore();
+  const isEnabled = normalizeBackgroundPhashScanningEnabled(
+    store.get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
+  );
+
+  if (!isEnabled) {
+    return cloneStatus(scanStatus);
+  }
+
+  if (activeScanPromise) {
+    return cloneStatus(scanStatus);
+  }
+
+  await waitForInstallScan();
+
+  if (abortRequested) {
+    scanStatus.state = "aborted";
+    scanStatus.finishedAt = new Date().toISOString();
+    return cloneStatus(scanStatus);
+  }
+
+  abortRequested = false;
+  scanStatus = {
+    state: "running",
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    totalCount: 0,
+    completedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    currentRoundName: null,
+    errors: [],
+  };
+
+  activeScanPromise = runPhashScan()
+    .catch((error) => {
+      scanStatus.state = "error";
+      scanStatus.finishedAt = new Date().toISOString();
+      scanStatus.currentRoundName = null;
+
+      const message = error instanceof Error ? error.message : "Unknown phash scan error.";
+      scanStatus.errors.push({
+        roundId: "scan",
+        roundName: "Phash Scan",
+        reason: message,
+      });
+    })
+    .finally(() => {
+      activeScanPromise = null;
+      abortRequested = false;
+    });
+
+  await activeScanPromise;
+  return cloneStatus(scanStatus);
+}
+
+export async function startPhashScanManual(): Promise<PhashScanStatus> {
+  if (activeScanPromise) {
+    return cloneStatus(scanStatus);
+  }
+
+  await waitForInstallScan();
+
+  if (abortRequested) {
+    scanStatus.state = "aborted";
+    scanStatus.finishedAt = new Date().toISOString();
+    return cloneStatus(scanStatus);
+  }
+
+  abortRequested = false;
+  scanStatus = {
+    state: "running",
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    totalCount: 0,
+    completedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    currentRoundName: null,
+    errors: [],
+  };
+
+  activeScanPromise = runPhashScan()
+    .catch((error) => {
+      scanStatus.state = "error";
+      scanStatus.finishedAt = new Date().toISOString();
+      scanStatus.currentRoundName = null;
+
+      const message = error instanceof Error ? error.message : "Unknown phash scan error.";
+      scanStatus.errors.push({
+        roundId: "scan",
+        roundName: "Phash Scan",
+        reason: message,
+      });
+    })
+    .finally(() => {
+      activeScanPromise = null;
+      abortRequested = false;
+    });
+
+  await activeScanPromise;
+  return cloneStatus(scanStatus);
+}
+
+export function startContinuousPhashScan(): void {
+  const store = getStore();
+  const isEnabled = normalizeBackgroundPhashScanningEnabled(
+    store.get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
+  );
+
+  if (!isEnabled) {
+    stopContinuousPhashScan();
+    return;
+  }
+
+  if (continuousScanTimer) {
+    return;
+  }
+
+  continuousScanTimer = setInterval(async () => {
+    const currentSetting = normalizeBackgroundPhashScanningEnabled(
+      getStore().get(BACKGROUND_PHASH_SCANNING_ENABLED_KEY)
+    );
+
+    if (!currentSetting) {
+      stopContinuousPhashScan();
+      return;
+    }
+
+    if (activeScanPromise) {
+      return;
+    }
+
+    try {
+      await startPhashScan();
+    } catch (error) {
+      console.error("Continuous phash scan error:", error);
+    }
+  }, CONTINUOUS_SCAN_INTERVAL_MS);
+
+  void startPhashScan().catch((error) => {
+    console.error("Initial continuous phash scan error:", error);
+  });
+}
+
+export function stopContinuousPhashScan(): void {
+  if (continuousScanTimer) {
+    clearInterval(continuousScanTimer);
+    continuousScanTimer = null;
+  }
+}
+
+export function isContinuousPhashScanRunning(): boolean {
+  return continuousScanTimer !== null;
+}

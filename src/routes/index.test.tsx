@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   loaderData: {
     videos: [],
     overallHighscore: 0,
+    cumLoadCount: 0,
+    installedRounds: [],
+    skipRoundsCheck: false,
   },
   navigate: vi.fn(),
   closeWindow: vi.fn(async () => true),
@@ -46,6 +49,7 @@ const mocks = vi.hoisted(() => ({
     error: null,
     connectionKey: "",
   },
+  sfwModeEnabled: false,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -66,13 +70,15 @@ vi.mock("../components/MenuButton", () => ({
     onClick,
     badge,
     subLabel,
+    disabled,
   }: {
     label: string;
     onClick?: () => void;
     badge?: string;
     subLabel?: string;
+    disabled?: boolean;
   }) => (
-    <button type="button" onClick={onClick}>
+    <button type="button" onClick={onClick} disabled={disabled}>
       <span>{label}</span>
       {badge ? <span>{badge}</span> : null}
       {subLabel ? <span>{subLabel}</span> : null}
@@ -90,6 +96,18 @@ vi.mock("../contexts/HandyContext", () => ({
 
 vi.mock("../hooks/useAppUpdate", () => ({
   useAppUpdate: () => mocks.appUpdate,
+}));
+
+vi.mock("../hooks/useSfwMode", () => ({
+  useSfwMode: () => mocks.sfwModeEnabled,
+}));
+
+vi.mock("../features/library/components/LibraryStatusPoller", () => ({
+  LibraryStatusPoller: () => null,
+}));
+
+vi.mock("../features/phash/components/PhashScanStatusPoller", () => ({
+  PhashScanStatusPoller: () => null,
 }));
 
 vi.mock("../services/db", () => ({
@@ -127,6 +145,7 @@ describe("Home route update menu", () => {
     mocks.navigate.mockReset();
     mocks.closeWindow.mockClear();
     mocks.appUpdate.triggerPrimaryAction.mockClear();
+    mocks.sfwModeEnabled = false;
 
     window.electronAPI = {
       file: {
@@ -214,5 +233,29 @@ describe("Home route update menu", () => {
         search: { returnTo: "menu" },
       });
     });
+  });
+
+  it("blocks multiplayer from the menu while sfw mode is enabled", () => {
+    mocks.sfwModeEnabled = true;
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Play/i }));
+
+    const multiplayerButton = screen.getByRole("button", { name: /Multiplayer/i });
+    expect(multiplayerButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Blocked By SFW Mode")).toBeDefined();
+  });
+
+  it("hides the cum load counter while sfw mode is enabled", () => {
+    mocks.sfwModeEnabled = true;
+    mocks.loaderData.overallHighscore = { score: 900, localCheatMode: false };
+    mocks.loaderData.cumLoadCount = 7;
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    expect(screen.queryByText(/cum loads extracted/i)).toBeNull();
   });
 });

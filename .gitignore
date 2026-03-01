@@ -49,3 +49,9 @@ dev.db
 /snapshot.tar
 /snapshot/
 VideoInfo.json
+/target1.txt
+/target2.txt
+/target3.txt
+/TODO.md
+/dev.db-shm
+/dev.db-wal

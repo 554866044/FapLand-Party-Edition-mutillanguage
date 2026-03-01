@@ -70,6 +70,7 @@ export const playlistTrackPlay = sqliteTable('PlaylistTrackPlay', {
 export const gameProfile = sqliteTable('GameProfile', {
     id: text('id').primaryKey(),
     highscore: integer('highscore').notNull().default(0),
+    highscoreCheatMode: integer('highscoreCheatMode', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -103,6 +104,7 @@ export const singlePlayerRunHistory = sqliteTable('SinglePlayerRunHistory', {
     playlistFormatVersion: integer('playlistFormatVersion'),
     endingPosition: integer('endingPosition').notNull(),
     turn: integer('turn').notNull(),
+    cheatModeActive: integer('cheatModeActive', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ({
     historyFinishedAtIdx: index('SinglePlayerRunHistory_finishedAt_idx').on(table.finishedAt),

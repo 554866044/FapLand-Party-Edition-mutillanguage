@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MusicLoopMode } from "../constants/musicSettings";
 import { ForegroundMediaProvider, useForegroundMedia } from "./ForegroundMediaContext";
@@ -26,6 +26,7 @@ vi.mock("../services/trpc", () => ({
 class FakeAudio extends EventTarget {
   src = "";
   currentTime = 0;
+  duration = 180;
   paused = true;
   volume = 1;
   preload = "auto";
@@ -40,7 +41,9 @@ class FakeAudio extends EventTarget {
       this.dispatchEvent(new Event("pause"));
     }
   });
-  load = vi.fn();
+  load = vi.fn(() => {
+    this.dispatchEvent(new Event("loadedmetadata"));
+  });
   removeAttribute = vi.fn((name: string) => {
     if (name === "src") this.src = "";
   });
@@ -50,20 +53,29 @@ const audioInstances: FakeAudio[] = [];
 
 function installAudioMock() {
   audioInstances.length = 0;
-  vi.stubGlobal("Audio", vi.fn(() => {
-    const audio = new FakeAudio();
-    audioInstances.push(audio);
-    return audio;
-  }));
+  vi.stubGlobal(
+    "Audio",
+    vi.fn(function (this: FakeAudio) {
+      const audio = new FakeAudio();
+      audioInstances.push(audio);
+      return audio;
+    })
+  );
 }
 
 function Suppressor() {
   const media = useForegroundMedia();
   return (
     <div>
-      <button type="button" onClick={() => media.register("video")}>register</button>
-      <button type="button" onClick={() => media.setPlaying("video", true)}>play-video</button>
-      <button type="button" onClick={() => media.setPlaying("video", false)}>pause-video</button>
+      <button type="button" onClick={() => media.register("video")}>
+        register
+      </button>
+      <button type="button" onClick={() => media.setPlaying("video", true)}>
+        play-video
+      </button>
+      <button type="button" onClick={() => media.setPlaying("video", false)}>
+        pause-video
+      </button>
     </div>
   );
 }
@@ -76,10 +88,18 @@ function Consumer() {
       <div data-testid="playing">{String(music.isPlaying)}</div>
       <div data-testid="suppressed">{String(music.isSuppressedByVideo)}</div>
       <div data-testid="loop-mode">{music.loopMode}</div>
-      <button type="button" onClick={() => void music.pause()}>pause</button>
-      <button type="button" onClick={() => void music.play()}>play</button>
-      <button type="button" onClick={() => void music.next()}>next</button>
-      <button type="button" onClick={() => void music.setLoopMode("off")}>loop-off</button>
+      <button type="button" onClick={() => void music.pause()}>
+        pause
+      </button>
+      <button type="button" onClick={() => void music.play()}>
+        play
+      </button>
+      <button type="button" onClick={() => void music.next()}>
+        next
+      </button>
+      <button type="button" onClick={() => void music.setLoopMode("off")}>
+        loop-off
+      </button>
     </div>
   );
 }
@@ -91,12 +111,13 @@ function renderProviders() {
         <Suppressor />
         <Consumer />
       </GlobalMusicProvider>
-    </ForegroundMediaProvider>,
+    </ForegroundMediaProvider>
   );
 }
 
 describe("GlobalMusicContext", () => {
   beforeEach(() => {
+    cleanup();
     installAudioMock();
     window.electronAPI = {
       file: {
@@ -129,10 +150,13 @@ describe("GlobalMusicContext", () => {
     mocks.setMutate.mockResolvedValue(undefined);
     const values = new Map<string, unknown>([
       ["music.enabled", true],
-      ["music.queue", [
-        { id: "t1", filePath: "/music/one.mp3", name: "one.mp3" },
-        { id: "t2", filePath: "/music/two.mp3", name: "two.mp3" },
-      ]],
+      [
+        "music.queue",
+        [
+          { id: "t1", filePath: "/music/one.mp3", name: "one.mp3" },
+          { id: "t2", filePath: "/music/two.mp3", name: "two.mp3" },
+        ],
+      ],
       ["music.volume", 0.5],
       ["music.shuffle", false],
       ["music.loopMode", "queue" satisfies MusicLoopMode],

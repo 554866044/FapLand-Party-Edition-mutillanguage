@@ -85,7 +85,15 @@ export type GameEffect =
   | SetPendingRollCeilingEffect
   | SetPendingIntensityCapEffect;
 
-export type BoardFieldKind = "start" | "end" | "path" | "safePoint" | "round" | "randomRound" | "perk" | "event";
+export type BoardFieldKind =
+  | "start"
+  | "end"
+  | "path"
+  | "safePoint"
+  | "round"
+  | "randomRound"
+  | "perk"
+  | "event";
 
 export type RoundRef = {
   slot: number;
@@ -194,6 +202,7 @@ export type PerkDefinition = {
   durationRounds?: number | null;
   application?: "persistent" | "immediate";
   effects: GameEffect[];
+  requiresHandy?: boolean;
 };
 
 export type InventoryItem = {
@@ -210,7 +219,7 @@ export type ActivePerkEffect = {
   name?: string;
   kind: PerkKind;
   remainingRounds: number | null;
-  effects: NumericDeltaEffect[];
+  effects: GameEffect[];
 };
 
 export type GameConfig = {
@@ -252,6 +261,7 @@ export type GameConfig = {
     scorePerActiveAntiPerk: number;
     scorePerCumRoundSuccess: number;
   };
+  roundStartDelayMs: number;
 };
 
 export type PlayerStats = {
@@ -324,15 +334,9 @@ export type CompletedRoundSummary = {
   cumOutcome?: CumRoundOutcome;
 };
 
-export type CumRoundOutcome =
-  | "came_as_told"
-  | "did_not_cum"
-  | "failed_instruction";
+export type CumRoundOutcome = "came_as_told" | "did_not_cum" | "failed_instruction";
 
-export type GameCompletionReason =
-  | "finished"
-  | "self_reported_cum"
-  | "cum_instruction_failed";
+export type GameCompletionReason = "finished" | "self_reported_cum" | "cum_instruction_failed";
 
 export type GameState = {
   config: GameConfig;

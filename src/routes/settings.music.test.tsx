@@ -104,6 +104,9 @@ vi.mock("../services/db", () => ({
       addAutoScanFolderAndScan: vi.fn(),
       removeAutoScanFolder: vi.fn(),
     },
+    phash: {
+      getScanStatus: vi.fn(async () => null),
+    },
   },
 }));
 
@@ -221,6 +224,27 @@ describe("Settings music section", () => {
     });
   });
 
+  it("shows the updated multiplayer safeguards warning in experimental settings", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Skip Multiplayer Safeguards")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Skip Multiplayer Safeguards" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /general minimum round count and any playlist-specific round requirement/i
+        )
+      ).toBeDefined();
+      expect(screen.getAllByText(/bad user experience/i).length).toBeGreaterThan(0);
+    });
+  });
+
   it("persists experimental controller support when toggled", async () => {
     const setMutate = vi.mocked(trpc.store.set.mutate);
 
@@ -229,7 +253,7 @@ describe("Settings music section", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
 
     const toggle = await screen.findByRole("switch", { name: "Toggle Controller Support" });
-    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(toggle);
 
@@ -311,6 +335,8 @@ describe("Settings music section", () => {
     expect(screen.getByText("Map Editor")).toBeDefined();
     expect(screen.getByText("Ctrl/Cmd+M")).toBeDefined();
     expect(screen.getByText("Ctrl/Cmd+S")).toBeDefined();
+    expect(screen.getByText("Open or close the global music overlay.")).toBeDefined();
+    expect(screen.getByText("Save the current converter mapping immediately.")).toBeDefined();
   });
 
   it("hides debug shortcuts in production builds", () => {

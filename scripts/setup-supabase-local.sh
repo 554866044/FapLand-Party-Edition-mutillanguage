@@ -12,6 +12,13 @@ require_command() {
   fi
 }
 
+reload_postgrest_schema() {
+  psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
+select pg_notify('pgrst', 'reload schema');
+select pg_sleep(1);
+SQL
+}
+
 echo "Preparing local Supabase for multiplayer testing..."
 
 require_command supabase
@@ -28,6 +35,9 @@ supabase start
 
 echo "[2/4] Resetting local database (migrations + seed)..."
 supabase db reset --local
+
+echo "Reloading PostgREST schema cache..."
+reload_postgrest_schema
 
 echo "[3/4] Verifying multiplayer schema and RPCs..."
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
@@ -92,8 +102,11 @@ begin
       'mp_join_lobby',
       'mp_record_join_lobby_failure',
       'mp_reset_join_lobby_rate_limit',
+      'mp_set_lobby_public',
       'mp_set_ready',
       'mp_set_lobby_open',
+      'mp_list_public_lobbies',
+      'mp_get_lobby_join_preview',
       'mp_kick_player',
       'mp_ban_player',
       'mp_unban',

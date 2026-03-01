@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
     volume: 0.45,
     shuffle: false,
     loopMode: "queue" as const,
+    currentTime: 45,
+    duration: 180,
     setEnabled: vi.fn(async () => {}),
     addTracks: vi.fn(async () => {}),
     removeTrack: vi.fn(async () => {}),
@@ -29,6 +31,7 @@ const mocks = vi.hoisted(() => ({
     setVolume: vi.fn(async () => {}),
     setShuffle: vi.fn(async () => {}),
     setLoopMode: vi.fn(async () => {}),
+    seek: vi.fn(),
   },
 }));
 
@@ -58,6 +61,8 @@ describe("GlobalMusicOverlay", () => {
       volume: 0.45,
       shuffle: false,
       loopMode: "queue",
+      currentTime: 45,
+      duration: 180,
     });
     window.electronAPI = {
       file: {
@@ -96,7 +101,7 @@ describe("GlobalMusicOverlay", () => {
 
     expect(screen.getByRole("dialog", { name: "Global music controls" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    fireEvent.click(screen.getByRole("button", { name: /Play/ }));
 
     await waitFor(() => {
       expect(mocks.globalMusic.play).toHaveBeenCalled();
@@ -120,7 +125,7 @@ describe("GlobalMusicOverlay", () => {
       <div>
         <input aria-label="editor" />
         <GlobalMusicOverlay />
-      </div>,
+      </div>
     );
 
     const input = screen.getByLabelText("editor");
@@ -136,9 +141,9 @@ describe("GlobalMusicOverlay", () => {
     render(<GlobalMusicOverlay />);
     fireEvent.keyDown(window, { key: "m", ctrlKey: true });
 
-    expect(screen.getAllByText("Blocked by foreground video").length).toBeGreaterThan(0);
+    expect(screen.getByText("Blocked by video")).toBeTruthy();
 
-    const playButton = screen.getByRole("button", { name: "Play" });
+    const playButton = screen.getByRole("button", { name: /Play/ });
     expect(playButton.hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(playButton);

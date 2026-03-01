@@ -1,9 +1,5 @@
 import type { InstalledRound } from "../services/db";
-import {
-  getPerkById,
-  getSinglePlayerAntiPerkPool,
-  getSinglePlayerPerkPool,
-} from "./data/perks";
+import { getPerkById, getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "./data/perks";
 import { resolvePerkRarity } from "./data/perkRarity";
 import type {
   ActivePerkEffect,
@@ -28,6 +24,10 @@ function clamp(value: number, min?: number, max?: number): number {
   if (typeof min === "number") result = Math.max(min, result);
   if (typeof max === "number") result = Math.min(max, result);
   return result;
+}
+
+function coerceFiniteNumber(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function randomInt(min: number, max: number): number {
@@ -73,11 +73,12 @@ function pickUniqueWeighted<T>(items: T[], count: number, getWeight: (item: T) =
 function normalizeDice(stats: PlayerStats): PlayerStats {
   const diceMax = clamp(stats.diceMax, 1, 20);
   const diceMin = clamp(stats.diceMin, 1, diceMax);
+  const roundPauseMs = coerceFiniteNumber(stats.roundPauseMs, 20_000);
   return {
     ...stats,
     diceMin,
     diceMax,
-    roundPauseMs: clamp(stats.roundPauseMs, 250, 30000),
+    roundPauseMs: clamp(roundPauseMs, 250, 30000),
     perkFrequency: clamp(stats.perkFrequency, -0.5, 0.5),
     perkLuck: clamp(stats.perkLuck, -1, 1),
   };
@@ -86,15 +87,23 @@ function normalizeDice(stats: PlayerStats): PlayerStats {
 function updatePlayer(
   players: PlayerState[],
   playerId: string,
-  updater: (player: PlayerState) => PlayerState,
+  updater: (player: PlayerState) => PlayerState
 ): PlayerState[] {
   return players.map((player) => (player.id === playerId ? updater(player) : player));
 }
 
-function applyNumericDelta(stats: PlayerStats, effect: NumericDeltaEffect, reverse = false): PlayerStats {
+function applyNumericDelta(
+  stats: PlayerStats,
+  effect: NumericDeltaEffect,
+  reverse = false
+): PlayerStats {
   const direction = reverse ? -1 : 1;
   const nextStats: PlayerStats = { ...stats };
-  nextStats[effect.stat] = clamp(nextStats[effect.stat] + effect.amount * direction, effect.min, effect.max);
+  nextStats[effect.stat] = clamp(
+    nextStats[effect.stat] + effect.amount * direction,
+    effect.min,
+    effect.max
+  );
   return normalizeDice(nextStats);
 }
 
@@ -115,7 +124,11 @@ function stripPerkIdOnce(values: string[], id: string): string[] {
   return [...values.slice(0, index), ...values.slice(index + 1)];
 }
 
-function createInventoryItem(state: GameState, perk: PerkDefinition, playerId: string): InventoryItem {
+function createInventoryItem(
+  state: GameState,
+  perk: PerkDefinition,
+  playerId: string
+): InventoryItem {
   return {
     itemId: `inv-${playerId}-${state.turn}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
     perkId: perk.id,
@@ -126,7 +139,10 @@ function createInventoryItem(state: GameState, perk: PerkDefinition, playerId: s
   };
 }
 
-function getRoundById(installedRounds: InstalledRound[], roundId: string): InstalledRound | undefined {
+function getRoundById(
+  installedRounds: InstalledRound[],
+  roundId: string
+): InstalledRound | undefined {
   return installedRounds.find((round) => round.id === roundId);
 }
 
@@ -158,15 +174,16 @@ function pickSuccubusRoundId(installedRounds: InstalledRound[]): string | null {
   if (normals.length === 0) return null;
 
   const highDifficulty = normals.filter((round) => resolveRoundDifficulty(round) >= 4);
-  const source = highDifficulty.length > 0
-    ? highDifficulty
-    : [...normals]
-      .sort((a, b) => {
-        const diff = resolveRoundDifficulty(b) - resolveRoundDifficulty(a);
-        if (diff !== 0) return diff;
-        return resolveRoundBpm(b) - resolveRoundBpm(a);
-      })
-      .slice(0, Math.max(1, Math.ceil(normals.length * 0.25)));
+  const source =
+    highDifficulty.length > 0
+      ? highDifficulty
+      : [...normals]
+          .sort((a, b) => {
+            const diff = resolveRoundDifficulty(b) - resolveRoundDifficulty(a);
+            if (diff !== 0) return diff;
+            return resolveRoundBpm(b) - resolveRoundBpm(a);
+          })
+          .slice(0, Math.max(1, Math.ceil(normals.length * 0.25)));
 
   if (source.length === 0) return null;
   return source[randomInt(0, source.length - 1)]?.id ?? null;
@@ -192,7 +209,7 @@ function getEffectivePerkTriggerChance(state: GameState, player: PlayerState): n
   return clamp(
     state.config.perkSelection.triggerChancePerCompletedRound + player.stats.perkFrequency,
     0,
-    1,
+    1
   );
 }
 
@@ -215,7 +232,8 @@ function tickPerkDurations(state: GameState): GameState {
   const nextPlayers = state.players.map((player) => {
     const currentShieldRounds = getShieldRounds(player);
     const decrementedShieldRounds = currentShieldRounds > 0 ? currentShieldRounds - 1 : 0;
-    if (player.activePerkEffects.length === 0 && decrementedShieldRounds === currentShieldRounds) return player;
+    if (player.activePerkEffects.length === 0 && decrementedShieldRounds === currentShieldRounds)
+      return player;
 
     let nextStats = { ...player.stats };
     let nextPerks = [...player.perks];
@@ -236,7 +254,9 @@ function tickPerkDurations(state: GameState): GameState {
       }
 
       for (const effect of active.effects) {
-        nextStats = applyNumericDelta(nextStats, effect, true);
+        if (effect.kind === "numericDelta") {
+          nextStats = applyNumericDelta(nextStats, effect, true);
+        }
       }
 
       didChange = true;
@@ -266,11 +286,7 @@ function tickPerkDurations(state: GameState): GameState {
   };
 }
 
-function applyEffect(
-  state: GameState,
-  effect: GameEffect,
-  sourcePlayerId: string,
-): GameState {
+function applyEffect(state: GameState, effect: GameEffect, sourcePlayerId: string): GameState {
   if (effect.kind === "numericDelta") {
     const target = effect.target ?? "self";
     const targetIds =
@@ -278,7 +294,9 @@ function applyEffect(
         ? [sourcePlayerId]
         : target === "all"
           ? state.players.map((player) => player.id)
-          : state.players.filter((player) => player.id !== sourcePlayerId).map((player) => player.id);
+          : state.players
+              .filter((player) => player.id !== sourcePlayerId)
+              .map((player) => player.id);
 
     if (targetIds.length === 0) return state;
 
@@ -286,7 +304,11 @@ function applyEffect(
       if (!targetIds.includes(player.id)) return player;
 
       const nextStats: PlayerStats = { ...player.stats };
-      nextStats[effect.stat] = clamp(nextStats[effect.stat] + effect.amount, effect.min, effect.max);
+      nextStats[effect.stat] = clamp(
+        nextStats[effect.stat] + effect.amount,
+        effect.min,
+        effect.max
+      );
 
       return {
         ...player,
@@ -306,7 +328,7 @@ function applyEffect(
         intermediaryProbability: clamp(
           state.intermediaryProbability + effect.amount,
           effect.min ?? 0,
-          effect.max ?? fallbackMax,
+          effect.max ?? fallbackMax
         ),
       };
     }
@@ -316,7 +338,7 @@ function applyEffect(
       antiPerkProbability: clamp(
         state.antiPerkProbability + effect.amount,
         effect.min ?? 0,
-        effect.max ?? fallbackMax,
+        effect.max ?? fallbackMax
       ),
     };
   }
@@ -328,7 +350,9 @@ function applyEffect(
         ? [sourcePlayerId]
         : target === "all"
           ? state.players.map((player) => player.id)
-          : state.players.filter((player) => player.id !== sourcePlayerId).map((player) => player.id);
+          : state.players
+              .filter((player) => player.id !== sourcePlayerId)
+              .map((player) => player.id);
 
     if (targetIds.length === 0) return state;
 
@@ -351,9 +375,16 @@ function applyEffect(
         const controls = getRoundControl(player);
         return {
           ...player,
-          roundControl: effect.control === "pause"
-            ? { ...controls, pauseCharges: controls.pauseCharges + Math.max(0, Math.floor(effect.amount)) }
-            : { ...controls, skipCharges: controls.skipCharges + Math.max(0, Math.floor(effect.amount)) },
+          roundControl:
+            effect.control === "pause"
+              ? {
+                  ...controls,
+                  pauseCharges: controls.pauseCharges + Math.max(0, Math.floor(effect.amount)),
+                }
+              : {
+                  ...controls,
+                  skipCharges: controls.skipCharges + Math.max(0, Math.floor(effect.amount)),
+                },
         };
       }),
     };
@@ -367,9 +398,10 @@ function applyEffect(
         const delta = Math.max(0, Math.floor(Math.abs(effect.amount)));
         return {
           ...player,
-          roundControl: effect.control === "pause"
-            ? { ...controls, pauseCharges: Math.max(0, controls.pauseCharges - delta) }
-            : { ...controls, skipCharges: Math.max(0, controls.skipCharges - delta) },
+          roundControl:
+            effect.control === "pause"
+              ? { ...controls, pauseCharges: Math.max(0, controls.pauseCharges - delta) }
+              : { ...controls, skipCharges: Math.max(0, controls.skipCharges - delta) },
         };
       }),
     };
@@ -391,7 +423,10 @@ function applyEffect(
     return {
       ...state,
       players: updatePlayer(state.players, sourcePlayerId, (player) => {
-        if (player.antiPerks.length === 0 && player.activePerkEffects.every((active) => active.kind !== "antiPerk")) {
+        if (
+          player.antiPerks.length === 0 &&
+          player.activePerkEffects.every((active) => active.kind !== "antiPerk")
+        ) {
           return player;
         }
 
@@ -402,8 +437,10 @@ function applyEffect(
             keepEffects.push(active);
             continue;
           }
-          for (const numericEffect of active.effects) {
-            nextStats = applyNumericDelta(nextStats, numericEffect, true);
+          for (const effect of active.effects) {
+            if (effect.kind === "numericDelta") {
+              nextStats = applyNumericDelta(nextStats, effect, true);
+            }
           }
         }
 
@@ -456,7 +493,7 @@ function applyEffect(
 function applyPerkToPlayer(
   state: GameState,
   sourcePlayerId: string,
-  perk: PerkDefinition,
+  perk: PerkDefinition
 ): GameState {
   if (perk.kind === "antiPerk") {
     const target = state.players.find((player) => player.id === sourcePlayerId);
@@ -482,14 +519,14 @@ function applyPerkToPlayer(
   }
 
   const persistentEffects = perk.effects.filter(
-    (effect): effect is NumericDeltaEffect => effect.kind === "numericDelta",
+    (effect): effect is NumericDeltaEffect => effect.kind === "numericDelta"
   );
   const isImmediate = perk.application === "immediate";
-  const hasTimedDuration = typeof perk.durationRounds === "number" || perk.durationRounds === null;
-  if (isImmediate || (!hasTimedDuration && persistentEffects.length === 0)) return nextState;
 
-  const remainingRounds = perk.durationRounds ?? null;
+  const remainingRounds = isImmediate ? 0 : (perk.durationRounds ?? null);
   const kind: PerkKind = perk.kind;
+  const effectsToStore = isImmediate ? perk.effects : persistentEffects;
+
   return {
     ...nextState,
     players: updatePlayer(nextState.players, sourcePlayerId, (player) => ({
@@ -503,7 +540,7 @@ function applyPerkToPlayer(
           name: perk.name,
           kind,
           remainingRounds,
-          effects: persistentEffects,
+          effects: effectsToStore,
         },
       ],
     })),
@@ -545,7 +582,10 @@ function queueCumRound(state: GameState, installedRounds: InstalledRound[]): Gam
 
 function startCumPhase(state: GameState, installedRounds: InstalledRound[]): GameState {
   if (state.sessionPhase !== "normal") return state;
-  if (state.config.singlePlayer.cumRoundIds.length === 0 && getInstalledCumRounds(installedRounds).length === 0) {
+  if (
+    state.config.singlePlayer.cumRoundIds.length === 0 &&
+    getInstalledCumRounds(installedRounds).length === 0
+  ) {
     return {
       ...state,
       sessionPhase: "completed",
@@ -559,24 +599,38 @@ function startCumPhase(state: GameState, installedRounds: InstalledRound[]): Gam
       sessionPhase: "cum",
       nextCumRoundIndex: 0,
     },
-    installedRounds,
+    installedRounds
   );
 }
 
-function triggerPerkSelection(state: GameState, playerId: string, sourceFieldId: string): GameState {
-  if (state.pendingPerkSelection || state.pendingPathChoice || state.queuedRound || state.activeRound) return state;
+function triggerPerkSelection(
+  state: GameState,
+  playerId: string,
+  sourceFieldId: string
+): GameState {
+  if (
+    state.pendingPerkSelection ||
+    state.pendingPathChoice ||
+    state.queuedRound ||
+    state.activeRound
+  )
+    return state;
   const player = state.players.find((entry) => entry.id === playerId);
   if (!player) return state;
 
   if (Math.random() < state.antiPerkProbability) {
     const antiPool = getEnabledAntiPerkPool(state.config);
-    const selectedAntiPerk = antiPool.length > 0 ? antiPool[randomInt(0, antiPool.length - 1)] : undefined;
+    const selectedAntiPerk =
+      antiPool.length > 0 ? antiPool[randomInt(0, antiPool.length - 1)] : undefined;
     if (selectedAntiPerk) {
       const target = state.players.find((player) => player.id === playerId);
       if (target && getShieldRounds(target) > 0) {
         return {
           ...state,
-          log: [`${target.name} blocked ${selectedAntiPerk.name} with Shield.`, ...state.log].slice(0, 40),
+          log: [`${target.name} blocked ${selectedAntiPerk.name} with Shield.`, ...state.log].slice(
+            0,
+            40
+          ),
         };
       }
       const next = applyPerkToPlayer(state, playerId, selectedAntiPerk);
@@ -597,7 +651,7 @@ function triggerPerkSelection(state: GameState, playerId: string, sourceFieldId:
   const options = pickUniqueWeighted(
     perkChoicePool,
     state.config.perkSelection.optionsPerPick,
-    (perk) => getPerkRarityWeight(perk, player),
+    (perk) => getPerkRarityWeight(perk, player)
   );
   if (options.length === 0) {
     return {
@@ -629,7 +683,11 @@ function advanceTurn(state: GameState): GameState {
   };
 }
 
-function getValidOutgoingEdges(state: GameState, nodeId: string, playerMoney: number): RuntimeGraphEdge[] {
+function getValidOutgoingEdges(
+  state: GameState,
+  nodeId: string,
+  playerMoney: number
+): RuntimeGraphEdge[] {
   const edgeIds = state.config.runtimeGraph.outgoingEdgeIdsByNodeId[nodeId] ?? [];
   return edgeIds
     .map((edgeId) => state.config.runtimeGraph.edgesById[edgeId])
@@ -637,7 +695,10 @@ function getValidOutgoingEdges(state: GameState, nodeId: string, playerMoney: nu
     .filter((edge) => playerMoney >= edge.gateCost);
 }
 
-function resolveRandomRoundForPool(state: GameState, poolId: string): { roundId: string | null; nextState: GameState } {
+function resolveRandomRoundForPool(
+  state: GameState,
+  poolId: string
+): { roundId: string | null; nextState: GameState } {
   const pool = state.config.runtimeGraph.randomRoundPoolsById[poolId];
   if (!pool || pool.candidates.length === 0) return { roundId: null, nextState: state };
 
@@ -669,7 +730,7 @@ function queueRoundFromNode(
   nodeId: string,
   roundId: string,
   selectionKind: "fixed" | "random",
-  poolId: string | null,
+  poolId: string | null
 ): GameState {
   const round = getRoundById(installedRounds, roundId);
   const nodeIndex = state.config.runtimeGraph.nodeIndexById[nodeId];
@@ -689,7 +750,7 @@ function queueRoundFromNode(
       campaignIndex: typeof nodeIndex === "number" ? nodeIndex : null,
     },
     log: [
-      `${state.players[state.currentPlayerIndex]?.name ?? "Player"} landed on ${field?.name ?? nodeId}. ${(round?.name ?? field?.name ?? roundId)} starts after countdown.`,
+      `${state.players[state.currentPlayerIndex]?.name ?? "Player"} landed on ${field?.name ?? nodeId}. ${round?.name ?? field?.name ?? roundId} starts after countdown.`,
       ...state.log,
     ].slice(0, 40),
   };
@@ -713,7 +774,7 @@ function movePlayerToNode(state: GameState, playerId: string, nodeId: string): G
 
 function resolveSafePointLanding(
   state: GameState,
-  nodeId: string,
+  nodeId: string
 ): { state: GameState; stopMovement: boolean; stoppedAtSafePoint: boolean } {
   const nodeIndex = state.config.runtimeGraph.nodeIndexById[nodeId] ?? 0;
   const field = state.config.board[nodeIndex];
@@ -743,7 +804,7 @@ function resolveSafePointLanding(
 function resolveForcedRoundLanding(
   state: GameState,
   installedRounds: InstalledRound[],
-  nodeId: string,
+  nodeId: string
 ): { state: GameState; stopMovement: boolean; stoppedAtForcedRound: boolean } {
   const nodeIndex = state.config.runtimeGraph.nodeIndexById[nodeId] ?? 0;
   const field = state.config.board[nodeIndex];
@@ -771,11 +832,7 @@ function resolveForcedRoundLanding(
   return { state, stopMovement: false, stoppedAtForcedRound: false };
 }
 
-function grantPerkToInventory(
-  state: GameState,
-  playerId: string,
-  perk: PerkDefinition,
-): GameState {
+function grantPerkToInventory(state: GameState, playerId: string, perk: PerkDefinition): GameState {
   const inventoryItem = createInventoryItem(state, perk, playerId);
   return {
     ...state,
@@ -789,7 +846,7 @@ function grantPerkToInventory(
 function resolveTerminalLanding(
   state: GameState,
   installedRounds: InstalledRound[],
-  nodeId: string,
+  nodeId: string
 ): { state: GameState; stopMovement: boolean; stoppedAtEnd: boolean } {
   const nodeIndex = state.config.runtimeGraph.nodeIndexById[nodeId] ?? 0;
   const field = state.config.board[nodeIndex];
@@ -805,10 +862,7 @@ function resolveTerminalLanding(
   };
 }
 
-function resolveFinalNodeLanding(
-  state: GameState,
-  installedRounds: InstalledRound[],
-): GameState {
+function resolveFinalNodeLanding(state: GameState, installedRounds: InstalledRound[]): GameState {
   const player = state.players[state.currentPlayerIndex];
   if (!player) return state;
 
@@ -820,8 +874,19 @@ function resolveFinalNodeLanding(
   if (player.antiPerks.includes("succubus")) {
     const forcedRoundId = pickSuccubusRoundId(installedRounds);
     if (forcedRoundId) {
-      const queued = queueRoundFromNode(state, installedRounds, nodeId, forcedRoundId, "random", "succubus");
-      return consumeAntiPerkById(queued, { playerId: player.id, perkId: "succubus", reason: "Succubus forced a high-difficulty round." });
+      const queued = queueRoundFromNode(
+        state,
+        installedRounds,
+        nodeId,
+        forcedRoundId,
+        "random",
+        "succubus"
+      );
+      return consumeAntiPerkById(queued, {
+        playerId: player.id,
+        perkId: "succubus",
+        reason: "Succubus forced a high-difficulty round.",
+      });
     }
   }
 
@@ -834,7 +899,10 @@ function resolveFinalNodeLanding(
     if (!resolved.roundId) {
       return {
         ...resolved.nextState,
-        log: [`Random pool ${field.randomPoolId} has no playable rounds.`, ...resolved.nextState.log].slice(0, 40),
+        log: [
+          `Random pool ${field.randomPoolId} has no playable rounds.`,
+          ...resolved.nextState.log,
+        ].slice(0, 40),
       };
     }
 
@@ -844,7 +912,7 @@ function resolveFinalNodeLanding(
       nodeId,
       resolved.roundId,
       "random",
-      field.randomPoolId,
+      field.randomPoolId
     );
   }
 
@@ -855,7 +923,10 @@ function resolveFinalNodeLanding(
       if (!configuredPerk || configuredPerk.kind !== "perk") {
         return {
           ...state,
-          log: [`Perk node ${field.name} references unknown perk ${configuredPerkId}.`, ...state.log].slice(0, 40),
+          log: [
+            `Perk node ${field.name} references unknown perk ${configuredPerkId}.`,
+            ...state.log,
+          ].slice(0, 40),
         };
       }
 
@@ -884,7 +955,7 @@ function continueTraversalWithEdge(
   installedRounds: InstalledRound[],
   edge: RuntimeGraphEdge,
   remainingSteps: number,
-  traversedNodeIds: string[],
+  traversedNodeIds: string[]
 ): {
   state: GameState;
   stoppedAtSafePoint: boolean;
@@ -895,7 +966,14 @@ function continueTraversalWithEdge(
 } {
   const currentPlayer = state.players[state.currentPlayerIndex];
   if (!currentPlayer) {
-    return { state, stoppedAtSafePoint: false, stoppedAtForcedRound: false, stoppedAtEnd: false, remainingSteps, traversedNodeIds };
+    return {
+      state,
+      stoppedAtSafePoint: false,
+      stoppedAtForcedRound: false,
+      stoppedAtEnd: false,
+      remainingSteps,
+      traversedNodeIds,
+    };
   }
 
   const afterPayment = {
@@ -908,8 +986,16 @@ function continueTraversalWithEdge(
   const moved = movePlayerToNode(afterPayment, currentPlayer.id, edge.toNodeId);
   const nextTraversed = [...traversedNodeIds, edge.toNodeId];
   const afterLanding = resolveSafePointLanding(moved, edge.toNodeId);
-  const afterForcedRound = resolveForcedRoundLanding(afterLanding.state, installedRounds, edge.toNodeId);
-  const afterTerminal = resolveTerminalLanding(afterForcedRound.state, installedRounds, edge.toNodeId);
+  const afterForcedRound = resolveForcedRoundLanding(
+    afterLanding.state,
+    installedRounds,
+    edge.toNodeId
+  );
+  const afterTerminal = resolveTerminalLanding(
+    afterForcedRound.state,
+    installedRounds,
+    edge.toNodeId
+  );
 
   return {
     state: afterTerminal.state,
@@ -925,7 +1011,7 @@ function traverseMovement(
   state: GameState,
   installedRounds: InstalledRound[],
   remainingSteps: number,
-  traversedNodeIds: string[],
+  traversedNodeIds: string[]
 ): { state: GameState; stoppedAtSafePoint: boolean } {
   let nextState = state;
   let steps = remainingSteps;
@@ -938,7 +1024,11 @@ function traverseMovement(
     const currentPlayer = nextState.players[nextState.currentPlayerIndex];
     if (!currentPlayer) break;
 
-    const outgoing = getValidOutgoingEdges(nextState, currentPlayer.currentNodeId, currentPlayer.money);
+    const outgoing = getValidOutgoingEdges(
+      nextState,
+      currentPlayer.currentNodeId,
+      currentPlayer.money
+    );
     if (outgoing.length === 0) {
       break;
     }
@@ -975,7 +1065,13 @@ function traverseMovement(
 
     const selectedEdge = outgoing[0];
     if (!selectedEdge) break;
-    const traversed = continueTraversalWithEdge(nextState, installedRounds, selectedEdge, steps, path);
+    const traversed = continueTraversalWithEdge(
+      nextState,
+      installedRounds,
+      selectedEdge,
+      steps,
+      path
+    );
 
     nextState = traversed.state;
     steps = traversed.remainingSteps;
@@ -984,7 +1080,15 @@ function traverseMovement(
     stoppedAtForcedRound = traversed.stoppedAtForcedRound;
     stoppedAtEnd = traversed.stoppedAtEnd;
 
-    if (stoppedAtSafePoint || stoppedAtForcedRound || stoppedAtEnd || nextState.queuedRound || nextState.activeRound || nextState.pendingPerkSelection || nextState.sessionPhase !== "normal") {
+    if (
+      stoppedAtSafePoint ||
+      stoppedAtForcedRound ||
+      stoppedAtEnd ||
+      nextState.queuedRound ||
+      nextState.activeRound ||
+      nextState.pendingPerkSelection ||
+      nextState.sessionPhase !== "normal"
+    ) {
       break;
     }
   }
@@ -1014,7 +1118,7 @@ function traverseMovement(
 export function selectPathEdge(
   state: GameState,
   edgeId: string,
-  installedRounds: InstalledRound[],
+  installedRounds: InstalledRound[]
 ): GameState {
   const pending = state.pendingPathChoice;
   if (!pending) return state;
@@ -1023,7 +1127,11 @@ export function selectPathEdge(
   if (!edge || edge.fromNodeId !== pending.fromNodeId) return state;
 
   const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer || currentPlayer.id !== pending.playerId || currentPlayer.money < edge.gateCost) {
+  if (
+    !currentPlayer ||
+    currentPlayer.id !== pending.playerId ||
+    currentPlayer.money < edge.gateCost
+  ) {
     return state;
   }
 
@@ -1037,7 +1145,7 @@ export function selectPathEdge(
     installedRounds,
     edge,
     pending.remainingSteps,
-    pending.traversedNodeIds,
+    pending.traversedNodeIds
   );
 
   let next = {
@@ -1045,7 +1153,15 @@ export function selectPathEdge(
     lastTraversalPathNodeIds: traversedFirst.traversedNodeIds,
   };
 
-  if (traversedFirst.stoppedAtSafePoint || traversedFirst.stoppedAtForcedRound || traversedFirst.stoppedAtEnd || next.queuedRound || next.activeRound || next.pendingPerkSelection || next.sessionPhase !== "normal") {
+  if (
+    traversedFirst.stoppedAtSafePoint ||
+    traversedFirst.stoppedAtForcedRound ||
+    traversedFirst.stoppedAtEnd ||
+    next.queuedRound ||
+    next.activeRound ||
+    next.pendingPerkSelection ||
+    next.sessionPhase !== "normal"
+  ) {
     return next;
   }
 
@@ -1056,21 +1172,30 @@ export function selectPathEdge(
       next,
       installedRounds,
       traversedFirst.remainingSteps,
-      traversedFirst.traversedNodeIds,
+      traversedFirst.traversedNodeIds
     );
     next = continued.state;
     if (continued.stoppedAtSafePoint) {
       return next;
     }
   }
-  if (next.pendingPathChoice || next.queuedRound || next.activeRound || next.pendingPerkSelection || next.sessionPhase !== "normal") {
+  if (
+    next.pendingPathChoice ||
+    next.queuedRound ||
+    next.activeRound ||
+    next.pendingPerkSelection ||
+    next.sessionPhase !== "normal"
+  ) {
     return next;
   }
 
   return advanceTurn(next);
 }
 
-export function resolvePathChoiceTimeout(state: GameState, installedRounds: InstalledRound[]): GameState {
+export function resolvePathChoiceTimeout(
+  state: GameState,
+  installedRounds: InstalledRound[]
+): GameState {
   const pending = state.pendingPathChoice;
   if (!pending || pending.options.length === 0) return state;
 
@@ -1098,7 +1223,9 @@ export function resolvePathChoiceTimeout(state: GameState, installedRounds: Inst
     };
   });
 
-  const selectedEdgeId = pickWeightedRoundId(weighted.map((entry) => ({ roundId: entry.edgeId, weight: entry.weight })));
+  const selectedEdgeId = pickWeightedRoundId(
+    weighted.map((entry) => ({ roundId: entry.edgeId, weight: entry.weight }))
+  );
   if (!selectedEdgeId) return state;
 
   return selectPathEdge(state, selectedEdgeId, installedRounds);
@@ -1106,7 +1233,7 @@ export function resolvePathChoiceTimeout(state: GameState, installedRounds: Inst
 
 export function createInitialGameState(
   config: GameConfig,
-  options?: { initialHighscore?: number; playedRoundIdsByPool?: Record<string, string[]> },
+  options?: { initialHighscore?: number; playedRoundIdsByPool?: Record<string, string[]> }
 ): GameState {
   const initialHighscore = Math.max(0, options?.initialHighscore ?? 0);
   const startNodeId = config.runtimeGraph.startNodeId;
@@ -1123,7 +1250,7 @@ export function createInitialGameState(
         stats: {
           diceMin: config.dice.min,
           diceMax: config.dice.max,
-          roundPauseMs: 20000,
+          roundPauseMs: coerceFiniteNumber(config.roundStartDelayMs, 20_000),
           perkFrequency: 0,
           perkLuck: 0,
         },
@@ -1152,12 +1279,12 @@ export function createInitialGameState(
     intermediaryProbability: clamp(
       config.probabilityScaling.initialIntermediaryProbability,
       0,
-      config.probabilityScaling.maxIntermediaryProbability,
+      config.probabilityScaling.maxIntermediaryProbability
     ),
     antiPerkProbability: clamp(
       config.probabilityScaling.initialAntiPerkProbability,
       0,
-      config.probabilityScaling.maxAntiPerkProbability,
+      config.probabilityScaling.maxAntiPerkProbability
     ),
     queuedRound: null,
     activeRound: null,
@@ -1188,7 +1315,7 @@ export function reportPlayerCum(state: GameState): GameState {
 export function rollTurn(
   state: GameState,
   installedRounds: InstalledRound[],
-  forcedRoll?: number,
+  forcedRoll?: number
 ): GameState {
   if (state.sessionPhase !== "normal") return state;
   if (state.pendingPerkSelection || state.pendingPathChoice || state.activeRound) return state;
@@ -1197,10 +1324,12 @@ export function rollTurn(
   const player = state.players[state.currentPlayerIndex];
   if (!player) return state;
 
-  const baseRoll = typeof forcedRoll === "number"
-    ? clamp(Math.floor(forcedRoll), player.stats.diceMin, player.stats.diceMax)
-    : randomInt(player.stats.diceMin, player.stats.diceMax);
-  const rollCeiling = player.pendingRollCeiling == null ? null : clamp(Math.floor(player.pendingRollCeiling), 1, 12);
+  const baseRoll =
+    typeof forcedRoll === "number"
+      ? clamp(Math.floor(forcedRoll), player.stats.diceMin, player.stats.diceMax)
+      : randomInt(player.stats.diceMin, player.stats.diceMax);
+  const rollCeiling =
+    player.pendingRollCeiling == null ? null : clamp(Math.floor(player.pendingRollCeiling), 1, 12);
   const cappedBaseRoll = rollCeiling == null ? baseRoll : Math.min(baseRoll, rollCeiling);
   const rollMultiplier = Math.max(1, Math.floor(player.pendingRollMultiplier ?? 1));
   const roll = Math.max(1, Math.floor(cappedBaseRoll * rollMultiplier));
@@ -1212,6 +1341,15 @@ export function rollTurn(
       ...entry,
       pendingRollMultiplier: null,
       pendingRollCeiling: null,
+      activePerkEffects: entry.activePerkEffects.filter(
+        (effect) =>
+          !(
+            effect.remainingRounds === 0 &&
+            effect.effects.some(
+              (e) => e.kind === "setPendingRollCeiling" || e.kind === "setPendingRollMultiplier"
+            )
+          )
+      ),
     })),
     lastRoll: roll,
     log: [
@@ -1249,10 +1387,10 @@ export function triggerQueuedRound(state: GameState): GameState {
   const withResolvedNoRest =
     currentPlayerId && state.players[state.currentPlayerIndex]?.antiPerks.includes("no-rest")
       ? consumeAntiPerkById(state, {
-        playerId: currentPlayerId,
-        perkId: "no-rest",
-        reason: "No-rest ended when the round started.",
-      })
+          playerId: currentPlayerId,
+          perkId: "no-rest",
+          reason: "No-rest ended when the round started.",
+        })
       : state;
   return {
     ...withResolvedNoRest,
@@ -1269,7 +1407,7 @@ export function shouldAutoStartQueuedRound(state: GameState): boolean {
 export function completeRound(
   state: GameState,
   summary: CompletedRoundSummary | undefined,
-  installedRounds: InstalledRound[],
+  installedRounds: InstalledRound[]
 ): GameState {
   if (!state.activeRound) return state;
 
@@ -1324,12 +1462,12 @@ export function completeRound(
   const nextIntermediaryProbability = clamp(
     state.intermediaryProbability + state.config.probabilityScaling.intermediaryIncreasePerRound,
     0,
-    state.config.probabilityScaling.maxIntermediaryProbability,
+    state.config.probabilityScaling.maxIntermediaryProbability
   );
   const nextAntiPerkProbability = clamp(
     state.antiPerkProbability + state.config.probabilityScaling.antiPerkIncreasePerRound,
     0,
-    state.config.probabilityScaling.maxAntiPerkProbability,
+    state.config.probabilityScaling.maxAntiPerkProbability
   );
 
   const nextPlayers = updatePlayer(state.players, currentPlayer.id, (player) => ({
@@ -1337,6 +1475,13 @@ export function completeRound(
     money: Math.max(0, player.money + moneyEarned),
     score: Math.max(0, player.score + scoreEarned),
     pendingIntensityCap: null,
+    activePerkEffects: player.activePerkEffects.filter(
+      (effect) =>
+        !(
+          effect.remainingRounds === 0 &&
+          effect.effects.some((e) => e.kind === "setPendingIntensityCap")
+        )
+    ),
   }));
   const updatedPlayer = nextPlayers[state.currentPlayerIndex];
   const nextHighscore = Math.max(state.highscore, updatedPlayer?.score ?? 0);
@@ -1356,19 +1501,33 @@ export function completeRound(
 
   const currentNodeId = next.players[next.currentPlayerIndex]?.currentNodeId;
   const outgoing = currentNodeId
-    ? next.config.runtimeGraph.outgoingEdgeIdsByNodeId[currentNodeId] ?? []
+    ? (next.config.runtimeGraph.outgoingEdgeIdsByNodeId[currentNodeId] ?? [])
     : [];
   const hasExplicitEndNodes = next.config.board.some((field) => field.kind === "end");
 
-  if (!hasExplicitEndNodes && outgoing.length === 0 && next.config.singlePlayer.cumRoundIds.length > 0) {
+  if (
+    !hasExplicitEndNodes &&
+    outgoing.length === 0 &&
+    next.config.singlePlayer.cumRoundIds.length > 0
+  ) {
     next = startCumPhase(next, installedRounds);
-    if (next.pendingPerkSelection || next.pendingPathChoice || next.queuedRound || next.activeRound || next.sessionPhase === "completed") {
+    if (
+      next.pendingPerkSelection ||
+      next.pendingPathChoice ||
+      next.queuedRound ||
+      next.activeRound ||
+      next.sessionPhase === "completed"
+    ) {
       return next;
     }
     return advanceTurn(next);
   }
 
-  if (!hasExplicitEndNodes && outgoing.length === 0 && next.config.singlePlayer.cumRoundIds.length === 0) {
+  if (
+    !hasExplicitEndNodes &&
+    outgoing.length === 0 &&
+    next.config.singlePlayer.cumRoundIds.length === 0
+  ) {
     return {
       ...next,
       sessionPhase: "completed",
@@ -1378,9 +1537,13 @@ export function completeRound(
   }
 
   const updatedCurrentPlayer = next.players[next.currentPlayerIndex];
-  if (updatedCurrentPlayer && Math.random() < getEffectivePerkTriggerChance(next, updatedCurrentPlayer)) {
+  if (
+    updatedCurrentPlayer &&
+    Math.random() < getEffectivePerkTriggerChance(next, updatedCurrentPlayer)
+  ) {
     next = triggerPerkSelection(next, currentPlayer.id, activeRound.fieldId);
-    if (next.pendingPerkSelection || next.pendingPathChoice || next.queuedRound || next.activeRound) return next;
+    if (next.pendingPerkSelection || next.pendingPathChoice || next.queuedRound || next.activeRound)
+      return next;
   }
 
   return advanceTurn(next);
@@ -1389,7 +1552,7 @@ export function completeRound(
 export function selectPerk(
   state: GameState,
   perkId: string,
-  options?: { applyDirectly?: boolean },
+  options?: { applyDirectly?: boolean }
 ): GameState {
   const pending = state.pendingPerkSelection;
   if (!pending) return state;
@@ -1438,11 +1601,15 @@ export function selectPerk(
         ...player,
         inventory: [inventoryItem, ...player.inventory],
       })),
-      log: [`Stored item: ${selected.name} (-$${selected.cost}).`, ...afterPayment.log].slice(0, 40),
+      log: [`Stored item: ${selected.name} (-$${selected.cost}).`, ...afterPayment.log].slice(
+        0,
+        40
+      ),
     };
   }
 
-  if (nextState.pendingPathChoice || nextState.queuedRound || nextState.activeRound) return nextState;
+  if (nextState.pendingPathChoice || nextState.queuedRound || nextState.activeRound)
+    return nextState;
   return advanceTurn(nextState);
 }
 
@@ -1451,7 +1618,7 @@ export function applyInventoryItemToSelf(
   input: {
     playerId: string;
     itemId: string;
-  },
+  }
 ): GameState {
   const player = state.players.find((entry) => entry.id === input.playerId);
   if (!player) return state;
@@ -1487,7 +1654,7 @@ export function consumeInventoryItem(
     playerId: string;
     itemId: string;
     reason?: string;
-  },
+  }
 ): GameState {
   const player = state.players.find((entry) => entry.id === input.playerId);
   if (!player) return state;
@@ -1511,20 +1678,22 @@ export function consumeAntiPerkById(
     playerId: string;
     perkId: string;
     reason?: string;
-  },
+  }
 ): GameState {
   const player = state.players.find((entry) => entry.id === input.playerId);
   if (!player) return state;
   const hadPerk = player.antiPerks.includes(input.perkId);
   const matchingEffects = player.activePerkEffects.filter(
-    (active) => active.kind === "antiPerk" && active.id === input.perkId,
+    (active) => active.kind === "antiPerk" && active.id === input.perkId
   );
   if (!hadPerk && matchingEffects.length === 0) return state;
 
   let nextStats = { ...player.stats };
   for (const active of matchingEffects) {
     for (const effect of active.effects) {
-      nextStats = applyNumericDelta(nextStats, effect, true);
+      if (effect.kind === "numericDelta") {
+        nextStats = applyNumericDelta(nextStats, effect, true);
+      }
     }
   }
 
@@ -1536,7 +1705,7 @@ export function consumeAntiPerkById(
       stats: normalizeDice(nextStats),
       antiPerks: entry.antiPerks.filter((id) => id !== input.perkId),
       activePerkEffects: entry.activePerkEffects.filter(
-        (active) => !(active.kind === "antiPerk" && active.id === input.perkId),
+        (active) => !(active.kind === "antiPerk" && active.id === input.perkId)
       ),
     })),
     log: [reason, ...state.log].slice(0, 40),
@@ -1548,7 +1717,7 @@ export function useRoundControl(
   input: {
     playerId: string;
     control: "pause" | "skip";
-  },
+  }
 ): GameState {
   const player = state.players.find((entry) => entry.id === input.playerId);
   if (!player) return state;
@@ -1556,9 +1725,10 @@ export function useRoundControl(
   const available = input.control === "pause" ? controls.pauseCharges : controls.skipCharges;
   if (available <= 0) return state;
 
-  const nextControls = input.control === "pause"
-    ? { ...controls, pauseCharges: controls.pauseCharges - 1 }
-    : { ...controls, skipCharges: controls.skipCharges - 1 };
+  const nextControls =
+    input.control === "pause"
+      ? { ...controls, pauseCharges: controls.pauseCharges - 1 }
+      : { ...controls, skipCharges: controls.skipCharges - 1 };
 
   return {
     ...state,
@@ -1579,7 +1749,8 @@ export function skipPerkSelection(state: GameState): GameState {
     log: ["Perk selection timed out. No perk selected.", ...state.log].slice(0, 40),
   };
 
-  if (nextState.pendingPathChoice || nextState.queuedRound || nextState.activeRound) return nextState;
+  if (nextState.pendingPathChoice || nextState.queuedRound || nextState.activeRound)
+    return nextState;
   return advanceTurn(nextState);
 }
 
@@ -1589,7 +1760,7 @@ export function applyPerkByIdToPlayer(
     targetPlayerId: string;
     perkId: string;
     sourceLabel?: string;
-  },
+  }
 ): GameState {
   const targetPlayer = state.players.find((player) => player.id === input.targetPlayerId);
   if (!targetPlayer) return state;
@@ -1616,7 +1787,10 @@ export function applyPerkByIdToPlayer(
 
   return {
     ...next,
-    log: [`${actor} applied ${kindLabel}: ${perk.name} - ${perk.description}`, ...next.log].slice(0, 40),
+    log: [`${actor} applied ${kindLabel}: ${perk.name} - ${perk.description}`, ...next.log].slice(
+      0,
+      40
+    ),
   };
 }
 
@@ -1626,7 +1800,7 @@ export function adjustPlayerMoney(
     playerId: string;
     delta: number;
     reason?: string;
-  },
+  }
 ): GameState {
   const player = state.players.find((entry) => entry.id === input.playerId);
   if (!player) return state;

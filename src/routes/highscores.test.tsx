@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   loaderData: {
@@ -44,10 +44,11 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   db: {
     gameProfile: {
-      getLocalHighscore: vi.fn().mockResolvedValue(900),
+      getLocalHighscore: vi.fn().mockResolvedValue({ highscore: 900, highscoreCheatMode: false }),
     },
     singlePlayerHistory: {
       listRuns: vi.fn().mockResolvedValue([]),
+      deleteRun: vi.fn().mockResolvedValue({ highscore: 320, highscoreCheatMode: false }),
     },
     multiplayer: {
       listResultSyncLobbies: vi.fn().mockResolvedValue([]),
@@ -106,8 +107,55 @@ class AudioMock {
 import { HighscoresRoute } from "./highscores";
 
 describe("HighscoresRoute", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
+    mocks.loaderData.singleRuns = [
+      {
+        id: "run-1",
+        finishedAt: "2026-03-20T10:00:00.000Z",
+        score: 540,
+        survivedDurationSec: 812,
+        highscoreBefore: 500,
+        highscoreAfter: 540,
+        wasNewHighscore: true,
+        completionReason: "finished",
+        playlistId: "playlist-1",
+        playlistName: "Default Playlist",
+        playlistFormatVersion: 1,
+        endingPosition: 100,
+        turn: 42,
+        createdAt: "2026-03-20T10:00:00.000Z",
+      },
+      {
+        id: "run-2",
+        finishedAt: "2026-03-20T09:00:00.000Z",
+        score: 320,
+        survivedDurationSec: null,
+        highscoreBefore: 540,
+        highscoreAfter: 540,
+        wasNewHighscore: false,
+        completionReason: "self_reported_cum",
+        playlistId: "playlist-2",
+        playlistName: "",
+        playlistFormatVersion: 1,
+        endingPosition: 74,
+        turn: 28,
+        createdAt: "2026-03-20T09:00:00.000Z",
+      },
+    ];
     mocks.navigate.mockReset();
+    mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({ highscore: 900, highscoreCheatMode: false });
+    mocks.db.singlePlayerHistory.listRuns.mockResolvedValue(mocks.loaderData.singleRuns);
+    mocks.db.singlePlayerHistory.deleteRun.mockReset();
+    mocks.db.singlePlayerHistory.deleteRun.mockImplementation(async (id: string) => {
+      mocks.loaderData.singleRuns = mocks.loaderData.singleRuns.filter((run) => run.id !== id);
+      mocks.db.singlePlayerHistory.listRuns.mockResolvedValue(mocks.loaderData.singleRuns);
+      mocks.db.gameProfile.getLocalHighscore.mockResolvedValue({ highscore: 320, highscoreCheatMode: false });
+      return { highscore: 320, highscoreCheatMode: false };
+    });
     vi.stubGlobal("Audio", AudioMock);
   });
 
@@ -116,10 +164,34 @@ describe("HighscoresRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Single-Player" }));
 
     expect(screen.getAllByText(/Survived:/)).toHaveLength(2);
-    expect(screen.getByText("13:32")).toBeTruthy();
+    expect(screen.getAllByText("13:32")).toHaveLength(2);
     expect(screen.getByText("Legacy run")).toBeTruthy();
-    expect(screen.getAllByText(/Playlist:/)).toHaveLength(4);
+    expect(screen.getAllByText(/Playlist:/)).toHaveLength(2);
     expect(screen.getByText("Default Playlist")).toBeTruthy();
     expect(screen.getByText("playlist-2")).toBeTruthy();
+  });
+
+  it("deletes a run from the single-player history view", async () => {
+    render(<HighscoresRoute />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Single-Player" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Delete run 540" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Deletion" }));
+
+    await waitFor(() => {
+      expect(mocks.db.singlePlayerHistory.deleteRun).toHaveBeenCalledWith("run-1");
+      expect(screen.queryByRole("button", { name: "Confirm Deletion" })).toBeNull();
+    });
+  });
+
+  it("does not delete a run when confirmation is cancelled", async () => {
+    render(<HighscoresRoute />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Single-Player" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Delete run 540" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(mocks.db.singlePlayerHistory.deleteRun).not.toHaveBeenCalled();
+    });
+    expect(screen.getByRole("button", { name: "Delete run 540" })).toBeTruthy();
   });
 });

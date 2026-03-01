@@ -18,7 +18,127 @@ vi.mock("./supabaseClient", () => ({
   })),
 }));
 
-import { finishPlayer, sendAntiPerk, startLobbyForAll, updateOwnProgress } from "./api";
+import {
+  createLobby,
+  finishPlayer,
+  getLobbyJoinPreview,
+  listPublicLobbies,
+  sendAntiPerk,
+  setLobbyPublicState,
+  startLobbyForAll,
+  updateOwnProgress,
+} from "./api";
+
+describe("multiplayer api lobby visibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("forwards public visibility when creating a lobby", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        lobby_id: "lobby-1",
+        invite_code: "ABCD1234",
+        player_id: "player-1",
+        status: "waiting",
+      },
+      error: null,
+    });
+
+    await createLobby({
+      name: "Public Lobby",
+      playlistSnapshotJson: { config: { playlistVersion: 1 } },
+      displayName: "Host",
+      allowLateJoin: true,
+      isPublic: true,
+      serverLabel: "F-Land Online",
+    });
+
+    expect(rpcMock).toHaveBeenCalledWith(
+      "mp_create_lobby",
+      expect.objectContaining({
+        p_is_public: true,
+      })
+    );
+  });
+
+  it("lists public lobbies from the new RPC", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        {
+          lobby_id: "lobby-public",
+          invite_code: "PUBLIC1",
+          name: "Public Lobby",
+          playlist_name: "Playlist One",
+          player_count: 4,
+          status: "waiting",
+          is_open: true,
+          allow_late_join: true,
+          required_round_count: 100,
+          created_at: "2026-03-29T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+
+    await expect(listPublicLobbies()).resolves.toEqual([
+      {
+        lobbyId: "lobby-public",
+        inviteCode: "PUBLIC1",
+        name: "Public Lobby",
+        playlistName: "Playlist One",
+        playerCount: 4,
+        status: "waiting",
+        isOpen: true,
+        allowLateJoin: true,
+        requiredRoundCount: 100,
+        createdAt: "2026-03-29T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("loads a join preview by invite code", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        lobby_id: "lobby-preview",
+        invite_code: "ROOM140",
+        name: "Huge Lobby",
+        playlist_name: "Huge Playlist",
+        player_count: 2,
+        status: "waiting",
+        is_open: true,
+        allow_late_join: true,
+        required_round_count: 140,
+        created_at: "2026-03-29T00:00:00.000Z",
+      },
+      error: null,
+    });
+
+    await expect(getLobbyJoinPreview("room140")).resolves.toEqual({
+      lobbyId: "lobby-preview",
+      inviteCode: "ROOM140",
+      name: "Huge Lobby",
+      playlistName: "Huge Playlist",
+      playerCount: 2,
+      status: "waiting",
+      isOpen: true,
+      allowLateJoin: true,
+      requiredRoundCount: 140,
+      createdAt: "2026-03-29T00:00:00.000Z",
+    });
+  });
+
+  it("updates lobby public state through the new RPC", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null });
+
+    await setLobbyPublicState("lobby-1", true);
+
+    expect(rpcMock).toHaveBeenCalledWith("mp_set_lobby_public", {
+      p_lobby_id: "lobby-1",
+      p_is_public: true,
+    });
+  });
+});
 
 describe("multiplayer api finishPlayer", () => {
   beforeEach(() => {

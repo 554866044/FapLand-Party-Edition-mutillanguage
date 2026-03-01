@@ -1,7 +1,6 @@
 import { createObfuscationPlugin } from "./build/obfuscation";
 import { getBuildVersion } from "./build/version";
 import tailwindcss from "@tailwindcss/vite";
-import { devtools } from "@tanstack/devtools-vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
@@ -94,7 +93,9 @@ export default defineConfig(({ command, mode }) => {
   const defines = {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
     "process.env.FLAND_APP_VERSION": JSON.stringify(appVersion),
-    "import.meta.env.FLAND_ENABLE_DEV_FEATURES": JSON.stringify(enableDevFeatures ? "true" : "false"),
+    "import.meta.env.FLAND_ENABLE_DEV_FEATURES": JSON.stringify(
+      enableDevFeatures ? "true" : "false"
+    ),
     "import.meta.env.FLAND_UPDATE_REPOSITORY": JSON.stringify(
       env.FLAND_UPDATE_REPOSITORY ?? process.env.FLAND_UPDATE_REPOSITORY ?? ""
     ),
@@ -103,7 +104,6 @@ export default defineConfig(({ command, mode }) => {
   return {
     define: defines,
     plugins: [
-      ...(command === "serve" ? [devtools()] : []),
       viteTsConfigPaths({
         projects: ["./tsconfig.json"],
       }),
@@ -156,6 +156,9 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 3000,
       strictPort: true,
+      watch: {
+        ignored: ["**/dev.db", "**/dev.db-journal", "**/dev.db-wal"],
+      },
     },
 
     build: {

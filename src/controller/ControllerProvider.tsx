@@ -5,7 +5,12 @@ import {
   normalizeControllerSupportEnabled,
 } from "../constants/experimentalFeatures";
 import { trpc } from "../services/trpc";
-import { findInitialFocusable, focusElement, getSurfaceRoot, handleDomAction } from "./controllerDom";
+import {
+  findInitialFocusable,
+  focusElement,
+  getSurfaceRoot,
+  handleDomAction,
+} from "./controllerDom";
 import type { ControllerAction, ControllerSurfaceOptions } from "./types";
 
 type RegisteredSurface = ControllerSurfaceOptions & {
@@ -36,6 +41,8 @@ const BUTTON_REPEAT_INTERVAL_MS = 120;
 const ACTION_BUTTONS: Record<ControllerAction, number> = {
   PRIMARY: 0,
   SECONDARY: 1,
+  ACTION_X: 2,
+  ACTION_Y: 3,
   LB: 4,
   RB: 5,
   BACK: 8,
@@ -50,7 +57,9 @@ function getPressedActions(gamepad: Gamepad | null): Set<ControllerAction> {
   const actions = new Set<ControllerAction>();
   if (!gamepad) return actions;
 
-  for (const [action, index] of Object.entries(ACTION_BUTTONS) as Array<[ControllerAction, number]>) {
+  for (const [action, index] of Object.entries(ACTION_BUTTONS) as Array<
+    [ControllerAction, number]
+  >) {
     if (gamepad.buttons[index]?.pressed) {
       actions.add(action);
     }
@@ -67,7 +76,14 @@ function getPressedActions(gamepad: Gamepad | null): Set<ControllerAction> {
 }
 
 function isRepeatableAction(action: ControllerAction): boolean {
-  return action === "UP" || action === "DOWN" || action === "LEFT" || action === "RIGHT" || action === "LB" || action === "RB";
+  return (
+    action === "UP" ||
+    action === "DOWN" ||
+    action === "LEFT" ||
+    action === "RIGHT" ||
+    action === "LB" ||
+    action === "RB"
+  );
 }
 
 function sortSurfaces(left: RegisteredSurface, right: RegisteredSurface): number {
@@ -83,13 +99,17 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
   const controllerSupportHydratedRef = useRef(false);
   const orderRef = useRef(0);
   const rafRef = useRef<number | null>(null);
-  const heldStateRef = useRef<Record<ControllerAction, { pressedAt: number; repeatedAt: number } | null>>({
+  const heldStateRef = useRef<
+    Record<ControllerAction, { pressedAt: number; repeatedAt: number } | null>
+  >({
     UP: null,
     DOWN: null,
     LEFT: null,
     RIGHT: null,
     PRIMARY: null,
     SECONDARY: null,
+    ACTION_X: null,
+    ACTION_Y: null,
     LB: null,
     RB: null,
     START: null,
@@ -106,7 +126,8 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
   const ensureSurfaceFocus = useCallback((surface: RegisteredSurface | null): boolean => {
     if (!surface) return false;
     const root = getSurfaceRoot(surface);
-    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const activeElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (activeElement && root.contains(activeElement)) {
       return true;
     }
@@ -119,35 +140,42 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
     return focusElement(findInitialFocusable(root, surface.initialFocusId));
   }, []);
 
-  const dispatchAction = useCallback((action: ControllerAction) => {
-    for (const listener of subscribersRef.current) {
-      listener(action);
-    }
+  const dispatchAction = useCallback(
+    (action: ControllerAction) => {
+      if (typeof document !== "undefined") {
+        document.body.dataset.controllerActive = "true";
+      }
 
-    const surface = getActiveSurface();
-    if (!surface) return;
+      for (const listener of subscribersRef.current) {
+        listener(action);
+      }
 
-    if (action === "START") {
-      return;
-    }
+      const surface = getActiveSurface();
+      if (!surface) return;
 
-    ensureSurfaceFocus(surface);
-
-    const handledBeforeDom = surface.onBeforeDomAction?.(action);
-    if (handledBeforeDom) return;
-
-    const handled = handleDomAction(surface, action);
-    if (handled) return;
-
-    if ((action === "SECONDARY" || action === "BACK") && surface.onBack) {
-      const result = surface.onBack();
-      if (result !== false) {
+      if (action === "START") {
         return;
       }
-    }
 
-    surface.onUnhandledAction?.(action);
-  }, [ensureSurfaceFocus, getActiveSurface]);
+      ensureSurfaceFocus(surface);
+
+      const handledBeforeDom = surface.onBeforeDomAction?.(action);
+      if (handledBeforeDom) return;
+
+      const handled = handleDomAction(surface, action);
+      if (handled) return;
+
+      if ((action === "SECONDARY" || action === "BACK") && surface.onBack) {
+        const result = surface.onBack();
+        if (result !== false) {
+          return;
+        }
+      }
+
+      surface.onUnhandledAction?.(action);
+    },
+    [ensureSurfaceFocus, getActiveSurface]
+  );
 
   useEffect(() => {
     const handleFocusIn = (event: FocusEvent) => {
@@ -182,9 +210,8 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
     };
 
     const handleControllerSupportChanged = (event: Event) => {
-      const nextValue = event instanceof CustomEvent
-        ? normalizeControllerSupportEnabled(event.detail)
-        : false;
+      const nextValue =
+        event instanceof CustomEvent ? normalizeControllerSupportEnabled(event.detail) : false;
       controllerSupportHydratedRef.current = true;
       controllerSupportEnabledRef.current = nextValue;
     };
@@ -202,8 +229,10 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement;
       const editableFocused =
-        activeElement instanceof HTMLElement
-          && (activeElement.isContentEditable || activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
+        activeElement instanceof HTMLElement &&
+        (activeElement.isContentEditable ||
+          activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA");
 
       let action: ControllerAction | null = null;
 
@@ -237,6 +266,14 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
         case "E":
           action = "RB";
           break;
+        case "x":
+        case "X":
+          action = "ACTION_X";
+          break;
+        case "c":
+        case "C":
+          action = "ACTION_Y";
+          break;
         default:
           break;
       }
@@ -259,7 +296,7 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const tick = (timestamp: number) => {
       const gamepad = controllerSupportEnabledRef.current
-        ? navigator.getGamepads?.()[0] ?? null
+        ? (navigator.getGamepads?.()[0] ?? null)
         : null;
       const pressedActions = getPressedActions(gamepad);
 
@@ -303,7 +340,10 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
       order: ++orderRef.current,
     };
 
-    surfacesRef.current = [...surfacesRef.current.filter((entry) => entry.id !== surface.id), registered];
+    surfacesRef.current = [
+      ...surfacesRef.current.filter((entry) => entry.id !== surface.id),
+      registered,
+    ];
 
     return () => {
       surfacesRef.current = surfacesRef.current.filter((entry) => entry.id !== surface.id);
@@ -318,16 +358,15 @@ export function ControllerProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
-  const value = useMemo<ControllerContextValue>(() => ({
-    registerSurface,
-    subscribe,
-  }), [registerSurface, subscribe]);
-
-  return (
-    <ControllerContext.Provider value={value}>
-      {children}
-    </ControllerContext.Provider>
+  const value = useMemo<ControllerContextValue>(
+    () => ({
+      registerSurface,
+      subscribe,
+    }),
+    [registerSurface, subscribe]
   );
+
+  return <ControllerContext.Provider value={value}>{children}</ControllerContext.Provider>;
 }
 
 export function useControllerContext(): ControllerContextValue {

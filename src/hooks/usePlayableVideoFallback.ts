@@ -22,24 +22,24 @@ export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPla
   ensurePlayableVideo: (originalUri: string | null | undefined) => Promise<string | null>;
   handleVideoError: (originalUri: string | null | undefined) => Promise<string | null>;
 } {
-  const [fallbackByOriginalUri, setFallbackByOriginalUri] = useState<Record<string, string>>({});
+  const fallbackByOriginalUriRef = useRef<Record<string, string>>({});
+  const [, forceUpdate] = useState(0);
   const attemptedOriginalUrisRef = useRef(new Set<string>());
   const inFlightByOriginalUriRef = useRef(new Map<string, Promise<string | null>>());
+  const resolverRef = useRef(resolver);
+  resolverRef.current = resolver;
 
-  const getVideoSrc = useCallback(
-    (originalUri: string | null | undefined): string | undefined => {
-      if (!originalUri) return undefined;
-      return fallbackByOriginalUri[originalUri] ?? originalUri;
-    },
-    [fallbackByOriginalUri],
-  );
+  const getVideoSrc = useCallback((originalUri: string | null | undefined): string | undefined => {
+    if (!originalUri) return undefined;
+    return fallbackByOriginalUriRef.current[originalUri] ?? originalUri;
+  }, []);
 
   const ensurePlayableVideo = useCallback(
     async (originalUri: string | null | undefined): Promise<string | null> => {
       if (!originalUri) return null;
       if (!isLocalVideoUriForFallback(originalUri)) return null;
 
-      const resolved = fallbackByOriginalUri[originalUri];
+      const resolved = fallbackByOriginalUriRef.current[originalUri];
       if (resolved && resolved !== originalUri) {
         return resolved;
       }
@@ -54,15 +54,12 @@ export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPla
 
       const pending = (async () => {
         try {
-          const result = await resolver(originalUri);
+          const result = await resolverRef.current(originalUri);
           if (result.videoUri && result.videoUri !== originalUri) {
-            setFallbackByOriginalUri((previous) => {
-              if (previous[originalUri]) return previous;
-              return {
-                ...previous,
-                [originalUri]: result.videoUri,
-              };
-            });
+            if (!fallbackByOriginalUriRef.current[originalUri]) {
+              fallbackByOriginalUriRef.current[originalUri] = result.videoUri;
+              forceUpdate((n) => n + 1);
+            }
             return result.videoUri;
           }
           return null;
@@ -77,14 +74,45 @@ export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPla
       inFlightByOriginalUriRef.current.set(originalUri, pending);
       return pending;
     },
-    [fallbackByOriginalUri, resolver],
+    []
   );
 
   const handleVideoError = useCallback(
     async (originalUri: string | null | undefined): Promise<string | null> => {
-      return ensurePlayableVideo(originalUri);
+      if (!originalUri) return null;
+      if (!isLocalVideoUriForFallback(originalUri)) return null;
+
+      const existingInFlight = inFlightByOriginalUriRef.current.get(originalUri);
+      if (existingInFlight) return existingInFlight;
+
+      if (attemptedOriginalUrisRef.current.has(originalUri)) {
+        return null;
+      }
+      attemptedOriginalUrisRef.current.add(originalUri);
+
+      const pending = (async () => {
+        try {
+          const result = await resolverRef.current(originalUri);
+          if (result.videoUri && result.videoUri !== originalUri) {
+            if (!fallbackByOriginalUriRef.current[originalUri]) {
+              fallbackByOriginalUriRef.current[originalUri] = result.videoUri;
+              forceUpdate((n) => n + 1);
+            }
+            return result.videoUri;
+          }
+          return null;
+        } catch (error) {
+          console.warn("Video fallback resolve failed", error);
+          return null;
+        } finally {
+          inFlightByOriginalUriRef.current.delete(originalUri);
+        }
+      })();
+
+      inFlightByOriginalUriRef.current.set(originalUri, pending);
+      return pending;
     },
-    [ensurePlayableVideo],
+    []
   );
 
   return {

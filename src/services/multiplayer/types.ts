@@ -31,6 +31,7 @@ export type MultiplayerLobby = {
   name: string;
   status: MultiplayerLobbyStatus;
   isOpen: boolean;
+  isPublic: boolean;
   allowLateJoin: boolean;
   serverLabel: string | null;
   playlistSnapshotJson: unknown;
@@ -117,6 +118,32 @@ export type MultiplayerJoinLobbyResult = {
   playerId: string;
   status: MultiplayerLobbyStatus;
   isOpen: boolean;
+};
+
+export type MultiplayerPublicLobbySummary = {
+  lobbyId: string;
+  inviteCode: string;
+  name: string;
+  playlistName: string;
+  playerCount: number;
+  status: MultiplayerLobbyStatus;
+  isOpen: boolean;
+  allowLateJoin: boolean;
+  requiredRoundCount: number;
+  createdAt: string;
+};
+
+export type MultiplayerLobbyJoinPreview = {
+  lobbyId: string;
+  inviteCode: string;
+  name: string;
+  playlistName: string;
+  playerCount: number;
+  status: MultiplayerLobbyStatus;
+  isOpen: boolean;
+  allowLateJoin: boolean;
+  requiredRoundCount: number;
+  createdAt: string;
 };
 
 export type MultiplayerSendAntiPerkResult = {

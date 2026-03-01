@@ -12,6 +12,7 @@ function makeSnapshot(): MultiplayerLobbySnapshot {
       name: "Lobby",
       status: "running",
       isOpen: true,
+      isPublic: false,
       allowLateJoin: true,
       serverLabel: "Local",
       playlistSnapshotJson: {},
@@ -106,4 +107,3 @@ describe("multiplayer result helpers", () => {
     });
   });
 });
-

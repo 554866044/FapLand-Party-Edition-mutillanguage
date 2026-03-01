@@ -213,23 +213,44 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
         let bobPhase = 0;
 
         const app = new Application();
+        let destroyed = false;
+        let initialized = false;
+        const destroyApp = () => {
+            if (destroyed) return;
+            destroyed = true;
+            if (appRef.current === app) {
+                appRef.current = null;
+            }
+            if (!initialized) return;
+            try {
+                app.destroy(true, { children: true });
+            } catch (error) {
+                console.warn("Failed to destroy Pixi board renderer", error);
+            }
+        };
 
         (async () => {
-            await app.init({
-                backgroundAlpha: 0,
-                antialias: true,
-                width: stageW,
-                height: stageH,
-                resolution: window.devicePixelRatio ?? 1,
-                autoDensity: true,
-            });
+            try {
+                await app.init({
+                    backgroundAlpha: 0,
+                    antialias: true,
+                    width: stageW,
+                    height: stageH,
+                    resolution: window.devicePixelRatio ?? 1,
+                    autoDensity: true,
+                    skipExtensionImports: true,
+                });
 
-            if (!containerRef.current) {
-                app.destroy(true);
-                return;
-            }
+                if (!containerRef.current) {
+                    destroyApp();
+                    return;
+                }
 
-            appRef.current = app;
+                initialized = true;
+                appRef.current = app;
+            app.canvas.style.display = "block";
+            app.canvas.style.width = "100%";
+            app.canvas.style.height = "100%";
             containerRef.current.appendChild(app.canvas);
             const stage = app.stage;
 
@@ -286,7 +307,7 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
                 kindText.interactiveChildren = false;
 
                 const indexText = new Text({
-                    text: `${idx + 1}`,
+                    text: `${idx}`,
                     style: new TextStyle({
                         fontFamily: "JetBrains Mono, monospace",
                         fontSize: 8,
@@ -384,20 +405,16 @@ export const GameBoardRenderer = memo(function GameBoardRenderer({
             };
 
             rafId = requestAnimationFrame(renderFrame);
+            } catch (error) {
+                console.error("Pixi board renderer init failed", error);
+                destroyApp();
+            }
         })();
 
         return () => {
             cancelAnimationFrame(rafId);
-            // Slight delay so async init doesn't append after cleanup
-            setTimeout(() => {
-                if (appRef.current) {
-                    appRef.current.destroy(true, { children: true });
-                    appRef.current = null;
-                }
-            }, 0);
+            destroyApp();
         };
-        // We intentionally only re-initialize when board dimensions change
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [board.length, stageW, stageH, handleOver, handleOut]);
 
     return (

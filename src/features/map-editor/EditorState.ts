@@ -1,3 +1,4 @@
+import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../../game/data/perks";
 import type {
   GraphBoardConfig,
   LinearBoardConfig,
@@ -217,15 +218,15 @@ export const toEditorGraphConfig = (input: GraphBoardConfig): EditorGraphConfig 
       triggerChancePerCompletedRound: 0.35,
     },
     perkPool: {
-      enabledPerkIds: [],
-      enabledAntiPerkIds: [],
+      enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+      enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
     },
     probabilityScaling: {
       initialIntermediaryProbability: 0.1,
       initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     economy: {
@@ -333,15 +334,15 @@ export const layoutLinearGraphFromPlaylist = (config: LinearBoardConfig): Editor
       triggerChancePerCompletedRound: 0.35,
     },
     perkPool: {
-      enabledPerkIds: [],
-      enabledAntiPerkIds: [],
+      enabledPerkIds: getSinglePlayerPerkPool().map((p) => p.id),
+      enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((p) => p.id),
     },
     probabilityScaling: {
       initialIntermediaryProbability: 0.1,
       initialAntiPerkProbability: 0.1,
       intermediaryIncreasePerRound: 0.02,
       antiPerkIncreasePerRound: 0.015,
-      maxIntermediaryProbability: 0.85,
+      maxIntermediaryProbability: 1,
       maxAntiPerkProbability: 0.75,
     },
     economy: {

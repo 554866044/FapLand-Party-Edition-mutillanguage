@@ -4,6 +4,7 @@ export type CinematicTransitionFrameProps = {
   title: string;
   overline: string;
   accentLabel?: string | null;
+  hintText?: string | null;
   countdownLabel?: string | null;
   progress: number;
   variant: "playlist-launch" | "round-start";
@@ -23,6 +24,7 @@ export function CinematicTransitionFrame({
   title,
   overline,
   accentLabel,
+  hintText,
   countdownLabel,
   progress,
   variant,
@@ -204,6 +206,18 @@ export function CinematicTransitionFrame({
               </div>
             ) : null}
           </div>
+
+          {hintText ? (
+            <div
+              className="relative z-10 mt-6 rounded-[1.5rem] border border-fuchsia-200/20 bg-[linear-gradient(135deg,rgba(14,29,56,0.85),rgba(34,11,49,0.78))] px-4 py-4 shadow-[inset_0_0_24px_rgba(103,232,249,0.08),0_0_24px_rgba(217,70,239,0.08)] sm:px-5"
+              data-testid="cinematic-transition-hint"
+              style={{ opacity: entryPhase < 1 ? entryEase : 1 - warpEase * 0.15 }}
+            >
+              <p className="font-[family-name:var(--font-inter)] text-sm font-semibold leading-6 text-cyan-50 sm:text-base">
+                {hintText}
+              </p>
+            </div>
+          ) : null}
 
           {/* Progress Bar */}
           <div className="relative z-10 mt-8 h-1.5 overflow-hidden rounded-full bg-slate-900/60 shadow-inner">

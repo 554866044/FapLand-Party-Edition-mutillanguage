@@ -46,10 +46,23 @@ type ConverterSearchParams = {
     heroName: string;
 };
 
+export type ConverterStep = "select" | "edit";
+
+export type SelectedSourceInfo = {
+    kind: "round" | "hero" | "local";
+    id: string;
+    name: string;
+} | null;
+
 export type ConverterState = ReturnType<typeof useConverterState>;
 
 export function useConverterState(searchParams: ConverterSearchParams) {
     const { sourceRoundId: preselectedSourceRoundId, heroName: prefilledHeroName } = searchParams;
+
+    const [step, setStep] = useState<ConverterStep>(
+        preselectedSourceRoundId || prefilledHeroName ? "edit" : "select"
+    );
+    const [selectedSourceInfo, setSelectedSourceInfo] = useState<SelectedSourceInfo>(null);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const timelineScrollRef = useRef<HTMLDivElement>(null);
@@ -93,6 +106,179 @@ export function useConverterState(searchParams: ConverterSearchParams) {
     const [error, setError] = useState<string | null>(null);
     const [showHotkeys, setShowHotkeys] = useState(false);
     const { getVideoSrc, ensurePlayableVideo, handleVideoError } = usePlayableVideoFallback();
+
+    const goToSelectStep = useCallback(() => {
+        setStep("select");
+        setSelectedSourceInfo(null);
+        setVideoUri("");
+        setFunscriptUri(null);
+        setSelectedInstalledId("");
+        setSegments([]);
+        setSelectedSegmentId(null);
+        setDetectedSegments([]);
+        setMarkInMs(null);
+        setMarkOutMs(null);
+        setDurationMs(0);
+        setCurrentTimeMs(0);
+        setHeroName("");
+        setHeroAuthor("");
+        setHeroDescription("");
+        setMessage(null);
+        setError(null);
+    }, []);
+
+    const selectRoundAndEdit = useCallback(async (roundId: string) => {
+        const rounds = await db.round.findInstalled(true);
+        const round = rounds.find((r) => r.id === roundId);
+        if (!round) {
+            setError("Round not found.");
+            return;
+        }
+
+        const resource = round.resources.find((entry) => !entry.disabled && entry.videoUri.trim().length > 0)
+            ?? round.resources.find((entry) => entry.videoUri.trim().length > 0);
+        if (!resource) {
+            setError("Round has no usable video resource.");
+            return;
+        }
+
+        setSelectedSourceInfo({ kind: "round", id: roundId, name: round.name });
+        setSourceMode("installed");
+        setDeleteSourceRound(true);
+        setSelectedInstalledId(roundId);
+        setVideoUri(resource.videoUri);
+        setFunscriptUri(resource.funscriptUri ?? null);
+        setHeroName(round.hero?.name ?? round.name);
+        setHeroAuthor(round.hero?.author ?? round.author ?? "");
+        setHeroDescription(round.hero?.description ?? round.description ?? "");
+
+        if (round.startTime != null && round.endTime != null) {
+            const draft: SegmentDraft = {
+                id: createSegmentId(),
+                startTimeMs: round.startTime,
+                endTimeMs: round.endTime,
+                type: round.type ?? "Normal",
+                customName: round.name,
+                bpm: round.bpm ?? null,
+                difficulty: round.difficulty ?? null,
+                bpmOverride: round.bpm != null,
+                difficultyOverride: round.difficulty != null,
+            };
+            setSegments([draft]);
+            setSelectedSegmentId(draft.id);
+        } else {
+            setSegments([]);
+            setSelectedSegmentId(null);
+        }
+
+        setDetectedSegments([]);
+        setMarkInMs(null);
+        setMarkOutMs(null);
+        setCurrentTimeMs(0);
+        setDurationMs(0);
+        setMessage(null);
+        setError(null);
+        playSelectSound();
+        setStep("edit");
+    }, []);
+
+    const selectHeroAndEdit = useCallback(async (heroId: string) => {
+        const heroes = await db.hero.findMany();
+        const hero = heroes.find((h) => h.id === heroId);
+        if (!hero) {
+            setError("Hero not found.");
+            return;
+        }
+
+        const rounds = await db.round.findInstalled(true);
+        const heroRounds = rounds.filter(
+            (r) => r.heroId === heroId && r.resources.length > 0
+        );
+
+        if (heroRounds.length === 0) {
+            setError("Hero has no rounds with usable resources.");
+            return;
+        }
+
+        const firstRound = heroRounds[0];
+        const resource = firstRound?.resources.find((entry) => !entry.disabled && entry.videoUri.trim().length > 0)
+            ?? firstRound?.resources.find((entry) => entry.videoUri.trim().length > 0);
+        if (!resource || !firstRound) {
+            setError("Hero rounds have no usable video resource.");
+            return;
+        }
+
+        setSelectedSourceInfo({ kind: "hero", id: heroId, name: hero.name });
+        setSourceMode("installed");
+        setDeleteSourceRound(true);
+        setSelectedInstalledId(firstRound.id);
+        setVideoUri(resource.videoUri);
+        setFunscriptUri(resource.funscriptUri ?? null);
+        setHeroName(hero.name);
+        setHeroAuthor(hero.author ?? "");
+        setHeroDescription(hero.description ?? "");
+
+        const segmentDrafts: SegmentDraft[] = heroRounds
+            .filter((round) => round.startTime != null && round.endTime != null)
+            .map((round) => ({
+                id: createSegmentId(),
+                startTimeMs: round.startTime!,
+                endTimeMs: round.endTime!,
+                type: round.type ?? "Normal",
+                customName: round.name,
+                bpm: round.bpm ?? null,
+                difficulty: round.difficulty ?? null,
+                bpmOverride: round.bpm != null,
+                difficultyOverride: round.difficulty != null,
+            }));
+        setSegments(sortSegments(segmentDrafts));
+        setSelectedSegmentId(segmentDrafts[0]?.id ?? null);
+
+        setDetectedSegments([]);
+        setMarkInMs(null);
+        setMarkOutMs(null);
+        setCurrentTimeMs(0);
+        setDurationMs(0);
+        setMessage(null);
+        setError(null);
+        playSelectSound();
+        setStep("edit");
+    }, []);
+
+    const selectLocalAndEdit = useCallback(async () => {
+        const path = await window.electronAPI.dialog.selectConverterVideoFile();
+        if (!path) return;
+
+        const converted = window.electronAPI.file.convertFileSrc(path);
+        setSelectedSourceInfo({ kind: "local", id: path, name: path.split(/[/\\]/).pop() ?? "Local file" });
+        setSourceMode("local");
+        setDeleteSourceRound(false);
+        setSelectedInstalledId("");
+        setVideoUri(converted);
+        setFunscriptUri(null);
+        setHeroName("");
+        setHeroAuthor("");
+        setHeroDescription("");
+        setSegments([]);
+        setSelectedSegmentId(null);
+        setDetectedSegments([]);
+        setMarkInMs(null);
+        setMarkOutMs(null);
+        setCurrentTimeMs(0);
+        setDurationMs(0);
+        setMessage("Local video loaded. Add funscript for auto-detection.");
+        setError(null);
+        playSelectSound();
+        setStep("edit");
+    }, []);
+
+    const attachLocalFunscript = useCallback(async () => {
+        const path = await window.electronAPI.dialog.selectConverterFunscriptFile();
+        if (!path) return;
+        const converted = window.electronAPI.file.convertFileSrc(path);
+        setFunscriptUri(converted);
+        setMessage("Funscript attached.");
+    }, []);
 
     const sortedSegments = useMemo(() => sortSegments(segments), [segments]);
     const selectedSegment = useMemo(
@@ -1023,6 +1209,15 @@ export function useConverterState(searchParams: ConverterSearchParams) {
         videoRef,
         timelineScrollRef,
         dragStateRef,
+
+        // Step navigation
+        step,
+        selectedSourceInfo,
+        goToSelectStep,
+        selectRoundAndEdit,
+        selectHeroAndEdit,
+        selectLocalAndEdit,
+        attachLocalFunscript,
 
         // Source
         sourceMode,

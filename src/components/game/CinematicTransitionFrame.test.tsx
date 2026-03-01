@@ -37,5 +37,23 @@ describe("CinematicTransitionFrame", () => {
     expect(view.getByTestId("cinematic-transition-title").textContent).toBe("Round 9");
     expect(view.getByTestId("cinematic-transition-metadata").textContent).toContain("Linear board");
     expect(view.getByTestId("cinematic-transition-countdown").textContent).toBe("2");
+    expect(view.queryByTestId("cinematic-transition-hint")).toBeNull();
+  });
+
+  it("renders a hint callout when provided", () => {
+    const view = render(
+      <CinematicTransitionFrame
+        title="Finale"
+        overline="CUM ROUND"
+        hintText="In this round, you may cum when the video instructs you to do so."
+        countdownLabel="4"
+        progress={0.25}
+        variant="round-start"
+      />,
+    );
+
+    expect(view.getByTestId("cinematic-transition-hint").textContent).toContain(
+      "In this round, you may cum when the video instructs you to do so.",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { THEHANDY_APP_API_KEY_OVERRIDE_STORE_KEY } from "../constants/theHandy";
 import { verifyConnection } from "../services/handyApi";
 import { normalizeHandyAppApiKeyOverride, resolveHandyAppApiKey } from "../services/theHandyConfig";
@@ -226,27 +226,44 @@ export const HandyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSyncError(next.error ?? null);
     }, []);
 
+    const value = useMemo(() => ({
+        connectionKey,
+        appApiKey,
+        appApiKeyOverride,
+        isUsingDefaultAppApiKey,
+        localIp,
+        connected,
+        manuallyStopped,
+        synced,
+        syncError,
+        isConnecting,
+        error,
+        connect,
+        disconnect,
+        forceStop,
+        toggleManualStop,
+        setSyncStatus,
+    }), [
+        connectionKey,
+        appApiKey,
+        appApiKeyOverride,
+        isUsingDefaultAppApiKey,
+        localIp,
+        connected,
+        manuallyStopped,
+        synced,
+        syncError,
+        isConnecting,
+        error,
+        connect,
+        disconnect,
+        forceStop,
+        toggleManualStop,
+        setSyncStatus,
+    ]);
+
     return (
-        <HandyContext.Provider
-            value={{
-                connectionKey,
-                appApiKey,
-                appApiKeyOverride,
-                isUsingDefaultAppApiKey,
-                localIp,
-                connected,
-                manuallyStopped,
-                synced,
-                syncError,
-                isConnecting,
-                error,
-                connect,
-                disconnect,
-                forceStop,
-                toggleManualStop,
-                setSyncStatus,
-            }}
-        >
+        <HandyContext.Provider value={value}>
             {children}
         </HandyContext.Provider>
     );

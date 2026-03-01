@@ -90,7 +90,9 @@ vi.mock("../components/game/RoundVideoOverlay", () => ({
 
 vi.mock("../components/MenuButton", () => ({
   MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>{label}</button>
+    <button type="button" onClick={onClick}>
+      {label}
+    </button>
   ),
 }));
 
@@ -127,28 +129,28 @@ function makeRound({
     heroId,
     hero: hero
       ? {
-        id: heroId ?? "hero-unknown",
-        name: hero.name ?? "",
-        createdAt,
-        updatedAt: createdAt,
-        sourceKey: null,
-        sourceType: null,
-      }
+          id: heroId ?? "hero-unknown",
+          name: hero.name ?? "",
+          createdAt,
+          updatedAt: createdAt,
+          sourceKey: null,
+          sourceType: null,
+        }
       : null,
     resources: template
       ? []
       : [
-        {
-          id: `res-${id}`,
-          roundId: id,
-          videoUri: null,
-          funscriptUri: null,
-          phash: null,
-          disabled: false,
-          createdAt,
-          updatedAt: createdAt,
-        },
-      ],
+          {
+            id: `res-${id}`,
+            roundId: id,
+            videoUri: null,
+            funscriptUri: null,
+            phash: null,
+            disabled: false,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        ],
     installSourceKey: null,
     phash: null,
     heroSourceType: null,
@@ -174,7 +176,11 @@ function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlayl
         safePointIndices: [],
         safePointRestMsByIndex: {},
         normalRoundRefsByIndex: {},
-        normalRoundOrder: roundIds.map((roundId) => ({ idHint: roundId, name: roundId, type: "Normal" as const })),
+        normalRoundOrder: roundIds.map((roundId) => ({
+          idHint: roundId,
+          name: roundId,
+          type: "Normal" as const,
+        })),
         cumRoundRefs: [],
       },
       perkSelection: {
@@ -190,7 +196,7 @@ function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlayl
         initialAntiPerkProbability: 0,
         intermediaryIncreasePerRound: 0.02,
         antiPerkIncreasePerRound: 0.015,
-        maxIntermediaryProbability: 0.85,
+        maxIntermediaryProbability: 1,
         maxAntiPerkProbability: 0.75,
       },
       economy: {
@@ -390,9 +396,19 @@ afterEach(() => {
 describe("buildRoundRenderRows", () => {
   it("groups hero rounds and preserves first-seen order", () => {
     const rows = buildRoundRenderRows([
-      makeRound({ id: "a", name: "Hero A 1", createdAt: "2026-03-03T10:00:00.000Z", hero: { id: "h-a", name: "Hero A" } }),
+      makeRound({
+        id: "a",
+        name: "Hero A 1",
+        createdAt: "2026-03-03T10:00:00.000Z",
+        hero: { id: "h-a", name: "Hero A" },
+      }),
       makeRound({ id: "solo", name: "Solo", createdAt: "2026-03-03T09:00:00.000Z" }),
-      makeRound({ id: "b", name: "Hero A 2", createdAt: "2026-03-03T08:00:00.000Z", hero: { id: "h-a", name: "Hero A" } }),
+      makeRound({
+        id: "b",
+        name: "Hero A 2",
+        createdAt: "2026-03-03T08:00:00.000Z",
+        hero: { id: "h-a", name: "Hero A" },
+      }),
     ]);
 
     expect(rows).toHaveLength(2);
@@ -405,9 +421,19 @@ describe("buildRoundRenderRows", () => {
 
   it("groups hero rounds under their hero name", () => {
     const rows = buildRoundRenderRows([
-      makeRound({ id: "a", name: "Alpha", createdAt: "2026-03-01T10:00:00.000Z", hero: { name: "Hero A" } }),
+      makeRound({
+        id: "a",
+        name: "Alpha",
+        createdAt: "2026-03-01T10:00:00.000Z",
+        hero: { name: "Hero A" },
+      }),
       makeRound({ id: "b", name: "Beta", createdAt: "2026-03-01T11:00:00.000Z" }),
-      makeRound({ id: "c", name: "Gamma", createdAt: "2026-03-01T12:00:00.000Z", hero: { name: "Hero A" } }),
+      makeRound({
+        id: "c",
+        name: "Gamma",
+        createdAt: "2026-03-01T12:00:00.000Z",
+        hero: { name: "Hero A" },
+      }),
     ]);
 
     expect(rows).toEqual([
@@ -415,10 +441,7 @@ describe("buildRoundRenderRows", () => {
         kind: "hero-group",
         groupKey: expect.stringContaining("Hero A"),
         heroName: "Hero A",
-        rounds: [
-          expect.objectContaining({ id: "a" }),
-          expect.objectContaining({ id: "c" }),
-        ],
+        rounds: [expect.objectContaining({ id: "a" }), expect.objectContaining({ id: "c" })],
       },
       {
         kind: "standalone",
@@ -430,16 +453,19 @@ describe("buildRoundRenderRows", () => {
   it("groups rounds under playlists and allows the same round in multiple playlist groups", () => {
     const alpha = makeRound({ id: "alpha", name: "Alpha", createdAt: "2026-03-01T10:00:00.000Z" });
     const beta = makeRound({ id: "beta", name: "Beta", createdAt: "2026-03-01T11:00:00.000Z" });
-    const rows = buildRoundRenderRowsWithOptions(
-      [alpha, beta],
-      {
-        mode: "playlist",
-        playlistsByRoundId: new Map([
-          ["alpha", [{ playlistId: "p-1", playlistName: "Playlist One" }, { playlistId: "p-2", playlistName: "Playlist Two" }]],
-          ["beta", [{ playlistId: "p-2", playlistName: "Playlist Two" }]],
-        ]),
-      },
-    );
+    const rows = buildRoundRenderRowsWithOptions([alpha, beta], {
+      mode: "playlist",
+      playlistsByRoundId: new Map([
+        [
+          "alpha",
+          [
+            { playlistId: "p-1", playlistName: "Playlist One" },
+            { playlistId: "p-2", playlistName: "Playlist Two" },
+          ],
+        ],
+        ["beta", [{ playlistId: "p-2", playlistName: "Playlist Two" }]],
+      ]),
+    });
 
     expect(rows).toEqual([
       {
@@ -454,10 +480,7 @@ describe("buildRoundRenderRows", () => {
         groupKey: "playlist:p-2",
         playlistId: "p-2",
         playlistName: "Playlist Two",
-        rounds: [
-          expect.objectContaining({ id: "alpha" }),
-          expect.objectContaining({ id: "beta" }),
-        ],
+        rounds: [expect.objectContaining({ id: "alpha" }), expect.objectContaining({ id: "beta" })],
       },
     ]);
   });
@@ -474,9 +497,19 @@ describe("InstalledRoundsPage hero grouping", () => {
 
   it("renders hero groups collapsed by default and toggles expansion", async () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "r1", name: "Hero Round 1", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
       makeRound({ id: "solo", name: "Solo Round", createdAt: "2026-03-03T11:00:00.000Z" }),
-      makeRound({ id: "r2", name: "Hero Round 2", createdAt: "2026-03-03T10:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "r2",
+        name: "Hero Round 2",
+        createdAt: "2026-03-03T10:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
     ];
 
     render(<InstalledRoundsPage />);
@@ -497,9 +530,19 @@ describe("InstalledRoundsPage hero grouping", () => {
 
   it("keeps first-seen order across hero groups and standalone rounds", () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "beta", name: "Beta Round", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "hb", name: "Hero Beta" } }),
+      makeRound({
+        id: "beta",
+        name: "Beta Round",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "hb", name: "Hero Beta" },
+      }),
       makeRound({ id: "solo", name: "Solo Round", createdAt: "2026-03-03T11:00:00.000Z" }),
-      makeRound({ id: "alpha", name: "Alpha Round", createdAt: "2026-03-03T10:00:00.000Z", hero: { id: "ha", name: "Hero Alpha" } }),
+      makeRound({
+        id: "alpha",
+        name: "Alpha Round",
+        createdAt: "2026-03-03T10:00:00.000Z",
+        hero: { id: "ha", name: "Hero Alpha" },
+      }),
     ];
 
     render(<InstalledRoundsPage />);
@@ -508,13 +551,22 @@ describe("InstalledRoundsPage hero grouping", () => {
     const soloHeading = screen.getByRole("heading", { name: "Solo Round" });
     const alphaHeader = screen.getByRole("button", { name: "Hero Alpha (1 rounds)" });
 
-    expect(Boolean(betaHeader.compareDocumentPosition(soloHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(soloHeading.compareDocumentPosition(alphaHeader) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(
+      Boolean(betaHeader.compareDocumentPosition(soloHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
+    expect(
+      Boolean(soloHeading.compareDocumentPosition(alphaHeader) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
   });
 
   it("updates grouped rows via filtering and preserves empty state", () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "hero", name: "Hero Filter Round", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "hero",
+        name: "Hero Filter Round",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
 
@@ -580,8 +632,18 @@ describe("InstalledRoundsPage hero grouping", () => {
 
   it("converts a hero group back to a standalone round after explicit confirmation", async () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "r1", name: "Hero Round 1", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
-      makeRound({ id: "r2", name: "Hero Round 2", createdAt: "2026-03-03T13:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
+      makeRound({
+        id: "r2",
+        name: "Hero Round 2",
+        createdAt: "2026-03-03T13:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
     ];
 
     const confirmSpy = vi.spyOn(window, "confirm");
@@ -661,16 +723,23 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Round" }));
 
     await waitFor(() => {
-      expect(mocks.db.round.update).toHaveBeenCalledWith(expect.objectContaining({
-        id: "solo",
-        name: "Solo Round Updated",
-      }));
+      expect(mocks.db.round.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "solo",
+          name: "Solo Round Updated",
+        })
+      );
     });
   });
 
   it("edits a hero group inside a popup", async () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "r1", name: "Hero Round 1", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
     ];
 
     render(<InstalledRoundsPage />);
@@ -683,10 +752,12 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Hero" }));
 
     await waitFor(() => {
-      expect(mocks.db.hero.update).toHaveBeenCalledWith(expect.objectContaining({
-        id: "h1",
-        name: "Hero Prime",
-      }));
+      expect(mocks.db.hero.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "h1",
+          name: "Hero Prime",
+        })
+      );
     });
   });
 
@@ -706,13 +777,20 @@ describe("InstalledRoundsPage hero grouping", () => {
       expect(mocks.db.round.delete).toHaveBeenCalledWith("solo");
     });
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Files on disk will be left untouched"));
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Files on disk will be left untouched")
+    );
     confirmSpy.mockRestore();
   });
 
   it("deletes a hero from the edit dialog and leaves attached rounds installed", async () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "r1", name: "Hero Round 1", createdAt: "2026-03-03T12:00:00.000Z", hero: { id: "h1", name: "Hero One" } }),
+      makeRound({
+        id: "r1",
+        name: "Hero Round 1",
+        createdAt: "2026-03-03T12:00:00.000Z",
+        hero: { id: "h1", name: "Hero One" },
+      }),
     ];
 
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -726,7 +804,9 @@ describe("InstalledRoundsPage hero grouping", () => {
       expect(mocks.db.hero.delete).toHaveBeenCalledWith("h1");
     });
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("attached rounds will remain installed"));
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("attached rounds will remain installed")
+    );
     confirmSpy.mockRestore();
   });
 
@@ -771,7 +851,10 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect((startButton as HTMLButtonElement).disabled).toBe(false);
 
     await waitFor(() => {
-      expect((screen.getByRole("button", { name: "Start Advanced Export" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(
+        (screen.getByRole("button", { name: "Start Advanced Export" }) as HTMLButtonElement)
+          .disabled
+      ).toBe(false);
     });
 
     fireEvent.click(startButton);
@@ -807,7 +890,7 @@ describe("InstalledRoundsPage hero grouping", () => {
       () =>
         new Promise((resolve) => {
           resolveImport = resolve;
-        }),
+        })
     );
     vi.mocked(window.electronAPI.dialog.selectFolders).mockResolvedValue(["/tmp/legacy-pack"]);
 
@@ -855,9 +938,27 @@ describe("InstalledRoundsPage hero grouping", () => {
       folderPath: "/tmp/legacy-pack",
       playlistNameHint: "Legacy Pack",
       legacySlots: [
-        { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", sourceLabel: "1", originalOrder: 0, defaultCheckpoint: false },
-        { id: "slot-1", sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4", sourceLabel: "2 checkpoint", originalOrder: 1, defaultCheckpoint: true },
-        { id: "slot-2", sourcePath: "/tmp/legacy-pack/10.mp4", sourceLabel: "10", originalOrder: 2, defaultCheckpoint: false },
+        {
+          id: "slot-0",
+          sourcePath: "/tmp/legacy-pack/1.mp4",
+          sourceLabel: "1",
+          originalOrder: 0,
+          defaultCheckpoint: false,
+        },
+        {
+          id: "slot-1",
+          sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4",
+          sourceLabel: "2 checkpoint",
+          originalOrder: 1,
+          defaultCheckpoint: true,
+        },
+        {
+          id: "slot-2",
+          sourcePath: "/tmp/legacy-pack/10.mp4",
+          sourceLabel: "10",
+          originalOrder: 2,
+          defaultCheckpoint: false,
+        },
       ],
     });
 
@@ -873,24 +974,48 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import and Create Playlist" }));
 
     await waitFor(() => {
-      expect(mocks.playlists.create).toHaveBeenCalledWith(expect.objectContaining({
-        name: "Imported Legacy Run",
-        config: expect.objectContaining({
-          boardConfig: expect.objectContaining({
-            safePointIndices: [2],
-            normalRoundRefsByIndex: {
-              "1": { name: "1", type: "Normal" },
-              "3": { name: "10", type: "Normal" },
-            },
+      expect(mocks.playlists.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Imported Legacy Run",
+          config: expect.objectContaining({
+            boardConfig: expect.objectContaining({
+              safePointIndices: [2],
+              normalRoundRefsByIndex: {
+                "1": { name: "1", type: "Normal" },
+                "3": { name: "10", type: "Normal" },
+              },
+            }),
           }),
-        }),
-      }));
+        })
+      );
     });
-    expect(mocks.db.install.importLegacyWithPlan).toHaveBeenCalledWith("/tmp/legacy-pack", [
-      { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", originalOrder: 0, selectedAsCheckpoint: false, excludedFromImport: false },
-      { id: "slot-1", sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4", originalOrder: 1, selectedAsCheckpoint: true, excludedFromImport: false },
-      { id: "slot-2", sourcePath: "/tmp/legacy-pack/10.mp4", originalOrder: 2, selectedAsCheckpoint: false, excludedFromImport: false },
-    ]);
+    expect(mocks.db.install.importLegacyWithPlan).toHaveBeenCalledWith(
+      "/tmp/legacy-pack",
+      [
+        {
+          id: "slot-0",
+          sourcePath: "/tmp/legacy-pack/1.mp4",
+          originalOrder: 0,
+          selectedAsCheckpoint: false,
+          excludedFromImport: false,
+        },
+        {
+          id: "slot-1",
+          sourcePath: "/tmp/legacy-pack/2 checkpoint.mp4",
+          originalOrder: 1,
+          selectedAsCheckpoint: true,
+          excludedFromImport: false,
+        },
+        {
+          id: "slot-2",
+          sourcePath: "/tmp/legacy-pack/10.mp4",
+          originalOrder: 2,
+          selectedAsCheckpoint: false,
+          excludedFromImport: false,
+        },
+      ],
+      true
+    );
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-1");
   });
 
@@ -901,8 +1026,20 @@ describe("InstalledRoundsPage hero grouping", () => {
       folderPath: "/tmp/legacy-pack",
       playlistNameHint: "Legacy Pack",
       legacySlots: [
-        { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", sourceLabel: "1", originalOrder: 0, defaultCheckpoint: false },
-        { id: "slot-1", sourcePath: "/tmp/legacy-pack/2.mp4", sourceLabel: "2", originalOrder: 1, defaultCheckpoint: false },
+        {
+          id: "slot-0",
+          sourcePath: "/tmp/legacy-pack/1.mp4",
+          sourceLabel: "1",
+          originalOrder: 0,
+          defaultCheckpoint: false,
+        },
+        {
+          id: "slot-1",
+          sourcePath: "/tmp/legacy-pack/2.mp4",
+          sourceLabel: "2",
+          originalOrder: 1,
+          defaultCheckpoint: false,
+        },
       ],
     });
 
@@ -915,17 +1052,35 @@ describe("InstalledRoundsPage hero grouping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import Without Playlist" }));
 
     await waitFor(() => {
-      expect(mocks.db.install.importLegacyWithPlan).toHaveBeenCalledWith("/tmp/legacy-pack", [
-        { id: "slot-0", sourcePath: "/tmp/legacy-pack/1.mp4", originalOrder: 0, selectedAsCheckpoint: false, excludedFromImport: false },
-        { id: "slot-1", sourcePath: "/tmp/legacy-pack/2.mp4", originalOrder: 1, selectedAsCheckpoint: false, excludedFromImport: true },
-      ]);
+      expect(mocks.db.install.importLegacyWithPlan).toHaveBeenCalledWith(
+        "/tmp/legacy-pack",
+        [
+          {
+            id: "slot-0",
+            sourcePath: "/tmp/legacy-pack/1.mp4",
+            originalOrder: 0,
+            selectedAsCheckpoint: false,
+            excludedFromImport: false,
+          },
+          {
+            id: "slot-1",
+            sourcePath: "/tmp/legacy-pack/2.mp4",
+            originalOrder: 1,
+            selectedAsCheckpoint: false,
+            excludedFromImport: true,
+          },
+        ],
+        true
+      );
     });
     expect(mocks.playlists.create).not.toHaveBeenCalled();
     expect(mocks.playlists.setActive).not.toHaveBeenCalled();
   });
 
   it("imports a selected .round or .hero file from the rounds page", async () => {
-    vi.mocked(window.electronAPI.dialog.selectInstallImportFile).mockResolvedValue("/tmp/imported.round");
+    vi.mocked(window.electronAPI.dialog.selectInstallImportFile).mockResolvedValue(
+      "/tmp/imported.round"
+    );
 
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Import File" }));
@@ -937,22 +1092,52 @@ describe("InstalledRoundsPage hero grouping", () => {
   });
 
   it("imports a selected .fplay file from the rounds page and navigates to playlist workshop", async () => {
-    vi.mocked(window.electronAPI.dialog.selectInstallImportFile).mockResolvedValue("/tmp/imported.fplay");
+    vi.mocked(window.electronAPI.dialog.selectInstallImportFile).mockResolvedValue(
+      "/tmp/imported.fplay"
+    );
 
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Import File" }));
 
     await waitFor(() => {
-      expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({ filePath: "/tmp/imported.fplay" });
+      expect(mocks.playlists.importFromFile).toHaveBeenCalledWith({
+        filePath: "/tmp/imported.fplay",
+      });
     });
     expect(mocks.playlists.setActive).toHaveBeenCalledWith("playlist-2");
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
   });
 
+  it("renders a large library through the virtualized wrapper without load-more pagination", () => {
+    mocks.loaderData.rounds = Array.from({ length: 75 }, (_, index) =>
+      makeRound({
+        id: `round-${index}`,
+        name: `Round ${index}`,
+        createdAt: `2026-03-${String((index % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
+      }),
+    );
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getByText("75 / 75 Visible")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Round 0" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Round 74" })).toBeDefined();
+    expect(screen.queryByText("Loading more rounds...")).toBeNull();
+  });
+
   it("shows template actions and repairs a template round from installed content", async () => {
     mocks.loaderData.rounds = [
-      makeRound({ id: "template-1", name: "Template Round", createdAt: "2026-03-03T00:00:00.000Z", template: true }),
-      makeRound({ id: "installed-1", name: "Installed Source", createdAt: "2026-03-02T00:00:00.000Z" }),
+      makeRound({
+        id: "template-1",
+        name: "Template Round",
+        createdAt: "2026-03-03T00:00:00.000Z",
+        template: true,
+      }),
+      makeRound({
+        id: "installed-1",
+        name: "Installed Source",
+        createdAt: "2026-03-02T00:00:00.000Z",
+      }),
     ];
 
     render(<InstalledRoundsPage />);

@@ -8,12 +8,24 @@ import { playHoverSound, playSelectSound } from "../utils/audio";
 function isEditableElement(target: Element | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tagName = target.tagName.toLowerCase();
-  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
+  );
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (isEditableElement(target instanceof Element ? target : null)) return true;
   return isEditableElement(document.activeElement);
+}
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 function formatPlaybackStatus({
@@ -25,9 +37,26 @@ function formatPlaybackStatus({
   isPlaying: boolean;
   isSuppressedByVideo: boolean;
 }): string {
-  if (isSuppressedByVideo) return "Blocked by foreground video";
+  if (isSuppressedByVideo) return "Blocked by video";
   if (!enabled) return "Music disabled";
   return isPlaying ? "Now playing" : "Ready to play";
+}
+
+function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
+  return (
+    <div className="flex items-end justify-center gap-[3px] h-8">
+      {[0.6, 1, 0.7, 0.9, 0.5].map((_, i) => (
+        <div
+          key={i}
+          className="w-1 bg-gradient-to-t from-cyan-400 to-white rounded-full"
+          style={{
+            height: isPlaying ? "100%" : "40%",
+            animation: isPlaying ? `music-wave-bar 0.8s ease-in-out infinite ${i * 0.1}s` : "none",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function GlobalMusicOverlay() {
@@ -40,6 +69,8 @@ export function GlobalMusicOverlay() {
     volume,
     shuffle,
     loopMode,
+    currentTime,
+    duration,
     setEnabled,
     addTracks,
     clearQueue,
@@ -51,12 +82,14 @@ export function GlobalMusicOverlay() {
     setVolume,
     setShuffle,
     setLoopMode,
+    seek,
   } = useGlobalMusic();
   const [open, setOpen] = useState(false);
   const [isAddingTracks, setIsAddingTracks] = useState(false);
   const [showQueue, setShowQueue] = useState(true);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(volume * 100));
   const overlayRef = useRef<HTMLElement | null>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setVolumeDraft(Math.round(volume * 100));
@@ -64,7 +97,12 @@ export function GlobalMusicOverlay() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "m" && !event.shiftKey && !event.altKey) {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "m" &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
         event.preventDefault();
         if (!open && isEditableTarget(event.target)) return;
         setOpen((current) => !current);
@@ -83,8 +121,10 @@ export function GlobalMusicOverlay() {
 
   const statusLabel = useMemo(
     () => formatPlaybackStatus({ enabled, isPlaying, isSuppressedByVideo }),
-    [enabled, isPlaying, isSuppressedByVideo],
+    [enabled, isPlaying, isSuppressedByVideo]
   );
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const addSelectedTracks = async () => {
     if (isAddingTracks) return;
@@ -114,15 +154,28 @@ export function GlobalMusicOverlay() {
     await setVolume(volumeDraft / 100);
   };
 
+  const handleProgressClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressRef.current || duration === 0) return;
+    const rect = progressRef.current.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    seek(percentage * duration);
+  };
+
   const handleToggleOverlay = useCallback(() => {
     setOpen((current) => !current);
   }, []);
 
-  useControllerSubscription(useCallback((action) => {
-    if (action === "START") {
-      handleToggleOverlay();
-    }
-  }, [handleToggleOverlay]));
+  useControllerSubscription(
+    useCallback(
+      (action) => {
+        if (action === "START") {
+          handleToggleOverlay();
+        }
+      },
+      [handleToggleOverlay]
+    )
+  );
 
   useControllerSurface({
     id: "global-music-overlay",
@@ -144,145 +197,293 @@ export function GlobalMusicOverlay() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[240] flex items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.14),_transparent_34%),linear-gradient(180deg,rgba(8,12,20,0.88),rgba(5,8,14,0.96))] px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-md"
+          className="fixed inset-0 z-[240] flex items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.08),_transparent_40%),linear-gradient(180deg,rgba(8,12,20,0.92),rgba(5,8,14,0.97))] px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-lg"
           onClick={() => setOpen(false)}
         >
           <motion.section
             ref={overlayRef}
-            initial={{ opacity: 0, y: 28, scale: 0.97 }}
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 240, damping: 24 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
             onClick={(event) => event.stopPropagation()}
-            className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/12 bg-[linear-gradient(145deg,rgba(18,28,46,0.95),rgba(9,12,22,0.98))] text-zinc-100 shadow-[0_32px_120px_rgba(0,0,0,0.55)] sm:max-h-[calc(100vh-2rem)]"
+            className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[linear-gradient(160deg,rgba(18,28,46,0.92),rgba(9,14,24,0.96))] text-zinc-100 shadow-[0_28px_100px_rgba(0,0,0,0.5)] sm:max-h-[calc(100vh-2rem)]"
             role="dialog"
             aria-modal="true"
             aria-label="Global music controls"
           >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_30%),radial-gradient(circle_at_80%_18%,_rgba(251,191,36,0.16),_transparent_22%),linear-gradient(180deg,transparent,rgba(255,255,255,0.02))]" />
-
-            <div className="relative border-b border-white/10 px-5 py-5 sm:px-7">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="max-w-2xl">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-cyan-200/80">Global Music</p>
-                  <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Control the soundtrack from anywhere</h2>
-                  <p className="mt-2 text-sm text-zinc-300">
-                    Press <span className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs font-semibold text-white">Ctrl+M</span> to toggle this overlay.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onMouseEnter={playHoverSound}
-                    onClick={() => {
-                      playSelectSound();
-                      void setEnabled(!enabled);
-                    }}
-                    className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${enabled
-                      ? "border-emerald-300/50 bg-emerald-400/15 text-emerald-100"
-                      : "border-zinc-600 bg-black/30 text-zinc-300"
-                      }`}
-                    data-controller-focus-id="music-enabled-toggle"
-                    data-controller-initial="true"
-                  >
-                    {enabled ? "Music On" : "Music Off"}
-                  </button>
-                  <button
-                    type="button"
-                    onMouseEnter={playHoverSound}
-                    onClick={() => {
-                      playSelectSound();
-                      setOpen(false);
-                    }}
-                    className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/10"
-                    aria-label="Close music overlay"
-                    data-controller-focus-id="music-close"
-                    data-controller-back="true"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+              <div className="absolute -left-20 -top-20 h-48 w-48 rounded-full bg-cyan-400/10 blur-[80px]" />
+              <div className="absolute -bottom-16 -right-16 h-40 w-40 rounded-full bg-amber-400/8 blur-[70px]" />
             </div>
 
-            <div className="relative min-h-0 overflow-y-auto">
-              <div className="grid gap-5 px-4 py-4 sm:px-5 sm:py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] lg:px-7">
-              <div className="space-y-5">
-                <div className="rounded-[1.6rem] border border-white/10 bg-black/25 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/75">{statusLabel}</p>
-                      <div className="mt-3 truncate text-2xl font-black text-white">
-                        {currentTrack?.name ?? "No track selected"}
-                      </div>
-                      <div className="mt-1 truncate text-sm text-zinc-400">
-                        {currentTrack?.filePath ?? "Add local audio files to start a queue."}
-                      </div>
+            <header className="relative flex items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-4 sm:px-6">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-300/80">
+                  Global Music
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Press{" "}
+                  <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    Ctrl+M
+                  </span>{" "}
+                  to toggle
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    void setEnabled(!enabled);
+                  }}
+                  className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    enabled
+                      ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.15)]"
+                      : "border-zinc-600/50 bg-black/20 text-zinc-400"
+                  }`}
+                  data-controller-focus-id="music-enabled-toggle"
+                  data-controller-initial="true"
+                >
+                  {enabled ? "Music On" : "Music Off"}
+                </button>
+                <button
+                  type="button"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => {
+                    playSelectSound();
+                    setOpen(false);
+                  }}
+                  className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/10"
+                  aria-label="Close music overlay"
+                  data-controller-focus-id="music-close"
+                  data-controller-back="true"
+                >
+                  Close
+                </button>
+              </div>
+            </header>
+
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
+              <div className="p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-5">
+                  <div
+                    className={`relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border ${
+                      isPlaying && enabled && !isSuppressedByVideo
+                        ? "border-cyan-300/30 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 shadow-[0_0_30px_rgba(34,211,238,0.2)]"
+                        : "border-white/10 bg-gradient-to-br from-zinc-700/40 to-zinc-800/40"
+                    }`}
+                  >
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-3xl opacity-40">♪</span>
                     </div>
-                    {isSuppressedByVideo ? (
-                      <div className="rounded-2xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-                        Playback is paused while a foreground video is active.
-                      </div>
-                    ) : null}
+                    <div className="absolute inset-x-0 bottom-2">
+                      <WaveformBars isPlaying={isPlaying && enabled && !isSuppressedByVideo} />
+                    </div>
                   </div>
 
-                  <div className="mt-6 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        playSelectSound();
-                        void previous();
-                      }}
-                      className="rounded-2xl border border-white/12 bg-white/5 px-4 py-3 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
-                      data-controller-focus-id="music-previous"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        void togglePlayback();
-                      }}
-                      disabled={!currentTrack || !enabled || isSuppressedByVideo}
-                      className={`rounded-2xl px-6 py-3 text-sm font-semibold transition ${!currentTrack || !enabled || isSuppressedByVideo
-                        ? "cursor-not-allowed border border-zinc-700 bg-zinc-900 text-zinc-500"
-                        : "border border-cyan-300/45 bg-cyan-400/20 text-cyan-50 shadow-[0_0_30px_rgba(34,211,238,0.16)] hover:bg-cyan-400/28"
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-200/70">
+                        {statusLabel}
+                      </p>
+                      {isPlaying && enabled && !isSuppressedByVideo && (
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                      )}
+                    </div>
+                    <h2 className="mt-1 truncate text-lg font-bold text-white sm:text-xl">
+                      {currentTrack?.name ?? "No track selected"}
+                    </h2>
+                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                      {currentTrack?.filePath ?? "Add local audio files to start"}
+                    </p>
+                  </div>
+                </div>
+
+                {isSuppressedByVideo && (
+                  <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100">
+                    <span>⚠</span>
+                    <span>Playback paused while a foreground video is active</span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div
+                    ref={progressRef}
+                    onClick={handleProgressClick}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowLeft") {
+                        seek(Math.max(0, currentTime - 5));
+                      } else if (e.key === "ArrowRight") {
+                        seek(Math.min(duration, currentTime + 5));
+                      }
+                    }}
+                    role="slider"
+                    aria-label="Track progress"
+                    aria-valuemin={0}
+                    aria-valuemax={duration}
+                    aria-valuenow={currentTime}
+                    tabIndex={0}
+                    className={`relative h-2 overflow-hidden rounded-full bg-white/10 ${
+                      currentTrack && enabled && !isSuppressedByVideo
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed"
+                    }`}
+                  >
+                    <motion.div
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-400 to-cyan-300"
+                      style={{ width: `${progress}%` }}
+                      layoutId="music-progress"
+                    />
+                    {progress > 0 && (
+                      <div
+                        className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-300 bg-zinc-900 shadow-[0_0_12px_rgba(34,211,238,0.5)]"
+                        style={{ left: `${progress}%` }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      void previous();
+                    }}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:border-white/20"
+                    data-controller-focus-id="music-previous"
+                  >
+                    ◀◀ Prev
+                  </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => void togglePlayback()}
+                    disabled={!currentTrack || !enabled || isSuppressedByVideo}
+                    className={`min-w-[100px] rounded-xl px-6 py-2.5 text-sm font-bold transition-all ${
+                      !currentTrack || !enabled || isSuppressedByVideo
+                        ? "cursor-not-allowed border border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                        : isPlaying
+                          ? "border border-cyan-300/40 bg-cyan-400/15 text-cyan-50 shadow-[0_0_30px_rgba(34,211,238,0.25)] hover:bg-cyan-400/25"
+                          : "border border-emerald-300/40 bg-emerald-400/15 text-emerald-50 shadow-[0_0_24px_rgba(52,211,153,0.2)] hover:bg-emerald-400/25"
+                    }`}
+                    data-controller-focus-id="music-toggle-playback"
+                  >
+                    {isPlaying ? "⏸ Pause" : "▶ Play"}
+                  </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      void next();
+                    }}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/10 hover:border-white/20"
+                    data-controller-focus-id="music-next"
+                  >
+                    Next ▶▶
+                  </button>
+                  <button
+                    type="button"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => void addSelectedTracks()}
+                    disabled={isAddingTracks}
+                    className={`rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+                      isAddingTracks
+                        ? "cursor-not-allowed border border-zinc-700/50 bg-zinc-800/50 text-zinc-500"
+                        : "border border-amber-300/30 bg-amber-400/10 text-amber-100 hover:bg-amber-400/18 hover:border-amber-300/50"
+                    }`}
+                    data-controller-focus-id="music-add-tracks"
+                  >
+                    {isAddingTracks ? "Adding..." : "+ Add Tracks"}
+                  </button>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-white">Volume</p>
+                      <span className="text-xs font-bold text-cyan-300">{volumeDraft}%</span>
+                    </div>
+                    <input
+                      aria-label="Music volume"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={volumeDraft}
+                      onChange={(event) => setVolumeDraft(Number(event.target.value))}
+                      onMouseUp={() => void commitVolumeDraft()}
+                      onTouchEnd={() => void commitVolumeDraft()}
+                      onKeyUp={() => void commitVolumeDraft()}
+                      onBlur={() => void commitVolumeDraft()}
+                      className="mt-3 w-full accent-cyan-400"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-white">Shuffle</p>
+                      <button
+                        type="button"
+                        aria-pressed={shuffle}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void setShuffle(!shuffle);
+                        }}
+                        className={`rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                          shuffle
+                            ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                            : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
                         }`}
-                      data-controller-focus-id="music-toggle-playback"
-                    >
-                      {isPlaying ? "Pause" : "Play"}
-                    </button>
-                    <button
-                      type="button"
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        playSelectSound();
-                        void next();
-                      }}
-                      className="rounded-2xl border border-white/12 bg-white/5 px-4 py-3 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
-                      data-controller-focus-id="music-next"
-                    >
-                      Next
-                    </button>
-                    <button
-                      type="button"
-                      onMouseEnter={playHoverSound}
-                      onClick={() => {
-                        playSelectSound();
-                        void addSelectedTracks();
-                      }}
-                      disabled={isAddingTracks}
-                      className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${isAddingTracks
-                        ? "cursor-not-allowed border border-zinc-700 bg-zinc-900 text-zinc-500"
-                        : "border border-amber-300/45 bg-amber-300/15 text-amber-50 hover:bg-amber-300/24"
-                        }`}
-                      data-controller-focus-id="music-add-tracks"
-                    >
-                      {isAddingTracks ? "Adding..." : "Add Tracks"}
-                    </button>
+                      >
+                        {shuffle ? "On" : "Off"}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[10px] text-zinc-500">Randomize track order</p>
+                  </div>
+
+                  <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+                    <p className="text-xs font-semibold text-white">Loop</p>
+                    <div className="mt-2 flex gap-1.5">
+                      {(
+                        [
+                          ["queue", "Queue"],
+                          ["track", "Track"],
+                          ["off", "Off"],
+                        ] as const satisfies ReadonlyArray<readonly [MusicLoopMode, string]>
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onMouseEnter={playHoverSound}
+                          onClick={() => {
+                            playSelectSound();
+                            void setLoopMode(value);
+                          }}
+                          className={`flex-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                            loopMode === value
+                              ? "border-amber-300/40 bg-amber-400/15 text-amber-100"
+                              : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/[0.06] bg-black/20">
+                  <div className="flex items-center justify-between p-4">
                     <button
                       type="button"
                       onMouseEnter={playHoverSound}
@@ -290,46 +491,39 @@ export function GlobalMusicOverlay() {
                         playSelectSound();
                         setShowQueue((current) => !current);
                       }}
-                      className="rounded-2xl border border-white/12 bg-white/5 px-4 py-3 text-sm font-semibold text-zinc-100 transition hover:bg-white/10"
+                      className="flex items-center gap-3 text-left"
                       data-controller-focus-id="music-toggle-queue"
                     >
-                      {showQueue ? "Hide Queue" : "Show Queue"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(220px,260px)]">
-                  <div className="rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-                    <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-lg font-bold text-white">Queue</p>
-                        <p className="text-sm text-zinc-400">{queue.length} tracks ready</p>
+                        <p className="text-xs font-semibold text-white">Queue</p>
+                        <p className="text-[10px] text-zinc-500">{queue.length} tracks</p>
                       </div>
+                      <span className="text-xs text-zinc-400">{showQueue ? "▲" : "▼"}</span>
+                    </button>
+                    {queue.length > 0 && (
                       <button
                         type="button"
-                        disabled={queue.length === 0}
                         onMouseEnter={playHoverSound}
                         onClick={() => {
                           playSelectSound();
                           void clearQueue();
                         }}
-                        className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${queue.length === 0
-                          ? "cursor-not-allowed border-zinc-700 bg-zinc-900 text-zinc-500"
-                          : "border-rose-300/40 bg-rose-400/12 text-rose-100 hover:bg-rose-400/20"
-                          }`}
+                        className="rounded-lg border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-400/18"
                       >
-                        Clear Queue
+                        Clear
                       </button>
-                    </div>
+                    )}
+                  </div>
 
-                    {showQueue ? (
-                      <div className="mt-4 max-h-[min(320px,40vh)] space-y-2 overflow-y-auto pr-1">
-                        {queue.length === 0 ? (
-                          <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.03] px-4 py-8 text-center text-sm text-zinc-400">
-                            Your queue is empty.
-                          </div>
-                        ) : (
-                          queue.map((entry) => {
+                  {showQueue && (
+                    <div className="max-h-[200px] overflow-y-auto border-t border-white/[0.04] px-2 py-2">
+                      {queue.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-white/10 px-4 py-6 text-center text-xs text-zinc-500">
+                          Your queue is empty
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {queue.map((entry) => {
                             const isCurrent = currentTrack?.id === entry.id;
                             return (
                               <button
@@ -339,138 +533,32 @@ export function GlobalMusicOverlay() {
                                   playSelectSound();
                                   void setCurrentTrack(entry.id);
                                 }}
-                                className={`block w-full rounded-2xl border px-4 py-3 text-left transition ${isCurrent
-                                  ? "border-cyan-300/45 bg-cyan-400/12 shadow-[0_0_24px_rgba(34,211,238,0.08)]"
-                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
-                                  }`}
+                                className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                                  isCurrent
+                                    ? "border-cyan-300/30 bg-cyan-400/10 shadow-[0_0_16px_rgba(34,211,238,0.1)]"
+                                    : "border-transparent bg-white/[0.02] hover:bg-white/[0.05]"
+                                }`}
                               >
-                                <div className="truncate text-sm font-semibold text-zinc-100">{entry.name}</div>
-                                <div className="mt-1 truncate text-xs text-zinc-500">{entry.filePath}</div>
+                                <span
+                                  className={`text-xs ${isCurrent ? "text-cyan-300" : "text-zinc-500"}`}
+                                >
+                                  {isCurrent && isPlaying ? "▶" : "•"}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={`truncate text-xs font-medium ${isCurrent ? "text-white" : "text-zinc-300"}`}
+                                  >
+                                    {entry.name}
+                                  </p>
+                                </div>
                               </button>
                             );
-                          })
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 text-sm text-zinc-400">
-                        Queue hidden.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-5">
-                    <div className="rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-                      <p className="text-lg font-bold text-white">Volume</p>
-                      <p className="mt-1 text-sm text-zinc-400">{volumeDraft}%</p>
-                      <input
-                        aria-label="Music volume"
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={volumeDraft}
-                        onChange={(event) => {
-                          setVolumeDraft(Number(event.target.value));
-                        }}
-                        onMouseUp={() => {
-                          void commitVolumeDraft();
-                        }}
-                        onTouchEnd={() => {
-                          void commitVolumeDraft();
-                        }}
-                        onKeyUp={() => {
-                          void commitVolumeDraft();
-                        }}
-                        onBlur={() => {
-                          void commitVolumeDraft();
-                        }}
-                        className="mt-4 w-full accent-cyan-300"
-                      />
+                          })}
+                        </div>
+                      )}
                     </div>
-
-                    <div className="rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-                      <p className="text-lg font-bold text-white">Shuffle</p>
-                      <p className="mt-1 text-sm text-zinc-400">Randomize track advancement.</p>
-                      <button
-                        type="button"
-                        aria-pressed={shuffle}
-                        onMouseEnter={playHoverSound}
-                        onClick={() => {
-                          playSelectSound();
-                          void setShuffle(!shuffle);
-                        }}
-                        className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${shuffle
-                          ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-50"
-                          : "border-white/12 bg-white/5 text-zinc-200"
-                          }`}
-                      >
-                        {shuffle ? "Shuffle On" : "Shuffle Off"}
-                      </button>
-                    </div>
-
-                    <div className="rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-                      <p className="text-lg font-bold text-white">Loop Mode</p>
-                      <div className="mt-4 grid gap-2">
-                        {([
-                          ["queue", "Loop Queue"],
-                          ["track", "Loop Track"],
-                          ["off", "Off"],
-                        ] as const satisfies ReadonlyArray<readonly [MusicLoopMode, string]>).map(([value, label]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onMouseEnter={playHoverSound}
-                            onClick={() => {
-                              playSelectSound();
-                              void setLoopMode(value);
-                            }}
-                            className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${loopMode === value
-                              ? "border-amber-300/45 bg-amber-300/16 text-amber-50"
-                              : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-                              }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-
-              <aside className="rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-zinc-400">Now Loaded</p>
-                <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_45%),rgba(255,255,255,0.03)] p-5">
-                  <div className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100/75">Current Track</div>
-                  <div className="mt-4 text-3xl font-black leading-tight text-white">
-                    {currentTrack?.name ?? "Silence"}
-                  </div>
-                  <div className="mt-3 text-sm text-zinc-300">
-                    {currentTrack
-                      ? "Pinned to your global queue and carried across routes."
-                      : "Pick a local audio file to fill the room."}
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3 rounded-[1.5rem] border border-white/10 bg-black/20 p-5 text-sm text-zinc-300">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Status</span>
-                    <span className="font-semibold text-white">{statusLabel}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Queue Size</span>
-                    <span className="font-semibold text-white">{queue.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Shortcut</span>
-                    <span className="font-semibold text-white">Ctrl+M</span>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.5rem] border border-amber-300/20 bg-amber-300/8 p-5 text-sm text-amber-50">
-                  Music will not start while foreground video playback is active. The overlay stays available, but play remains blocked until the video stops.
-                </div>
-              </aside>
               </div>
             </div>
           </motion.section>

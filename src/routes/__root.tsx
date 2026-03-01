@@ -1,3 +1,4 @@
+import React from "react";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GlobalMusicOverlay } from "../components/GlobalMusicOverlay";
@@ -8,13 +9,29 @@ import { HandyProvider } from "../contexts/HandyContext";
 import { useGlobalParallax } from "../hooks/useGlobalParallax";
 import "../styles.css";
 
-const queryClient = new QueryClient();
+let queryClient: QueryClient | null = null;
 
-export const RootComponent: React.FC = () => {
+function getQueryClient(): QueryClient {
+  if (!queryClient) {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          refetchOnWindowFocus: false,
+          refetchOnMount: false,
+          refetchOnReconnect: false,
+          retry: false,
+        },
+      },
+    });
+  }
+  return queryClient;
+}
+
+function RootComponent() {
   useGlobalParallax();
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={getQueryClient()}>
       <ControllerProvider>
         <ForegroundMediaProvider>
           <GlobalMusicProvider>
@@ -27,7 +44,7 @@ export const RootComponent: React.FC = () => {
       </ControllerProvider>
     </QueryClientProvider>
   );
-};
+}
 
 export const Route = createRootRoute({
   component: RootComponent,
