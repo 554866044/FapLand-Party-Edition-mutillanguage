@@ -12,6 +12,7 @@ vi.mock("electron", () => ({
 import {
   getInstalledMarkerPath,
   getPortableDataRoot,
+  getPortableDataRelativePath,
   getPortableDatabasePath,
   getPortableExecutableDir,
   isPathInsidePortableDataRoot,
@@ -19,6 +20,7 @@ import {
   normalizeUserDataSuffix,
   resolvePortableAwareStoragePath,
   resolvePortableDataRelativePath,
+  resolvePortableMovedDataPath,
 } from "./portable";
 
 describe("portable", () => {
@@ -185,6 +187,47 @@ describe("portable", () => {
         context
       )
     ).toBe("D:\\Games\\Fap Land\\data\\web-video-cache");
+  });
+
+  it("rebases arbitrary paths inside the old portable data root after moving a Windows zip folder", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+    };
+
+    expect(
+      getPortableDataRelativePath(
+        "C:\\Old\\Fap Land\\data\\music-cache\\abc\\audio.mp3",
+        undefined,
+        context
+      )
+    ).toBe("music-cache/abc/audio.mp3");
+    expect(
+      resolvePortableMovedDataPath(
+        "C:\\Old\\Fap Land\\data\\music-cache\\abc\\audio.mp3",
+        undefined,
+        context
+      )
+    ).toBe("D:\\Games\\Fap Land\\data\\music-cache\\abc\\audio.mp3");
+  });
+
+  it("rebases suffixed portable data paths after moving a Windows zip folder", () => {
+    const context = {
+      platform: "win32" as const,
+      isPackaged: true,
+      execPath: "D:\\Games\\Fap Land\\Fap Land.exe",
+      markerExists: () => false,
+    };
+
+    expect(
+      resolvePortableMovedDataPath(
+        "C:\\Old\\Fap Land\\data\\mp1\\music-cache\\abc\\audio.mp3",
+        "mp1",
+        context
+      )
+    ).toBe("D:\\Games\\Fap Land\\data\\mp1\\music-cache\\abc\\audio.mp3");
   });
 
   it("preserves custom absolute paths for Windows zip portable storage", () => {

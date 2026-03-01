@@ -4937,6 +4937,7 @@ msgid "Lobby:"
 msgstr "大厅："
 
 #: src/features/converter/SourcePanel.tsx:56
+#: src/routes/rounds.tsx:4229
 msgid "Local"
 msgstr "本地"
 
@@ -8391,6 +8392,10 @@ msgstr "初始百分比概率。"
 msgid "Starting..."
 msgstr "启动中..."
 
+#: src/routes/rounds.tsx:4227
+msgid "Stash"
+msgstr "Stash"
+
 #: src/routes/settings.tsx:4606
 msgid "Stash connection failed."
 msgstr "Stash 连接失败。"
@@ -9372,6 +9377,10 @@ msgstr "警告：来自此播放列表的运行在高分和运行历史中会被
 #: src/routes/settings.tsx:4119
 msgid "Warning: This cannot be undone."
 msgstr "警告：此操作无法撤销。"
+
+#: src/routes/rounds.tsx:4228
+msgid "Web"
+msgstr "网页"
 
 #: src/routes/rounds.tsx:5941
 msgid "Website Install"

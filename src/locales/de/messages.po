@@ -4937,6 +4937,7 @@ msgid "Lobby:"
 msgstr "Lobby:"
 
 #: src/features/converter/SourcePanel.tsx:56
+#: src/routes/rounds.tsx:4229
 msgid "Local"
 msgstr "Lokal"
 
@@ -8391,6 +8392,10 @@ msgstr "Startchance in Prozent."
 msgid "Starting..."
 msgstr "Beginnt..."
 
+#: src/routes/rounds.tsx:4227
+msgid "Stash"
+msgstr "Stash"
+
 #: src/routes/settings.tsx:4606
 msgid "Stash connection failed."
 msgstr "Die Stash-Verbindung ist fehlgeschlagen."
@@ -9372,6 +9377,10 @@ msgstr "Warnung: Läufe aus dieser Playlist werden im Highscore und im Laufverla
 #: src/routes/settings.tsx:4119
 msgid "Warning: This cannot be undone."
 msgstr "Warnung: Dies kann nicht rückgängig gemacht werden."
+
+#: src/routes/rounds.tsx:4228
+msgid "Web"
+msgstr "Web"
 
 #: src/routes/rounds.tsx:5941
 msgid "Website Install"

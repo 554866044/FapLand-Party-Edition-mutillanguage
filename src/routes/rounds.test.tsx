@@ -854,6 +854,50 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(screen.getByText((_content, node) => node?.textContent === "Source: Web")).toBeDefined();
   });
 
+  it("labels stash and local rounds in the installed rounds view", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "stash-round",
+        name: "Stash Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        installSourceKey: "stash:https://stash.example.com:scene:123",
+      }),
+      makeRound({
+        id: "local-round",
+        name: "Local Round",
+        createdAt: "2026-03-03T10:00:00.000Z",
+      }),
+    ];
+
+    await renderInstalledRoundsPage();
+
+    expect(screen.getAllByText("Stash").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Local").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText((_content, node) => node?.textContent === "Source: Stash")
+    ).toBeDefined();
+    expect(
+      screen.getByText((_content, node) => node?.textContent === "Source: Local")
+    ).toBeDefined();
+  });
+
+  it("falls back to a normal round type label when persisted type data is blank", async () => {
+    mocks.loaderData.rounds = [
+      {
+        ...makeRound({
+          id: "blank-type-round",
+          name: "Blank Type Round",
+          createdAt: "2026-03-03T11:00:00.000Z",
+        }),
+        type: "",
+      } as unknown as InstalledRound,
+    ];
+
+    await renderInstalledRoundsPage();
+
+    expect(screen.getAllByText("Normal").length).toBeGreaterThan(0);
+  });
+
   it("shows preview generation text for website rounds while web caching is running", async () => {
     mocks.db.webVideoCache.getScanStatus.mockResolvedValue({
       state: "running",

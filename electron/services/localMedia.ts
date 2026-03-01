@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeUserDataSuffix, resolvePortableMovedDataPath } from "./portable";
 
 const APP_MEDIA_PROTOCOL = "app:";
 const APP_MEDIA_HOSTNAME = "media";
@@ -15,14 +16,24 @@ export function fromLocalMediaUri(uri: string): string | null {
     if (parsed.protocol === APP_MEDIA_PROTOCOL && parsed.hostname === APP_MEDIA_HOSTNAME) {
       const decoded = decodeURIComponent(parsed.pathname.slice(1));
       if (!decoded) return null;
-      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)) {
-        return path.normalize(decoded.slice(1));
-      }
-      return path.normalize(decoded);
+      const normalized =
+        process.platform === "win32" && /^\/[A-Za-z]:/.test(decoded)
+          ? path.normalize(decoded.slice(1))
+          : path.normalize(decoded);
+      const portablePath = resolvePortableMovedDataPath(
+        normalized,
+        normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
+      );
+      return portablePath ?? normalized;
     }
 
     if (parsed.protocol === "file:") {
-      return path.normalize(fileURLToPath(parsed));
+      const normalized = path.normalize(fileURLToPath(parsed));
+      const portablePath = resolvePortableMovedDataPath(
+        normalized,
+        normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
+      );
+      return portablePath ?? normalized;
     }
 
     return null;

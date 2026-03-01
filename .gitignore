@@ -61,3 +61,4 @@ VideoInfo.json
 /dev.db-shm
 /dev.db-wal
 /bun.lock
+/tsconfig.node.tsbuildinfo

@@ -59,6 +59,27 @@ function pathEndsWithSegments(
   });
 }
 
+function findPathSegmentTailIndex(
+  filePath: string,
+  expectedSegments: string[],
+  platform: NodeJS.Platform
+): number {
+  const actualSegments = splitPathSegments(filePath);
+  if (expectedSegments.length === 0 || actualSegments.length < expectedSegments.length) return -1;
+
+  for (let start = actualSegments.length - expectedSegments.length; start >= 0; start -= 1) {
+    const matches = expectedSegments.every((segment, index) => {
+      const actual = actualSegments[start + index] ?? "";
+      return platform === "win32"
+        ? actual.toLowerCase() === segment.toLowerCase()
+        : actual === segment;
+    });
+    if (matches) return start + expectedSegments.length;
+  }
+
+  return -1;
+}
+
 function isPathInsideRoot(filePath: string, rootPath: string, platform: NodeJS.Platform): boolean {
   const pathApi = getPathApiForResolvedDir(platform, rootPath);
   const normalizedRoot = pathApi.resolve(rootPath);
@@ -90,7 +111,10 @@ export function getInstalledMarkerPath(executableDir: string): string {
 
 export function isPortableMode(context: PortableContext = {}): boolean {
   const platform = getContextValue(context.platform, () => process.platform);
-  const isPackaged = getContextValue(context.isPackaged, () => app.isPackaged);
+  const isPackaged = getContextValue(
+    context.isPackaged,
+    () => (app as typeof app | undefined)?.isPackaged ?? false
+  );
   const env = getContextValue(context.env, () => process.env);
 
   if (platform !== "win32" || !isPackaged) return false;
@@ -162,6 +186,67 @@ export function resolvePortableDataRelativePath(
 
   const pathApi = getPathApiForResolvedDir(platform, portableDataRoot);
   return pathApi.join(portableDataRoot, trimmedRelativePath);
+}
+
+export function getPortableDataRelativePath(
+  filePath: string,
+  userDataSuffix?: string | null,
+  context: PortableContext = {}
+): string | null {
+  const platform = getContextValue(context.platform, () => process.platform);
+  const portableDataRoot = getPortableDataRoot(userDataSuffix, context);
+  if (!portableDataRoot) return null;
+
+  const trimmedFilePath = filePath.trim();
+  if (trimmedFilePath.length === 0) return null;
+
+  const pathApi = getPathApiForResolvedDir(platform, portableDataRoot);
+  const normalizedFilePath = pathApi.normalize(trimmedFilePath);
+  const normalizedPortableDataRoot = pathApi.normalize(portableDataRoot);
+
+  if (!pathApi.isAbsolute(normalizedFilePath)) {
+    return normalizedFilePath
+      .split(/[\\/]+/u)
+      .filter(Boolean)
+      .join(path.posix.sep);
+  }
+
+  if (isPathInsideRoot(normalizedFilePath, normalizedPortableDataRoot, platform)) {
+    const relativePath = pathApi.relative(normalizedPortableDataRoot, normalizedFilePath);
+    return relativePath
+      .split(/[\\/]+/u)
+      .filter(Boolean)
+      .join(path.posix.sep);
+  }
+
+  const trimmedSuffix = userDataSuffix?.trim();
+  const expectedDataRootTail = ["data", ...(trimmedSuffix ? [trimmedSuffix] : [])];
+  const tailStartIndex = findPathSegmentTailIndex(
+    normalizedFilePath,
+    expectedDataRootTail,
+    platform
+  );
+  if (tailStartIndex < 0) return null;
+
+  return splitPathSegments(normalizedFilePath).slice(tailStartIndex).join(path.posix.sep);
+}
+
+export function resolvePortableMovedDataPath(
+  filePath: string,
+  userDataSuffix?: string | null,
+  context: PortableContext = {}
+): string | null {
+  const platform = getContextValue(context.platform, () => process.platform);
+  const portableDataRoot = getPortableDataRoot(userDataSuffix, context);
+  if (!portableDataRoot) return null;
+
+  const relativePath = getPortableDataRelativePath(filePath, userDataSuffix, context);
+  if (relativePath === null) return null;
+
+  const pathApi = getPathApiForResolvedDir(platform, portableDataRoot);
+  return relativePath.length > 0
+    ? pathApi.join(portableDataRoot, relativePath)
+    : pathApi.normalize(portableDataRoot);
 }
 
 export function resolvePortableAwareStoragePath(

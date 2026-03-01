@@ -24,7 +24,11 @@ import { normalizeMultiplayerAuthCallback } from "./services/authCallback";
 import { ensureAppDatabaseReady } from "./services/db";
 import { initStore, getStore } from "./services/store";
 import { scanInstallSources } from "./services/installer";
-import { getPortableDataRoot, normalizeUserDataSuffix } from "./services/portable";
+import {
+  getPortableDataRoot,
+  normalizeUserDataSuffix,
+  resolvePortableMovedDataPath,
+} from "./services/portable";
 import { initializePortableStorageDefaults } from "./services/storagePaths";
 import { proxyExternalRequest } from "./services/integrations";
 import { startContinuousPhashScan } from "./services/phashScanService";
@@ -568,7 +572,11 @@ function registerFileProtocol(): void {
           ? path.normalize(decoded.slice(1))
           : path.normalize(decoded);
 
-      return createMediaResponse(normalizedPath, request, url.searchParams);
+      return createMediaResponse(
+        resolvePortableMovedDataPath(normalizedPath, userDataSuffix) ?? normalizedPath,
+        request,
+        url.searchParams
+      );
     }
 
     return new Response("Not found", { status: 404 });

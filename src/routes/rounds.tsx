@@ -4223,13 +4223,17 @@ const RoundCard = memo(function RoundCard({
   const canPreview = Boolean(previewUri) && !showWebsiteCachingState;
   const difficulty = round.difficulty ?? 1;
   const sourceLabel = abbreviateNsfwText(
-    getRoundInstallSourceLabel(round.installSourceKey, t),
+    getRoundInstallSourceLabel(round.installSourceKey, {
+      stash: t`Stash`,
+      web: t`Web`,
+      local: t`Local`,
+    }),
     sfwMode
   );
   const durationLabel = formatDurationLabel(getRoundDurationSec(round));
   const animationDelay = index < 12 ? `${0.14 + index * 0.04}s` : undefined;
   const displayName = abbreviateNsfwText(round.name, sfwMode);
-  const displayType = abbreviateNsfwText(round.type ?? "Normal", sfwMode);
+  const displayType = abbreviateNsfwText(getRoundDisplayType(round.type, "Normal"), sfwMode);
   const displayDescription = abbreviateNsfwText(round.description ?? t`No description`, sfwMode);
   const displayAuthor = abbreviateNsfwText(round.author ?? t`Unknown`, sfwMode);
   const displayHeroName = round.hero?.name ? abbreviateNsfwText(round.hero.name, sfwMode) : t`N/A`;
@@ -6150,17 +6154,21 @@ function formatWindow(
 
 function getRoundInstallSourceLabel(
   installSourceKey: string | null | undefined,
-  t: (template: TemplateStringsArray) => string
+  labels: { stash: string; web: string; local: string }
 ): string {
   if (installSourceKey?.startsWith("stash:")) {
-    return t`Stash`;
+    return labels.stash;
   }
 
   if (installSourceKey?.startsWith("website:")) {
-    return t`Web`;
+    return labels.web;
   }
 
-  return t`Local`;
+  return labels.local;
+}
+
+function getRoundDisplayType(type: string | null | undefined, normalLabel: string): string {
+  return typeof type === "string" && type.trim().length > 0 ? type : normalLabel;
 }
 
 function summarizeHeroGroupPreviewState(

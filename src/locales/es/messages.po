@@ -4938,6 +4938,7 @@ msgid "Lobby:"
 msgstr "Sala:"
 
 #: src/features/converter/SourcePanel.tsx:56
+#: src/routes/rounds.tsx:4229
 msgid "Local"
 msgstr "Local"
 
@@ -8392,6 +8393,10 @@ msgstr "Porcentaje de probabilidad inicial."
 msgid "Starting..."
 msgstr "Iniciando..."
 
+#: src/routes/rounds.tsx:4227
+msgid "Stash"
+msgstr "Stash"
+
 #: src/routes/settings.tsx:4606
 msgid "Stash connection failed."
 msgstr "La conexión con Stash falló."
@@ -9373,6 +9378,10 @@ msgstr "Advertencia: las partidas de esta lista se marcan como asistidas en la p
 #: src/routes/settings.tsx:4119
 msgid "Warning: This cannot be undone."
 msgstr "Advertencia: Esto no se puede deshacer."
+
+#: src/routes/rounds.tsx:4228
+msgid "Web"
+msgstr "Web"
 
 #: src/routes/rounds.tsx:5941
 msgid "Website Install"

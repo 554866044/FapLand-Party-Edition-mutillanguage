@@ -4937,6 +4937,7 @@ msgid "Lobby:"
 msgstr "Lobby:"
 
 #: src/features/converter/SourcePanel.tsx:56
+#: src/routes/rounds.tsx:4229
 msgid "Local"
 msgstr "Local"
 
@@ -8391,6 +8392,10 @@ msgstr "Starting percent chance."
 msgid "Starting..."
 msgstr "Starting..."
 
+#: src/routes/rounds.tsx:4227
+msgid "Stash"
+msgstr "Stash"
+
 #: src/routes/settings.tsx:4606
 msgid "Stash connection failed."
 msgstr "Stash connection failed."
@@ -9372,6 +9377,10 @@ msgstr "Warning: runs from this playlist are marked as assisted on the highscore
 #: src/routes/settings.tsx:4119
 msgid "Warning: This cannot be undone."
 msgstr "Warning: This cannot be undone."
+
+#: src/routes/rounds.tsx:4228
+msgid "Web"
+msgstr "Web"
 
 #: src/routes/rounds.tsx:5941
 msgid "Website Install"

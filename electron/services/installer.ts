@@ -50,6 +50,11 @@ import {
 } from "./security";
 import { parseWebsiteVideoProxyUri } from "./webVideo";
 import { startWebsiteVideoScan } from "./webVideoScanService";
+import {
+  getPortableDataRelativePath,
+  normalizeUserDataSuffix,
+  resolvePortableMovedDataPath,
+} from "./portable";
 
 const AUTO_SCAN_FOLDERS_KEY = "install.autoScanFolders";
 const MAX_TRACKED_ERRORS = 50;
@@ -454,13 +459,19 @@ async function createInstallSessionContext(
   for (const entry of existingRounds) {
     const installSourceKey = normalizeText(entry.installSourceKey);
     if (!installSourceKey) continue;
-    roundByInstallSourceKey.set(installSourceKey, {
+    const existingRound = {
       id: entry.id,
       previewImage: entry.previewImage,
       heroId: entry.heroId,
       name: entry.name,
       phash: entry.phash,
-    });
+    };
+    roundByInstallSourceKey.set(installSourceKey, existingRound);
+
+    const portableAlias = toPortableDataInstallSourceKeyAlias(installSourceKey);
+    if (portableAlias && !roundByInstallSourceKey.has(portableAlias)) {
+      roundByInstallSourceKey.set(portableAlias, existingRound);
+    }
   }
 
   const exactVideoUriByPhash = new Map<string, string>();
@@ -595,8 +606,42 @@ function normalizeText(value: string | null | undefined): string | null {
 }
 
 function normalizeScanFolder(input: string): string {
-  const resolved = path.resolve(input.trim());
+  const trimmed = input.trim();
+  const resolvedPortablePath = resolvePortableMovedDataPath(
+    trimmed,
+    normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
+  );
+  const resolved = resolvedPortablePath ?? path.resolve(trimmed);
   return path.normalize(resolved);
+}
+
+function toPortableDataInstallSourceKey(filePath: string): string | null {
+  const relativePath = getPortableDataRelativePath(
+    filePath,
+    normalizeUserDataSuffix(process.env.FLAND_USER_DATA_SUFFIX)
+  );
+  return relativePath ? `portable-data:${relativePath}` : null;
+}
+
+function toPortableDataInstallSourceKeyAlias(installSourceKey: string | null): string | null {
+  const normalized = normalizeText(installSourceKey);
+  if (!normalized || normalized.startsWith("portable-data:")) return null;
+
+  const legacyPrefix = "legacy:";
+  const isLegacy = normalized.startsWith(legacyPrefix);
+  const keyBody = isLegacy ? normalized.slice(legacyPrefix.length) : normalized;
+  const hashIndex = keyBody.lastIndexOf("#");
+  const suffix = hashIndex >= 0 ? keyBody.slice(hashIndex) : "";
+  const filePath = hashIndex >= 0 ? keyBody.slice(0, hashIndex) : keyBody;
+  const portableKey = toPortableDataInstallSourceKey(filePath);
+  if (!portableKey) return null;
+  return `${isLegacy ? legacyPrefix : ""}${portableKey}${suffix}`;
+}
+
+function toFilesystemInstallSourceKey(filePath: string, index?: number): string {
+  const resolved = path.resolve(filePath);
+  const baseKey = toPortableDataInstallSourceKey(resolved) ?? resolved;
+  return typeof index === "number" ? `${baseKey}#${index}` : baseKey;
 }
 
 const legacyFilenameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
@@ -732,7 +777,7 @@ async function collectSidecarFiles(folderPath: string): Promise<ImportedSidecarD
         try {
           const { manifest } = await ensureFpackExtracted(fullPath);
           output.push(
-            ...manifest.sidecarEntries.map((sidecar) => ({
+            ...manifest.sidecarEntries.map((sidecar): ImportedSidecarDescriptor => ({
               sidecarPath: sidecar.extractedPath,
               source: {
                 sourceKind: "fpack",
@@ -1366,10 +1411,15 @@ async function prepareRoundWrite(
   deferPhash?: boolean
 ): Promise<PreparedRoundWrite> {
   const normalizedRound = normalizeRoundData(roundInput);
+  const existingRound = context.roundByInstallSourceKey.get(installSourceKey) ?? null;
+  const roundForPreparation =
+    normalizedRound.phash || !existingRound?.phash
+      ? normalizedRound
+      : { ...normalizedRound, phash: existingRound.phash };
   const prepared = await prepareRoundResources(
     context,
     sidecarPath,
-    normalizedRound,
+    roundForPreparation,
     allowLocalFallback,
     deferPhash
   );
@@ -1527,7 +1577,9 @@ async function prepareRoundSidecar(
     writes: [
       await prepareRoundWrite(
         context,
-        source.archiveEntryPath ? toFpackInstallSourceKey(source.archiveEntryPath) : path.resolve(sidecarPath),
+        source.archiveEntryPath
+          ? toFpackInstallSourceKey(source.archiveEntryPath)
+          : toFilesystemInstallSourceKey(sidecarPath),
         sidecarPath,
         parsed.data,
         true
@@ -1560,7 +1612,7 @@ async function prepareHeroSidecar(
           context,
           source.archiveEntryPath
             ? toFpackInstallSourceKey(source.archiveEntryPath, index)
-            : `${path.resolve(sidecarPath)}#${index}`,
+            : toFilesystemInstallSourceKey(sidecarPath, index),
           sidecarPath,
           { ...entry, hero: undefined },
           false
@@ -1620,7 +1672,8 @@ async function persistPreparedEntry(
     approveDialogPath("playlistImportFile", entry.filePath);
     await importPlaylistFromFile({
       filePath: entry.filePath,
-      installSourceKey: entry.installSourceKeyOverride ?? path.resolve(entry.filePath),
+      installSourceKey:
+        entry.installSourceKeyOverride ?? toFilesystemInstallSourceKey(entry.filePath),
     });
     return {
       installed: 0,
@@ -2111,7 +2164,7 @@ async function prepareLegacyRoundEntry(
     sourcePath: absoluteVideoPath,
     write: await prepareRoundWrite(
       context,
-      `legacy:${absoluteVideoPath}`,
+      `legacy:${toPortableDataInstallSourceKey(absoluteVideoPath) ?? absoluteVideoPath}`,
       absoluteVideoPath,
       {
         name: parsed.name,

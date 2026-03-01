@@ -4937,6 +4937,7 @@ msgid "Lobby:"
 msgstr "Hall d'entrée :"
 
 #: src/features/converter/SourcePanel.tsx:56
+#: src/routes/rounds.tsx:4229
 msgid "Local"
 msgstr "Locale"
 
@@ -8391,6 +8392,10 @@ msgstr "Pourcentage de chance de départ."
 msgid "Starting..."
 msgstr "Demarrage en cours..."
 
+#: src/routes/rounds.tsx:4227
+msgid "Stash"
+msgstr "Stash"
+
 #: src/routes/settings.tsx:4606
 msgid "Stash connection failed."
 msgstr "La connexion cachée a échoué."
@@ -9372,6 +9377,10 @@ msgstr "Attention : les courses de cette playlist sont marquées comme assisté
 #: src/routes/settings.tsx:4119
 msgid "Warning: This cannot be undone."
 msgstr "Attention : cette opération est irréversible."
+
+#: src/routes/rounds.tsx:4228
+msgid "Web"
+msgstr "Web"
 
 #: src/routes/rounds.tsx:5941
 msgid "Website Install"
