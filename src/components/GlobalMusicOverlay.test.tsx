@@ -74,6 +74,7 @@ describe("GlobalMusicOverlay", () => {
         selectPlaylistImportFile: vi.fn(),
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
+        selectWebsiteVideoCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => ["/music/three.mp3"]),
         selectConverterFunscriptFile: vi.fn(),

@@ -31,4 +31,12 @@ export function normalizeMultiplayerSkipRoundsCheck(value: unknown): boolean {
   return typeof value === "boolean" ? value : DEFAULT_MULTIPLAYER_SKIP_ROUNDS_CHECK;
 }
 
+export const INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY =
+  "experimental.installWebFunscriptUrlEnabled";
+export const DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED = false;
+
+export function normalizeInstallWebFunscriptUrlEnabled(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED;
+}
+
 export const MULTIPLAYER_MINIMUM_ROUNDS = 100;

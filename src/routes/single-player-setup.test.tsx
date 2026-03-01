@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InstalledRound } from "../services/db";
 
 function makePlaylist(id: string, name: string) {
   return {
@@ -48,6 +49,45 @@ function makePlaylist(id: string, name: string) {
   };
 }
 
+function makeRound(id: string, name: string, websiteVideoCacheStatus?: "cached" | "pending"): InstalledRound {
+  const createdAt = "2026-01-01T00:00:00.000Z";
+  return {
+    id,
+    name,
+    description: null,
+    author: null,
+    type: "Normal",
+    difficulty: 2,
+    bpm: 120,
+    startTime: null,
+    endTime: null,
+    createdAt,
+    heroId: null,
+    hero: null,
+    resources: [
+      {
+        id: `res-${id}`,
+        roundId: id,
+        videoUri:
+          websiteVideoCacheStatus === undefined
+            ? "app://media/%2Ftmp%2Flocal.mp4"
+            : `https://example.com/${id}`,
+        funscriptUri: null,
+        phash: null,
+        disabled: false,
+        createdAt,
+        updatedAt: createdAt,
+        websiteVideoCacheStatus: websiteVideoCacheStatus ?? "not_applicable",
+      },
+    ],
+    installSourceKey: websiteVideoCacheStatus ? `website:${id}` : null,
+    phash: null,
+    heroSourceType: null,
+    sourceType: null,
+    updatedAt: createdAt,
+  } as unknown as InstalledRound;
+}
+
 const PLAYLIST_LAUNCH_DURATION_MS = 2500;
 
 const mocks = vi.hoisted(() => ({
@@ -74,8 +114,16 @@ vi.mock("../components/AnimatedBackground", () => ({
 }));
 
 vi.mock("../components/MenuButton", () => ({
-  MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>{label}</button>
+  MenuButton: ({
+    label,
+    onClick,
+    disabled,
+  }: {
+    label: string;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" onClick={onClick} disabled={disabled}>{label}</button>
   ),
 }));
 
@@ -236,5 +284,37 @@ describe("SinglePlayerSetupRoute", () => {
     expect(screen.getByText("No Playlist Yet")).toBeDefined();
     expect(screen.getByRole("button", { name: "Open Playlist Workshop" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Open Map Editor" })).toBeDefined();
+  });
+
+  it("blocks starting a playlist while required web rounds are still caching", async () => {
+    const playlist = {
+      ...makePlaylist("playlist-1", "Web Playlist"),
+      config: {
+        ...makePlaylist("playlist-1", "Web Playlist").config,
+        boardConfig: {
+          ...makePlaylist("playlist-1", "Web Playlist").config.boardConfig,
+          totalIndices: 1,
+          normalRoundOrder: [{ idHint: "web-round", name: "Web Round", type: "Normal" as const }],
+        },
+      },
+    };
+
+    mocks.loaderData = {
+      availablePlaylists: [playlist],
+      activePlaylist: playlist,
+      installedRounds: [makeRound("web-round", "Web Round", "pending")],
+    };
+
+    render(<SinglePlayerSetupRoute />);
+
+    expect(screen.getAllByText("Caching ongoing").length).toBeGreaterThan(0);
+    const startButton = screen.getByRole("button", { name: "Caching Ongoing" });
+    expect(startButton.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.click(startButton);
+    await Promise.resolve();
+
+    expect(mocks.playlists.setActive).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 });

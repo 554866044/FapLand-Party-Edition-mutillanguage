@@ -23,13 +23,15 @@ export const playlists = {
   importFromFile: (input: { filePath: string; manualMappingByRefKey?: Record<string, string | null> }) =>
     trpc.playlist.importFromFile.mutate(input),
   exportToFile: (playlistId: string, filePath: string) => trpc.playlist.exportToFile.mutate({ playlistId, filePath }),
-  analyzeExportPackage: (input: { playlistId: string; compressionMode?: "copy" | "av1"; compressionStrength?: number }) =>
+  analyzeExportPackage: (input: { playlistId: string; compressionMode?: "copy" | "av1"; compressionStrength?: number; includeMedia?: boolean }) =>
     trpc.playlist.analyzeExportPackage.query(input),
   exportPackage: (input: {
     playlistId: string;
     directoryPath: string;
     compressionMode?: "copy" | "av1";
     compressionStrength?: number;
+    includeMedia?: boolean;
+    asFpack?: boolean;
   }) =>
     trpc.playlist.exportPackage.mutate(input),
   getExportPackageStatus: () => trpc.playlist.getExportPackageStatus.query(),

@@ -14,6 +14,11 @@ const { getStoreMock } = vi.hoisted(() => ({
   getStoreMock: vi.fn(),
 }));
 
+const { clearWebsiteVideoCacheMock, clearPlayableVideoCacheMock } = vi.hoisted(() => ({
+  clearWebsiteVideoCacheMock: vi.fn(),
+  clearPlayableVideoCacheMock: vi.fn(),
+}));
+
 vi.mock("../../services/db", () => ({
   getDb: getDbMock,
 }));
@@ -24,6 +29,24 @@ vi.mock("../../services/installExport", () => ({
 
 vi.mock("../../services/store", () => ({
   getStore: getStoreMock,
+}));
+
+vi.mock("../../services/webVideo", () => ({
+  clearWebsiteVideoCache: clearWebsiteVideoCacheMock,
+  getWebsiteVideoCacheState: vi.fn(),
+  getWebsiteVideoTargetUrl: vi.fn((uri: string) => {
+    const trimmed = uri.trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return trimmed;
+    }
+    return null;
+  }),
+  removeCachedWebsiteVideo: vi.fn(),
+  resolveWebsiteVideoStream: vi.fn(),
+}));
+
+vi.mock("../../services/playableVideo", () => ({
+  clearPlayableVideoCache: clearPlayableVideoCacheMock,
 }));
 
 import { dbRouter } from "./db";
@@ -81,6 +104,23 @@ type RoundRow = {
   endTime: number | null;
   type: "Normal" | "Interjection" | "Cum";
   heroId?: string | null;
+  installSourceKey?: string | null;
+  previewImage?: string | null;
+  phash?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+type ResourceRow = {
+  id: string;
+  roundId: string;
+  videoUri: string;
+  funscriptUri: string | null;
+  phash: string | null;
+  durationMs: number | null;
+  disabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 describe("dbRouter local highscore and multiplayer cache", () => {
@@ -88,9 +128,12 @@ describe("dbRouter local highscore and multiplayer cache", () => {
   let storeMockRef: ReturnType<typeof getStoreMock>;
   let heroesByIdRef: Map<string, HeroRow>;
   let roundsByIdRef: Map<string, RoundRow>;
+  let resourcesByIdRef: Map<string, ResourceRow>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWebsiteVideoCacheMock.mockResolvedValue(undefined);
+    clearPlayableVideoCacheMock.mockResolvedValue(undefined);
     exportInstalledDatabaseMock.mockResolvedValue({
       exportDir: "/tmp/f-land/export/2026-03-05T20-00-00.000Z",
       heroFiles: 1,
@@ -123,6 +166,24 @@ describe("dbRouter local highscore and multiplayer cache", () => {
         startTime: 1000,
         endTime: 5000,
         type: "Normal",
+        installSourceKey: null,
+        previewImage: null,
+        phash: null,
+        createdAt: new Date("2026-03-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-05T00:00:00.000Z"),
+      }],
+    ]);
+    resourcesByIdRef = new Map<string, ResourceRow>([
+      ["resource-1", {
+        id: "resource-1",
+        roundId: "round-1",
+        videoUri: "file:///tmp/round-1.mp4",
+        funscriptUri: null,
+        phash: null,
+        durationMs: null,
+        disabled: false,
+        createdAt: new Date("2026-03-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-05T00:00:00.000Z"),
       }],
     ]);
     let highscore = 0;
@@ -194,12 +255,32 @@ describe("dbRouter local highscore and multiplayer cache", () => {
           }),
         },
         round: {
-          findFirst: vi.fn(async (input: { where: unknown }) => {
+          findFirst: vi.fn(async (input: { where: unknown; with?: { resources?: unknown } }) => {
             const [value] = extractSqlParams(input.where);
             if (typeof value === "string") {
-              return roundsByIdRef.get(value) ?? null;
+              const existing = roundsByIdRef.get(value) ?? null;
+              if (!existing) return null;
+              if (input.with?.resources) {
+                return {
+                  ...existing,
+                  resources: [...resourcesByIdRef.values()]
+                    .filter((entry) => entry.roundId === value)
+                    .map((entry) => ({ id: entry.id, videoUri: entry.videoUri })),
+                };
+              }
+              return existing;
             }
-            return roundsByIdRef.values().next().value ?? null;
+            const fallback = roundsByIdRef.values().next().value ?? null;
+            if (!fallback) return null;
+            if (input.with?.resources) {
+              return {
+                ...fallback,
+                resources: [...resourcesByIdRef.values()]
+                  .filter((entry) => entry.roundId === fallback.id)
+                  .map((entry) => ({ id: entry.id, videoUri: entry.videoUri })),
+              };
+            }
+            return fallback;
           }),
           findMany: vi.fn(async (input: { where: unknown }) => {
             const ids = extractSqlParams(input.where).filter((value): value is string => typeof value === "string");
@@ -210,6 +291,14 @@ describe("dbRouter local highscore and multiplayer cache", () => {
               .map((id) => roundsByIdRef.get(id))
               .filter((entry): entry is RoundRow => entry !== undefined);
           }),
+        },
+        resource: {
+          findFirst: vi.fn(async (input: { where: unknown }) => {
+            const values = extractSqlParams(input.where).filter((value): value is string => typeof value === "string");
+            const [roundId] = values;
+            return [...resourcesByIdRef.values()].find((entry) => entry.roundId === roundId && !entry.disabled) ?? null;
+          }),
+          findMany: vi.fn(async () => [...resourcesByIdRef.values()]),
         },
       },
       select: vi.fn(() => ({
@@ -303,6 +392,45 @@ describe("dbRouter local highscore and multiplayer cache", () => {
               singleRuns.push(row);
               return [row];
             }
+            if (getTableName(table) === "Round") {
+              const input = data as Omit<RoundRow, "id"> & Partial<Pick<RoundRow, "id">>;
+              const row: RoundRow = {
+                id: input.id ?? `round-${roundsByIdRef.size + 1}`,
+                name: input.name,
+                author: input.author ?? null,
+                description: input.description ?? null,
+                bpm: input.bpm ?? null,
+                difficulty: input.difficulty ?? null,
+                startTime: input.startTime ?? null,
+                endTime: input.endTime ?? null,
+                type: input.type,
+                heroId: input.heroId ?? null,
+                installSourceKey: input.installSourceKey ?? null,
+                previewImage: input.previewImage ?? null,
+                phash: input.phash ?? null,
+                createdAt: new Date("2026-03-06T00:00:00.000Z"),
+                updatedAt: new Date("2026-03-06T00:00:00.000Z"),
+              };
+              roundsByIdRef.set(row.id, row);
+              return [row];
+            }
+            if (getTableName(table) === "Resource") {
+              const input = data as Omit<ResourceRow, "id" | "createdAt" | "updatedAt"> &
+                Partial<Pick<ResourceRow, "id" | "createdAt" | "updatedAt">>;
+              const row: ResourceRow = {
+                id: input.id ?? `resource-${resourcesByIdRef.size + 1}`,
+                roundId: input.roundId,
+                videoUri: input.videoUri,
+                funscriptUri: input.funscriptUri ?? null,
+                phash: input.phash ?? null,
+                durationMs: input.durationMs ?? null,
+                disabled: input.disabled ?? false,
+                createdAt: input.createdAt ?? new Date("2026-03-06T00:00:00.000Z"),
+                updatedAt: input.updatedAt ?? new Date("2026-03-06T00:00:00.000Z"),
+              };
+              resourcesByIdRef.set(row.id, row);
+              return [row];
+            }
             return [];
           },
         }),
@@ -385,8 +513,16 @@ describe("dbRouter local highscore and multiplayer cache", () => {
             const tableName = getTableName(table);
             const values = extractSqlParams(whereClause).filter((value): value is string => typeof value === "string");
             if (tableName === "Round") {
-              for (const roundId of values) {
+              const roundIds = values.length > 0 ? values : [roundsByIdRef.keys().next().value].filter(
+                (value): value is string => typeof value === "string"
+              );
+              for (const roundId of roundIds) {
                 roundsByIdRef.delete(roundId);
+                for (const [resourceId, entry] of resourcesByIdRef.entries()) {
+                  if (entry.roundId === roundId) {
+                    resourcesByIdRef.delete(resourceId);
+                  }
+                }
               }
             }
             if (tableName === "Hero") {
@@ -718,6 +854,44 @@ describe("dbRouter local highscore and multiplayer cache", () => {
     })).rejects.toThrow("greater than start time");
   });
 
+  it("creates a website-backed installed round with an attached resource", async () => {
+    const caller = dbRouter.createCaller({} as never);
+
+    const created = await caller.createWebsiteRound({
+      name: "Website Round",
+      videoUri: "https://www.xhamster.com/videos/demo-123",
+      funscriptUri: "app://media/tmp/demo.funscript",
+    });
+
+    const installedRound = roundsByIdRef.get(created.roundId);
+    const installedResource = resourcesByIdRef.get(created.resourceId);
+
+    expect(installedRound).toMatchObject({
+      name: "Website Round",
+      type: "Normal",
+    });
+    expect(installedRound?.installSourceKey).toMatch(/^website:/);
+    expect(installedResource).toMatchObject({
+      roundId: created.roundId,
+      videoUri: "https://www.xhamster.com/videos/demo-123",
+      funscriptUri: "app://media/tmp/demo.funscript",
+      disabled: false,
+    });
+    expect(dbMockRef.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects invalid website round video URLs", async () => {
+    const caller = dbRouter.createCaller({} as never);
+
+    await expect(
+      caller.createWebsiteRound({
+        name: "Broken Website Round",
+        videoUri: "ftp://example.com/video",
+        funscriptUri: null,
+      })
+    ).rejects.toThrow("public http(s) URLs");
+  });
+
   it("deletes a round entry", async () => {
     const caller = dbRouter.createCaller({} as never);
 
@@ -813,9 +987,29 @@ describe("dbRouter local highscore and multiplayer cache", () => {
 
     expect(dbMockRef.transaction).toHaveBeenCalledTimes(1);
     expect(storeMockRef.clear).toHaveBeenCalledTimes(1);
+    expect(clearWebsiteVideoCacheMock).toHaveBeenCalledTimes(1);
+    expect(clearPlayableVideoCacheMock).toHaveBeenCalledTimes(1);
     await expect(caller.getLocalHighscore()).resolves.toMatchObject({ highscore: 0, highscoreCheatMode: false });
     await expect(caller.listSinglePlayerRuns({ limit: 10 })).resolves.toHaveLength(0);
     await expect(caller.listMultiplayerMatchCache({ limit: 10 })).resolves.toHaveLength(0);
     await expect(caller.listResultSyncLobbies()).resolves.toHaveLength(0);
+  });
+
+  it("can clear only video caches without clearing the store", async () => {
+    const caller = dbRouter.createCaller({} as never);
+
+    await expect(caller.clearAllData({
+      rounds: false,
+      playlists: false,
+      stats: false,
+      history: false,
+      cache: false,
+      videoCache: true,
+      settings: false,
+    })).resolves.toEqual({ cleared: true });
+
+    expect(storeMockRef.clear).not.toHaveBeenCalled();
+    expect(clearWebsiteVideoCacheMock).toHaveBeenCalledTimes(1);
+    expect(clearPlayableVideoCacheMock).toHaveBeenCalledTimes(1);
   });
 });

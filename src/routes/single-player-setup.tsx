@@ -5,6 +5,7 @@ import { MenuButton } from "../components/MenuButton";
 import { PlaylistMapPreview } from "../components/PlaylistMapPreview";
 import { PlaylistLaunchTransition } from "../components/game/PlaylistLaunchTransition";
 import { useControllerSurface } from "../controller";
+import { buildPlaylistWebsiteCacheSummary } from "../features/webVideo/cacheStatus";
 import type { PlaylistConfig } from "../game/playlistSchema";
 import { describePlaylistBoard } from "../game/playlistStats";
 import { resolvePortableRoundRef } from "../game/playlistRuntime";
@@ -104,10 +105,25 @@ export function SinglePlayerSetupRoute() {
     () => (selectedPlaylist ? describePlaylistBoard(selectedPlaylist.config) : null),
     [selectedPlaylist],
   );
+  const playlistCacheSummaryById = useMemo(
+    () => buildPlaylistWebsiteCacheSummary(availablePlaylists, installedRounds),
+    [availablePlaylists, installedRounds]
+  );
   const selectedPlaylistDurationSec = useMemo(
     () => (selectedPlaylist ? estimatePlaylistDurationSec(selectedPlaylist.config, installedRounds) : 0),
     [installedRounds, selectedPlaylist],
   );
+  const selectedPlaylistCacheSummary = selectedPlaylist
+    ? playlistCacheSummaryById.get(selectedPlaylist.id) ?? {
+        hasPending: false,
+        pendingRoundCount: 0,
+        pendingRoundNames: [],
+      }
+    : {
+        hasPending: false,
+        pendingRoundCount: 0,
+        pendingRoundNames: [],
+      };
   const isLaunchAnimating = launchState.kind === "animating";
 
   useEffect(() => {
@@ -137,7 +153,7 @@ export function SinglePlayerSetupRoute() {
   };
 
   const handleStart = async () => {
-    if (pendingAction || !selectedPlaylist) return;
+    if (pendingAction || !selectedPlaylist || selectedPlaylistCacheSummary.hasPending) return;
     setPendingAction("start");
     setNotice(null);
     try {
@@ -288,7 +304,7 @@ export function SinglePlayerSetupRoute() {
               Pick And Start
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Choose a playlist on the left, then start immediately from the main panel.
+              Choose a playlist on the left, then start when all required web rounds are fully cached.
             </p>
           </div>
 
@@ -309,6 +325,8 @@ export function SinglePlayerSetupRoute() {
                 const summary = describePlaylistBoard(playlist.config);
                 const estimatedDurationSec = estimatePlaylistDurationSec(playlist.config, installedRounds);
                 const isLinear = summary.modeLabel === "Linear";
+                const cacheSummary = playlistCacheSummaryById.get(playlist.id);
+                const isCachePending = cacheSummary?.hasPending ?? false;
 
                 return (
                   <button
@@ -327,21 +345,37 @@ export function SinglePlayerSetupRoute() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <span className="truncate text-sm font-semibold text-zinc-100">{playlist.name}</span>
-                        <span
-                          className={[
-                            "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]",
-                            isLinear
-                              ? "border-teal-400/45 bg-teal-500/15 text-teal-200"
-                              : "border-amber-400/45 bg-amber-500/15 text-amber-200",
-                          ].join(" ")}
-                        >
-                          {summary.modeLabel}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isCachePending && (
+                            <span className="rounded-full border border-amber-300/45 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100">
+                              Caching ongoing
+                            </span>
+                          )}
+                          <span
+                            className={[
+                              "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]",
+                              isLinear
+                                ? "border-teal-400/45 bg-teal-500/15 text-teal-200"
+                                : "border-amber-400/45 bg-amber-500/15 text-amber-200",
+                            ].join(" ")}
+                          >
+                            {summary.modeLabel}
+                          </span>
+                        </div>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-[family-name:var(--font-jetbrains-mono)] uppercase tracking-[0.14em] text-zinc-400">
                         <span>{summary.roundNodeCount} rounds</span>
                         <span>•</span>
                         <span>{formatDurationLabel(estimatedDurationSec)}</span>
+                        {isCachePending && (
+                          <>
+                            <span>•</span>
+                            <span className="text-amber-200">
+                              {cacheSummary?.pendingRoundCount ?? 0} web round
+                              {(cacheSummary?.pendingRoundCount ?? 0) === 1 ? "" : "s"} caching
+                            </span>
+                          </>
+                        )}
                         {isActive && (
                           <>
                             <span>•</span>
@@ -403,7 +437,19 @@ export function SinglePlayerSetupRoute() {
                     <span className="rounded-full border border-zinc-700/70 bg-black/30 px-3 py-1.5">
                       v{selectedPlaylist.config.playlistVersion}
                     </span>
+                    {selectedPlaylistCacheSummary.hasPending && (
+                      <span className="rounded-full border border-amber-300/45 bg-amber-500/12 px-3 py-1.5 text-amber-100">
+                        Caching ongoing
+                      </span>
+                    )}
                   </div>
+                  {selectedPlaylistCacheSummary.hasPending && (
+                    <p className="mt-3 text-sm text-amber-100/85">
+                      {selectedPlaylistCacheSummary.pendingRoundCount} required web round
+                      {selectedPlaylistCacheSummary.pendingRoundCount === 1 ? "" : "s"} are still caching
+                      in the background. Playback unlocks automatically when caching finishes.
+                    </p>
+                  )}
                   {notice && (
                     <p className="mt-3 text-sm text-rose-200">{notice}</p>
                   )}
@@ -421,9 +467,22 @@ export function SinglePlayerSetupRoute() {
                         </span>
                       </div>
                       <MenuButton
-                        label={pendingAction === "start" ? "Starting..." : "Start Selected Playlist"}
-                        subLabel="Fastest path into a round"
+                        label={
+                          selectedPlaylistCacheSummary.hasPending
+                            ? "Caching Ongoing"
+                            : pendingAction === "start"
+                              ? "Starting..."
+                              : "Start Selected Playlist"
+                        }
+                        subLabel={
+                          selectedPlaylistCacheSummary.hasPending
+                            ? "Wait until the required web rounds finish caching"
+                            : "Fastest path into a round"
+                        }
+                        badge={selectedPlaylistCacheSummary.hasPending ? "Blocked" : undefined}
+                        statusTone={selectedPlaylistCacheSummary.hasPending ? "warning" : "default"}
                         primary
+                        disabled={selectedPlaylistCacheSummary.hasPending}
                         onHover={playHoverSound}
                         onClick={() => {
                           playSelectSound();

@@ -43,6 +43,19 @@ describe("install sidecar schemas", () => {
     expect(parsed.rounds[0]?.resources[0]?.videoUri).toContain("hero-round-1.mp4");
   });
 
+  it("parses webpage URLs intended for yt-dlp resolution", () => {
+    const parsed = ZRoundSidecar.parse({
+      name: "Website Round",
+      resources: [
+        {
+          videoUri: "https://www.pornhub.com/view_video.php?viewkey=test123",
+        },
+      ],
+    });
+
+    expect(parsed.resources[0]?.videoUri).toBe("https://www.pornhub.com/view_video.php?viewkey=test123");
+  });
+
   it("parses package-relative resource paths", () => {
     const parsed = ZRoundSidecar.parse({
       name: "Portable Round",

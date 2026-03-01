@@ -8,6 +8,7 @@ import { inArray } from "drizzle-orm";
 import { ZHeroSidecar, ZRoundSidecar } from "../../src/zod/installSidecar";
 import { getDb } from "./db";
 import { round as roundTable } from "./db/schema";
+import { createFpackFromDirectory } from "./fpack";
 import { fetchStashMediaWithAuth } from "./integrations/stashClient";
 import { stashProvider } from "./integrations/providers/stashProvider";
 import { listExternalSources, normalizeBaseUrl } from "./integrations/store";
@@ -18,6 +19,7 @@ export type LibraryExportPackageInput = {
   heroIds?: string[];
   includeMedia?: boolean;
   directoryPath?: string;
+  asFpack?: boolean;
 };
 
 export type LibraryExportPackageState = "idle" | "running" | "done" | "aborted" | "error";
@@ -41,6 +43,7 @@ export type LibraryExportPackageStatus = {
 
 export type LibraryExportPackageResult = {
   exportDir: string;
+  fpackPath?: string;
   heroFiles: number;
   roundFiles: number;
   videoFiles: number;
@@ -114,7 +117,7 @@ type RoundResourceEntry = {
   resource: ExportableResource;
   materialized: {
     canonicalVideoKey: string;
-    video: ExportedMediaFile;
+    video: ExportedMediaFile | null;
     funscript: ExportedMediaFile | null;
   };
 };
@@ -256,7 +259,7 @@ async function copyLocalFile(sourcePath: string, destinationPath: string): Promi
     completed = true;
   } finally {
     if (!completed) {
-      await fs.rm(destinationPath, { force: true }).catch(() => {});
+      await fs.rm(destinationPath, { force: true }).catch(() => { });
     }
   }
 }
@@ -303,7 +306,7 @@ async function downloadRemoteResource(
     completed = true;
   } finally {
     if (!completed) {
-      await fs.rm(destinationPath, { force: true }).catch(() => {});
+      await fs.rm(destinationPath, { force: true }).catch(() => { });
     }
   }
 }
@@ -343,14 +346,12 @@ function toRoundSidecarPayload(entry: RoundResourceEntry, includeMedia: boolean)
     startTime: entry.round.startTime ?? undefined,
     endTime: entry.round.endTime ?? undefined,
     type: entry.round.type,
-    resources: includeMedia
-      ? [
-          {
-            videoUri: entry.materialized.video.relativePath,
-            funscriptUri: entry.materialized.funscript?.relativePath,
-          },
-        ]
-      : [],
+    resources: [
+      {
+        videoUri: includeMedia ? (entry.materialized.video?.relativePath ?? entry.resource.videoUri) : entry.resource.videoUri,
+        funscriptUri: entry.materialized.funscript?.relativePath ?? entry.resource.funscriptUri ?? undefined,
+      },
+    ],
   });
 }
 
@@ -379,14 +380,12 @@ function toHeroSidecarPayload(
         startTime: entry.round.startTime ?? undefined,
         endTime: entry.round.endTime ?? undefined,
         type: entry.round.type,
-        resources: includeMedia
-          ? [
-              {
-                videoUri: entry.materialized.video.relativePath,
-                funscriptUri: entry.materialized.funscript?.relativePath,
-              },
-            ]
-          : [],
+        resources: [
+          {
+            videoUri: includeMedia ? (entry.materialized.video?.relativePath ?? entry.resource.videoUri) : entry.resource.videoUri,
+            funscriptUri: entry.materialized.funscript?.relativePath ?? entry.resource.funscriptUri ?? undefined,
+          },
+        ],
       })),
   });
 }
@@ -521,6 +520,19 @@ export function getLibraryExportPackageStatus(): LibraryExportPackageStatus {
   return { ...exportStatus };
 }
 
+async function packResultAsFpack(
+  result: LibraryExportPackageResult,
+  asFpack: boolean
+): Promise<LibraryExportPackageResult> {
+  if (!asFpack) return result;
+  const fpackFileName = `${path.basename(result.exportDir)}.fpack`;
+  const fpackPath = path.join(path.dirname(result.exportDir), fpackFileName);
+  updateStatus({ lastMessage: "Packing .fpack file..." });
+  await createFpackFromDirectory(result.exportDir, fpackPath);
+  await fs.rm(result.exportDir, { recursive: true, force: true });
+  return { ...result, exportDir: path.dirname(result.exportDir), fpackPath };
+}
+
 export async function exportLibraryPackage(
   input: LibraryExportPackageInput = {}
 ): Promise<LibraryExportPackageResult> {
@@ -607,234 +619,150 @@ export async function exportLibraryPackage(
         usedNames: usedMediaNames,
         packageDir: exportDir,
       });
-      allocateMediaOutputs({
-        tasks: funscriptTasks,
-        usedNames: usedMediaNames,
-        packageDir: exportDir,
-      });
+    }
 
-      const totalWork = videoTasks.length + funscriptTasks.length + rounds.length;
-      setProgress({ completed: 0, total: totalWork });
+    allocateMediaOutputs({
+      tasks: funscriptTasks,
+      usedNames: usedMediaNames,
+      packageDir: exportDir,
+    });
 
+    const totalWork = (includeMedia ? videoTasks.length : 0) + funscriptTasks.length + rounds.length;
+    setProgress({ completed: 0, total: totalWork });
+
+    if (includeMedia) {
       for (const task of videoTasks) {
         await materializeVideoTask(task);
       }
       videoFiles = videoTasks.length;
+    }
 
-      for (const task of funscriptTasks) {
-        await materializeFunscriptTask(task);
-      }
-      funscriptFiles = funscriptTasks.length;
+    for (const task of funscriptTasks) {
+      await materializeFunscriptTask(task);
+    }
+    funscriptFiles = funscriptTasks.length;
 
-      const videoOutputByKey = new Map<string, ExportedMediaFile>(
-        videoTasks
+    const videoOutputByKey = new Map<string, ExportedMediaFile>(
+      includeMedia
+        ? videoTasks
           .filter((task): task is VideoTask & { output: ExportedMediaFile } => Boolean(task.output))
           .map((task) => [`video:${task.canonicalKey}`, task.output])
-      );
-      const funscriptOutputByKey = new Map<string, ExportedMediaFile>(
-        funscriptTasks
-          .filter((task): task is FunscriptTask & { output: ExportedMediaFile } =>
-            Boolean(task.output)
-          )
-          .map((task) => [`funscript:${task.canonicalKey}`, task.output])
-      );
+        : []
+    );
+    const funscriptOutputByKey = new Map<string, ExportedMediaFile>(
+      funscriptTasks
+        .filter((task): task is FunscriptTask & { output: ExportedMediaFile } =>
+          Boolean(task.output)
+        )
+        .map((task) => [`funscript:${task.canonicalKey}`, task.output])
+    );
 
-      const materializedEntries: RoundResourceEntry[] = resourceReferences.map((entry) => {
+    const materializedEntries: RoundResourceEntry[] = resourceReferences.map((entry) => {
+      const funscriptKey = entry.resource.funscriptUri
+        ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}`
+        : null;
+      let video = null;
+
+      if (includeMedia) {
         const videoKey = `video:${canonicalizeResourceKey(entry.resource.videoUri)}`;
-        const funscriptKey = entry.resource.funscriptUri
-          ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}`
-          : null;
-        const video = videoOutputByKey.get(videoKey);
+        video = videoOutputByKey.get(videoKey) ?? null;
         if (!video) {
           throw new Error(`Exported video output is missing for ${entry.resource.videoUri}`);
         }
-        return {
-          round: entry.round,
-          resource: entry.resource,
-          materialized: {
-            canonicalVideoKey: canonicalizeResourceKey(entry.resource.videoUri),
-            video,
-            funscript: funscriptKey ? (funscriptOutputByKey.get(funscriptKey) ?? null) : null,
-          },
-        };
-      });
-
-      let roundFiles = 0;
-      let heroFiles = 0;
-      const heroGroups = new Map<string, { hero: ExportableHero; entries: RoundResourceEntry[] }>();
-
-      for (const entry of materializedEntries) {
-        if (entry.round.heroId && entry.round.hero) {
-          const key = entry.round.heroId;
-          const existing = heroGroups.get(key);
-          if (existing) {
-            existing.entries.push(entry);
-          } else {
-            heroGroups.set(key, { hero: entry.round.hero, entries: [entry] });
-          }
-          continue;
-        }
-
-        const sidecarBaseName = sanitizeFileSystemName(
-          entry.round.name,
-          `round__${entry.round.id}`
-        );
-        const fileName = toUniqueCaseInsensitiveFileName(
-          usedSidecarNames,
-          sidecarBaseName,
-          ".round"
-        );
-        updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
-        await writeJsonFile(
-          path.join(exportDir, fileName),
-          toRoundSidecarPayload(entry, includeMedia)
-        );
-        incrementStat("roundFiles");
-        incrementProgress();
-        roundFiles += 1;
       }
 
-      const sortedHeroGroups = Array.from(heroGroups.values()).sort((a, b) => {
-        const byName = a.hero.name.localeCompare(b.hero.name, undefined, {
-          sensitivity: "base",
-          numeric: true,
-        });
-        if (byName !== 0) return byName;
-        return a.hero.id.localeCompare(b.hero.id);
-      });
-
-      for (const group of sortedHeroGroups) {
-        const sidecarBaseName = sanitizeFileSystemName(group.hero.name, `hero__${group.hero.id}`);
-        const fileName = toUniqueCaseInsensitiveFileName(
-          usedSidecarNames,
-          sidecarBaseName,
-          ".hero"
-        );
-        updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
-        await writeJsonFile(
-          path.join(exportDir, fileName),
-          toHeroSidecarPayload(group.hero, group.entries, includeMedia)
-        );
-        incrementStat("heroFiles");
-        incrementProgress();
-        heroFiles += 1;
-      }
-
-      const result: LibraryExportPackageResult = {
-        exportDir,
-        heroFiles,
-        roundFiles,
-        videoFiles,
-        funscriptFiles,
-        exportedRounds: rounds.length,
-        includeMedia,
+      return {
+        round: entry.round,
+        resource: entry.resource,
+        materialized: {
+          canonicalVideoKey: canonicalizeResourceKey(entry.resource.videoUri),
+          video: video ?? null,
+          funscript: funscriptKey ? (funscriptOutputByKey.get(funscriptKey) ?? null) : null,
+        },
       };
+    });
 
-      exportStatus = {
-        state: "done",
-        startedAt: exportStatus.startedAt,
-        finishedAt: new Date().toISOString(),
-        lastMessage: "Export complete.",
-        progress: { completed: exportStatus.progress.total, total: exportStatus.progress.total },
-        stats: { ...exportStatus.stats, heroFiles, roundFiles, videoFiles, funscriptFiles },
-      };
+    let roundFiles = 0;
+    let heroFiles = 0;
+    const heroGroups = new Map<string, { hero: ExportableHero; entries: RoundResourceEntry[] }>();
 
-      return result;
-    } else {
-      setProgress({ completed: 0, total: rounds.length });
-
-      const standaloneRounds = rounds.filter((round) => !round.heroId || !round.hero);
-      const heroGroups = new Map<string, { hero: ExportableHero; rounds: ExportableRound[] }>();
-
-      for (const round of rounds) {
-        if (!round.heroId || !round.hero) continue;
-        const existing = heroGroups.get(round.heroId);
+    for (const entry of materializedEntries) {
+      if (entry.round.heroId && entry.round.hero) {
+        const key = entry.round.heroId;
+        const existing = heroGroups.get(key);
         if (existing) {
-          existing.rounds.push(round);
-          continue;
+          existing.entries.push(entry);
+        } else {
+          heroGroups.set(key, { hero: entry.round.hero, entries: [entry] });
         }
-        heroGroups.set(round.heroId, { hero: round.hero, rounds: [round] });
+        continue;
       }
 
-      let roundFiles = 0;
-      for (const round of standaloneRounds) {
-        const sidecar = ZRoundSidecar.parse({
-          name: round.name,
-          author: round.author ?? undefined,
-          description: round.description ?? undefined,
-          bpm: round.bpm ?? undefined,
-          difficulty: round.difficulty ?? undefined,
-          phash: round.phash ?? undefined,
-          startTime: round.startTime ?? undefined,
-          endTime: round.endTime ?? undefined,
-          type: round.type,
-          resources: [],
-        });
-        const fileName = toUniqueCaseInsensitiveFileName(
-          usedSidecarNames,
-          sanitizeFileSystemName(round.name, `round__${round.id}`),
-          ".round"
-        );
-        updateStatus({ lastMessage: `Writing ${fileName}...` });
-        await writeJsonFile(path.join(exportDir, fileName), sidecar);
-        incrementStat("roundFiles");
-        incrementProgress();
-        roundFiles += 1;
-      }
-
-      let heroFiles = 0;
-      for (const [, entry] of heroGroups) {
-        const sidecar = ZHeroSidecar.parse({
-          name: entry.hero.name,
-          author: entry.hero.author ?? undefined,
-          description: entry.hero.description ?? undefined,
-          phash: entry.hero.phash ?? undefined,
-          rounds: entry.rounds.map((round) => ({
-            name: round.name,
-            author: round.author ?? undefined,
-            description: round.description ?? undefined,
-            bpm: round.bpm ?? undefined,
-            difficulty: round.difficulty ?? undefined,
-            phash: round.phash ?? undefined,
-            startTime: round.startTime ?? undefined,
-            endTime: round.endTime ?? undefined,
-            type: round.type,
-            resources: [],
-          })),
-        });
-        const fileName = toUniqueCaseInsensitiveFileName(
-          usedSidecarNames,
-          sanitizeFileSystemName(entry.hero.name, `hero__${entry.hero.id}`),
-          ".hero"
-        );
-        updateStatus({ lastMessage: `Writing ${fileName}...` });
-        await writeJsonFile(path.join(exportDir, fileName), sidecar);
-        incrementStat("heroFiles");
-        incrementProgress();
-        heroFiles += 1;
-      }
-
-      const result: LibraryExportPackageResult = {
-        exportDir,
-        heroFiles,
-        roundFiles,
-        videoFiles: 0,
-        funscriptFiles: 0,
-        exportedRounds: rounds.length,
-        includeMedia: false,
-      };
-
-      exportStatus = {
-        state: "done",
-        startedAt: exportStatus.startedAt,
-        finishedAt: new Date().toISOString(),
-        lastMessage: "Export complete.",
-        progress: { completed: exportStatus.progress.total, total: exportStatus.progress.total },
-        stats: { ...exportStatus.stats, heroFiles, roundFiles, videoFiles: 0, funscriptFiles: 0 },
-      };
-
-      return result;
+      const sidecarBaseName = sanitizeFileSystemName(
+        entry.round.name,
+        `round__${entry.round.id}`
+      );
+      const fileName = toUniqueCaseInsensitiveFileName(
+        usedSidecarNames,
+        sidecarBaseName,
+        ".round"
+      );
+      updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
+      await writeJsonFile(
+        path.join(exportDir, fileName),
+        toRoundSidecarPayload(entry, includeMedia)
+      );
+      incrementStat("roundFiles");
+      incrementProgress();
+      roundFiles += 1;
     }
+
+    const sortedHeroGroups = Array.from(heroGroups.values()).sort((a, b) => {
+      const byName = a.hero.name.localeCompare(b.hero.name, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+      if (byName !== 0) return byName;
+      return a.hero.id.localeCompare(b.hero.id);
+    });
+
+    for (const group of sortedHeroGroups) {
+      const sidecarBaseName = sanitizeFileSystemName(group.hero.name, `hero__${group.hero.id}`);
+      const fileName = toUniqueCaseInsensitiveFileName(
+        usedSidecarNames,
+        sidecarBaseName,
+        ".hero"
+      );
+      updateStatus({ lastMessage: `Writing sidecar ${fileName}...` });
+      await writeJsonFile(
+        path.join(exportDir, fileName),
+        toHeroSidecarPayload(group.hero, group.entries, includeMedia)
+      );
+      incrementStat("heroFiles");
+      incrementProgress();
+      heroFiles += 1;
+    }
+
+    const result: LibraryExportPackageResult = {
+      exportDir,
+      heroFiles,
+      roundFiles,
+      videoFiles,
+      funscriptFiles,
+      exportedRounds: rounds.length,
+      includeMedia,
+    };
+
+    exportStatus = {
+      state: "done",
+      startedAt: exportStatus.startedAt,
+      finishedAt: new Date().toISOString(),
+      lastMessage: "Export complete.",
+      progress: { completed: exportStatus.progress.total, total: exportStatus.progress.total },
+      stats: { ...exportStatus.stats, heroFiles, roundFiles, videoFiles, funscriptFiles },
+    };
+
+    return await packResultAsFpack(result, input.asFpack ?? false);
   } catch (error) {
     exportStatus = {
       state: "error",

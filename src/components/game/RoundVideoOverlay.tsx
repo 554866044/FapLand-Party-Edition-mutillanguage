@@ -54,6 +54,7 @@ import {
 import { formatDurationLabel } from "../../utils/duration";
 import { isGameDevelopmentMode } from "../../utils/devFeatures";
 import { useSfwMode } from "../../hooks/useSfwMode";
+import { SfwOneTimeOverridePrompt } from "../SfwGuard";
 import {
   extractBeatbarMotionEvents,
   getAntiPerkSequenceDefinition,
@@ -154,6 +155,24 @@ function teardownVideoElement(video: HTMLVideoElement | null) {
   video.pause();
   video.removeAttribute("src");
   video.load();
+}
+
+function isIgnorableVideoPlayError(error: unknown): boolean {
+  if (!(error instanceof DOMException) && !(error instanceof Error)) {
+    return false;
+  }
+
+  const name = "name" in error && typeof error.name === "string" ? error.name : "";
+  const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+  return (
+    name === "AbortError"
+    || message.includes("interrupted by a call to pause")
+    || message.includes("interrupted by a new load request")
+  );
+}
+
+function isWebsiteVideoProxySrc(uri: string | null | undefined): boolean {
+  return typeof uri === "string" && uri.startsWith("app://external/web-url?");
 }
 
 function AntiPerkBeatbar({
@@ -372,6 +391,7 @@ export function RoundVideoOverlay({
   const [showProgressBarAlways, setShowProgressBarAlways] = useState(initialShowProgressBarAlways);
   const [showAntiPerkBeatbar, setShowAntiPerkBeatbar] = useState(initialShowAntiPerkBeatbar);
   const [isRemoteVideoLoading, setIsRemoteVideoLoading] = useState(false);
+  const [allowUnsafeMediaOnce, setAllowUnsafeMediaOnce] = useState(false);
   const [pendingCumRoundSummary, setPendingCumRoundSummary] =
     useState<CompletedRoundSummary | null>(null);
   const [activeAntiPerkSequence, setActiveAntiPerkSequence] =
@@ -395,6 +415,10 @@ export function RoundVideoOverlay({
   useEffect(() => {
     onCompleteBoardSequenceRef.current = onCompleteBoardSequence;
   }, [onCompleteBoardSequence]);
+
+  useEffect(() => {
+    setAllowUnsafeMediaOnce(false);
+  }, [activeRound?.fieldId, activeRound?.roundId]);
 
   const resolvedRound = useMemo(() => {
     if (!activeRound) return null;
@@ -527,6 +551,9 @@ export function RoundVideoOverlay({
     : undefined;
   const resolvedIntermediaryVideoSrc =
     segment.kind === "intermediary" ? getVideoSrc(segment.trigger.resource.videoUri) : undefined;
+  const activeResolvedVideoSrc = activeSegmentResource
+    ? getVideoSrc(activeSegmentResource.videoUri) ?? null
+    : null;
   const isRemoteVideoUri = useMemo(
     () => Boolean(activeVideoUri && /^https?:\/\//i.test(activeVideoUri)),
     [activeVideoUri]
@@ -565,6 +592,32 @@ export function RoundVideoOverlay({
       })),
     [intermediaryResourcePool]
   );
+
+  useEffect(() => {
+    const originalUri = activeSegmentResource?.videoUri;
+    if (!originalUri) return;
+    if (!isWebsiteVideoProxySrc(activeResolvedVideoSrc)) return;
+
+    let cancelled = false;
+    let timeoutId: number | null = null;
+
+    const pollForCachedPlayback = async () => {
+      const resolved = await ensurePlayableVideo(originalUri);
+      if (cancelled || resolved) return;
+      timeoutId = window.setTimeout(() => {
+        void pollForCachedPlayback();
+      }, 2500);
+    };
+
+    void pollForCachedPlayback();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeResolvedVideoSrc, activeSegmentResource?.videoUri, ensurePlayableVideo]);
 
   const clearCountdownTimer = useCallback(() => {
     if (countdownTimerRef.current !== null) {
@@ -974,6 +1027,9 @@ export function RoundVideoOverlay({
     }
     if (!video.paused) return;
     void video.play().catch((error) => {
+      if (isIgnorableVideoPlayError(error)) {
+        return;
+      }
       console.warn("Video autoplay failed", error);
     });
   }, [isIntermediaryScreenActive, isWaitingForHandyStart, segment.kind]);
@@ -2481,6 +2537,7 @@ export function RoundVideoOverlay({
   const hasLoadingMedia = loadingMedia.length > 0;
   const activeLoadingMediaIndex = hasLoadingMedia ? loadingMediaIndex % loadingMedia.length : -1;
   const activeLoadingMedia = hasLoadingMedia ? loadingMedia[activeLoadingMediaIndex] : null;
+  const unsafeMediaUnlocked = !sfwMode || allowUnsafeMediaOnce;
   const shouldShowManualBeatbar =
     showAntiPerkBeatbar &&
     !handyConnected &&
@@ -2792,7 +2849,7 @@ export function RoundVideoOverlay({
         <div
           className={`relative h-full w-full ${isOnlyNoRest ? "bg-transparent" : "bg-[#060410]"}`}
         >
-          {resolvedMainResource && !sfwMode && (
+          {resolvedMainResource && unsafeMediaUnlocked && (
             <video
               ref={mainVideoRef}
               className={`absolute inset-0 h-full w-full object-contain ${segment.kind === "main" && !isIntermediaryScreenActive ? "opacity-100" : "pointer-events-none"}`}
@@ -2808,7 +2865,7 @@ export function RoundVideoOverlay({
               src={resolvedMainVideoSrc}
               onContextMenu={(event) => event.preventDefault()}
               onError={() => {
-                setFailedVideoUri(resolvedMainResource.videoUri);
+                setFailedVideoUri(mainVideoRef.current?.currentSrc ?? resolvedMainResource.videoUri);
                 void handleVideoError(resolvedMainResource.videoUri);
               }}
               onEmptied={() => {
@@ -2898,7 +2955,7 @@ export function RoundVideoOverlay({
             </video>
           )}
 
-          {segment.kind === "intermediary" && !sfwMode && (
+          {segment.kind === "intermediary" && unsafeMediaUnlocked && (
             <video
               ref={intermediaryVideoRef}
               className={`absolute inset-0 h-full w-full object-contain ${!isIntermediaryScreenActive ? "opacity-100" : "opacity-0 pointer-events-none"}`}
@@ -2910,7 +2967,9 @@ export function RoundVideoOverlay({
               src={resolvedIntermediaryVideoSrc}
               onContextMenu={(event) => event.preventDefault()}
               onError={() => {
-                setFailedVideoUri(segment.trigger.resource.videoUri);
+                setFailedVideoUri(
+                  intermediaryVideoRef.current?.currentSrc ?? segment.trigger.resource.videoUri
+                );
                 void handleVideoError(segment.trigger.resource.videoUri);
               }}
               onEmptied={() => {
@@ -2964,26 +3023,12 @@ export function RoundVideoOverlay({
             </video>
           )}
 
-          {sfwMode && (resolvedMainResource || segment.kind === "intermediary") && (
-            <div className="absolute inset-0 z-[60] flex items-center justify-center">
-              <div className="flex flex-col items-center gap-2 rounded-xl border border-zinc-700/50 bg-zinc-800/90 px-6 py-4 shadow-lg">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 text-zinc-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-                  />
-                </svg>
-                <span className="text-sm font-medium text-zinc-400">Safe Mode Enabled</span>
-              </div>
-            </div>
+          {!unsafeMediaUnlocked && (resolvedMainResource || segment.kind === "intermediary") && (
+            <SfwOneTimeOverridePrompt
+              confirmLabel="Show Video Once"
+              mediaLabel="video"
+              onConfirm={() => setAllowUnsafeMediaOnce(true)}
+            />
           )}
 
           {showRemoteLoadingIndicator && (
@@ -2998,9 +3043,11 @@ export function RoundVideoOverlay({
             <div className="pointer-events-none absolute inset-0 z-[45] flex items-center justify-center">
               <div className="rounded-xl border border-red-400/50 bg-black/70 px-6 py-4 backdrop-blur-sm">
                 <p className="text-center text-sm text-red-200">
-                  {isLocalVideoUriForFallback(failedVideoUri)
-                    ? "Local media file not found"
-                    : "Remote media file not found"}
+                  {isWebsiteVideoProxySrc(failedVideoUri)
+                    ? "Website stream playback failed"
+                    : isLocalVideoUriForFallback(failedVideoUri)
+                      ? "Local media file not found"
+                      : "Remote media file not found"}
                 </p>
               </div>
             </div>
@@ -3129,26 +3176,12 @@ export function RoundVideoOverlay({
                   )}
                 </>
               )}
-              {activeLoadingMedia && sfwMode && (
-                <div className="absolute inset-0 z-[60] flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-2 rounded-xl border border-zinc-700/50 bg-zinc-800/90 px-6 py-4 shadow-lg">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-6 w-6 text-zinc-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-                      />
-                    </svg>
-                    <span className="text-sm font-medium text-zinc-400">Safe Mode Enabled</span>
-                  </div>
-                </div>
+              {activeLoadingMedia && !unsafeMediaUnlocked && (
+                <SfwOneTimeOverridePrompt
+                  confirmLabel="Show Video Once"
+                  mediaLabel="video"
+                  onConfirm={() => setAllowUnsafeMediaOnce(true)}
+                />
               )}
               {!boardSequence && (
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(190,24,93,0.12),rgba(8,5,18,0.82))]" />
@@ -3186,7 +3219,7 @@ export function RoundVideoOverlay({
                   <span className="text-fuchsia-200/60">Prompt:</span>{" "}
                   <span className="text-zinc-100/90">{booruSearchPrompt}</span>
                 </div>
-                {activeLoadingMedia && !sfwMode && (
+                {activeLoadingMedia && unsafeMediaUnlocked && (
                   <div className="flex items-center gap-2 pl-1">
                     <div className="h-1.5 w-1.5 rounded-full bg-fuchsia-400/60 shadow-[0_0_8px_rgba(217,70,239,0.5)]" />
                     <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-fuchsia-200/55">

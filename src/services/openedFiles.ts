@@ -1,7 +1,9 @@
 import { db, type InstallFolderScanResult } from "./db";
 import { playlists, type PlaylistImportResult } from "./playlists";
+import { security } from "./security";
+import { reviewInstallSidecarTrust } from "../components/InstallSidecarTrustModalHost";
 
-export type OpenedFileKind = "sidecar" | "playlist" | "unsupported";
+export type OpenedFileKind = "sidecar" | "playlist" | "unsupported" | "cancelled";
 
 export type OpenedFileImportResult =
   | {
@@ -16,6 +18,10 @@ export type OpenedFileImportResult =
     }
   | {
       kind: "unsupported";
+      filePath: string;
+    }
+  | {
+      kind: "cancelled";
       filePath: string;
     };
 
@@ -34,10 +40,23 @@ export async function importOpenedFile(filePath: string): Promise<OpenedFileImpo
   const kind = getOpenedFileKind(filePath);
 
   if (kind === "sidecar") {
+    const analysis = await db.install.inspectSidecarFile(filePath);
+    const { securityMode } = await security.listTrustedSites();
+    const review = securityMode === "prompt"
+      ? await reviewInstallSidecarTrust(analysis)
+      : { action: "import" as const, trustedBaseDomains: [] };
+    if (review.action === "cancel") {
+      return {
+        kind: "cancelled",
+        filePath,
+      };
+    }
+
+    await Promise.all(review.trustedBaseDomains.map((baseDomain) => security.addTrustedSite(baseDomain)));
     return {
       kind,
       filePath,
-      result: await db.install.importSidecarFile(filePath),
+      result: await db.install.importSidecarFile(filePath, review.trustedBaseDomains),
     };
   }
 

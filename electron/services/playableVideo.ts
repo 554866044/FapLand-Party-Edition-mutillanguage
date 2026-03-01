@@ -6,6 +6,12 @@ import { app } from "electron";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
 import { fromLocalMediaUri, isLocalMediaUri, toLocalMediaUri } from "./localMedia";
+import {
+  buildWebsiteVideoProxyUri,
+  getCachedWebsiteVideoLocalPath,
+  isWebsiteVideoResolvableUri,
+  warmWebsiteVideoCache,
+} from "./webVideo";
 
 export type ResolvePlayableVideoUriResult = {
   videoUri: string;
@@ -31,6 +37,11 @@ export function __resetPlayableVideoCachesForTests(): void {
   resolvedBySourceFingerprint.clear();
   inFlightBySourceFingerprint.clear();
   inFlightByCacheKey.clear();
+}
+
+export async function clearPlayableVideoCache(): Promise<void> {
+  __resetPlayableVideoCachesForTests();
+  await fs.rm(resolveCacheRootPath(), { recursive: true, force: true });
 }
 
 export function isLocalPlayableVideoUri(videoUri: string): boolean {
@@ -59,6 +70,15 @@ async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isNonEmptyFile(filePath: string): Promise<boolean> {
+  try {
+    const stats = await fs.stat(filePath);
+    return stats.isFile() && stats.size > 0;
   } catch {
     return false;
   }
@@ -158,6 +178,31 @@ async function transcodeToPlayableMp4(input: {
 }
 
 export async function resolvePlayableVideoUri(videoUri: string): Promise<ResolvePlayableVideoUriResult> {
+  if (isWebsiteVideoResolvableUri(videoUri)) {
+    const cachedLocalPath = await getCachedWebsiteVideoLocalPath(videoUri);
+    if (cachedLocalPath) {
+      const resolved = await resolvePlayableVideoUri(toLocalMediaUri(cachedLocalPath));
+      return {
+        ...resolved,
+        cacheHit: true,
+      };
+    }
+
+    const pending = warmWebsiteVideoCache(videoUri);
+    if (pending) {
+      void pending.catch((error) => {
+        console.warn("Website video cache warm failed", error);
+      });
+    }
+    return {
+      videoUri: videoUri.startsWith("http://") || videoUri.startsWith("https://")
+        ? buildWebsiteVideoProxyUri(videoUri)
+        : videoUri,
+      transcoded: false,
+      cacheHit: false,
+    };
+  }
+
   if (!isLocalPlayableVideoUri(videoUri)) {
     return {
       videoUri,
@@ -203,15 +248,15 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
     }
 
     const cacheRootPath = await ensureCacheRootPath();
-  const cacheKey = buildTranscodeCacheKey({
-    normalizedPath,
-    fileSizeBytes: sourceStat.size,
-    modifiedMs: Math.floor(sourceStat.mtimeMs),
-    ffmpegVersion: binaries.ffmpegVersion,
-  });
+    const cacheKey = buildTranscodeCacheKey({
+      normalizedPath,
+      fileSizeBytes: sourceStat.size,
+      modifiedMs: Math.floor(sourceStat.mtimeMs),
+      ffmpegVersion: binaries.ffmpegVersion,
+    });
     const outputPath = path.join(cacheRootPath, `${cacheKey}.mp4`);
 
-    if (await fileExists(outputPath)) {
+    if (await isNonEmptyFile(outputPath)) {
       const cachedResult = {
         videoUri: toLocalMediaUri(outputPath),
         transcoded: true,
@@ -219,6 +264,10 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
       } satisfies ResolvePlayableVideoUriResult;
       resolvedBySourceFingerprint.set(sourceFingerprint, cachedResult);
       return cachedResult;
+    }
+
+    if (await fileExists(outputPath)) {
+      await fs.rm(outputPath, { force: true });
     }
 
     const existingInFlight = inFlightByCacheKey.get(cacheKey);
@@ -235,7 +284,8 @@ export async function resolvePlayableVideoUri(videoUri: string): Promise<Resolve
         outputPath,
       });
 
-      if (!(await fileExists(outputPath))) {
+      if (!(await isNonEmptyFile(outputPath))) {
+        await fs.rm(outputPath, { force: true });
         throw new Error("Transcode did not produce an output file.");
       }
 

@@ -43,11 +43,13 @@ export function PlaylistPackExportDialog({
   playlistId: string;
   playlistName: string;
   onClose: () => void;
-  onSubmit: (input: { compressionMode: CompressionMode; compressionStrength: number }) => Promise<boolean>;
+  onSubmit: (input: { compressionMode: CompressionMode; compressionStrength: number; includeMedia: boolean; asFpack: boolean }) => Promise<boolean>;
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [compressionMode, setCompressionMode] = useState<CompressionMode | null>(null);
   const [compressionStrength, setCompressionStrength] = useState(80);
+  const [includeMedia, setIncludeMedia] = useState(true);
+  const [asFpack, setAsFpack] = useState(false);
   const [analysis, setAnalysis] = useState<PlaylistExportPackageAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +73,7 @@ export function PlaylistPackExportDialog({
           playlistId,
           compressionMode: compressionMode ?? undefined,
           compressionStrength,
+          includeMedia,
         })
         .then((result) => {
           if (cancelled) return;
@@ -96,7 +99,7 @@ export function PlaylistPackExportDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [playlistId, compressionMode, compressionStrength]);
+  }, [playlistId, compressionMode, compressionStrength, includeMedia]);
 
   const canEnableCompression = analysis?.compression.supported ?? false;
   const effectiveMode: CompressionMode = compressionMode ?? analysis?.compression.defaultMode ?? "copy";
@@ -116,6 +119,8 @@ export function PlaylistPackExportDialog({
       const started = await onSubmit({
         compressionMode: effectiveMode,
         compressionStrength,
+        includeMedia,
+        asFpack,
       });
       if (started) {
         onClose();
@@ -151,11 +156,10 @@ export function PlaylistPackExportDialog({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${
-                submitting
+              className={`rounded-xl border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] ${submitting
                   ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                   : "border-slate-600/80 bg-black/30 text-slate-300 transition-all duration-200 hover:border-cyan-200/60 hover:text-white"
-              }`}
+                }`}
             >
               Close
             </button>
@@ -165,85 +169,120 @@ export function PlaylistPackExportDialog({
             <div className="space-y-4">
               <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
                 <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
-                  Compression
+                  Package Options
                 </p>
-                <div className="mt-4 grid gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      userTouchedModeRef.current = true;
-                      setCompressionMode("copy");
-                    }}
-                    className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
-                      effectiveMode === "copy"
-                        ? "border-emerald-300/65 bg-emerald-500/12"
-                        : "border-slate-700/85 bg-slate-900/75 hover:border-emerald-300/30"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-100/80">
-                          Fastest
-                        </p>
-                        <h3 className="mt-2 text-lg font-bold text-white">Copy original videos</h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-300">
-                          Export the pack without reencoding. File size stays close to the original sources.
-                        </p>
-                      </div>
-                      <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "copy" ? "border-emerald-200/70 bg-emerald-400/20 text-emerald-50" : "border-slate-600 text-slate-300"}`}>
-                        {effectiveMode === "copy" ? "Selected" : "Select"}
-                      </div>
+                <div className="mt-4 flex flex-col gap-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
+                      checked={includeMedia}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setIncludeMedia(next);
+                        if (!next && asFpack === false) setAsFpack(true);
+                        else if (next && asFpack === true) setAsFpack(false);
+                      }}
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-white">Include Media Files</span>
+                      <p className="text-xs text-slate-400">If unchecked, only text files and configurations are exported.</p>
                     </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canEnableCompression) return;
-                      userTouchedModeRef.current = true;
-                      setCompressionMode("av1");
-                    }}
-                    disabled={!canEnableCompression}
-                    className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${
-                      effectiveMode === "av1"
-                        ? "border-cyan-200/70 bg-cyan-400/14 shadow-[0_0_30px_rgba(34,211,238,0.12)]"
-                        : canEnableCompression
-                          ? "border-slate-700/85 bg-slate-900/75 hover:border-cyan-300/35"
-                          : "cursor-not-allowed border-slate-800 bg-slate-900/55 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-cyan-100/85">
-                            Smallest Packs
-                          </p>
-                          {analysis?.compression.encoderName && (
-                            <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                              analysis.compression.encoderKind === "hardware"
-                                ? "border-emerald-300/55 bg-emerald-500/15 text-emerald-100"
-                                : "border-amber-300/55 bg-amber-500/15 text-amber-100"
-                            }`}>
-                              {analysis.compression.encoderKind === "hardware" ? "Hardware" : "Software"} {analysis.compression.encoderName}
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="mt-2 text-lg font-bold text-white">Compress non-AV1 videos to AV1</h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-300">
-                          Skip videos that are already AV1 and recompress the rest to reduce sharing size.
-                        </p>
-                      </div>
-                      <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
-                        effectiveMode === "av1" ? "border-cyan-100/75 bg-cyan-300/20 text-cyan-50" : "border-slate-600 text-slate-300"
-                      }`}>
-                        {effectiveMode === "av1" ? "Selected" : canEnableCompression ? "Select" : "Unavailable"}
-                      </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-5 w-5 rounded border-slate-700 bg-black/50 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-slate-950"
+                      checked={asFpack}
+                      onChange={(e) => setAsFpack(e.target.checked)}
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-white">Pack into .fpack File</span>
+                      <p className="text-xs text-slate-400">Packs all exported files into a single ZIP archive (.fpack).</p>
                     </div>
-                  </button>
+                  </label>
                 </div>
               </div>
 
-              {effectiveMode === "av1" && (
+              {includeMedia && (
+                <div className="rounded-[1.5rem] border border-cyan-300/18 bg-cyan-500/8 p-5">
+                  <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-cyan-100/85">
+                    Compression
+                  </p>
+                  <div className="mt-4 grid gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        userTouchedModeRef.current = true;
+                        setCompressionMode("copy");
+                      }}
+                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${effectiveMode === "copy"
+                          ? "border-emerald-300/65 bg-emerald-500/12"
+                          : "border-slate-700/85 bg-slate-900/75 hover:border-emerald-300/30"
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-emerald-100/80">
+                            Fastest
+                          </p>
+                          <h3 className="mt-2 text-lg font-bold text-white">Copy original videos</h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-300">
+                            Export the pack without reencoding. File size stays close to the original sources.
+                          </p>
+                        </div>
+                        <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "copy" ? "border-emerald-200/70 bg-emerald-400/20 text-emerald-50" : "border-slate-600 text-slate-300"}`}>
+                          {effectiveMode === "copy" ? "Selected" : "Select"}
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!canEnableCompression) return;
+                        userTouchedModeRef.current = true;
+                        setCompressionMode("av1");
+                      }}
+                      disabled={!canEnableCompression}
+                      className={`rounded-[1.25rem] border p-4 text-left transition-all duration-200 ${effectiveMode === "av1"
+                          ? "border-cyan-200/70 bg-cyan-400/14 shadow-[0_0_30px_rgba(34,211,238,0.12)]"
+                          : canEnableCompression
+                            ? "border-slate-700/85 bg-slate-900/75 hover:border-cyan-300/35"
+                            : "cursor-not-allowed border-slate-800 bg-slate-900/55 opacity-60"
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-cyan-100/85">
+                              Smallest Packs
+                            </p>
+                            {analysis?.compression.encoderName && (
+                              <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${analysis.compression.encoderKind === "hardware"
+                                  ? "border-emerald-300/55 bg-emerald-500/15 text-emerald-100"
+                                  : "border-amber-300/55 bg-amber-500/15 text-amber-100"
+                                }`}>
+                                {analysis.compression.encoderKind === "hardware" ? "Hardware" : "Software"} {analysis.compression.encoderName}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="mt-2 text-lg font-bold text-white">Compress non-AV1 videos to AV1</h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-300">
+                            Skip videos that are already AV1 and recompress the rest to reduce sharing size.
+                          </p>
+                        </div>
+                        <div className={`mt-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${effectiveMode === "av1" ? "border-cyan-100/75 bg-cyan-300/20 text-cyan-50" : "border-slate-600 text-slate-300"
+                          }`}>
+                          {effectiveMode === "av1" ? "Selected" : canEnableCompression ? "Select" : "Unavailable"}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {includeMedia && effectiveMode === "av1" && (
                 <div className="rounded-[1.5rem] border border-slate-700/80 bg-black/25 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -278,13 +317,12 @@ export function PlaylistPackExportDialog({
               )}
 
               {(error || analysis?.compression.warning) && (
-                <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${
-                  error
+                <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${error
                     ? "border-rose-300/35 bg-rose-500/15 text-rose-100"
                     : analysis?.compression.encoderKind === "software"
                       ? "border-amber-300/35 bg-amber-500/15 text-amber-100"
                       : "border-slate-700/70 bg-slate-900/60 text-slate-200"
-                }`}>
+                  }`}>
                   {error ?? analysis?.compression.warning}
                 </div>
               )}
@@ -312,13 +350,13 @@ export function PlaylistPackExportDialog({
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
                       Expected Savings
                     </p>
-                    <p className="mt-2 text-xl font-bold text-white">{savingsLabel}</p>
+                    <p className="mt-2 text-xl font-bold text-white">{!includeMedia ? "N/A" : savingsLabel}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.2em] text-slate-400">
                       Compression Time
                     </p>
-                    <p className="mt-2 text-xl font-bold text-white">{timeEstimateLabel}</p>
+                    <p className="mt-2 text-xl font-bold text-white">{!includeMedia ? "0 min" : timeEstimateLabel}</p>
                   </div>
                 </div>
                 {analysis?.estimate.approximate && (
@@ -357,9 +395,13 @@ export function PlaylistPackExportDialog({
             <p className="text-sm text-slate-400">
               {analyzing
                 ? "Refreshing export analysis..."
-                : effectiveMode === "av1"
-                  ? "The folder picker opens next. Export starts after you choose the destination."
-                  : "The export will copy the current source videos as-is."}
+                : (!includeMedia && asFpack)
+                  ? "The export will skip media files and package into a single .fpack file."
+                  : (!includeMedia)
+                    ? "The export will skip media files and save to a folder."
+                    : effectiveMode === "av1"
+                      ? "The folder picker opens next. Export starts after you choose the destination."
+                      : "The export will copy the current source videos as-is."}
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -375,12 +417,11 @@ export function PlaylistPackExportDialog({
                 onClick={() => {
                   void handleSubmit();
                 }}
-                disabled={analyzing || submitting || !analysis || (effectiveMode === "av1" && !canEnableCompression)}
-                className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${
-                  analyzing || submitting || !analysis || (effectiveMode === "av1" && !canEnableCompression)
+                disabled={analyzing || submitting || !analysis || (includeMedia && effectiveMode === "av1" && !canEnableCompression)}
+                className={`rounded-xl border px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.22em] transition-all duration-200 ${analyzing || submitting || !analysis || (includeMedia && effectiveMode === "av1" && !canEnableCompression)
                     ? "cursor-not-allowed border-slate-700 bg-slate-900 text-slate-500"
                     : "border-cyan-300/60 bg-cyan-500/22 text-cyan-100 hover:border-cyan-200/85 hover:bg-cyan-500/36"
-                }`}
+                  }`}
                 data-controller-focus-id="playlist-pack-export-submit"
                 data-controller-initial="true"
               >

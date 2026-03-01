@@ -1,9 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { db, type InstalledRound } from "../../services/db";
+import { trpc } from "../../services/trpc";
 import { playHoverSound, playSelectSound } from "../../utils/audio";
+import {
+  DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
+  INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
+  normalizeInstallWebFunscriptUrlEnabled,
+} from "../../constants/experimentalFeatures";
 import { ConverterSelectionCard } from "./ConverterSelectionCard";
 
-type SourceSection = "round" | "hero" | "file";
+type SourceSection = "round" | "hero" | "file" | "url";
 
 type HeroSummary = {
   id: string;
@@ -20,14 +26,42 @@ type ConverterSourcePickerProps = {
   onSelectHero: (heroId: string) => void;
   onSelectLocalVideo: () => void;
   onSelectLocalFunscript: () => void;
+  onSelectWebsiteSource: (videoUri: string, funscriptUri: string | null) => void;
 };
 
+function normalizeHttpUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value.trim());
+    if (!(parsed.protocol === "http:" || parsed.protocol === "https:")) {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React.memo(
-  ({ section, onSelectRound, onSelectHero, onSelectLocalVideo, onSelectLocalFunscript }) => {
+  ({
+    section,
+    onSelectRound,
+    onSelectHero,
+    onSelectLocalVideo,
+    onSelectLocalFunscript,
+    onSelectWebsiteSource,
+  }) => {
     const [rounds, setRounds] = useState<InstalledRound[]>([]);
     const [heroes, setHeroes] = useState<HeroSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [websiteVideoUrl, setWebsiteVideoUrl] = useState("");
+    const [websiteFunscriptUrl, setWebsiteFunscriptUrl] = useState("");
+    const [websiteFunscriptFileUri, setWebsiteFunscriptFileUri] = useState<string | null>(null);
+    const [websiteFunscriptFileLabel, setWebsiteFunscriptFileLabel] = useState<string | null>(null);
+    const [websitePickerError, setWebsitePickerError] = useState<string | null>(null);
+    const [installWebFunscriptUrlEnabled, setInstallWebFunscriptUrlEnabled] = useState(
+      DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED
+    );
 
     useEffect(() => {
       let mounted = true;
@@ -35,12 +69,17 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       const loadData = async () => {
         setIsLoading(true);
         try {
-          const [allRounds, allHeroes] = await Promise.all([
+          const [allRounds, allHeroes, rawInstallWebFunscriptUrlEnabled] = await Promise.all([
             db.round.findInstalled(true),
             db.hero.findMany(),
+            trpc.store.get.query({ key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY }),
           ]);
 
           if (!mounted) return;
+
+          setInstallWebFunscriptUrlEnabled(
+            normalizeInstallWebFunscriptUrlEnabled(rawInstallWebFunscriptUrlEnabled)
+          );
 
           const standaloneRounds = allRounds.filter(
             (round) => !round.heroId && round.resources.length > 0
@@ -155,6 +194,125 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
       );
     }
 
+    if (section === "url") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-violet-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl">
+            <h3 className="text-lg font-bold text-violet-100">Website Video URL</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Paste a supported website video URL and jump straight into the converter. The app will cache the video first, then you can start editing.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+                  Video URL
+                </span>
+                <input
+                  type="url"
+                  value={websiteVideoUrl}
+                  onChange={(event) => {
+                    setWebsiteVideoUrl(event.target.value);
+                    setWebsitePickerError(null);
+                  }}
+                  placeholder="https://www.pornhub.com/view_video.php?viewkey=..."
+                  className="w-full rounded-xl border border-violet-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-violet-200/75"
+                />
+              </label>
+
+              {installWebFunscriptUrlEnabled && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+                    Funscript URL
+                  </span>
+                  <input
+                    type="url"
+                    value={websiteFunscriptUrl}
+                    onChange={(event) => {
+                      setWebsiteFunscriptUrl(event.target.value);
+                      setWebsiteFunscriptFileUri(null);
+                      setWebsiteFunscriptFileLabel(null);
+                      setWebsitePickerError(null);
+                    }}
+                    placeholder="Optional: https://example.com/video.funscript"
+                    className="w-full rounded-xl border border-cyan-300/30 bg-black/45 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-cyan-200/75"
+                  />
+                </label>
+              )}
+            </div>
+
+            {websitePickerError ? (
+              <div className="mt-3 rounded-xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                {websitePickerError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  void window.electronAPI.dialog.selectConverterFunscriptFile().then((filePath) => {
+                    if (!filePath) return;
+                    const converted = window.electronAPI.file.convertFileSrc(filePath);
+                    setWebsiteFunscriptFileUri(converted);
+                    setWebsiteFunscriptFileLabel(filePath.split(/[/\\]/).pop() ?? filePath);
+                    setWebsiteFunscriptUrl("");
+                    setWebsitePickerError(null);
+                  });
+                }}
+                className="rounded-xl border border-cyan-300/60 bg-cyan-500/25 px-5 py-3 text-sm font-semibold text-cyan-100 transition-all duration-200 hover:border-cyan-200/80 hover:bg-cyan-500/40"
+              >
+                Select Local Funscript
+              </button>
+              <button
+                type="button"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSelectSound();
+                  const normalizedVideoUrl = normalizeHttpUrl(websiteVideoUrl);
+                  if (!normalizedVideoUrl) {
+                    setWebsitePickerError("Enter a valid http(s) video URL.");
+                    return;
+                  }
+
+                  const trimmedFunscriptUrl = websiteFunscriptUrl.trim();
+                  const normalizedFunscriptUrl = trimmedFunscriptUrl.length > 0
+                    ? normalizeHttpUrl(trimmedFunscriptUrl)
+                    : null;
+                  if (trimmedFunscriptUrl.length > 0 && !normalizedFunscriptUrl) {
+                    setWebsitePickerError("Funscript URL must also be a valid http(s) URL.");
+                    return;
+                  }
+
+                  setWebsitePickerError(null);
+                  onSelectWebsiteSource(
+                    normalizedVideoUrl,
+                    websiteFunscriptFileUri ?? normalizedFunscriptUrl,
+                  );
+                }}
+                className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-5 py-3 text-sm font-semibold text-violet-100 transition-all duration-200 hover:border-violet-200/80 hover:bg-violet-500/45"
+              >
+                Use Website Source
+              </button>
+            </div>
+
+            {websiteFunscriptFileLabel ? (
+              <div className="mt-3 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+                Local funscript attached: {websiteFunscriptFileLabel}
+              </div>
+            ) : null}
+
+            <div className="mt-4 rounded-xl border border-zinc-700/70 bg-black/30 px-4 py-3 text-xs text-zinc-400">
+              Supported in practice through yt-dlp-backed playback. Paste sites like Pornhub,
+              XVideos, or xHamster here, then add segments the same way as any other source.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-purple-400/20 bg-black/30 p-3">
@@ -196,16 +354,16 @@ export const ConverterSourcePicker: React.FC<ConverterSourcePickerProps> = React
                     author={round.author}
                     description={round.description}
                     type={round.type}
-                  bpm={round.bpm}
-                  durationMs={durationMs}
-                  hasFunscript={Boolean(resource?.funscriptUri)}
-                  previewImage={round.previewImage}
-                  previewVideoUri={resource?.videoUri ?? null}
-                  previewStartTimeMs={round.startTime}
-                  previewEndTimeMs={round.endTime}
-                  onClick={() => onSelectRound(round.id)}
-                />
-              );
+                    bpm={round.bpm}
+                    durationMs={durationMs}
+                    hasFunscript={Boolean(resource?.funscriptUri)}
+                    previewImage={round.previewImage}
+                    previewVideoUri={resource?.videoUri ?? null}
+                    previewStartTimeMs={round.startTime}
+                    previewEndTimeMs={round.endTime}
+                    onClick={() => onSelectRound(round.id)}
+                  />
+                );
               })}
             </div>
           )

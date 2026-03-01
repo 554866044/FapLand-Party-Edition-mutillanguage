@@ -36,6 +36,15 @@ export type SinglePlayerRunHistoryRow = Awaited<
   ReturnType<typeof trpc.db.listSinglePlayerRuns.query>
 >[number];
 export type PhashScanStatus = Awaited<ReturnType<typeof trpc.db.getPhashScanStatus.query>>;
+export type WebsiteVideoScanStatus = Awaited<
+  ReturnType<typeof trpc.db.getWebsiteVideoScanStatus.query>
+>;
+export type InstallSidecarSecurityAnalysis = Awaited<
+  ReturnType<typeof trpc.db.inspectInstallSidecarFile.query>
+>;
+export type VideoDownloadProgress = Awaited<
+  ReturnType<typeof trpc.db.getWebsiteVideoDownloadProgresses.query>
+>[number];
 
 export const db = {
   resource: {
@@ -66,8 +75,13 @@ export const db = {
       difficulty?: number | null;
       startTime?: number | null;
       endTime?: number | null;
+      funscriptUri?: string | null;
       type: "Normal" | "Interjection" | "Cum";
     }) => trpc.db.updateRound.mutate(input),
+    createWebsiteRound: (input: { name: string; videoUri: string; funscriptUri?: string | null }) =>
+      trpc.db.createWebsiteRound.mutate(input),
+    checkWebsiteVideoSupport: (videoUri: string) =>
+      trpc.db.checkWebsiteRoundVideoSupport.query({ videoUri }),
     delete: (id: string) => trpc.db.deleteRound.mutate({ id }),
     repairTemplate: (input: { roundId: string; installedRoundId: string }) =>
       trpc.db.repairTemplateRound.mutate(input),
@@ -96,7 +110,9 @@ export const db = {
     inspectFolder: (folderPath: string) => trpc.db.inspectInstallFolder.query({ folderPath }),
     scanFolderOnce: (folderPath: string, omitCheckpointRounds = true) =>
       trpc.db.scanInstallFolderOnce.mutate({ folderPath, omitCheckpointRounds }),
-    importSidecarFile: (filePath: string) => trpc.db.importInstallSidecarFile.mutate({ filePath }),
+    inspectSidecarFile: (filePath: string) => trpc.db.inspectInstallSidecarFile.query({ filePath }),
+    importSidecarFile: (filePath: string, allowedBaseDomains?: string[]) =>
+      trpc.db.importInstallSidecarFile.mutate({ filePath, allowedBaseDomains }),
     importLegacyWithPlan: (
       folderPath: string,
       reviewedSlots: Array<{
@@ -121,6 +137,7 @@ export const db = {
       heroIds?: string[];
       includeMedia?: boolean;
       directoryPath?: string;
+      asFpack?: boolean;
     }) => trpc.db.exportLibraryPackage.mutate(input),
     openExportFolder: () => trpc.db.openInstallExportFolder.mutate(),
     clearAllData: () => trpc.db.clearAllData.mutate(),
@@ -169,5 +186,12 @@ export const db = {
     startScan: () => trpc.db.startPhashScan.mutate(),
     startScanManual: () => trpc.db.startPhashScanManual.mutate(),
     abortScan: () => trpc.db.abortPhashScan.mutate(),
+  },
+  webVideoCache: {
+    getScanStatus: () => trpc.db.getWebsiteVideoScanStatus.query(),
+    startScan: () => trpc.db.startWebsiteVideoScan.mutate(),
+    startScanManual: () => trpc.db.startWebsiteVideoScanManual.mutate(),
+    abortScan: () => trpc.db.abortWebsiteVideoScan.mutate(),
+    getDownloadProgresses: () => trpc.db.getWebsiteVideoDownloadProgresses.query(),
   },
 } as const;

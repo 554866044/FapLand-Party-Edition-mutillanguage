@@ -16,7 +16,7 @@ type VideoPreviewProps = {
   currentTimeMs: number;
   markInMs: number | null;
   markOutMs: number | null;
-  getVideoSrc: (uri: string) => string;
+  getVideoSrc: (uri: string) => string | undefined;
   onLoadedMetadata: (video: HTMLVideoElement) => void;
   onTimeUpdate: (currentTimeMs: number) => void;
   onVideoError: () => void;
@@ -162,7 +162,7 @@ export function pickVideoPreviewProps(state: ConverterState): VideoPreviewProps 
     currentTimeMs: state.currentTimeMs,
     markInMs: state.markInMs,
     markOutMs: state.markOutMs,
-    getVideoSrc: (uri: string) => state.getVideoSrc(uri) ?? uri,
+    getVideoSrc: (uri: string) => state.getVideoSrc(uri),
     onLoadedMetadata: (video: HTMLVideoElement) => {
       const nextDuration = Number.isFinite(video.duration) ? Math.floor(video.duration * 1000) : 0;
       state.setDurationMs(nextDuration);

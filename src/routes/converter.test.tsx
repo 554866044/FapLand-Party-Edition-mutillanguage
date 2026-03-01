@@ -268,6 +268,7 @@ describe("ConverterPage", () => {
       expect(screen.getByRole("button", { name: /From Round/ })).toBeDefined();
       expect(screen.getByRole("button", { name: /From Hero/ })).toBeDefined();
       expect(screen.getByRole("button", { name: /From File/ })).toBeDefined();
+      expect(screen.getByRole("button", { name: /From URL/ })).toBeDefined();
     });
 
     it("shows back button in sidebar that navigates home", () => {
@@ -382,6 +383,17 @@ describe("ConverterPage", () => {
 
       expect(screen.getByRole("button", { name: "Select Video File" })).toBeDefined();
       expect(screen.getByRole("button", { name: "Select Funscript File" })).toBeDefined();
+    });
+
+    it("shows website url inputs when switching to 'From URL' section", () => {
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From URL/ }));
+
+      expect(screen.getByLabelText("Video URL")).toBeDefined();
+      expect(screen.getByLabelText("Funscript URL")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Use Website Source" })).toBeDefined();
     });
   });
 
@@ -551,6 +563,27 @@ describe("ConverterPage", () => {
       });
 
       expect(screen.getByText("local-video.mp4")).toBeDefined();
+    });
+
+    it("transitions to edit mode when submitting a website video url", async () => {
+      const Component = (Route as unknown as { component: React.FC }).component;
+      render(<Component />);
+
+      fireEvent.click(screen.getByRole("button", { name: /From URL/ }));
+      fireEvent.change(screen.getByLabelText("Video URL"), {
+        target: { value: "https://www.xhamster.com/videos/test-video-123" },
+      });
+      fireEvent.change(screen.getByLabelText("Funscript URL"), {
+        target: { value: "https://cdn.example.com/test-video.funscript" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Use Website Source" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Change Source" })).toBeDefined();
+      });
+
+      expect(screen.getByText("xhamster.com")).toBeDefined();
+      expect(screen.getByTestId("status-message").textContent).toContain("Website source loaded");
     });
   });
 });

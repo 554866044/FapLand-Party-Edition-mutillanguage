@@ -35,8 +35,20 @@ vi.mock("./phash/extract", () => ({
   })),
 }));
 
+vi.mock("./webVideo", () => ({
+  buildWebsiteVideoProxyUri: vi.fn((videoUri: string) => `app://external/web-url?target=${encodeURIComponent(videoUri)}`),
+  getCachedWebsiteVideoLocalPath: vi.fn(async () => null),
+  isWebsiteVideoResolvableUri: vi.fn(() => false),
+  warmWebsiteVideoCache: vi.fn(() => null),
+}));
+
 import fs from "node:fs/promises";
 import { runCommand } from "./phash/extract";
+import {
+  getCachedWebsiteVideoLocalPath,
+  isWebsiteVideoResolvableUri,
+  warmWebsiteVideoCache,
+} from "./webVideo";
 import {
   __resetPlayableVideoCachesForTests,
   buildTranscodeCacheKey,
@@ -48,6 +60,9 @@ import {
 describe("playableVideo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCachedWebsiteVideoLocalPath).mockResolvedValue(null);
+    vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(false);
+    vi.mocked(warmWebsiteVideoCache).mockReturnValue(null);
     __resetPlayableVideoCachesForTests();
   });
 
@@ -59,6 +74,81 @@ describe("playableVideo", () => {
       cacheHit: false,
     });
     expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it("keeps website urls non-playable until the local cache exists", async () => {
+    vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(true);
+    const pending = Promise.resolve({
+      originalUrl: "https://example.com/watch?v=1",
+      extractor: "generic",
+      title: "Example",
+      durationMs: 1_000,
+      finalFilePath: "/tmp/example.mp4",
+      fileExtension: "mp4",
+      ytDlpVersion: "2025.12.08",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastAccessedAt: "2026-01-01T00:00:00.000Z",
+    });
+    vi.mocked(warmWebsiteVideoCache).mockReturnValue(pending);
+
+    const uri = "app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1";
+    const result = await resolvePlayableVideoUri(uri);
+    expect(result).toEqual({
+      videoUri: uri,
+      transcoded: false,
+      cacheHit: false,
+    });
+    expect(getCachedWebsiteVideoLocalPath).toHaveBeenCalledWith(uri);
+    expect(warmWebsiteVideoCache).toHaveBeenCalledWith(uri);
+  });
+
+  it("returns raw website urls while caching warms in the background", async () => {
+    vi.mocked(isWebsiteVideoResolvableUri).mockReturnValue(true);
+    vi.mocked(warmWebsiteVideoCache).mockReturnValue(Promise.resolve({
+      originalUrl: "https://www.pornhub.com/view_video.php?viewkey=1",
+      extractor: "PornHub",
+      title: "Example",
+      durationMs: 1_000,
+      finalFilePath: "/tmp/example.mp4",
+      fileExtension: "mp4",
+      ytDlpVersion: "2025.12.08",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastAccessedAt: "2026-01-01T00:00:00.000Z",
+    }));
+
+    const result = await resolvePlayableVideoUri("https://www.pornhub.com/view_video.php?viewkey=1");
+    expect(result).toEqual({
+      videoUri: "app://external/web-url?target=https%3A%2F%2Fwww.pornhub.com%2Fview_video.php%3Fviewkey%3D1",
+      transcoded: false,
+      cacheHit: false,
+    });
+  });
+
+  it("returns the cached local website video when one already exists", async () => {
+    vi.mocked(isWebsiteVideoResolvableUri).mockImplementation((uri) => uri.startsWith("app://external/web-url?"));
+    vi.mocked(getCachedWebsiteVideoLocalPath).mockResolvedValue("/tmp/cached-website.mp4");
+    vi.mocked(fs.stat).mockResolvedValue({
+      isFile: () => true,
+      size: 1000,
+      mtimeMs: 2000,
+    } as any);
+    vi.mocked(runCommand).mockImplementation(async (_command, args) => {
+      if (args.includes("-show_entries")) {
+        return {
+          stdout: Buffer.from(JSON.stringify({ streams: [{ codec_name: "h264" }] }), "utf8"),
+          stderr: Buffer.alloc(0),
+        };
+      }
+      return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+    });
+
+    const result = await resolvePlayableVideoUri("app://external/web-url?target=https%3A%2F%2Fexample.com%2Fwatch%3Fv%3D1");
+    expect(result).toEqual({
+      videoUri: "app://media/%2Ftmp%2Fcached-website.mp4",
+      transcoded: false,
+      cacheHit: true,
+    });
+    expect(warmWebsiteVideoCache).not.toHaveBeenCalled();
   });
 
   it("resolves local uris and transcodes on cache miss", async () => {
@@ -114,6 +204,47 @@ describe("playableVideo", () => {
     expect(result.transcoded).toBe(true);
     expect(result.cacheHit).toBe(true);
     expect(runCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops empty cached transcodes and rebuilds them", async () => {
+    vi.mocked(fs.stat).mockImplementation(async (targetPath?: any) => {
+      if (String(targetPath).endsWith(".hevc")) {
+        return {
+          isFile: () => true,
+          size: 1000,
+          mtimeMs: 2000,
+        } as any;
+      }
+
+      return {
+        isFile: () => true,
+        size: 0,
+        mtimeMs: 2000,
+      } as any;
+    });
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    vi.mocked(fs.rm).mockResolvedValue(undefined);
+
+    let ffmpegRuns = 0;
+    vi.mocked(runCommand).mockImplementation(async (_command, args) => {
+      if (args.includes("-show_entries")) {
+        return {
+          stdout: Buffer.from(JSON.stringify({ streams: [{ codec_name: "hevc" }] }), "utf8"),
+          stderr: Buffer.alloc(0),
+        };
+      }
+
+      ffmpegRuns += 1;
+      return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+    });
+
+    await expect(resolvePlayableVideoUri("app://media/%2Ftmp%2Fvideo.hevc")).rejects.toThrow(
+      "Transcode did not produce an output file."
+    );
+
+    expect(ffmpegRuns).toBe(1);
+    expect(fs.rm).toHaveBeenCalled();
   });
 
   it("deduplicates concurrent transcode requests for same source", async () => {

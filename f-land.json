@@ -2,7 +2,7 @@
 	"integrations": {
 		"sources": [
 			{
-				"id": "8e0fe1ae-16f8-4e30-b798-8230e1e1b80d",
+				"id": "d3508082-d4d4-4168-a1d2-2b662839525c",
 				"kind": "stash",
 				"name": "Protected Stash",
 				"enabled": true,
@@ -12,8 +12,8 @@
 				"username": "alice",
 				"password": "secret",
 				"tagSelections": [],
-				"createdAt": "2026-03-27T17:17:31.772Z",
-				"updatedAt": "2026-03-27T17:17:31.778Z"
+				"createdAt": "2026-03-29T18:01:11.567Z",
+				"updatedAt": "2026-03-29T18:01:11.572Z"
 			}
 		]
 	}

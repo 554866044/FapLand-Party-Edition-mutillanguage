@@ -55,6 +55,7 @@
           git-lfs
 
           appimage-run
+          yt-dlp
         ];
         shellHook = with pkgs; ''
           # Prisma engines

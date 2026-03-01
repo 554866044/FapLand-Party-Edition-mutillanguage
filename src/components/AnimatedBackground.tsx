@@ -149,7 +149,8 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(
         uri.startsWith("file://")
           ? uri
           : convertFileSrc(uri);
-      const src = getVideoSrc(originalSrc) ?? originalSrc;
+      const src = getVideoSrc(originalSrc);
+      if (!src) return null;
       const isVisible = isNext || (isCurrent && nextVideoIndex === null);
       return (
         <video

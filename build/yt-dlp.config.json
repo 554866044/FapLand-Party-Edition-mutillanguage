@@ -1,0 +1,15 @@
+{
+  "version": "2026.03.17",
+  "targets": {
+    "linux-x64": {
+      "assetName": "yt-dlp_linux",
+      "binaryName": "yt-dlp",
+      "sha256": "c2b0189f581fe4a2ddd41954f1bcb7d327db04b07ed0dea97e4f1b3e09b5dd8e"
+    },
+    "win32-x64": {
+      "assetName": "yt-dlp.exe",
+      "binaryName": "yt-dlp.exe",
+      "sha256": "3db811b366b2da47337d2fcfdfe5bbd9a258dad3f350c54974f005df115a1545"
+    }
+  }
+}

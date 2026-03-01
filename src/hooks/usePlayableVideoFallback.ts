@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { isLikelyVideoUrl } from "../constants/videoFormats";
 
 type PlayableResolverResult = {
   videoUri: string;
@@ -13,8 +14,33 @@ const defaultPlayableResolver: PlayableResolver = async (videoUri) => {
   return resolvePlayableVideoUri(videoUri);
 };
 
+function isRawWebsiteVideoPageUri(videoUri: string): boolean {
+  return (videoUri.startsWith("http://") || videoUri.startsWith("https://")) && !isLikelyVideoUrl(videoUri);
+}
+
+function isWebsiteVideoUri(videoUri: string): boolean {
+  return isRawWebsiteVideoPageUri(videoUri) || videoUri.startsWith("app://external/web-url?");
+}
+
+function toWebsiteVideoProxyUri(videoUri: string): string {
+  return `app://external/web-url?target=${encodeURIComponent(videoUri)}`;
+}
+
+function getDefaultVideoSrc(originalUri: string): string | undefined {
+  if (isRawWebsiteVideoPageUri(originalUri)) {
+    return toWebsiteVideoProxyUri(originalUri);
+  }
+  return originalUri;
+}
+
 export function isLocalVideoUriForFallback(videoUri: string): boolean {
-  return videoUri.startsWith("app://media/") || videoUri.startsWith("file://");
+  if (isRawWebsiteVideoPageUri(videoUri)) return true;
+
+  return (
+    videoUri.startsWith("app://media/")
+    || videoUri.startsWith("file://")
+    || videoUri.startsWith("app://external/web-url?")
+  );
 }
 
 export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPlayableResolver): {
@@ -31,39 +57,54 @@ export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPla
 
   const getVideoSrc = useCallback((originalUri: string | null | undefined): string | undefined => {
     if (!originalUri) return undefined;
-    return fallbackByOriginalUriRef.current[originalUri] ?? originalUri;
+    return fallbackByOriginalUriRef.current[originalUri] ?? getDefaultVideoSrc(originalUri);
   }, []);
 
-  const ensurePlayableVideo = useCallback(
+  const resolveFallback = useCallback(
     async (originalUri: string | null | undefined): Promise<string | null> => {
       if (!originalUri) return null;
       if (!isLocalVideoUriForFallback(originalUri)) return null;
 
+      const defaultVideoSrc = getDefaultVideoSrc(originalUri);
       const resolved = fallbackByOriginalUriRef.current[originalUri];
-      if (resolved && resolved !== originalUri) {
+      if (resolved && resolved !== defaultVideoSrc) {
         return resolved;
       }
 
       const existingInFlight = inFlightByOriginalUriRef.current.get(originalUri);
       if (existingInFlight) return existingInFlight;
 
-      if (attemptedOriginalUrisRef.current.has(originalUri)) {
+      const retryableWebsiteUri = isWebsiteVideoUri(originalUri);
+      if (!retryableWebsiteUri && attemptedOriginalUrisRef.current.has(originalUri)) {
         return null;
       }
-      attemptedOriginalUrisRef.current.add(originalUri);
 
       const pending = (async () => {
         try {
           const result = await resolverRef.current(originalUri);
-          if (result.videoUri && result.videoUri !== originalUri) {
-            if (!fallbackByOriginalUriRef.current[originalUri]) {
-              fallbackByOriginalUriRef.current[originalUri] = result.videoUri;
+          const nextVideoUri = typeof result.videoUri === "string" ? result.videoUri : "";
+          const hasReplacement = retryableWebsiteUri
+            ? nextVideoUri.length > 0 && Boolean(result.cacheHit)
+            : nextVideoUri.length > 0 && nextVideoUri !== defaultVideoSrc;
+
+          if (hasReplacement) {
+            if (fallbackByOriginalUriRef.current[originalUri] !== nextVideoUri) {
+              fallbackByOriginalUriRef.current[originalUri] = nextVideoUri;
               forceUpdate((n) => n + 1);
             }
-            return result.videoUri;
+            attemptedOriginalUrisRef.current.add(originalUri);
+            return nextVideoUri;
           }
+
+          if (!retryableWebsiteUri || result.cacheHit) {
+            attemptedOriginalUrisRef.current.add(originalUri);
+          } else {
+            attemptedOriginalUrisRef.current.delete(originalUri);
+          }
+
           return null;
         } catch (error) {
+          attemptedOriginalUrisRef.current.delete(originalUri);
           console.warn("Video fallback resolve failed", error);
           return null;
         } finally {
@@ -77,42 +118,14 @@ export function usePlayableVideoFallback(resolver: PlayableResolver = defaultPla
     []
   );
 
+  const ensurePlayableVideo = useCallback(
+    async (originalUri: string | null | undefined): Promise<string | null> => resolveFallback(originalUri),
+    [resolveFallback]
+  );
+
   const handleVideoError = useCallback(
-    async (originalUri: string | null | undefined): Promise<string | null> => {
-      if (!originalUri) return null;
-      if (!isLocalVideoUriForFallback(originalUri)) return null;
-
-      const existingInFlight = inFlightByOriginalUriRef.current.get(originalUri);
-      if (existingInFlight) return existingInFlight;
-
-      if (attemptedOriginalUrisRef.current.has(originalUri)) {
-        return null;
-      }
-      attemptedOriginalUrisRef.current.add(originalUri);
-
-      const pending = (async () => {
-        try {
-          const result = await resolverRef.current(originalUri);
-          if (result.videoUri && result.videoUri !== originalUri) {
-            if (!fallbackByOriginalUriRef.current[originalUri]) {
-              fallbackByOriginalUriRef.current[originalUri] = result.videoUri;
-              forceUpdate((n) => n + 1);
-            }
-            return result.videoUri;
-          }
-          return null;
-        } catch (error) {
-          console.warn("Video fallback resolve failed", error);
-          return null;
-        } finally {
-          inFlightByOriginalUriRef.current.delete(originalUri);
-        }
-      })();
-
-      inFlightByOriginalUriRef.current.set(originalUri, pending);
-      return pending;
-    },
-    []
+    async (originalUri: string | null | undefined): Promise<string | null> => resolveFallback(originalUri),
+    [resolveFallback]
   );
 
   return {

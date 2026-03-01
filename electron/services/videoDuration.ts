@@ -1,6 +1,7 @@
 import { resolvePhashBinaries } from "./phash/binaries";
 import { probeVideoDurationMs } from "./phash/probe";
 import { toLocalVideoPath } from "./playableVideo";
+import { getCachedWebsiteVideoMetadata } from "./webVideo";
 
 const durationByLocalPath = new Map<string, Promise<number | null>>();
 
@@ -33,6 +34,10 @@ export async function resolveVideoDurationMsForLocalPath(localPath: string): Pro
 
 export async function resolveVideoDurationMsForUri(videoUri: string): Promise<number | null> {
   const localPath = toLocalVideoPath(videoUri);
-  if (!localPath) return null;
-  return resolveVideoDurationMsForLocalPath(localPath);
+  if (localPath) {
+    return resolveVideoDurationMsForLocalPath(localPath);
+  }
+
+  const cachedMetadata = await getCachedWebsiteVideoMetadata(videoUri);
+  return cachedMetadata?.durationMs ?? null;
 }

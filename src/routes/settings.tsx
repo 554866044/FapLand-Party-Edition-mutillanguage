@@ -13,13 +13,14 @@ import { useHandy } from "../contexts/HandyContext";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 import { ensureBooruMediaCache } from "../services/booru";
-import { db, type PhashScanStatus } from "../services/db";
+import { db, type PhashScanStatus, type WebsiteVideoScanStatus } from "../services/db";
 import {
   integrations,
   type ExternalSource,
   type IntegrationSyncStatus,
   type StashTagResult,
 } from "../services/integrations";
+import { security } from "../services/security";
 import { trpc } from "../services/trpc";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import {
@@ -27,6 +28,12 @@ import {
   VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY,
   type VideoHashFfmpegSourcePreference,
 } from "../constants/videohashSettings";
+import {
+  DEFAULT_YT_DLP_BINARY_PREFERENCE,
+  normalizeYtDlpBinaryPreference,
+  YT_DLP_BINARY_PREFERENCE_KEY,
+  type YtDlpBinaryPreference,
+} from "../constants/ytDlpSettings";
 import {
   BACKGROUND_VIDEO_ENABLED_EVENT,
   BACKGROUND_VIDEO_ENABLED_KEY,
@@ -63,6 +70,9 @@ import {
   MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY,
   DEFAULT_MULTIPLAYER_SKIP_ROUNDS_CHECK,
   normalizeMultiplayerSkipRoundsCheck,
+  INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
+  DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED,
+  normalizeInstallWebFunscriptUrlEnabled,
 } from "../constants/experimentalFeatures";
 import {
   SFX_VOLUME_CHANGED_EVENT,
@@ -75,6 +85,7 @@ import {
   DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED,
   normalizeBackgroundPhashScanningEnabled,
 } from "../constants/phashSettings";
+import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
 
 const INTERMEDIARY_LOADING_PROMPT_KEY = "game.intermediary.loadingPrompt";
 const INTERMEDIARY_LOADING_DURATION_KEY = "game.intermediary.loadingDurationSec";
@@ -92,6 +103,7 @@ const SETTINGS_SECTION_IDS = [
   "hardware",
   "experimental",
   "music",
+  "security",
   "sources",
   "app",
   "help",
@@ -328,6 +340,9 @@ export function SettingsPage() {
   );
   const [videoHashFfmpegSourcePreference, setVideoHashFfmpegSourcePreference] =
     useState<VideoHashFfmpegSourcePreference>("auto");
+  const [ytDlpBinaryPreference, setYtDlpBinaryPreference] = useState<YtDlpBinaryPreference>(
+    DEFAULT_YT_DLP_BINARY_PREFERENCE
+  );
   const [backgroundVideoEnabled, setBackgroundVideoEnabled] = useState(
     DEFAULT_BACKGROUND_VIDEO_ENABLED
   );
@@ -349,11 +364,16 @@ export function SettingsPage() {
   const [multiplayerSkipRoundsCheck, setMultiplayerSkipRoundsCheck] = useState(
     DEFAULT_MULTIPLAYER_SKIP_ROUNDS_CHECK
   );
+  const [installWebFunscriptUrlEnabled, setInstallWebFunscriptUrlEnabled] = useState(
+    DEFAULT_INSTALL_WEB_FUNSCRIPT_URL_ENABLED
+  );
   const [backgroundPhashScanningEnabled, setBackgroundPhashScanningEnabled] = useState(
     DEFAULT_BACKGROUND_PHASH_SCANNING_ENABLED
   );
+  const [websiteVideoCacheRootPath, setWebsiteVideoCacheRootPath] = useState<string | null>(null);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isLoadingVideoHashPreference, setIsLoadingVideoHashPreference] = useState(true);
+  const [isLoadingYtDlpPreference, setIsLoadingYtDlpPreference] = useState(true);
   const [isLoadingBackgroundVideoEnabled, setIsLoadingBackgroundVideoEnabled] = useState(true);
   const [isLoadingAutofixBrokenFunscripts, setIsLoadingAutofixBrokenFunscripts] = useState(true);
   const [isLoadingRoundProgressBarAlwaysVisible, setIsLoadingRoundProgressBarAlwaysVisible] =
@@ -363,9 +383,13 @@ export function SettingsPage() {
   const [isLoadingCheatModeEnabled, setIsLoadingCheatModeEnabled] = useState(true);
   const [isLoadingBackgroundPhashScanningEnabled, setIsLoadingBackgroundPhashScanningEnabled] =
     useState(true);
+  const [isLoadingWebsiteVideoCacheRootPath, setIsLoadingWebsiteVideoCacheRootPath] =
+    useState(true);
   const [autoScanFolders, setAutoScanFolders] = useState<string[]>([]);
   const [isLoadingAutoScanFolders, setIsLoadingAutoScanFolders] = useState(true);
   const [isUpdatingAutoScanFolders, setIsUpdatingAutoScanFolders] = useState(false);
+  const [isUpdatingWebsiteVideoCacheRootPath, setIsUpdatingWebsiteVideoCacheRootPath] =
+    useState(false);
   const [folderImportNotices, setFolderImportNotices] = useState<FolderImportNotice[]>([]);
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false);
   const [isCheatModeConfirmDialogOpen, setIsCheatModeConfirmDialogOpen] = useState(false);
@@ -378,6 +402,7 @@ export function SettingsPage() {
     stats: true,
     history: true,
     cache: true,
+    videoCache: true,
     settings: true,
   });
 
@@ -391,6 +416,7 @@ export function SettingsPage() {
           rawDuration,
           rawReturnPause,
           rawVideoHashPreference,
+          rawYtDlpPreference,
           rawBackgroundVideoEnabled,
           rawAutofixBrokenFunscripts,
           rawRoundProgressBarAlwaysVisible,
@@ -401,6 +427,8 @@ export function SettingsPage() {
           rawBackgroundPhashScanningEnabled,
           rawApplyPerkDirectly,
           rawMultiplayerSkipRoundsCheck,
+          rawInstallWebFunscriptUrlEnabled,
+          rawWebsiteVideoCacheRootPath,
           folders,
         ] = await Promise.all([
           window.electronAPI.window.isFullscreen(),
@@ -408,6 +436,7 @@ export function SettingsPage() {
           trpc.store.get.query({ key: INTERMEDIARY_LOADING_DURATION_KEY }),
           trpc.store.get.query({ key: INTERMEDIARY_RETURN_PAUSE_KEY }),
           trpc.store.get.query({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY }),
+          trpc.store.get.query({ key: YT_DLP_BINARY_PREFERENCE_KEY }),
           trpc.store.get.query({ key: BACKGROUND_VIDEO_ENABLED_KEY }),
           trpc.store.get.query({ key: AUTOFIX_BROKEN_FUNSCRIPTS_KEY }),
           trpc.store.get.query({ key: ROUND_PROGRESS_BAR_ALWAYS_VISIBLE_KEY }),
@@ -418,6 +447,8 @@ export function SettingsPage() {
           trpc.store.get.query({ key: BACKGROUND_PHASH_SCANNING_ENABLED_KEY }),
           trpc.store.get.query({ key: APPLY_PERK_DIRECTLY_KEY }),
           trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
+          trpc.store.get.query({ key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY }),
+          trpc.store.get.query({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY }),
           db.install.getAutoScanFolders(),
         ]);
 
@@ -443,6 +474,7 @@ export function SettingsPage() {
           setVideoHashFfmpegSourcePreference(
             normalizeVideoHashFfmpegSourcePreference(rawVideoHashPreference)
           );
+          setYtDlpBinaryPreference(normalizeYtDlpBinaryPreference(rawYtDlpPreference));
           setBackgroundVideoEnabled(
             typeof rawBackgroundVideoEnabled === "boolean"
               ? rawBackgroundVideoEnabled
@@ -461,8 +493,17 @@ export function SettingsPage() {
           setMultiplayerSkipRoundsCheck(
             normalizeMultiplayerSkipRoundsCheck(rawMultiplayerSkipRoundsCheck)
           );
+          setInstallWebFunscriptUrlEnabled(
+            normalizeInstallWebFunscriptUrlEnabled(rawInstallWebFunscriptUrlEnabled)
+          );
           setBackgroundPhashScanningEnabled(
             normalizeBackgroundPhashScanningEnabled(rawBackgroundPhashScanningEnabled)
+          );
+          setWebsiteVideoCacheRootPath(
+            typeof rawWebsiteVideoCacheRootPath === "string" &&
+              rawWebsiteVideoCacheRootPath.trim().length > 0
+              ? rawWebsiteVideoCacheRootPath.trim()
+              : null
           );
           setApplyPerkDirectly(
             rawApplyPerkDirectly === true || rawApplyPerkDirectly === "true"
@@ -480,6 +521,7 @@ export function SettingsPage() {
           setIsLoadingFullscreen(false);
           setIsLoadingPrompt(false);
           setIsLoadingVideoHashPreference(false);
+          setIsLoadingYtDlpPreference(false);
           setIsLoadingBackgroundVideoEnabled(false);
           setIsLoadingAutofixBrokenFunscripts(false);
           setIsLoadingRoundProgressBarAlwaysVisible(false);
@@ -487,6 +529,7 @@ export function SettingsPage() {
           setIsLoadingControllerSupportEnabled(false);
           setIsLoadingCheatModeEnabled(false);
           setIsLoadingBackgroundPhashScanningEnabled(false);
+          setIsLoadingWebsiteVideoCacheRootPath(false);
           setIsLoadingAutoScanFolders(false);
         }
       }
@@ -549,6 +592,24 @@ export function SettingsPage() {
               const value = normalizeVideoHashFfmpegSourcePreference(next);
               await trpc.store.set.mutate({ key: VIDEOHASH_FFMPEG_SOURCE_PREFERENCE_KEY, value });
               setVideoHashFfmpegSourcePreference(value);
+            },
+          },
+          {
+            id: "yt-dlp-binary-source",
+            type: "select",
+            label: "yt-dlp Binary Source",
+            description:
+              "Auto keeps current behavior (prefer the bundled local binary). Use Local/System to force source selection.",
+            value: ytDlpBinaryPreference,
+            options: [
+              { value: "auto", label: "Auto (Default)" },
+              { value: "bundled", label: "Local Only" },
+              { value: "system", label: "System Only" },
+            ],
+            onChange: async (next: string) => {
+              const value = normalizeYtDlpBinaryPreference(next);
+              await trpc.store.set.mutate({ key: YT_DLP_BINARY_PREFERENCE_KEY, value });
+              setYtDlpBinaryPreference(value);
             },
           },
           {
@@ -687,6 +748,13 @@ export function SettingsPage() {
         settings: [],
       },
       {
+        id: "security",
+        icon: "🛡",
+        title: "Security",
+        description: "Trusted remote import domains and built-in safe site lists.",
+        settings: [],
+      },
+      {
         id: "experimental",
         icon: "🧪",
         title: "Experimental",
@@ -735,10 +803,26 @@ export function SettingsPage() {
             value: sfwModeEnabled,
             onChange: async (next: boolean) => {
               await trpc.store.set.mutate({ key: SFW_MODE_ENABLED_KEY, value: next });
+              window.localStorage.setItem(SFW_MODE_ENABLED_KEY, String(next));
               setSfwModeEnabled(next);
               window.dispatchEvent(
                 new CustomEvent<boolean>(SFW_MODE_ENABLED_EVENT, { detail: next })
               );
+            },
+          },
+          {
+            id: "install-web-funscript-url-enabled",
+            type: "toggle",
+            label: "Show Web Install Funscript URL",
+            description:
+              "Exposes an optional remote funscript URL field in the Install From Web dialog. Disabled by default so web installs prefer a local funscript file.",
+            value: installWebFunscriptUrlEnabled,
+            onChange: async (next: boolean) => {
+              await trpc.store.set.mutate({
+                key: INSTALL_WEB_FUNSCRIPT_URL_ENABLED_KEY,
+                value: next,
+              });
+              setInstallWebFunscriptUrlEnabled(next);
             },
           },
           {
@@ -810,7 +894,9 @@ export function SettingsPage() {
       cheatModeEnabled,
       sfwModeEnabled,
       multiplayerSkipRoundsCheck,
+      installWebFunscriptUrlEnabled,
       videoHashFfmpegSourcePreference,
+      ytDlpBinaryPreference,
       backgroundPhashScanningEnabled,
     ]
   );
@@ -891,6 +977,35 @@ export function SettingsPage() {
       console.error("Failed to remove auto-scan folder", error);
     } finally {
       setIsUpdatingAutoScanFolders(false);
+    }
+  };
+
+  const chooseWebsiteVideoCacheFolder = async () => {
+    if (isUpdatingWebsiteVideoCacheRootPath) return;
+    setIsUpdatingWebsiteVideoCacheRootPath(true);
+    try {
+      const selected = await window.electronAPI.dialog.selectWebsiteVideoCacheDirectory();
+      if (!selected) return;
+      const value = selected.trim();
+      await trpc.store.set.mutate({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY, value });
+      setWebsiteVideoCacheRootPath(value);
+    } catch (error) {
+      console.error("Failed to update website video cache folder", error);
+    } finally {
+      setIsUpdatingWebsiteVideoCacheRootPath(false);
+    }
+  };
+
+  const resetWebsiteVideoCacheFolder = async () => {
+    if (isUpdatingWebsiteVideoCacheRootPath) return;
+    setIsUpdatingWebsiteVideoCacheRootPath(true);
+    try {
+      await trpc.store.set.mutate({ key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY, value: null });
+      setWebsiteVideoCacheRootPath(null);
+    } catch (error) {
+      console.error("Failed to reset website video cache folder", error);
+    } finally {
+      setIsUpdatingWebsiteVideoCacheRootPath(false);
     }
   };
 
@@ -1020,6 +1135,7 @@ export function SettingsPage() {
                       isLoadingFullscreen ||
                       isLoadingPrompt ||
                       isLoadingVideoHashPreference ||
+                      isLoadingYtDlpPreference ||
                       isLoadingBackgroundVideoEnabled ||
                       isLoadingAutofixBrokenFunscripts ||
                       isLoadingRoundProgressBarAlwaysVisible ||
@@ -1029,10 +1145,26 @@ export function SettingsPage() {
                     }
                   />
                   <PhashScanCard />
+                  <WebsiteVideoCacheLocationCard
+                    configuredPath={websiteVideoCacheRootPath}
+                    isLoading={isLoadingWebsiteVideoCacheRootPath}
+                    isPending={isUpdatingWebsiteVideoCacheRootPath}
+                    onChooseFolder={() => {
+                      playSelectSound();
+                      void chooseWebsiteVideoCacheFolder();
+                    }}
+                    onReset={() => {
+                      playSelectSound();
+                      void resetWebsiteVideoCacheFolder();
+                    }}
+                  />
+                  <WebsiteVideoCacheScanCard />
                   <OnboardingCard />
                 </>
               ) : activeSection && activeSection.id === "music" ? (
                 <MusicSettingsCard />
+              ) : activeSection && activeSection.id === "security" ? (
+                <SecuritySettingsCard />
               ) : activeSection && activeSection.id === "app" ? (
                 <>
                   <AppUpdateCard appUpdate={appUpdate} />
@@ -1056,6 +1188,7 @@ export function SettingsPage() {
                     isLoadingFullscreen ||
                     isLoadingPrompt ||
                     isLoadingVideoHashPreference ||
+                    isLoadingYtDlpPreference ||
                     isLoadingBackgroundVideoEnabled ||
                     isLoadingAutofixBrokenFunscripts ||
                     isLoadingRoundProgressBarAlwaysVisible ||
@@ -1073,6 +1206,7 @@ export function SettingsPage() {
                     isLoadingFullscreen ||
                     isLoadingPrompt ||
                     isLoadingVideoHashPreference ||
+                    isLoadingYtDlpPreference ||
                     isLoadingBackgroundVideoEnabled ||
                     isLoadingAutofixBrokenFunscripts ||
                     isLoadingRoundProgressBarAlwaysVisible ||
@@ -1148,6 +1282,71 @@ export function SettingsPage() {
         }}
       />
     </div>
+  );
+}
+
+function WebsiteVideoCacheLocationCard({
+  configuredPath,
+  isLoading,
+  isPending,
+  onChooseFolder,
+  onReset,
+}: {
+  configuredPath: string | null;
+  isLoading: boolean;
+  isPending: boolean;
+  onChooseFolder: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.1s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Website Video Cache Location
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Store downloaded website videos in a custom folder, or leave this unset to keep using the
+          built-in default location.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-violet-300/25 bg-black/35 p-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Current Location</div>
+        <div className="mt-2 break-all font-[family-name:var(--font-jetbrains-mono)] text-sm text-zinc-100">
+          {isLoading
+            ? "Loading..."
+            : (configuredPath ?? "Default app data folder (existing behavior)")}
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          Changing this only affects the website video cache path. Existing cached files are not
+          moved automatically.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isLoading || isPending}
+            onMouseEnter={playHoverSound}
+            onClick={onChooseFolder}
+            className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? "Updating..." : "Choose Folder"}
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || isPending || configuredPath === null}
+            onMouseEnter={playHoverSound}
+            onClick={onReset}
+            className="rounded-xl border border-zinc-500/60 bg-zinc-700/40 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300/70 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Use Default
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1305,6 +1504,178 @@ function PhashScanCard() {
             }`}
           >
             {isStarting ? "Starting..." : isRunning ? "Scanning..." : "Scan Now"}
+          </button>
+
+          {isRunning && (
+            <button
+              type="button"
+              onClick={handleAbortScan}
+              className="rounded-xl border border-rose-300/60 bg-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-100 transition-all duration-200 hover:border-rose-200/80 hover:bg-rose-500/45"
+            >
+              Abort
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WebsiteVideoCacheScanCard() {
+  const [scanStatus, setScanStatus] = useState<WebsiteVideoScanStatus | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const pollStatus = async () => {
+      try {
+        const status = await db.webVideoCache.getScanStatus();
+        if (mounted) {
+          setScanStatus(status);
+        }
+      } catch (error) {
+        console.error("Failed to poll website video cache scan status", error);
+      }
+    };
+
+    void pollStatus();
+    const interval = window.setInterval(pollStatus, 2000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const handleStartScan = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    playSelectSound();
+    try {
+      await db.webVideoCache.startScanManual();
+    } catch (error) {
+      console.error("Failed to start website video cache scan", error);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handleAbortScan = async () => {
+    playSelectSound();
+    try {
+      await db.webVideoCache.abortScan();
+    } catch (error) {
+      console.error("Failed to abort website video cache scan", error);
+    }
+  };
+
+  const isRunning = scanStatus?.state === "running";
+  const progress =
+    scanStatus && scanStatus.totalCount > 0
+      ? (scanStatus.completedCount / scanStatus.totalCount) * 100
+      : 0;
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.11s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Website Video Cache
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Download and cache videos from website rounds for offline playback. A background scan runs
+          automatically every 5 minutes.
+        </p>
+      </div>
+
+      <div
+        className="rounded-2xl border border-violet-300/25 bg-black/35 p-4"
+        onMouseEnter={playHoverSound}
+      >
+        {isRunning && scanStatus && (
+          <>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-full border border-amber-300/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-100">
+                Caching
+              </span>
+            </div>
+
+            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-amber-950/60">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            {scanStatus.currentRoundName && (
+              <div className="mb-2 truncate font-[family-name:var(--font-jetbrains-mono)] text-xs text-amber-100/90">
+                Downloading: {scanStatus.currentRoundName}
+              </div>
+            )}
+
+            <div className="mb-3 flex items-center justify-between font-[family-name:var(--font-jetbrains-mono)] text-xs">
+              <span className="text-amber-400/60">
+                {scanStatus.completedCount} / {scanStatus.totalCount} videos
+              </span>
+              <span className="text-amber-300/80">{Math.round(progress)}%</span>
+            </div>
+          </>
+        )}
+
+        {!isRunning &&
+          scanStatus &&
+          (scanStatus.state === "done" ||
+            scanStatus.state === "aborted" ||
+            scanStatus.state === "error") && (
+            <div className="mb-3 flex items-center gap-2">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+                  scanStatus.state === "done"
+                    ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+                    : scanStatus.state === "aborted"
+                      ? "border-amber-300/40 bg-amber-500/15 text-amber-100"
+                      : "border-rose-300/40 bg-rose-500/15 text-rose-100"
+                }`}
+              >
+                {scanStatus.state === "done"
+                  ? "Complete"
+                  : scanStatus.state === "aborted"
+                    ? "Aborted"
+                    : "Error"}
+              </span>
+              <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
+                {scanStatus.completedCount} cached
+                {scanStatus.skippedCount > 0 && <span>, {scanStatus.skippedCount} failed</span>}
+              </span>
+            </div>
+          )}
+
+        {!isRunning && scanStatus?.state === "idle" && (
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full border border-zinc-500/40 bg-zinc-800/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-300">
+              Idle
+            </span>
+            <span className="font-[family-name:var(--font-jetbrains-mono)] text-xs text-zinc-400">
+              All website videos cached
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isRunning || isStarting}
+            onClick={handleStartScan}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              isRunning || isStarting
+                ? "cursor-not-allowed border-zinc-600 bg-zinc-800 text-zinc-500"
+                : "border-violet-300/60 bg-violet-500/30 text-violet-100 hover:border-violet-200/80 hover:bg-violet-500/45"
+            }`}
+          >
+            {isStarting ? "Starting..." : isRunning ? "Caching..." : "Cache Now"}
           </button>
 
           {isRunning && (
@@ -1647,7 +2018,6 @@ function MusicSettingsCard() {
     queue,
     currentTrack,
     isPlaying,
-    isSuppressedByVideo,
     volume,
     shuffle,
     loopMode,
@@ -1663,7 +2033,6 @@ function MusicSettingsCard() {
     setCurrentTrack,
     setVolume,
     setShuffle,
-    setLoopMode,
   } = useGlobalMusic();
   const [isAddingTracks, setIsAddingTracks] = useState(false);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(DEFAULT_MUSIC_VOLUME * 100));
@@ -2032,6 +2401,7 @@ function SelectiveClearDialog({
     stats: boolean;
     history: boolean;
     cache: boolean;
+    videoCache: boolean;
     settings: boolean;
   };
   onSelectionChange: (next: typeof selections) => void;
@@ -2057,6 +2427,11 @@ function SelectiveClearDialog({
       id: "cache",
       label: "Multiplayer Cache",
       description: "Downloaded match results and sync queue.",
+    },
+    {
+      id: "videoCache",
+      label: "Video Cache",
+      description: "Downloaded website videos and generated playback transcodes.",
     },
     {
       id: "settings",
@@ -2993,6 +3368,277 @@ function HelpShortcutsCard() {
             </div>
           </details>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function SecuritySettingsCard() {
+  const [trustedSites, setTrustedSites] = useState<Awaited<
+    ReturnType<typeof security.listTrustedSites>
+  > | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [draftDomain, setDraftDomain] = useState("");
+  const [filter, setFilter] = useState("");
+  const [isYtDlpDomainsOpen, setIsYtDlpDomainsOpen] = useState(true);
+  const [isUserTrustedDomainsOpen, setIsUserTrustedDomainsOpen] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    void security
+      .listTrustedSites()
+      .then((value) => {
+        if (mounted) setTrustedSites(value);
+      })
+      .catch((error) => {
+        if (mounted) {
+          setStatusMessage(
+            error instanceof Error ? error.message : "Failed to load trusted sites."
+          );
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const applyMutation = async (task: () => Promise<void>) => {
+    setStatusMessage(null);
+    try {
+      await task();
+      setTrustedSites(await security.listTrustedSites());
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Security settings update failed.");
+    }
+  };
+
+  const normalizedFilter = filter.trim().toLowerCase();
+  const includeEntry = (value: string) =>
+    normalizedFilter.length === 0 || value.toLowerCase().includes(normalizedFilter);
+
+  return (
+    <section
+      className="animate-entrance rounded-3xl border border-purple-400/25 bg-zinc-950/55 p-5 backdrop-blur-xl"
+      style={{ animationDelay: "0.08s" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold tracking-tight text-violet-100">
+          Remote Import Trust
+        </h2>
+        <p className="mt-1 text-sm text-zinc-300">
+          Sidecar imports automatically trust Stash source hosts, yt-dlp-supported domains, and the
+          user-trusted domains listed here. In{" "}
+          <span className="font-semibold text-zinc-100">Prompt</span> mode, unknown remote URLs can
+          be approved during manual import. In{" "}
+          <span className="font-semibold text-zinc-100">Block</span> mode, every non-whitelisted
+          remote URL is blocked automatically. In{" "}
+          <span className="font-semibold text-zinc-100">Paranoid</span> mode, only configured Stash
+          source URLs are allowed.
+        </p>
+      </div>
+
+      <div className="space-y-0 divide-y divide-violet-300/15">
+        <div className="pb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-zinc-100">Security Mode</span>
+            <div className="flex rounded-lg border border-violet-300/25 bg-black/35 p-0.5">
+              {(["prompt", "block", "paranoid"] as const).map((mode) => {
+                const active = trustedSites?.securityMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                      active
+                        ? "bg-violet-500/40 text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSelectSound();
+                      void applyMutation(async () => {
+                        await security.setSecurityMode(mode);
+                      });
+                    }}
+                  >
+                    {mode}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            {trustedSites?.securityMode === "paranoid"
+              ? "Allowing only configured Stash source URLs and blocking yt-dlp and user-whitelisted domains."
+              : trustedSites?.securityMode === "block"
+                ? "Silently blocking every remote URL that is not already whitelisted."
+                : "Asking during manual sidecar imports before trusting unknown remote URLs."}
+          </p>
+          {trustedSites?.securityMode === "paranoid" ? (
+            <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              Paranoid mode will impact the user experience significantly and should only be used if
+              you know exactly what you are doing.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="py-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={draftDomain}
+              onChange={(event) => setDraftDomain(event.target.value)}
+              placeholder="Add trusted base domain"
+              className="min-w-0 flex-1 rounded-xl border border-violet-300/25 bg-black/35 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-violet-300/50"
+            />
+            <button
+              type="button"
+              onMouseEnter={playHoverSound}
+              className="rounded-xl border border-violet-300/60 bg-violet-500/30 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:border-violet-200/80 hover:bg-violet-500/45"
+              onClick={() => {
+                playSelectSound();
+                void applyMutation(async () => {
+                  await security.addTrustedSite(draftDomain);
+                  setDraftDomain("");
+                });
+              }}
+            >
+              Add Trusted Site
+            </button>
+          </div>
+
+          <input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter domains"
+            className="mt-3 w-full rounded-xl border border-violet-300/25 bg-black/35 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-violet-300/50"
+          />
+        </div>
+
+        {statusMessage ? (
+          <div className="py-4">
+            <div className="rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+              {statusMessage}
+            </div>
+          </div>
+        ) : null}
+
+        {!trustedSites ? (
+          <div className="py-4 text-sm text-zinc-400">Loading security settings...</div>
+        ) : (
+          <>
+            {trustedSites.builtInStashHosts.length > 0 && (
+              <details className="group py-3" open>
+                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
+                  <span>
+                    Stash Hosts
+                    <span className="ml-2 text-xs font-normal text-zinc-500">
+                      {trustedSites.builtInStashHosts.filter(includeEntry).length}
+                    </span>
+                  </span>
+                  <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">
+                    ▾
+                  </span>
+                </summary>
+                <div className="mt-2 max-h-48 space-y-1 overflow-y-auto pl-1">
+                  {trustedSites.builtInStashHosts.filter(includeEntry).map((host) => (
+                    <div
+                      key={host}
+                      className="rounded-lg px-2 py-1 text-xs text-zinc-300 break-all"
+                    >
+                      {host}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {trustedSites.builtInYtDlpDomains.length > 0 && (
+              <details
+                className="group py-3"
+                open={isYtDlpDomainsOpen}
+                onToggle={(event) =>
+                  setIsYtDlpDomainsOpen((event.currentTarget as HTMLDetailsElement).open)
+                }
+              >
+                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
+                  <span>
+                    yt-dlp Domains
+                    <span className="ml-2 text-xs font-normal text-zinc-500">
+                      {trustedSites.builtInYtDlpDomains.filter(includeEntry).length}
+                    </span>
+                  </span>
+                  <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">
+                    ▾
+                  </span>
+                </summary>
+                {normalizedFilter.length === 0 ? (
+                  <p className="mt-2 text-xs text-zinc-500 pl-1">
+                    {trustedSites.builtInYtDlpDomains.length} domains — use the filter above to
+                    search.
+                  </p>
+                ) : (
+                  <div className="mt-2 max-h-48 space-y-1 overflow-y-auto pl-1">
+                    {trustedSites.builtInYtDlpDomains.filter(includeEntry).map((domain) => (
+                      <div
+                        key={domain}
+                        className="rounded-lg px-2 py-1 text-xs text-zinc-300 break-all"
+                      >
+                        {domain}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </details>
+            )}
+
+            <details
+              className="group py-3"
+              open={isUserTrustedDomainsOpen}
+              onToggle={(event) =>
+                setIsUserTrustedDomainsOpen((event.currentTarget as HTMLDetailsElement).open)
+              }
+            >
+              <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-100 hover:text-violet-100">
+                <span>
+                  User-Trusted Domains
+                  <span className="ml-2 text-xs font-normal text-zinc-500">
+                    {trustedSites.userTrustedBaseDomains.filter(includeEntry).length}
+                  </span>
+                </span>
+                <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-2 space-y-1 pl-1">
+                {trustedSites.userTrustedBaseDomains.filter(includeEntry).length === 0 ? (
+                  <p className="text-xs text-zinc-500">No user-trusted domains yet.</p>
+                ) : (
+                  trustedSites.userTrustedBaseDomains.filter(includeEntry).map((domain) => (
+                    <div
+                      key={domain}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-violet-300/25 bg-black/35 px-3 py-2"
+                    >
+                      <span className="break-all text-xs text-zinc-200">{domain}</span>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-lg border border-rose-300/60 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-rose-100 hover:bg-rose-500/35"
+                        onMouseEnter={playHoverSound}
+                        onClick={() => {
+                          playSelectSound();
+                          void applyMutation(async () => {
+                            await security.removeTrustedSite(domain);
+                          });
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </details>
+          </>
+        )}
       </div>
     </section>
   );

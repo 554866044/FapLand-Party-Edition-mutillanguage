@@ -133,8 +133,10 @@ vi.mock("../services/trpc", () => ({
           if (key === "game.intermediary.loadingDurationSec") return 5;
           if (key === "game.intermediary.returnPauseSec") return 4;
           if (key === "videoHash.ffmpegSourcePreference") return "auto";
+          if (key === "webVideo.ytDlpBinaryPreference") return "auto";
           if (key === "background.video.enabled") return true;
           if (key === "experimental.controllerSupportEnabled") return false;
+          if (key === "experimental.installWebFunscriptUrlEnabled") return false;
           if (key === "round.video.progressBarAlwaysVisible") return false;
           return null;
         }),
@@ -182,6 +184,7 @@ describe("Settings music section", () => {
         selectPlaylistImportFile: vi.fn(),
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
+        selectWebsiteVideoCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(async () => ["/music/three.mp3", "/music/four.mp3"]),
         selectConverterFunscriptFile: vi.fn(),
@@ -260,6 +263,31 @@ describe("Settings music section", () => {
     await waitFor(() => {
       expect(setMutate).toHaveBeenCalledWith({
         key: "experimental.controllerSupportEnabled",
+        value: true,
+      });
+    });
+  });
+
+  it("persists the install web funscript URL experimental toggle", async () => {
+    const setMutate = vi.mocked(trpc.store.set.mutate);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Experimental/ })[0]!);
+
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle Show Web Install Funscript URL",
+    });
+    await waitFor(() => {
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      expect(toggle.hasAttribute("disabled")).toBe(false);
+    });
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(setMutate).toHaveBeenCalledWith({
+        key: "experimental.installWebFunscriptUrlEnabled",
         value: true,
       });
     });

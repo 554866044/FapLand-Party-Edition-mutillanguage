@@ -252,15 +252,15 @@ function MultiplayerRoute() {
     "rounded-xl border px-3 py-2 text-sm font-semibold tracking-wide transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100";
 
   const refreshPublicLobbies = useCallback(
-    async (profile: MultiplayerServerProfile | null) => {
+    async (profile: MultiplayerServerProfile | null, silent = false) => {
       if (!profile || !isLikelyConfiguredSupabaseServer(profile) || onboardingStatus !== "ready") {
         setPublicLobbies((current) => (current.length === 0 ? current : []));
         setPublicLobbiesError(null);
-        setPublicLobbiesLoading(false);
+        if (!silent) setPublicLobbiesLoading(false);
         return;
       }
 
-      setPublicLobbiesLoading(true);
+      if (!silent) setPublicLobbiesLoading(true);
       try {
         const nextLobbies = await listPublicLobbies(profile);
         setPublicLobbies((current) =>
@@ -272,7 +272,7 @@ function MultiplayerRoute() {
           loadError instanceof Error ? loadError.message : "Failed to load public lobbies."
         );
       } finally {
-        setPublicLobbiesLoading(false);
+        if (!silent) setPublicLobbiesLoading(false);
       }
     },
     [onboardingStatus]
@@ -404,7 +404,7 @@ function MultiplayerRoute() {
 
     void refreshPublicLobbies(selectedServer);
     const interval = window.setInterval(() => {
-      void refreshPublicLobbies(selectedServer);
+      void refreshPublicLobbies(selectedServer, true);
     }, 10000);
 
     return () => {
@@ -660,7 +660,9 @@ function MultiplayerRoute() {
                 {lobby.status !== "waiting" &&
                   (lobby.allowLateJoin ? " · Late join" : " · No late join")}
               </p>
-              {joinBlockedReason && <p className="mt-1 text-xs text-zinc-500">{joinBlockedReason}</p>}
+              {joinBlockedReason && (
+                <p className="mt-1 text-xs text-zinc-500">{joinBlockedReason}</p>
+              )}
               {joinWarning && <p className="mt-1 text-xs text-amber-200/70">{joinWarning}</p>}
             </div>
             <button

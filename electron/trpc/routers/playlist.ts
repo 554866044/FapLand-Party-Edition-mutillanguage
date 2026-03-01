@@ -45,7 +45,7 @@ export const playlistRouter = router({
         name: z.string().trim().min(1),
         description: z.string().optional().nullable(),
         config: z.unknown().optional(),
-      }),
+      })
     )
     .mutation(({ input }) => {
       return createPlaylist(input);
@@ -58,7 +58,7 @@ export const playlistRouter = router({
         name: z.string().optional(),
         description: z.string().optional().nullable(),
         config: z.unknown().optional(),
-      }),
+      })
     )
     .mutation(({ input }) => {
       return updatePlaylist(input);
@@ -87,10 +87,12 @@ export const playlistRouter = router({
     }),
 
   importFromFile: publicProcedure
-    .input(z.object({
-      filePath: z.string().min(1),
-      manualMappingByRefKey: z.record(z.string(), z.string().min(1).nullable()).optional(),
-    }))
+    .input(
+      z.object({
+        filePath: z.string().min(1),
+        manualMappingByRefKey: z.record(z.string(), z.string().min(1).nullable()).optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       try {
         return await importPlaylistFromFile(input);
@@ -129,12 +131,15 @@ export const playlistRouter = router({
     }),
 
   exportPackage: publicProcedure
-    .input(z.object({
-      playlistId: z.string().min(1),
-      directoryPath: z.string().min(1),
-      compressionMode: z.enum(["copy", "av1"]).optional(),
-      compressionStrength: z.number().finite().min(0).max(100).optional(),
-    }))
+    .input(
+      z.object({
+        playlistId: z.string().min(1),
+        directoryPath: z.string().min(1),
+        compressionMode: z.enum(["copy", "av1"]).optional(),
+        compressionStrength: z.number().finite().min(0).max(100).optional(),
+        asFpack: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       try {
         return await exportPlaylistPackageBundle(input);
@@ -147,18 +152,21 @@ export const playlistRouter = router({
     }),
 
   analyzeExportPackage: publicProcedure
-    .input(z.object({
-      playlistId: z.string().min(1),
-      compressionMode: z.enum(["copy", "av1"]).optional(),
-      compressionStrength: z.number().finite().min(0).max(100).optional(),
-    }))
+    .input(
+      z.object({
+        playlistId: z.string().min(1),
+        compressionMode: z.enum(["copy", "av1"]).optional(),
+        compressionStrength: z.number().finite().min(0).max(100).optional(),
+      })
+    )
     .query(async ({ input }) => {
       try {
         return await analyzePlaylistExportPackage(input);
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: error instanceof Error ? error.message : "Failed to analyze playlist export package.",
+          message:
+            error instanceof Error ? error.message : "Failed to analyze playlist export package.",
         });
       }
     }),
@@ -178,7 +186,7 @@ export const playlistRouter = router({
         roundId: z.string().min(1),
         nodeId: z.string().optional().nullable(),
         poolId: z.string().optional().nullable(),
-      }),
+      })
     )
     .mutation(({ input }) => {
       return recordPlaylistTrackPlay(input);

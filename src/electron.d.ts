@@ -12,6 +12,7 @@ declare global {
                 selectPlaylistImportFile: () => Promise<string | null>;
                 selectPlaylistExportPath: (defaultName: string) => Promise<string | null>;
                 selectPlaylistExportDirectory: (defaultName?: string) => Promise<string | null>;
+                selectWebsiteVideoCacheDirectory: () => Promise<string | null>;
                 selectConverterVideoFile: () => Promise<string | null>;
                 selectMusicFiles: () => Promise<string[]>;
                 selectConverterFunscriptFile: () => Promise<string | null>;

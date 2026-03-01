@@ -1,0 +1,283 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY } from "../constants/websiteVideoCacheSettings";
+
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  globalMusic: {
+    enabled: true,
+    queue: [],
+    currentIndex: 0,
+    currentTrack: null,
+    isPlaying: false,
+    isSuppressedByVideo: false,
+    volume: 0.45,
+    shuffle: false,
+    loopMode: "queue" as const,
+    setEnabled: vi.fn(async () => {}),
+    addTracks: vi.fn(async () => {}),
+    removeTrack: vi.fn(async () => {}),
+    moveTrack: vi.fn(async () => {}),
+    clearQueue: vi.fn(async () => {}),
+    play: vi.fn(async () => {}),
+    pause: vi.fn(),
+    next: vi.fn(async () => {}),
+    previous: vi.fn(async () => {}),
+    setCurrentTrack: vi.fn(async () => {}),
+    setVolume: vi.fn(async () => {}),
+    setShuffle: vi.fn(async () => {}),
+    setLoopMode: vi.fn(async () => {}),
+  },
+  handy: {
+    connectionKey: "",
+    appApiKey: "default-app-key",
+    appApiKeyOverride: "",
+    isUsingDefaultAppApiKey: true,
+    localIp: "",
+    connected: false,
+    manuallyStopped: false,
+    synced: false,
+    syncError: null,
+    isConnecting: false,
+    error: null,
+    connect: vi.fn(async () => {}),
+    disconnect: vi.fn(async () => {}),
+    forceStop: vi.fn(async () => {}),
+    toggleManualStop: vi.fn(async () => "unavailable" as const),
+    setSyncStatus: vi.fn(),
+  },
+  appUpdate: {
+    state: {
+      status: "up_to_date" as const,
+      currentVersion: "0.1.2",
+      latestVersion: "0.1.2",
+      checkedAtIso: "2026-03-20T00:00:00.000Z",
+      releasePageUrl: "https://example.com/release",
+      downloadUrl: null,
+      releaseNotes: null,
+      publishedAtIso: null,
+      canAutoUpdate: false,
+      errorMessage: null,
+    },
+    isBusy: false,
+    actionLabel: "Check Again",
+    menuBadge: undefined,
+    menuTone: "success" as const,
+    systemMessage: "Installed build is current.",
+    triggerPrimaryAction: vi.fn(async () => {}),
+  },
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  createFileRoute: () => () => ({
+    useSearch: () => ({ section: "general" }),
+  }),
+  useNavigate: () => mocks.navigate,
+}));
+
+vi.mock("../components/AnimatedBackground", () => ({
+  AnimatedBackground: () => null,
+}));
+
+vi.mock("../components/MenuButton", () => ({
+  MenuButton: ({ label, onClick }: { label: string; onClick?: () => void }) => (
+    <button type="button" onClick={onClick}>
+      {label}
+    </button>
+  ),
+}));
+
+vi.mock("../utils/audio", () => ({
+  playHoverSound: vi.fn(),
+  playSelectSound: vi.fn(),
+}));
+
+vi.mock("../services/booru", () => ({
+  ensureBooruMediaCache: vi.fn(),
+}));
+
+vi.mock("../services/db", () => ({
+  db: {
+    install: {
+      getAutoScanFolders: vi.fn(async () => []),
+      clearAllData: vi.fn(async () => {}),
+      addAutoScanFolderAndScan: vi.fn(),
+      removeAutoScanFolder: vi.fn(),
+    },
+    phash: {
+      getScanStatus: vi.fn(async () => null),
+    },
+  },
+}));
+
+vi.mock("../services/integrations", () => ({
+  integrations: {
+    listSources: vi.fn(async () => []),
+    getSyncStatus: vi.fn(async () => null),
+    syncNow: vi.fn(),
+    createStashSource: vi.fn(),
+    updateStashSource: vi.fn(),
+    deleteSource: vi.fn(),
+    testStashConnection: vi.fn(),
+    searchStashTags: vi.fn(),
+    setSourceEnabled: vi.fn(),
+  },
+}));
+
+vi.mock("../services/trpc", () => ({
+  trpc: {
+    db: {
+      clearAllData: {
+        mutate: vi.fn(async () => {}),
+      },
+    },
+    store: {
+      get: {
+        query: vi.fn(async ({ key }: { key: string }) => {
+          if (key === "game.intermediary.loadingPrompt") return "animated gif webm score:>300";
+          if (key === "game.intermediary.loadingDurationSec") return 5;
+          if (key === "game.intermediary.returnPauseSec") return 4;
+          if (key === "videoHash.ffmpegSourcePreference") return "auto";
+          if (key === "webVideo.ytDlpBinaryPreference") return "auto";
+          if (key === "background.video.enabled") return true;
+          if (key === "game.backgroundWebsiteVideoCaching.enabled") return true;
+          if (key === "experimental.controllerSupportEnabled") return false;
+          if (key === "experimental.installWebFunscriptUrlEnabled") return false;
+          if (key === "round.video.progressBarAlwaysVisible") return false;
+          if (key === WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY) return null;
+          return null;
+        }),
+      },
+      set: {
+        mutate: vi.fn(async () => {}),
+      },
+    },
+  },
+}));
+
+vi.mock("../hooks/useGlobalMusic", () => ({
+  useGlobalMusic: () => mocks.globalMusic,
+}));
+
+vi.mock("../contexts/HandyContext", () => ({
+  useHandy: () => mocks.handy,
+}));
+
+vi.mock("../hooks/useAppUpdate", () => ({
+  useAppUpdate: () => mocks.appUpdate,
+}));
+
+import { SettingsPage } from "./settings";
+import { trpc } from "../services/trpc";
+
+describe("Settings website video caching", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    window.electronAPI = {
+      file: {
+        convertFileSrc: vi.fn(),
+      },
+      dialog: {
+        selectFolders: vi.fn(),
+        selectInstallImportFile: vi.fn(),
+        selectPlaylistImportFile: vi.fn(),
+        selectPlaylistExportPath: vi.fn(),
+        selectPlaylistExportDirectory: vi.fn(),
+        selectWebsiteVideoCacheDirectory: vi.fn(),
+        selectConverterVideoFile: vi.fn(),
+        selectMusicFiles: vi.fn(async () => []),
+        selectConverterFunscriptFile: vi.fn(),
+      },
+      window: {
+        isFullscreen: vi.fn(async () => false),
+        setFullscreen: vi.fn(async () => false),
+        toggleFullscreen: vi.fn(),
+        close: vi.fn(),
+      },
+      updates: {
+        subscribe: vi.fn(() => () => {}),
+      },
+      appOpen: {
+        consumePendingFiles: vi.fn(async () => []),
+        subscribe: vi.fn(() => () => {}),
+      },
+    };
+  });
+
+  it("does not expose a background website video caching toggle anymore", async () => {
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole("switch", { name: "Toggle Background Website Video Caching" })
+    ).toBeNull();
+  });
+
+  it("offers video cache as a separate delete option", async () => {
+    const clearAllDataMutate = vi.mocked(trpc.db.clearAllData.mutate);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage & Clear Data" }));
+
+    expect(screen.getByText("Video Cache")).toBeDefined();
+    expect(
+      screen.getByText("Downloaded website videos and generated playback transcodes.")
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Video Cache/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Deletion" }));
+
+    await waitFor(() => {
+      expect(clearAllDataMutate).toHaveBeenCalledWith({
+        rounds: true,
+        playlists: true,
+        stats: true,
+        history: true,
+        cache: true,
+        videoCache: false,
+        settings: true,
+      });
+    });
+  });
+
+  it("lets the user choose a custom website video cache folder", async () => {
+    const setMutate = vi.mocked(trpc.store.set.mutate);
+    vi.mocked(window.electronAPI.dialog.selectWebsiteVideoCacheDirectory).mockResolvedValue(
+      "/tmp/custom-web-cache"
+    );
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Folder" }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.dialog.selectWebsiteVideoCacheDirectory).toHaveBeenCalled();
+      expect(setMutate).toHaveBeenCalledWith({
+        key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
+        value: "/tmp/custom-web-cache",
+      });
+    });
+  });
+
+  it("can reset the website video cache folder back to the default location", async () => {
+    vi.mocked(trpc.store.get.query).mockImplementation(async ({ key }: { key: string }) => {
+      if (key === WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY) return "/tmp/custom-web-cache";
+      return null;
+    });
+    const setMutate = vi.mocked(trpc.store.set.mutate);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use Default" }));
+
+    await waitFor(() => {
+      expect(setMutate).toHaveBeenCalledWith({
+        key: WEBSITE_VIDEO_CACHE_ROOT_PATH_KEY,
+        value: null,
+      });
+    });
+  });
+});

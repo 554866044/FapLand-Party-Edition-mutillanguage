@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app, shell } from "electron";
@@ -14,6 +15,7 @@ import {
   addAutoScanFolderAndScan,
   getAutoScanFolders,
   getInstallScanStatus,
+  inspectInstallSidecarFile,
   importInstallSidecarFile,
   repairTemplateHero,
   repairTemplateRound,
@@ -31,6 +33,23 @@ import {
   startPhashScanManual,
   requestPhashScanAbort,
 } from "../../services/phashScanService";
+import {
+  getWebsiteVideoScanStatus,
+  requestWebsiteVideoScanAbort,
+  startWebsiteVideoScan,
+  startWebsiteVideoScanManual,
+} from "../../services/webVideoScanService";
+import { clearPlayableVideoCache } from "../../services/playableVideo";
+import {
+  clearWebsiteVideoCache,
+  ensureWebsiteVideoCached,
+  getAllWebsiteVideoDownloadProgresses,
+  getWebsiteVideoCacheState,
+  getWebsiteVideoDownloadProgress,
+  getWebsiteVideoTargetUrl,
+  removeCachedWebsiteVideo,
+  resolveWebsiteVideoStream,
+} from "../../services/webVideo";
 import { publicProcedure, router } from "../trpc";
 import { eq, desc, asc, inArray } from "drizzle-orm";
 import {
@@ -48,9 +67,54 @@ import {
 const ZNullableText = z.string().optional().nullable();
 const ZRoundType = z.enum(["Normal", "Interjection", "Cum"]);
 
+function normalizeHttpUrl(input: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(input.trim());
+  } catch {
+    throw new Error("Website URLs must be valid public http(s) URLs.");
+  }
+  if (!(parsed.protocol === "http:" || parsed.protocol === "https:")) {
+    throw new Error("Website URLs must be valid public http(s) URLs.");
+  }
+  return parsed.toString();
+}
+
+function toWebsiteRoundInstallSourceKey(input: {
+  name: string;
+  videoUri: string;
+  funscriptUri: string | null;
+}): string {
+  const payload = [
+    "website-round:v1",
+    input.name.trim().toLowerCase(),
+    input.videoUri.trim(),
+    input.funscriptUri?.trim() ?? "",
+  ].join("|");
+  const digest = crypto.createHash("sha256").update(payload).digest("hex");
+  return `website:${digest}`;
+}
+
 function getInstallExportBaseDir(): string {
   const exportBaseDir = app.isPackaged ? app.getPath("userData") : app.getAppPath();
   return path.join(exportBaseDir, "export");
+}
+
+function queueWebsiteVideoCaching(): void {
+  void startWebsiteVideoScan().catch((error) => {
+    console.error("Failed to queue website video caching", error);
+  });
+}
+
+function collectWebsiteVideoTargetUrls(videoUris: string[]): string[] {
+  const targetUrls = new Set<string>();
+  for (const videoUri of videoUris) {
+    const targetUrl = getWebsiteVideoTargetUrl(videoUri);
+    if (targetUrl) {
+      targetUrls.add(targetUrl);
+    }
+  }
+  return [...targetUrls];
 }
 
 async function hydrateResourceDurationMs(
@@ -154,8 +218,10 @@ export const dbRouter = router({
   getSinglePlayerCumLoadCount: publicProcedure.query(async () => {
     const db = getDb();
     const runs = await db.query.singlePlayerRunHistory.findMany();
-    return runs.filter((run) =>
-      run.completionReason === "self_reported_cum" || run.completionReason === "cum_instruction_failed"
+    return runs.filter(
+      (run) =>
+        run.completionReason === "self_reported_cum" ||
+        run.completionReason === "cum_instruction_failed"
     ).length;
   }),
 
@@ -400,6 +466,7 @@ export const dbRouter = router({
         difficulty: z.number().int().min(1).max(5).optional().nullable(),
         startTime: z.number().int().min(0).optional().nullable(),
         endTime: z.number().int().min(0).optional().nullable(),
+        funscriptUri: z.string().trim().min(1).optional().nullable(),
         type: ZRoundType,
       })
     )
@@ -408,6 +475,12 @@ export const dbRouter = router({
       const existing = await db.query.round.findFirst({
         where: eq(round.id, input.id),
         columns: { id: true },
+        with: {
+          resources: {
+            orderBy: [asc(resource.createdAt), asc(resource.id)],
+            columns: { id: true },
+          },
+        },
       });
       if (!existing) {
         throw new TRPCError({
@@ -423,6 +496,24 @@ export const dbRouter = router({
           code: "BAD_REQUEST",
           message: "Round end time must be greater than start time.",
         });
+      }
+
+      if (input.funscriptUri !== undefined) {
+        const primaryResource = existing.resources[0];
+        if (!primaryResource) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This round has no attached resource to update.",
+          });
+        }
+
+        await db
+          .update(resource)
+          .set({
+            funscriptUri: input.funscriptUri?.trim() || null,
+            updatedAt: new Date(),
+          })
+          .where(eq(resource.id, primaryResource.id));
       }
 
       const [updated] = await db
@@ -443,6 +534,136 @@ export const dbRouter = router({
       return updated;
     }),
 
+  createWebsiteRound: publicProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(1),
+        videoUri: z.string().trim().min(1),
+        funscriptUri: z.string().trim().min(1).optional().nullable(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      let normalizedVideoUri: string;
+      let normalizedFunscriptUri: string | null = null;
+
+      try {
+        normalizedVideoUri = normalizeHttpUrl(input.videoUri);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "Website video URLs must use public http(s).",
+        });
+      }
+
+      if (input.funscriptUri?.trim()) {
+        try {
+          normalizedFunscriptUri = normalizeHttpUrl(input.funscriptUri);
+        } catch {
+          normalizedFunscriptUri = input.funscriptUri.trim();
+        }
+      }
+
+      try {
+        const created = await db.transaction(async (tx) => {
+          const [createdRound] = await tx
+            .insert(round)
+            .values({
+              name: input.name.trim(),
+              author: null,
+              description: null,
+              bpm: null,
+              difficulty: null,
+              phash: null,
+              startTime: null,
+              endTime: null,
+              type: "Normal",
+              installSourceKey: toWebsiteRoundInstallSourceKey({
+                name: input.name,
+                videoUri: normalizedVideoUri,
+                funscriptUri: normalizedFunscriptUri,
+              }),
+              previewImage: null,
+              heroId: null,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          if (!createdRound) {
+            throw new Error("Failed to create the website round entry.");
+          }
+
+          const [createdResource] = await tx
+            .insert(resource)
+            .values({
+              videoUri: normalizedVideoUri,
+              funscriptUri: normalizedFunscriptUri,
+              phash: null,
+              durationMs: null,
+              disabled: false,
+              roundId: createdRound.id,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          if (!createdResource) {
+            throw new Error("Failed to attach website media to the installed round.");
+          }
+
+          return {
+            roundId: createdRound.id,
+            resourceId: createdResource.id,
+          };
+        });
+
+        queueWebsiteVideoCaching();
+        return created;
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "Failed to create the website round entry.",
+        });
+      }
+    }),
+
+  checkWebsiteRoundVideoSupport: publicProcedure
+    .input(
+      z.object({
+        videoUri: z.string().trim().min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      let normalizedVideoUri: string;
+
+      try {
+        normalizedVideoUri = normalizeHttpUrl(input.videoUri);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "Website video URLs must use public http(s).",
+        });
+      }
+
+      try {
+        const resolution = await resolveWebsiteVideoStream(normalizedVideoUri);
+        return {
+          supported: true,
+          normalizedVideoUri,
+          extractor: resolution.extractor ?? null,
+          title: resolution.title ?? null,
+        };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "This website video URL is not supported.",
+        });
+      }
+    }),
+
   deleteRound: publicProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ input }) => {
@@ -450,6 +671,13 @@ export const dbRouter = router({
       const existing = await db.query.round.findFirst({
         where: eq(round.id, input.id),
         columns: { id: true },
+        with: {
+          resources: {
+            columns: {
+              videoUri: true,
+            },
+          },
+        },
       });
       if (!existing) {
         throw new TRPCError({
@@ -458,7 +686,27 @@ export const dbRouter = router({
         });
       }
 
+      const deletedRoundWebsiteUrls = collectWebsiteVideoTargetUrls(
+        existing.resources.map((entry) => entry.videoUri)
+      );
       await db.delete(round).where(eq(round.id, input.id));
+
+      if (deletedRoundWebsiteUrls.length > 0) {
+        const remainingResources = await db.query.resource.findMany({
+          columns: {
+            videoUri: true,
+          },
+        });
+        const remainingWebsiteUrls = new Set(
+          collectWebsiteVideoTargetUrls(remainingResources.map((entry) => entry.videoUri))
+        );
+        await Promise.all(
+          deletedRoundWebsiteUrls
+            .filter((targetUrl) => !remainingWebsiteUrls.has(targetUrl))
+            .map((targetUrl) => removeCachedWebsiteVideo(targetUrl))
+        );
+      }
+
       return { deleted: true };
     }),
 
@@ -522,6 +770,10 @@ export const dbRouter = router({
       const includeDisabled = input?.includeDisabled ?? false;
       const includeTemplates = input?.includeTemplates ?? false;
       const disabledRoundIds = getDisabledRoundIdSet();
+      const websiteVideoCacheStateByUri = new Map<
+        string,
+        Promise<Awaited<ReturnType<typeof getWebsiteVideoCacheState>>>
+      >();
 
       const rounds = await db.query.round.findMany({
         with: {
@@ -549,16 +801,30 @@ export const dbRouter = router({
         db,
         filteredRounds.flatMap((entry) => entry.resources)
       );
-      return filteredRounds.map((r) => ({
-        ...r,
-        resources: r.resources.map((res) => ({
-          ...res,
-          ...resolveResourceUris({
-            videoUri: res.videoUri,
-            funscriptUri: res.funscriptUri,
-          }),
-        })),
-      }));
+
+      const getCachedStateForUri = (videoUri: string) => {
+        const existing = websiteVideoCacheStateByUri.get(videoUri);
+        if (existing) return existing;
+        const pending = getWebsiteVideoCacheState(videoUri);
+        websiteVideoCacheStateByUri.set(videoUri, pending);
+        return pending;
+      };
+
+      return await Promise.all(
+        filteredRounds.map(async (entry) => ({
+          ...entry,
+          resources: await Promise.all(
+            entry.resources.map(async (res) => ({
+              ...res,
+              ...resolveResourceUris({
+                videoUri: res.videoUri,
+                funscriptUri: res.funscriptUri,
+              }),
+              websiteVideoCacheStatus: await getCachedStateForUri(res.videoUri),
+            }))
+          ),
+        }))
+      );
     }),
 
   getDisabledRoundIds: publicProcedure.query(async () => {
@@ -601,7 +867,9 @@ export const dbRouter = router({
     }),
 
   scanInstallSources: publicProcedure.mutation(async () => {
-    return scanInstallSources("manual");
+    const result = await scanInstallSources("manual");
+    queueWebsiteVideoCaching();
+    return result;
   }),
 
   scanInstallFolderOnce: publicProcedure
@@ -613,9 +881,11 @@ export const dbRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        return await scanInstallFolderOnceWithLegacySupport(input.folderPath, {
+        const result = await scanInstallFolderOnceWithLegacySupport(input.folderPath, {
           omitCheckpointRounds: input.omitCheckpointRounds ?? true,
         });
+        queueWebsiteVideoCaching();
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -629,16 +899,40 @@ export const dbRouter = router({
     .input(
       z.object({
         filePath: z.string().min(1),
+        allowedBaseDomains: z.array(z.string().trim().min(1)).optional(),
       })
     )
     .mutation(async ({ input }) => {
       try {
-        return await importInstallSidecarFile(input.filePath);
+        const result = await importInstallSidecarFile(
+          input.filePath,
+          input.allowedBaseDomains ?? []
+        );
+        queueWebsiteVideoCaching();
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
             error instanceof Error ? error.message : "Failed to import selected sidecar file.",
+        });
+      }
+    }),
+
+  inspectInstallSidecarFile: publicProcedure
+    .input(
+      z.object({
+        filePath: z.string().min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        return await inspectInstallSidecarFile(input.filePath);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "Failed to inspect selected sidecar file.",
         });
       }
     }),
@@ -728,9 +1022,11 @@ export const dbRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        return await importLegacyFolderWithPlan(input.folderPath, input.reviewedSlots, {
+        const result = await importLegacyFolderWithPlan(input.folderPath, input.reviewedSlots, {
           deferPhash: input.deferPhash,
         });
+        queueWebsiteVideoCaching();
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -761,7 +1057,9 @@ export const dbRouter = router({
     .input(z.object({ folderPath: z.string().min(1) }))
     .mutation(async ({ input }) => {
       try {
-        return await addAutoScanFolderAndScan(input.folderPath);
+        const result = await addAutoScanFolderAndScan(input.folderPath);
+        queueWebsiteVideoCaching();
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -799,6 +1097,7 @@ export const dbRouter = router({
         heroIds: z.array(z.string()).optional(),
         includeMedia: z.boolean().optional(),
         directoryPath: z.string().optional(),
+        asFpack: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -808,6 +1107,7 @@ export const dbRouter = router({
           heroIds: input.heroIds,
           includeMedia: input.includeMedia ?? true,
           directoryPath: input.directoryPath,
+          asFpack: input.asFpack ?? false,
         });
       } catch (error) {
         throw new TRPCError({
@@ -839,6 +1139,7 @@ export const dbRouter = router({
           stats: z.boolean().optional(),
           history: z.boolean().optional(),
           cache: z.boolean().optional(),
+          videoCache: z.boolean().optional(),
           settings: z.boolean().optional(),
         })
         .optional()
@@ -851,6 +1152,7 @@ export const dbRouter = router({
         stats = true,
         history = true,
         cache = true,
+        videoCache = true,
         settings = true,
       } = input ?? {};
 
@@ -878,6 +1180,9 @@ export const dbRouter = router({
 
       if (settings) {
         getStore().clear();
+      }
+      if (videoCache) {
+        await Promise.all([clearWebsiteVideoCache(), clearPlayableVideoCache()]);
       }
       return { cleared: true };
     }),
@@ -983,4 +1288,60 @@ export const dbRouter = router({
   abortPhashScan: publicProcedure.mutation(() => {
     return requestPhashScanAbort();
   }),
+
+  getWebsiteVideoScanStatus: publicProcedure.query(() => {
+    return getWebsiteVideoScanStatus();
+  }),
+
+  startWebsiteVideoScan: publicProcedure.mutation(async () => {
+    return startWebsiteVideoScan();
+  }),
+
+  startWebsiteVideoScanManual: publicProcedure.mutation(async () => {
+    return startWebsiteVideoScanManual();
+  }),
+
+  abortWebsiteVideoScan: publicProcedure.mutation(() => {
+    return requestWebsiteVideoScanAbort();
+  }),
+
+  getWebsiteVideoDownloadProgresses: publicProcedure.query(() => {
+    return getAllWebsiteVideoDownloadProgresses();
+  }),
+
+  ensureWebsiteVideoCachedForConverter: publicProcedure
+    .input(
+      z.object({
+        url: z.string().trim().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await ensureWebsiteVideoCached(input.url);
+      return {
+        finalFilePath: result.finalFilePath,
+        title: result.title,
+        durationMs: result.durationMs,
+        extractor: result.extractor,
+      };
+    }),
+
+  getWebsiteVideoDownloadProgressForUrl: publicProcedure
+    .input(
+      z.object({
+        url: z.string().trim().min(1),
+      })
+    )
+    .query(({ input }) => {
+      return getWebsiteVideoDownloadProgress(input.url);
+    }),
+
+  cancelWebsiteVideoCache: publicProcedure
+    .input(
+      z.object({
+        url: z.string().trim().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await removeCachedWebsiteVideo(input.url);
+    }),
 });

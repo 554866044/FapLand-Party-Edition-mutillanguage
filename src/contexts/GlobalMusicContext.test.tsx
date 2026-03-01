@@ -129,6 +129,7 @@ describe("GlobalMusicContext", () => {
         selectPlaylistImportFile: vi.fn(),
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
+        selectWebsiteVideoCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),

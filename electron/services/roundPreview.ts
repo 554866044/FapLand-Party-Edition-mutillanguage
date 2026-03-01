@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import { resolvePhashBinaries } from "./phash/binaries";
 import { runCommand } from "./phash/extract";
 
-const PREVIEW_IMAGE_WIDTH = 640;
-const PREVIEW_JPEG_QUALITY = 4;
+const PREVIEW_IMAGE_WIDTH = 480;
+const PREVIEW_JPEG_QUALITY = 6;
 
 type GenerateRoundPreviewImageInput = {
   videoUri: string;

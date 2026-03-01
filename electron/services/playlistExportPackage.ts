@@ -48,12 +48,15 @@ type ExportPackageInput = {
   directoryPath: string;
   compressionMode?: PlaylistExportCompressionMode;
   compressionStrength?: number;
+  includeMedia?: boolean;
+  asFpack?: boolean;
 };
 
 type AnalyzeExportPackageInput = {
   playlistId: string;
   compressionMode?: PlaylistExportCompressionMode;
   compressionStrength?: number;
+  includeMedia?: boolean;
 };
 
 export type PlaylistExportPackageState = "idle" | "running" | "done" | "aborted" | "error";
@@ -203,14 +206,14 @@ type ExportedMediaFile = {
 
 type MaterializedResource = {
   canonicalVideoKey: string;
-  video: ExportedMediaFile;
+  video: ExportedMediaFile | null;
   funscript: ExportedMediaFile | null;
 };
 
 type RoundResourceEntry = {
   round: ExportableRound;
   resource: ExportableResource;
-  materialized: MaterializedResource;
+  materialized: MaterializedResource | null;
 };
 
 type ResourceReference = {
@@ -1068,7 +1071,7 @@ function estimateExportWork(input: PreparedPlaylistExport) {
   };
 }
 
-function toRoundSidecarPayload(entry: RoundResourceEntry) {
+function toRoundSidecarPayload(entry: RoundResourceEntry, includeMedia: boolean) {
   return ZRoundSidecar.parse({
     name: entry.round.name,
     author: entry.round.author ?? undefined,
@@ -1079,14 +1082,16 @@ function toRoundSidecarPayload(entry: RoundResourceEntry) {
     startTime: entry.round.startTime ?? undefined,
     endTime: entry.round.endTime ?? undefined,
     type: entry.round.type,
-    resources: [{
-      videoUri: entry.materialized.video.relativePath,
-      funscriptUri: entry.materialized.funscript?.relativePath,
-    }],
+    resources: [
+      {
+        videoUri: includeMedia && entry.materialized?.video ? entry.materialized.video.relativePath : entry.resource.videoUri,
+        funscriptUri: entry.materialized?.funscript ? entry.materialized.funscript.relativePath : entry.resource.funscriptUri,
+      },
+    ],
   });
 }
 
-function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEntry[]) {
+function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEntry[], includeMedia: boolean) {
   return ZHeroSidecar.parse({
     name: hero.name,
     author: hero.author ?? undefined,
@@ -1094,7 +1099,9 @@ function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEn
     phash: hero.phash ?? undefined,
     rounds: entries
       .slice()
-      .sort((a, b) => a.round.name.localeCompare(b.round.name, undefined, { sensitivity: "base", numeric: true }))
+      .sort((a, b) =>
+        a.round.name.localeCompare(b.round.name, undefined, { sensitivity: "base", numeric: true })
+      )
       .map((entry) => ({
         name: entry.round.name,
         author: entry.round.author ?? undefined,
@@ -1105,10 +1112,12 @@ function createHeroSidecarPayload(hero: ExportableHero, entries: RoundResourceEn
         startTime: entry.round.startTime ?? undefined,
         endTime: entry.round.endTime ?? undefined,
         type: entry.round.type,
-        resources: [{
-          videoUri: entry.materialized.video.relativePath,
-          funscriptUri: entry.materialized.funscript?.relativePath,
-        }],
+        resources: [
+          {
+            videoUri: includeMedia && entry.materialized?.video ? entry.materialized.video.relativePath : entry.resource.videoUri,
+            funscriptUri: entry.materialized?.funscript ? entry.materialized.funscript.relativePath : entry.resource.funscriptUri,
+          },
+        ],
       })),
   });
 }
@@ -1465,32 +1474,36 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     let actualVideoBytes = 0;
     let reencodedVideos = 0;
     let alreadyAv1Copied = 0;
-    const compressionLiveTracker = prepared.effectiveCompressionMode === "av1"
-      ? createCompressionLiveTracker(prepared.videoTasks)
-      : null;
-    if (compressionLiveTracker) {
-      syncCompressionLiveProgress(compressionLiveTracker);
-    }
+    const includeMedia = input.includeMedia ?? true;
 
-    await runLimited(
-      prepared.videoTasks,
-      prepared.effectiveCompressionMode === "av1" ? prepared.parallelJobs : 1,
-      async (task) => {
-        const result = await materializeVideoTask({
-          task,
-          workDir,
-          ffmpegPath: binaries.ffmpegPath,
-          ffprobePath: binaries.ffprobePath,
-          encoder: prepared.encoder,
-          compressionMode: prepared.effectiveCompressionMode,
-          compressionStrength: prepared.compressionStrength,
-          compressionLiveTracker,
-        });
-        actualVideoBytes += result.outputBytes;
-        if (result.reencoded) reencodedVideos += 1;
-        if (result.alreadyAv1Copied) alreadyAv1Copied += 1;
-      },
-    );
+    if (includeMedia) {
+      const compressionLiveTracker = prepared.effectiveCompressionMode === "av1"
+        ? createCompressionLiveTracker(prepared.videoTasks)
+        : null;
+      if (compressionLiveTracker) {
+        syncCompressionLiveProgress(compressionLiveTracker);
+      }
+
+      await runLimited(
+        prepared.videoTasks,
+        prepared.effectiveCompressionMode === "av1" ? prepared.parallelJobs : 1,
+        async (task) => {
+          const result = await materializeVideoTask({
+            task,
+            workDir,
+            ffmpegPath: binaries.ffmpegPath,
+            ffprobePath: binaries.ffprobePath,
+            encoder: prepared.encoder,
+            compressionMode: prepared.effectiveCompressionMode,
+            compressionStrength: prepared.compressionStrength,
+            compressionLiveTracker,
+          });
+          actualVideoBytes += result.outputBytes;
+          if (result.reencoded) reencodedVideos += 1;
+          if (result.alreadyAv1Copied) alreadyAv1Copied += 1;
+        },
+      );
+    }
 
     for (const task of prepared.funscriptTasks) {
       await materializeFunscriptTask(task);
@@ -1508,18 +1521,23 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
     );
 
     const materializedEntries: RoundResourceEntry[] = prepared.resourceReferences.map((entry) => {
-      const videoKey = `video:${canonicalizeResourceKey(entry.resource.videoUri)}`;
       const funscriptKey = entry.resource.funscriptUri ? `funscript:${canonicalizeResourceKey(entry.resource.funscriptUri)}` : null;
-      const video = videoOutputByKey.get(videoKey);
-      if (!video) {
-        throw new Error(`Exported video output is missing for ${entry.resource.videoUri}`);
+      let video = null;
+
+      if (includeMedia) {
+        const videoKey = `video:${canonicalizeResourceKey(entry.resource.videoUri)}`;
+        video = videoOutputByKey.get(videoKey);
+        if (!video) {
+          throw new Error(`Exported video output is missing for ${entry.resource.videoUri}`);
+        }
       }
+
       return {
         round: entry.round,
         resource: entry.resource,
         materialized: {
           canonicalVideoKey: canonicalizeResourceKey(entry.resource.videoUri),
-          video,
+          video: video ?? null,
           funscript: funscriptKey ? (funscriptOutputByKey.get(funscriptKey) ?? null) : null,
         },
       };
@@ -1553,7 +1571,7 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
       const sidecarBaseName = sanitizeFileSystemName(entry.round.name, `round__${entry.round.id}`);
       const fileName = toUniqueCaseInsensitiveFileName(usedSidecarNames, sidecarBaseName, ".round");
       updateExportPhase("writing", `Writing sidecar ${fileName}...`);
-      await writeJsonFile(path.join(tempDir, fileName), toRoundSidecarPayload(entry));
+      await writeJsonFile(path.join(tempDir, fileName), toRoundSidecarPayload(entry, includeMedia));
       incrementExportStat("sidecarFiles");
       incrementExportProgress();
       sidecarFiles += 1;
@@ -1568,7 +1586,7 @@ async function runExportPlaylistPackage(input: ExportPackageInput): Promise<Expo
       const sidecarBaseName = sanitizeFileSystemName(group.hero.name, `hero__${group.hero.id}`);
       const fileName = toUniqueCaseInsensitiveFileName(usedSidecarNames, sidecarBaseName, ".hero");
       updateExportPhase("writing", `Writing sidecar ${fileName}...`);
-      await writeJsonFile(path.join(tempDir, fileName), createHeroSidecarPayload(group.hero, group.entries));
+      await writeJsonFile(path.join(tempDir, fileName), createHeroSidecarPayload(group.hero, group.entries, includeMedia));
       incrementExportStat("sidecarFiles");
       incrementExportProgress();
       sidecarFiles += 1;

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveRound, PlayerState } from "../../game/types";
 import type { InstalledRound } from "../../services/db";
@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   isGameDevelopmentMode: vi.fn(() => false),
   playAntiPerkBeatSound: vi.fn(),
+  sfwMode: false,
 }));
 
 vi.mock("../../services/booru", () => ({
@@ -79,11 +80,15 @@ vi.mock("../../utils/devFeatures", () => ({
   isGameDevelopmentMode: mocks.isGameDevelopmentMode,
 }));
 
+vi.mock("../../hooks/useSfwMode", () => ({
+  useSfwMode: () => mocks.sfwMode,
+}));
+
 import { RoundVideoOverlay } from "./RoundVideoOverlay";
 
-function createInstalledRound(): InstalledRound {
+function createInstalledRound(roundId = "round-1"): InstalledRound {
   return {
-    id: "round-1",
+    id: roundId,
     name: "Round 1",
     type: "Main",
     startTime: 0,
@@ -98,11 +103,11 @@ function createInstalledRound(): InstalledRound {
   } as unknown as InstalledRound;
 }
 
-function createActiveRound(): ActiveRound {
+function createActiveRound(roundId = "round-1"): ActiveRound {
   return {
     fieldId: "field-1",
     nodeId: "node-1",
-    roundId: "round-1",
+    roundId,
     roundName: "Round 1",
     selectionKind: "fixed",
     poolId: null,
@@ -113,6 +118,7 @@ function createActiveRound(): ActiveRound {
 
 function renderOverlay({
   activeRound = createActiveRound(),
+  installedRounds = [createInstalledRound(activeRound?.roundId ?? "round-1")],
   currentPlayer,
   boardSequence = null,
   idleBoardSequence = null,
@@ -121,6 +127,7 @@ function renderOverlay({
   onCompleteBoardSequence,
 }: {
   activeRound?: ActiveRound | null;
+  installedRounds?: InstalledRound[];
   currentPlayer?: PlayerState | undefined;
   boardSequence?: "milker" | "jackhammer" | null;
   idleBoardSequence?: "no-rest" | null;
@@ -131,7 +138,7 @@ function renderOverlay({
   return render(
     <RoundVideoOverlay
       activeRound={activeRound}
-      installedRounds={[createInstalledRound()]}
+      installedRounds={installedRounds}
       currentPlayer={currentPlayer}
       intermediaryProbability={0}
       booruSearchPrompt="animated gif webm"
@@ -155,6 +162,7 @@ describe("RoundVideoOverlay", () => {
     mocks.handy.appApiKey = "";
     mocks.handy.connected = false;
     mocks.handy.manuallyStopped = false;
+    mocks.sfwMode = false;
     vi.mocked(booru.getCachedBooruMedia).mockClear();
     vi.mocked(booru.getCachedBooruMediaForDisplay).mockClear();
     vi.mocked(booru.refreshBooruMediaCache).mockClear();
@@ -181,6 +189,19 @@ describe("RoundVideoOverlay", () => {
 
     expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
     expect(screen.queryByText("Segment: Main")).toBeNull();
+  });
+
+  it("does not warn when play is aborted during a source transition", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValueOnce(
+      new DOMException("The play() request was interrupted by a new load request.", "AbortError")
+    );
+
+    renderOverlay();
+
+    await waitFor(() => {
+      expect(warnSpy).not.toHaveBeenCalledWith("Video autoplay failed", expect.anything());
+    });
   });
 
   it("prefers persisted booru cache for display reads", async () => {
@@ -260,6 +281,44 @@ describe("RoundVideoOverlay", () => {
     );
 
     expect((await screen.findByTestId("round-playback-timer")).textContent).toContain("0:00 / 0:00");
+  });
+
+  it("reveals blocked round video only after confirmation and resets for the next round", async () => {
+    mocks.sfwMode = true;
+
+    const view = renderOverlay({
+      activeRound: createActiveRound("round-1"),
+      installedRounds: [createInstalledRound("round-1")],
+    });
+
+    expect(screen.getByText("Safe Mode Enabled")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Show Video Once" })).not.toBeNull();
+    expect(view.container.querySelector('video[src="/video.mp4"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Video Once" }));
+    expect(screen.getByRole("dialog")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Once" }));
+
+    await waitFor(() => {
+      expect(view.container.querySelector('video[src="/video.mp4"]')).not.toBeNull();
+    });
+
+    view.rerender(
+      <RoundVideoOverlay
+        activeRound={createActiveRound("round-2")}
+        installedRounds={[createInstalledRound("round-2")]}
+        currentPlayer={undefined}
+        intermediaryProbability={0}
+        booruSearchPrompt="animated gif webm"
+        intermediaryLoadingDurationSec={10}
+        intermediaryReturnPauseSec={4}
+        onFinishRound={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Safe Mode Enabled")).not.toBeNull();
+    expect(view.container.querySelector('video[src="/video.mp4"]')).toBeNull();
   });
 
   it("shows proceed and close actions in the cum round dialog", async () => {

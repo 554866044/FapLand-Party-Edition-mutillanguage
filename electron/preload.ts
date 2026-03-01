@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
             ipcRenderer.invoke("dialog:selectPlaylistExportPath", defaultName) as Promise<string | null>,
         selectPlaylistExportDirectory: (defaultName?: string) =>
             ipcRenderer.invoke("dialog:selectPlaylistExportDirectory", defaultName) as Promise<string | null>,
+        selectWebsiteVideoCacheDirectory: () =>
+            ipcRenderer.invoke("dialog:selectWebsiteVideoCacheDirectory") as Promise<string | null>,
         selectConverterVideoFile: () => ipcRenderer.invoke("dialog:selectConverterVideoFile") as Promise<string | null>,
         selectMusicFiles: () => ipcRenderer.invoke("dialog:selectMusicFiles") as Promise<string[]>,
         selectConverterFunscriptFile: () =>

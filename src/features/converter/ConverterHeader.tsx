@@ -1,9 +1,9 @@
 import React from "react";
 import { playHoverSound, playSelectSound } from "../../utils/audio";
-import type { ConverterState, SelectedSourceInfo } from "./useConverterState";
+import type { ConverterState, ConverterStep, SelectedSourceInfo } from "./useConverterState";
 
 type ConverterHeaderBaseProps = {
-  step: "select" | "edit";
+  step: ConverterStep;
   selectedSourceInfo: SelectedSourceInfo;
   segmentCount: number;
   sourceSummary: string;
@@ -27,7 +27,8 @@ export const ConverterHeader: React.FC<ConverterHeaderProps> = React.memo(
             </h1>
           </div>
           <p className="mt-2 text-sm text-zinc-400">
-            Select a source to convert rounds into hero segments, or add more rounds to an existing hero.
+            Select a source to convert rounds into hero segments, or add more rounds to an existing
+            hero.
           </p>
         </header>
       );

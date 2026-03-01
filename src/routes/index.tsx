@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
+import { openGlobalMusicOverlay } from "../components/GlobalMusicOverlay";
 import { useControllerSurface } from "../controller";
 import {
   MULTIPLAYER_MINIMUM_ROUNDS,
@@ -16,6 +17,7 @@ import { parseStandingsJson } from "../services/multiplayer/results";
 import { trpc } from "../services/trpc";
 import { LibraryStatusPoller } from "../features/library/components/LibraryStatusPoller";
 import { PhashScanStatusPoller } from "../features/phash/components/PhashScanStatusPoller";
+import { WebsiteVideoScanStatusPoller } from "../features/webVideo/components/WebsiteVideoScanStatusPoller";
 import "../styles.css";
 
 const FIRST_START_COMPLETED_KEY = "app.firstStart.completed";
@@ -63,7 +65,8 @@ const getOverallHighscore = async (): Promise<{ score: number; localCheatMode: b
 };
 
 const Home = memo(() => {
-  const { videos, overallHighscore, cumLoadCount, installedRounds, skipRoundsCheck } = Route.useLoaderData();
+  const { videos, overallHighscore, cumLoadCount, installedRounds, skipRoundsCheck } =
+    Route.useLoaderData();
   const navigate = useNavigate();
   const { connected, isConnecting, error, connectionKey } = useHandy();
   const appUpdate = useAppUpdate();
@@ -91,10 +94,9 @@ const Home = memo(() => {
               sfwModeEnabled ||
               appUpdate.state.status === "update_available" ||
               (!skipRoundsCheck && installedRounds.length < MULTIPLAYER_MINIMUM_ROUNDS),
-            subLabel:
-              sfwModeEnabled
-                ? "Blocked By SFW Mode"
-                : appUpdate.state.status === "update_available"
+            subLabel: sfwModeEnabled
+              ? "Blocked By SFW Mode"
+              : appUpdate.state.status === "update_available"
                 ? "Update Required"
                 : !skipRoundsCheck && installedRounds.length < MULTIPLAYER_MINIMUM_ROUNDS
                   ? `${MULTIPLAYER_MINIMUM_ROUNDS} Rounds Required`
@@ -278,7 +280,9 @@ const Home = memo(() => {
               className="text-[0.65rem] sm:text-xs font-[family-name:var(--font-jetbrains-mono)] tracking-[0.6em] uppercase text-purple-400/70 mb-3 animate-entrance"
               style={{ animationDelay: "0.1s" }}
             >
-              ✦ &nbsp; Party Edition &nbsp; ✦
+              {sfwModeEnabled
+                ? "✦ \u00a0 Safe Experience \u00a0 ✦"
+                : "✦ \u00a0 Party Edition \u00a0 ✦"}
             </p>
 
             {/* Main title with animated shimmer gradient */}
@@ -295,7 +299,7 @@ const Home = memo(() => {
                 backgroundSize: "200% auto",
               }}
             >
-              FAP LAND
+              {sfwModeEnabled ? "SAFE MODE" : "FAP LAND"}
             </h1>
 
             {/* Decorative divider */}
@@ -442,6 +446,8 @@ const Home = memo(() => {
 
             <PhashScanStatusPoller />
 
+            <WebsiteVideoScanStatusPoller />
+
             <div
               className={`rounded-lg border px-3 py-1.5 backdrop-blur-sm transition-all duration-300 ${
                 appUpdate.state.status === "update_available"
@@ -544,29 +550,42 @@ const Home = memo(() => {
         </div>
       </aside>
 
-      <button
-        type="button"
-        onClick={() => {
-          void handleFullscreenToggle();
-        }}
-        className="absolute left-6 bottom-6 z-10 rounded-lg border border-zinc-600/70 bg-zinc-950/70 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:border-violet-300/60 hover:text-violet-100"
-        data-controller-focus-id="home-fullscreen"
-      >
-        Fullscreen F11
-      </button>
+      <div className="absolute left-6 bottom-6 z-10 flex gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            openGlobalMusicOverlay();
+          }}
+          className="rounded-lg border border-zinc-600/70 bg-zinc-950/70 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:border-violet-300/60 hover:text-violet-100"
+          data-controller-focus-id="home-music"
+        >
+          Music (Ctrl + M)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void handleFullscreenToggle();
+          }}
+          className="rounded-lg border border-zinc-600/70 bg-zinc-950/70 px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-xs uppercase tracking-[0.2em] text-zinc-200 transition-colors hover:border-violet-300/60 hover:text-violet-100"
+          data-controller-focus-id="home-fullscreen"
+        >
+          Fullscreen F11
+        </button>
+      </div>
     </div>
   );
 });
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [videos, overallHighscore, cumLoadCount, installedRounds, rawSkipRoundsCheck] = await Promise.all([
-      getVideos(),
-      getOverallHighscore(),
-      db.singlePlayerHistory.getCumLoadCount().catch(() => 0),
-      db.round.findInstalled(),
-      trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
-    ]);
+    const [videos, overallHighscore, cumLoadCount, installedRounds, rawSkipRoundsCheck] =
+      await Promise.all([
+        getVideos(),
+        getOverallHighscore(),
+        db.singlePlayerHistory.getCumLoadCount().catch(() => 0),
+        db.round.findInstalled(),
+        trpc.store.get.query({ key: MULTIPLAYER_SKIP_ROUNDS_CHECK_KEY }),
+      ]);
     const skipRoundsCheck =
       rawSkipRoundsCheck === true || rawSkipRoundsCheck === "true"
         ? true

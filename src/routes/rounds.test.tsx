@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getSinglePlayerAntiPerkPool, getSinglePlayerPerkPool } from "../game/data/perks";
 import type { InstalledRound } from "../services/db";
 import type { StoredPlaylist } from "../services/playlists";
 
@@ -10,6 +11,9 @@ const mocks = vi.hoisted(() => ({
     intermediaryLoadingPrompt: "animated gif webm score:>300",
     intermediaryLoadingDurationSec: 5,
     intermediaryReturnPauseSec: 4,
+    roundProgressBarAlwaysVisible: false,
+    controllerSupportEnabled: false,
+    installWebFunscriptUrlEnabled: false,
   },
   navigate: vi.fn(),
   db: {
@@ -21,6 +25,8 @@ const mocks = vi.hoisted(() => ({
       findInstalled: vi.fn(),
       getDisabledIds: vi.fn(),
       update: vi.fn(),
+      createWebsiteRound: vi.fn(),
+      checkWebsiteVideoSupport: vi.fn(),
       delete: vi.fn(),
       repairTemplate: vi.fn(),
       retryTemplateLinking: vi.fn(),
@@ -35,11 +41,16 @@ const mocks = vi.hoisted(() => ({
       abortScan: vi.fn(),
       scanNow: vi.fn(),
       inspectFolder: vi.fn(),
+      inspectSidecarFile: vi.fn(),
       importSidecarFile: vi.fn(),
       importLegacyWithPlan: vi.fn(),
       scanFolderOnce: vi.fn(),
       exportDatabase: vi.fn(),
+      exportPackage: vi.fn(),
       openExportFolder: vi.fn(),
+    },
+    webVideoCache: {
+      getScanStatus: vi.fn(),
     },
   },
   playlists: {
@@ -106,6 +117,9 @@ function makeRound({
   hero,
   startTime,
   template = false,
+  funscriptUri = null,
+  installSourceKey = null,
+  websiteVideoCacheStatus = "not_applicable",
 }: {
   id: string;
   name: string;
@@ -113,6 +127,9 @@ function makeRound({
   hero?: { id?: string | null; name?: string | null } | null;
   startTime?: number | null;
   template?: boolean;
+  funscriptUri?: string | null;
+  installSourceKey?: string | null;
+  websiteVideoCacheStatus?: "not_applicable" | "cached" | "pending";
 }): InstalledRound {
   const heroId = hero?.id ?? (hero?.name ? `hero-${hero.name}` : null);
   return {
@@ -144,14 +161,15 @@ function makeRound({
             id: `res-${id}`,
             roundId: id,
             videoUri: null,
-            funscriptUri: null,
-            phash: null,
-            disabled: false,
-            createdAt,
-            updatedAt: createdAt,
-          },
-        ],
-    installSourceKey: null,
+          funscriptUri,
+          phash: null,
+          disabled: false,
+          createdAt,
+          updatedAt: createdAt,
+          websiteVideoCacheStatus,
+        },
+      ],
+    installSourceKey,
     phash: null,
     heroSourceType: null,
     sourceType: null,
@@ -213,6 +231,7 @@ function makePlaylist(id: string, name: string, roundIds: string[]): StoredPlayl
 }
 
 beforeEach(() => {
+  vi.useRealTimers();
   window.electronAPI = {
     file: {
       convertFileSrc: vi.fn(),
@@ -223,6 +242,7 @@ beforeEach(() => {
       selectPlaylistImportFile: vi.fn(),
       selectPlaylistExportPath: vi.fn(),
       selectPlaylistExportDirectory: vi.fn(),
+      selectWebsiteVideoCacheDirectory: vi.fn(),
       selectConverterVideoFile: vi.fn(),
       selectMusicFiles: vi.fn(),
       selectConverterFunscriptFile: vi.fn(),
@@ -243,9 +263,34 @@ beforeEach(() => {
   };
   mocks.loaderData.rounds = [];
   mocks.loaderData.availablePlaylists = [];
+  mocks.loaderData.roundProgressBarAlwaysVisible = false;
+  mocks.loaderData.controllerSupportEnabled = false;
+  mocks.db.webVideoCache.getScanStatus.mockResolvedValue({
+    state: "idle",
+    startedAt: null,
+    finishedAt: null,
+    totalCount: 0,
+    completedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    currentRoundName: null,
+    currentUrl: null,
+    errors: [],
+  });
+  mocks.loaderData.installWebFunscriptUrlEnabled = false;
   mocks.db.round.findInstalled.mockImplementation(async () => mocks.loaderData.rounds);
   mocks.db.round.getDisabledIds.mockResolvedValue([]);
   mocks.db.round.update.mockResolvedValue({});
+  mocks.db.round.createWebsiteRound.mockResolvedValue({
+    roundId: "website-round-1",
+    resourceId: "website-resource-1",
+  });
+  mocks.db.round.checkWebsiteVideoSupport.mockResolvedValue({
+    supported: true,
+    normalizedVideoUri: "https://www.pornhub.com/view_video.php?viewkey=abc123",
+    extractor: "PornHub",
+    title: "Demo title",
+  });
   mocks.db.round.delete.mockResolvedValue({ deleted: true });
   mocks.db.round.convertHeroGroupToRound.mockResolvedValue({
     keptRoundId: "kept",
@@ -313,6 +358,17 @@ beforeEach(() => {
     playlistNameHint: "round-pack",
     sidecarCount: 1,
   });
+  mocks.db.install.inspectSidecarFile.mockResolvedValue({
+    trustedSourceHosts: [],
+    videoUrls: [],
+    funscriptUrls: [],
+    warnings: [],
+    sourceSummary: {
+      videoUrlCount: 0,
+      funscriptUrlCount: 0,
+      localFileCount: 0,
+    },
+  });
   mocks.db.install.importLegacyWithPlan.mockResolvedValue({
     status: {
       state: "done",
@@ -377,18 +433,21 @@ beforeEach(() => {
     },
   });
   mocks.playlists.setActive.mockResolvedValue({ id: "playlist-1" });
-  mocks.db.install.exportDatabase.mockResolvedValue({
-    exportDir: "/tmp/app-export/2026-03-20T12-00-00.000Z",
+  mocks.db.install.exportPackage.mockResolvedValue({
+    exportDir: "/tmp/export-root/2026-03-20T12-00-00.000Z",
     heroFiles: 1,
     roundFiles: 2,
+    videoFiles: 3,
+    funscriptFiles: 2,
     exportedRounds: 3,
-    includeResourceUris: false,
+    includeMedia: true,
   });
   mocks.db.install.openExportFolder.mockResolvedValue({ path: "/tmp/app-export" });
 });
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -630,6 +689,66 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
   });
 
+  it("labels website-backed rounds as web in the installed rounds view", () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "web-round",
+        name: "Website Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        installSourceKey: "website:https://example.com/video.mp4",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getAllByText("Web").length).toBeGreaterThan(0);
+    expect(screen.getByText((content, node) => node?.textContent === "Source: Web")).toBeDefined();
+  });
+
+  it("shows preview generation text for website rounds while web caching is running", async () => {
+    mocks.db.webVideoCache.getScanStatus.mockResolvedValue({
+      state: "running",
+      startedAt: "2026-03-30T00:00:00.000Z",
+      finishedAt: null,
+      totalCount: 1,
+      completedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      currentRoundName: "Website Round",
+      currentUrl: "https://example.com/watch?v=1",
+      errors: [],
+    });
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "web-round",
+        name: "Website Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        installSourceKey: "website:https://example.com/watch?v=1",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(await screen.findByText("Preview Is Being Generated")).toBeDefined();
+  });
+
+  it("shows caching ongoing for website rounds that are still waiting for the cache", () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "web-round",
+        name: "Website Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        installSourceKey: "website:https://example.com/watch?v=1",
+        websiteVideoCacheStatus: "pending",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    expect(screen.getAllByText("Caching Ongoing").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Play Website Round" })).toBeNull();
+  });
+
   it("converts a hero group back to a standalone round after explicit confirmation", async () => {
     mocks.loaderData.rounds = [
       makeRound({
@@ -732,6 +851,59 @@ describe("InstalledRoundsPage hero grouping", () => {
     });
   });
 
+  it("attaches a funscript from the round edit dialog", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "solo", name: "Solo Round", createdAt: "2026-03-03T11:00:00.000Z" }),
+    ];
+    vi.mocked(window.electronAPI.dialog.selectConverterFunscriptFile).mockResolvedValue(
+      "/tmp/solo.funscript"
+    );
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    fireEvent.click(screen.getByRole("button", { name: "Attach Funscript" }));
+    await waitFor(() => {
+      expect(screen.getByText("app://media/%2Ftmp%2Fsolo.funscript")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Round" }));
+
+    await waitFor(() => {
+      expect(mocks.db.round.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "solo",
+          funscriptUri: "app://media/%2Ftmp%2Fsolo.funscript",
+        })
+      );
+    });
+  });
+
+  it("detaches a funscript from the round edit dialog", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({
+        id: "solo",
+        name: "Solo Round",
+        createdAt: "2026-03-03T11:00:00.000Z",
+        funscriptUri: "app://media/%2Ftmp%2Fsolo.funscript",
+      }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Round" }));
+    fireEvent.click(screen.getByRole("button", { name: "Detach Funscript" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Round" }));
+
+    await waitFor(() => {
+      expect(mocks.db.round.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "solo",
+          funscriptUri: null,
+        })
+      );
+    });
+  });
+
   it("edits a hero group inside a popup", async () => {
     mocks.loaderData.rounds = [
       makeRound({
@@ -810,78 +982,56 @@ describe("InstalledRoundsPage hero grouping", () => {
     confirmSpy.mockRestore();
   });
 
-  it("exports with default safe mode when started from the internal dialog", async () => {
+  it("prompts for an export destination before packaging the library", async () => {
     mocks.loaderData.rounds = [
       makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
     ];
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue(
+      "/tmp/export-root"
+    );
 
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
-    expect(screen.getByRole("dialog", { name: "Package your installed rounds." })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Package your library." })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Safe Export" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Export" }));
 
     await waitFor(() => {
-      expect(mocks.db.install.exportDatabase).toHaveBeenCalledWith(false);
+      expect(window.electronAPI.dialog.selectPlaylistExportDirectory).toHaveBeenCalledWith(
+        "Installed Library"
+      );
     });
-    expect(screen.getByText("/tmp/app-export/2026-03-20T12-00-00.000Z")).toBeTruthy();
+    await waitFor(() => {
+      expect(mocks.db.install.exportPackage).toHaveBeenCalledWith({
+        roundIds: undefined,
+        heroIds: undefined,
+        includeMedia: true,
+        directoryPath: "/tmp/export-root",
+      });
+    });
+    expect(screen.getByText("/tmp/export-root/2026-03-20T12-00-00.000Z")).toBeTruthy();
     expect(screen.getByText("Export complete.")).toBeTruthy();
   });
 
-  it("requires explicit acknowledgement before advanced URI export", async () => {
-    mocks.loaderData.rounds = [
-      makeRound({ id: "solo", name: "Solo Target", createdAt: "2026-03-03T11:00:00.000Z" }),
-    ];
-    mocks.db.install.exportDatabase.mockResolvedValue({
-      exportDir: "/tmp/app-export/2026-03-20T12-10-00.000Z",
-      heroFiles: 0,
-      roundFiles: 1,
-      exportedRounds: 1,
-      includeResourceUris: true,
-    });
-
+  it("does not start the package export when directory selection is cancelled", async () => {
+    vi.mocked(window.electronAPI.dialog.selectPlaylistExportDirectory).mockResolvedValue(null);
     render(<InstalledRoundsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced Include resource URIs/i }));
-
-    const startButton = screen.getByRole("button", { name: "Start Advanced Export" });
-    expect((startButton as HTMLButtonElement).disabled).toBe(true);
-
-    fireEvent.click(screen.getByLabelText(/I understand this can leak or break resource paths/i));
-    expect((startButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Start Export" }));
 
     await waitFor(() => {
-      expect(
-        (screen.getByRole("button", { name: "Start Advanced Export" }) as HTMLButtonElement)
-          .disabled
-      ).toBe(false);
+      expect(window.electronAPI.dialog.selectPlaylistExportDirectory).toHaveBeenCalledWith(
+        "Installed Library"
+      );
     });
-
-    fireEvent.click(startButton);
-
-    await waitFor(() => {
-      expect(mocks.db.install.exportDatabase).toHaveBeenCalledWith(true);
-    });
-    expect(screen.getByText("Resource URIs included: yes")).toBeTruthy();
+    expect(mocks.db.install.exportPackage).not.toHaveBeenCalled();
   });
 
-  it("opens the install export folder from the export dialog", async () => {
+  it("removes the dedicated open export folder action", async () => {
     render(<InstalledRoundsPage />);
+    expect(screen.queryByRole("button", { name: "Open Export Folder" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Export Database" }));
-    fireEvent.click(screen.getByRole("button", { name: "Browse Export Library" }));
-
-    await waitFor(() => {
-      expect(mocks.db.install.openExportFolder).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it("opens the install export folder from the header action", async () => {
-    render(<InstalledRoundsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Open Export Folder" }));
-
-    await waitFor(() => {
-      expect(mocks.db.install.openExportFolder).toHaveBeenCalledTimes(1);
-    });
+    expect(screen.queryByRole("button", { name: "Browse Export Library" })).toBeNull();
   });
 
   it("shows a long-running import overlay and allows aborting the import", async () => {
@@ -985,6 +1135,13 @@ describe("InstalledRoundsPage hero grouping", () => {
                 "3": { name: "10", type: "Normal" },
               },
             }),
+            perkSelection: expect.objectContaining({
+              triggerChancePerCompletedRound: 0.51,
+            }),
+            perkPool: {
+              enabledPerkIds: getSinglePlayerPerkPool().map((perk) => perk.id),
+              enabledAntiPerkIds: getSinglePlayerAntiPerkPool().map((perk) => perk.id),
+            },
           }),
         })
       );
@@ -1108,6 +1265,114 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/playlist-workshop" });
   });
 
+  it("hides the web funscript URL input by default in install from web", () => {
+    render(<InstalledRoundsPage />);
+
+    expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    expect(screen.getByRole("dialog", { name: "Install from web" })).toBeTruthy();
+    expect(screen.queryByLabelText("Funscript URL")).toBeNull();
+    expect(screen.getByRole("button", { name: /Select Local Funscript/i })).toBeDefined();
+  });
+
+  it("autofills the round name from the extracted website title while the field is untouched", async () => {
+    render(<InstalledRoundsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    fireEvent.change(screen.getByLabelText("Video URL"), {
+      target: { value: "https://www.pornhub.com/view_video.php?viewkey=abc123" },
+    });
+
+    await screen.findByText("Supported via PornHub: Demo title");
+    expect(screen.getByLabelText("Round Name")).toHaveValue("Demo title");
+  });
+
+  it("does not overwrite a manually entered round name with the extracted website title", async () => {
+    render(<InstalledRoundsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    fireEvent.change(screen.getByLabelText("Round Name"), {
+      target: { value: "Manual Name" },
+    });
+    fireEvent.change(screen.getByLabelText("Video URL"), {
+      target: { value: "https://www.pornhub.com/view_video.php?viewkey=abc123" },
+    });
+
+    await screen.findByText("Supported via PornHub: Demo title");
+    expect(screen.getByLabelText("Round Name")).toHaveValue("Manual Name");
+  });
+
+  it("installs a website-backed round from the import view with an optional local funscript", async () => {
+    vi.mocked(window.electronAPI.dialog.selectConverterFunscriptFile).mockResolvedValue(
+      "/tmp/demo.funscript"
+    );
+    vi.mocked(window.electronAPI.file.convertFileSrc).mockReturnValue(
+      "app://media/tmp/demo.funscript"
+    );
+    mocks.loaderData.installWebFunscriptUrlEnabled = true;
+    mocks.db.round.createWebsiteRound.mockImplementation(async () => {
+      mocks.loaderData.rounds = [
+        makeRound({
+          id: "website-round-1",
+          name: "Website Demo",
+          createdAt: "2026-03-07T00:00:00.000Z",
+        }),
+      ];
+      return {
+        roundId: "website-round-1",
+        resourceId: "website-resource-1",
+      };
+    });
+
+    render(<InstalledRoundsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    expect(screen.getByRole("dialog", { name: "Install from web" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Round Name"), {
+      target: { value: "Website Demo" },
+    });
+    fireEvent.change(screen.getByLabelText("Video URL"), {
+      target: { value: "https://www.pornhub.com/view_video.php?viewkey=abc123" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Select Local Funscript/i }));
+
+    expect(await screen.findByText("Local funscript attached: demo.funscript")).toBeDefined();
+    expect(await screen.findByText("Supported via PornHub: Demo title")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Install Website Round/i }));
+
+    await waitFor(() => {
+      expect(mocks.db.round.createWebsiteRound).toHaveBeenCalledWith({
+        name: "Website Demo",
+        videoUri: "https://www.pornhub.com/view_video.php?viewkey=abc123",
+        funscriptUri: "app://media/tmp/demo.funscript",
+      });
+    });
+    expect(await screen.findByText('Installed "Website Demo".')).toBeDefined();
+  });
+
+  it("shows unsupported website video feedback live and blocks install", async () => {
+    mocks.db.round.checkWebsiteVideoSupport.mockRejectedValue(
+      new Error("This website video URL is not supported.")
+    );
+
+    render(<InstalledRoundsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Install From Web" }));
+
+    fireEvent.change(screen.getByLabelText("Video URL"), {
+      target: { value: "https://unsupported.example/video/123" },
+    });
+
+    expect(await screen.findByText("This website video URL is not supported.")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /Install Website Round/i }).hasAttribute("disabled")
+    ).toBe(true);
+    expect(mocks.db.round.createWebsiteRound).not.toHaveBeenCalled();
+  });
+
   it("renders a large library through the virtualized wrapper without load-more pagination", () => {
     mocks.loaderData.rounds = Array.from({ length: 75 }, (_, index) =>
       makeRound({
@@ -1123,6 +1388,30 @@ describe("InstalledRoundsPage hero grouping", () => {
     expect(screen.getByRole("heading", { name: "Round 0" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "Round 74" })).toBeDefined();
     expect(screen.queryByText("Loading more rounds...")).toBeNull();
+  });
+
+  it("sorts installed rounds by oldest entry first", async () => {
+    mocks.loaderData.rounds = [
+      makeRound({ id: "newest", name: "Newest Round", createdAt: "2026-03-03T12:00:00.000Z" }),
+      makeRound({ id: "middle", name: "Middle Round", createdAt: "2026-03-02T12:00:00.000Z" }),
+      makeRound({ id: "oldest", name: "Oldest Round", createdAt: "2026-03-01T12:00:00.000Z" }),
+    ];
+
+    render(<InstalledRoundsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Newest" }));
+    fireEvent.click(screen.getByRole("button", { name: "Oldest" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Sort: Oldest")).toBeDefined();
+    });
+
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    expect(headings.slice(0, 3).map((heading) => heading.textContent)).toEqual([
+      "Oldest Round",
+      "Middle Round",
+      "Newest Round",
+    ]);
   });
 
   it("shows template actions and repairs a template round from installed content", async () => {

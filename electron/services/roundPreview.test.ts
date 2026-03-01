@@ -23,7 +23,7 @@ describe("generateRoundPreviewImageDataUri", () => {
     });
   });
 
-  it("extracts a higher resolution jpeg preview", async () => {
+  it("extracts a compact jpeg preview sized for the UI", async () => {
     runCommandMock.mockResolvedValue({
       stdout: Buffer.from("preview-bytes"),
       stderr: Buffer.alloc(0),
@@ -48,9 +48,9 @@ describe("generateRoundPreviewImageDataUri", () => {
       "-frames:v",
       "1",
       "-vf",
-      "scale=640:-2",
+      "scale=480:-2",
       "-q:v",
-      "4",
+      "6",
       "-f",
       "image2pipe",
       "-vcodec",

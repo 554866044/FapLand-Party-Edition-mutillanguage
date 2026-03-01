@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { AnimatedBackground } from "../components/AnimatedBackground";
 import { MenuButton } from "../components/MenuButton";
 import { useControllerSurface } from "../controller";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 import { useConverterState } from "../features/converter/useConverterState";
+import { ConverterCachingOverlay } from "../features/converter/ConverterCachingOverlay";
 import { ConverterHeader, pickConverterHeaderProps } from "../features/converter/ConverterHeader";
 import { HeroPanel, pickHeroPanelProps } from "../features/converter/HeroPanel";
 import { VideoPreview, pickVideoPreviewProps } from "../features/converter/VideoPreview";
@@ -18,7 +20,7 @@ import { StatusBar } from "../features/converter/StatusBar";
 import { HotkeyOverlay } from "../features/converter/HotkeyOverlay";
 import { ConverterSourcePicker } from "../features/converter/ConverterSourcePicker";
 
-type SourceSection = "round" | "hero" | "file";
+type SourceSection = "round" | "hero" | "file" | "url";
 
 const SOURCE_SECTIONS: { id: SourceSection; icon: string; title: string; description: string }[] = [
   {
@@ -38,6 +40,12 @@ const SOURCE_SECTIONS: { id: SourceSection; icon: string; title: string; descrip
     icon: "📂",
     title: "From File",
     description: "Load a local video file and convert manually.",
+  },
+  {
+    id: "url",
+    icon: "🌐",
+    title: "From URL",
+    description: "Use a website video URL like Pornhub, XVideos, or rule34video as the source.",
   },
 ];
 
@@ -80,7 +88,7 @@ function ConverterPage() {
 
   const activeSection = SOURCE_SECTIONS.find((s) => s.id === activeSectionId) ?? SOURCE_SECTIONS[0];
 
-  if (state.step === "select") {
+  if (state.step === "select" || state.step === "caching") {
     return (
       <div className="relative min-h-screen overflow-hidden">
         <AnimatedBackground />
@@ -154,6 +162,9 @@ function ConverterPage() {
                   onSelectHero={(heroId) => void state.selectHeroAndEdit(heroId)}
                   onSelectLocalVideo={() => void state.selectLocalAndEdit()}
                   onSelectLocalFunscript={() => void state.attachLocalFunscript()}
+                  onSelectWebsiteSource={(videoUri, funscriptUri) =>
+                    void state.selectWebsiteAndEdit(videoUri, funscriptUri)
+                  }
                 />
               </div>
 
@@ -170,6 +181,17 @@ function ConverterPage() {
             </main>
           </div>
         </div>
+        <AnimatePresence>
+          {state.step === "caching" && state.cachingUrl && (
+            <ConverterCachingOverlay
+              url={state.cachingUrl}
+              progress={state.cachingProgress}
+              error={state.cachingError}
+              onCancel={state.cancelCaching}
+              onRetry={state.retryCaching}
+            />
+          )}
+        </AnimatePresence>
       </div>
     );
   }

@@ -16,6 +16,7 @@ import {
   type InstallResource,
   type InstallRound,
 } from "../../src/zod/installSidecar";
+import { extractFpackToTemp } from "./fpack";
 import { approveDialogPath, assertApprovedDialogPath } from "./dialogPathApproval";
 import { getDb } from "./db";
 import { eq, asc, isNotNull } from "drizzle-orm";
@@ -40,10 +41,25 @@ import { syncExternalSources } from "./integrations";
 import { importPlaylistFromFile } from "./playlists";
 import { generateRoundPreviewImageDataUri } from "./roundPreview";
 import { resolveVideoDurationMsForLocalPath } from "./videoDuration";
+import {
+  classifyTrustedUrl,
+  collectUnknownRemoteSitesFromResources,
+  type ImportSecurityWarning,
+  type InstallSidecarSecurityAnalysis,
+} from "./security";
 
 const AUTO_SCAN_FOLDERS_KEY = "install.autoScanFolders";
 const MAX_TRACKED_ERRORS = 50;
 const SIDECAR_EXTENSIONS = new Set([".round", ".hero", ".fplay"]);
+const SIDECAR_AND_FPACK_EXTENSIONS = new Set([".round", ".hero", ".fplay", ".fpack"]);
+const pendingFpackTempDirs: string[] = [];
+
+async function cleanupFpackTempDirs(): Promise<void> {
+  const dirs = pendingFpackTempDirs.splice(0);
+  await Promise.all(
+    dirs.map((dir) => fs.rm(dir, { recursive: true, force: true }).catch(() => {}))
+  );
+}
 
 export function isSupportedVideoFileExtension(extension: string): boolean {
   return isVideoExtension(extension);
@@ -159,6 +175,8 @@ type InstallSessionContext = {
   normalizedRangeCache: Map<string, Promise<VideoRangeResolution>>;
   durationCache: Map<string, Promise<number | null>>;
   prepConcurrency: number;
+  allowedBaseDomains: string[];
+  securityWarnings: ImportSecurityWarning[];
 };
 
 type PreparedLegacyEntry =
@@ -226,6 +244,7 @@ export type InstallScanStatus = {
   lastErrors: InstallScanError[];
   etaMs: number | null;
   lastPreviewImage: string | null;
+  securityWarnings: ImportSecurityWarning[];
 };
 
 export type LegacyInstallImport = {
@@ -283,6 +302,7 @@ export type LegacyImportSlot =
 export type InstallFolderScanResult = {
   status: InstallScanStatus;
   legacyImport?: LegacyInstallImport;
+  securityWarnings?: ImportSecurityWarning[];
 };
 
 export type AddAutoScanFolderAndScanResult = {
@@ -303,6 +323,7 @@ let scanStatus: InstallScanStatus = {
   lastErrors: [],
   etaMs: null,
   lastPreviewImage: null,
+  securityWarnings: [],
 };
 
 function emptyStats(): InstallScanStats {
@@ -334,7 +355,9 @@ function getPreparationConcurrency(): number {
   }
 }
 
-async function createInstallSessionContext(): Promise<InstallSessionContext> {
+async function createInstallSessionContext(
+  allowedBaseDomains: string[] = []
+): Promise<InstallSessionContext> {
   const db = getDb();
   const [heroes, existingRounds, existingResources, existingTemplateRounds] = await Promise.all([
     db.query.hero.findMany({
@@ -472,6 +495,8 @@ async function createInstallSessionContext(): Promise<InstallSessionContext> {
     normalizedRangeCache: new Map(),
     durationCache: new Map(),
     prepConcurrency: getPreparationConcurrency(),
+    allowedBaseDomains: [...allowedBaseDomains],
+    securityWarnings: [],
   };
 }
 
@@ -662,6 +687,17 @@ async function collectSidecarFiles(folderPath: string): Promise<string[]> {
 
       if (!entry.isFile()) continue;
       const ext = path.extname(entry.name).toLowerCase();
+      if (ext === ".fpack") {
+        try {
+          const { dir } = await extractFpackToTemp(fullPath);
+          pendingFpackTempDirs.push(dir);
+          const inner = await collectSidecarFiles(dir);
+          output.push(...inner);
+        } catch {
+          // Skip invalid .fpack files silently.
+        }
+        continue;
+      }
       if (SIDECAR_EXTENSIONS.has(ext)) {
         output.push(fullPath);
       }
@@ -880,6 +916,36 @@ function resolveSidecarResourceUri(resourceUri: string, sidecarPath: string): st
   return trimmed;
 }
 
+function rememberSecurityWarning(
+  context: InstallSessionContext,
+  warning: Omit<ImportSecurityWarning, "message">
+): void {
+  context.securityWarnings.push({
+    ...warning,
+    message: `Blocked untrusted remote URLs from ${warning.baseDomain} during import.`,
+  });
+}
+
+function filterTrustedRemoteUri(
+  context: InstallSessionContext,
+  uri: string | null,
+  kind: "video" | "funscript"
+): string | null {
+  if (!uri) return null;
+  const classified = classifyTrustedUrl(uri, context.allowedBaseDomains);
+  if (!classified || classified.decision === "trusted") {
+    return uri;
+  }
+
+  rememberSecurityWarning(context, {
+    baseDomain: classified.baseDomain,
+    host: classified.host,
+    videoUrlCount: kind === "video" ? 1 : 0,
+    funscriptUrlCount: kind === "funscript" ? 1 : 0,
+  });
+  return null;
+}
+
 async function prepareRoundResources(
   context: InstallSessionContext,
   sidecarPath: string,
@@ -898,10 +964,21 @@ async function prepareRoundResources(
   if (round.resources.length > 0) {
     for (const resource of round.resources) {
       throwIfAbortRequested();
-      const videoUri = resolveSidecarResourceUri(resource.videoUri, sidecarPath);
+      const videoUri = filterTrustedRemoteUri(
+        context,
+        resolveSidecarResourceUri(resource.videoUri, sidecarPath),
+        "video"
+      );
+      if (!videoUri) {
+        continue;
+      }
       const normalizedFunscriptUri = normalizeText(resource.funscriptUri);
       const funscriptUri = normalizedFunscriptUri
-        ? resolveSidecarResourceUri(normalizedFunscriptUri, sidecarPath)
+        ? filterTrustedRemoteUri(
+            context,
+            resolveSidecarResourceUri(normalizedFunscriptUri, sidecarPath),
+            "funscript"
+          )
         : null;
       resources.push({
         videoUri,
@@ -1230,6 +1307,62 @@ async function prepareRoundWrite(
     previewImage: prepared.previewImage,
     unresolved: prepared.resources.length === 0,
   };
+}
+
+type ParsedSidecarInspectionEntry =
+  | {
+      kind: "playlist";
+      filePath: string;
+      resources: [];
+    }
+  | {
+      kind: "hero_round";
+      filePath: string;
+      resources: Array<{ videoUri: string; funscriptUri: string | null }>;
+    };
+
+async function parseSidecarForInspection(
+  sidecarPath: string
+): Promise<ParsedSidecarInspectionEntry> {
+  const ext = path.extname(sidecarPath).toLowerCase();
+  if (ext === ".fplay") {
+    return { kind: "playlist", filePath: sidecarPath, resources: [] };
+  }
+
+  const content = await fs.readFile(sidecarPath, "utf8");
+  const parsedJson = JSON.parse(content) as unknown;
+
+  if (ext === ".round") {
+    const parsed = ZRoundSidecar.parse(parsedJson);
+    return {
+      kind: "hero_round",
+      filePath: sidecarPath,
+      resources: parsed.resources.map((resource) => ({
+        videoUri: resolveSidecarResourceUri(resource.videoUri, sidecarPath),
+        funscriptUri: resource.funscriptUri
+          ? resolveSidecarResourceUri(resource.funscriptUri, sidecarPath)
+          : null,
+      })),
+    };
+  }
+
+  if (ext === ".hero") {
+    const parsed = ZHeroSidecar.parse(parsedJson);
+    return {
+      kind: "hero_round",
+      filePath: sidecarPath,
+      resources: parsed.rounds.flatMap((round) =>
+        round.resources.map((resource) => ({
+          videoUri: resolveSidecarResourceUri(resource.videoUri, sidecarPath),
+          funscriptUri: resource.funscriptUri
+            ? resolveSidecarResourceUri(resource.funscriptUri, sidecarPath)
+            : null,
+        }))
+      ),
+    };
+  }
+
+  return { kind: "hero_round", filePath: sidecarPath, resources: [] };
 }
 
 async function prepareRoundSidecar(
@@ -2259,7 +2392,42 @@ export function requestInstallScanAbort(): InstallScanStatus {
   return cloneStatus(scanStatus);
 }
 
-export async function importInstallSidecarFile(filePath: string): Promise<InstallFolderScanResult> {
+export async function inspectInstallSidecarFile(
+  filePath: string
+): Promise<InstallSidecarSecurityAnalysis> {
+  const normalizedFile = assertApprovedDialogPath("installSidecarFile", filePath);
+  if (!(await isFile(normalizedFile))) {
+    throw new Error("Selected file does not exist or is not a file.");
+  }
+
+  const ext = path.extname(normalizedFile).toLowerCase();
+  if (!SIDECAR_AND_FPACK_EXTENSIONS.has(ext)) {
+    throw new Error("Selected file must be a .round, .hero, .fplay, or .fpack import file.");
+  }
+
+  if (ext === ".fpack") {
+    const { dir, cleanup } = await extractFpackToTemp(normalizedFile);
+    try {
+      const sidecars = await collectSidecarFiles(dir);
+      const allResources: { videoUri: string; funscriptUri: string | null }[] = [];
+      for (const sidecarPath of sidecars) {
+        const parsed = await parseSidecarForInspection(sidecarPath);
+        allResources.push(...parsed.resources);
+      }
+      return collectUnknownRemoteSitesFromResources(normalizedFile, allResources);
+    } finally {
+      await cleanup();
+    }
+  }
+
+  const parsed = await parseSidecarForInspection(normalizedFile);
+  return collectUnknownRemoteSitesFromResources(normalizedFile, parsed.resources);
+}
+
+export async function importInstallSidecarFile(
+  filePath: string,
+  allowedBaseDomains: string[] = []
+): Promise<InstallFolderScanResult> {
   activeManualFolderImport = true;
 
   try {
@@ -2269,8 +2437,18 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
     }
 
     const ext = path.extname(normalizedFile).toLowerCase();
-    if (!SIDECAR_EXTENSIONS.has(ext)) {
-      throw new Error("Selected file must be a .round, .hero, or .fplay import file.");
+    if (!SIDECAR_AND_FPACK_EXTENSIONS.has(ext)) {
+      throw new Error("Selected file must be a .round, .hero, .fplay, or .fpack import file.");
+    }
+
+    if (ext === ".fpack") {
+      const { dir, cleanup } = await extractFpackToTemp(normalizedFile);
+      try {
+        const result = await scanInstallFolderOnceWithLegacySupportResolved(dir);
+        return result;
+      } finally {
+        await cleanup();
+      }
     }
 
     const nextStatus: InstallScanStatus = {
@@ -2287,16 +2465,18 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
       lastErrors: [],
       etaMs: null,
       lastPreviewImage: null,
+      securityWarnings: [],
     };
     scanStatus = nextStatus;
 
-    const context = await createInstallSessionContext();
+    const context = await createInstallSessionContext(allowedBaseDomains);
     try {
       const prepared = await prepareSidecar(context, normalizedFile);
       const result = await persistPreparedEntry(context, prepared);
       nextStatus.stats.installed += result.installed;
       nextStatus.stats.playlistsImported += result.playlistsImported;
       nextStatus.stats.updated += result.updated;
+      nextStatus.securityWarnings = [...context.securityWarnings];
       await reconcileTemplateRounds(context);
     } catch (error) {
       recordInstallError(nextStatus, normalizedFile, error);
@@ -2317,6 +2497,7 @@ export async function importInstallSidecarFile(filePath: string): Promise<Instal
     scanStatus = nextStatus;
     return {
       status: cloneStatus(nextStatus),
+      securityWarnings: [...context.securityWarnings],
     };
   } catch (error) {
     if (error instanceof InstallAbortError) {
@@ -2408,6 +2589,7 @@ async function runScanWithFolders(
     lastErrors: [],
     etaMs: null,
     lastPreviewImage: null,
+    securityWarnings: [],
   };
 
   scanStatus = nextStatus;
@@ -2512,6 +2694,8 @@ async function runScanWithFolders(
     pushScanError(nextStatus, "templates", message);
   }
 
+  nextStatus.securityWarnings = [...context.securityWarnings];
+
   try {
     throwIfAbortRequested();
     await syncExternalSources(triggeredBy);
@@ -2524,6 +2708,7 @@ async function runScanWithFolders(
   nextStatus.finishedAt = new Date().toISOString();
   nextStatus.lastMessage = `Scan finished. ${formatImportStatsSummary(nextStatus.stats)}`;
 
+  await cleanupFpackTempDirs();
   scanStatus = nextStatus;
   return cloneStatus(nextStatus);
 }
@@ -2619,6 +2804,7 @@ export async function importLegacyFolderWithPlan(
       lastErrors: [],
       etaMs: null,
       lastPreviewImage: null,
+      securityWarnings: [],
     };
     scanStatus = nextStatus;
 

@@ -9,6 +9,7 @@ import {
 } from "../../src/constants/phashSettings";
 import { generateVideoPhash } from "./phash";
 import { getInstallScanStatus } from "./installer";
+import { getCachedWebsiteVideoLocalPath } from "./webVideo";
 
 export type PhashScanState = "idle" | "running" | "done" | "aborted" | "error";
 
@@ -50,6 +51,7 @@ let scanStatus: PhashScanStatus = {
 let activeScanPromise: Promise<void> | null = null;
 let abortRequested = false;
 let continuousScanTimer: ReturnType<typeof setInterval> | null = null;
+let rerunRequested = false;
 
 function cloneStatus(status: PhashScanStatus): PhashScanStatus {
   return { ...status, errors: [...status.errors] };
@@ -113,6 +115,15 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function resolvePhashVideoPath(videoUri: string): Promise<string | null> {
+  const localVideoPath = fromLocalMediaUri(videoUri);
+  if (localVideoPath) {
+    return localVideoPath;
+  }
+
+  return getCachedWebsiteVideoLocalPath(videoUri);
+}
+
 async function runPhashScan(): Promise<void> {
   const roundsToProcess = await findRoundsWithoutPhash();
 
@@ -135,10 +146,14 @@ async function runPhashScan(): Promise<void> {
 
     scanStatus.currentRoundName = row.roundName;
 
-    const localVideoPath = fromLocalMediaUri(row.videoUri);
+    const localVideoPath = await resolvePhashVideoPath(row.videoUri);
 
     if (!localVideoPath) {
-      pushScanError(row.roundId, row.roundName, "Video is not a local file, cannot compute phash.");
+      pushScanError(
+        row.roundId,
+        row.roundName,
+        "Video is not available as a local file yet, cannot compute phash."
+      );
       scanStatus.skippedCount += 1;
       continue;
     }
@@ -180,6 +195,47 @@ async function runPhashScan(): Promise<void> {
   scanStatus.currentRoundName = null;
 }
 
+function launchPhashScanRun(): void {
+  activeScanPromise = runPhashScan()
+    .catch((error) => {
+      scanStatus.state = "error";
+      scanStatus.finishedAt = new Date().toISOString();
+      scanStatus.currentRoundName = null;
+
+      const message = error instanceof Error ? error.message : "Unknown phash scan error.";
+      scanStatus.errors.push({
+        roundId: "scan",
+        roundName: "Phash Scan",
+        reason: message,
+      });
+    })
+    .finally(() => {
+      activeScanPromise = null;
+
+      const shouldRerun = rerunRequested && !abortRequested;
+      rerunRequested = false;
+
+      if (shouldRerun) {
+        abortRequested = false;
+        scanStatus = {
+          state: "running",
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+          totalCount: 0,
+          completedCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          currentRoundName: null,
+          errors: [],
+        };
+        launchPhashScanRun();
+        return;
+      }
+
+      abortRequested = false;
+    });
+}
+
 export function getPhashScanStatus(): PhashScanStatus {
   return cloneStatus(scanStatus);
 }
@@ -209,6 +265,7 @@ export async function startPhashScan(): Promise<PhashScanStatus> {
   }
 
   if (activeScanPromise) {
+    rerunRequested = true;
     return cloneStatus(scanStatus);
   }
 
@@ -233,23 +290,8 @@ export async function startPhashScan(): Promise<PhashScanStatus> {
     errors: [],
   };
 
-  activeScanPromise = runPhashScan()
-    .catch((error) => {
-      scanStatus.state = "error";
-      scanStatus.finishedAt = new Date().toISOString();
-      scanStatus.currentRoundName = null;
-
-      const message = error instanceof Error ? error.message : "Unknown phash scan error.";
-      scanStatus.errors.push({
-        roundId: "scan",
-        roundName: "Phash Scan",
-        reason: message,
-      });
-    })
-    .finally(() => {
-      activeScanPromise = null;
-      abortRequested = false;
-    });
+  rerunRequested = false;
+  launchPhashScanRun();
 
   await activeScanPromise;
   return cloneStatus(scanStatus);
@@ -257,6 +299,7 @@ export async function startPhashScan(): Promise<PhashScanStatus> {
 
 export async function startPhashScanManual(): Promise<PhashScanStatus> {
   if (activeScanPromise) {
+    rerunRequested = true;
     return cloneStatus(scanStatus);
   }
 
@@ -281,23 +324,8 @@ export async function startPhashScanManual(): Promise<PhashScanStatus> {
     errors: [],
   };
 
-  activeScanPromise = runPhashScan()
-    .catch((error) => {
-      scanStatus.state = "error";
-      scanStatus.finishedAt = new Date().toISOString();
-      scanStatus.currentRoundName = null;
-
-      const message = error instanceof Error ? error.message : "Unknown phash scan error.";
-      scanStatus.errors.push({
-        roundId: "scan",
-        roundName: "Phash Scan",
-        reason: message,
-      });
-    })
-    .finally(() => {
-      activeScanPromise = null;
-      abortRequested = false;
-    });
+  rerunRequested = false;
+  launchPhashScanRun();
 
   await activeScanPromise;
   return cloneStatus(scanStatus);

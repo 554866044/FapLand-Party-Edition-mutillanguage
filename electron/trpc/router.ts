@@ -9,6 +9,7 @@ import { converterRouter } from "./routers/converter";
 import { machineIdRouter } from "./routers/machineId";
 import { mediaRouter } from "./routers/media";
 import { updaterRouter } from "./routers/updater";
+import { securityRouter } from "./routers/security";
 
 export const appRouter = router({
     db: dbRouter,
@@ -21,6 +22,7 @@ export const appRouter = router({
     machineId: machineIdRouter,
     media: mediaRouter,
     updater: updaterRouter,
+    security: securityRouter,
 });
 
 export type AppRouter = typeof appRouter;

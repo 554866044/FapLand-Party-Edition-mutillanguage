@@ -5,6 +5,12 @@ import type { MusicLoopMode } from "../constants/musicSettings";
 import { useGlobalMusic } from "../hooks/useGlobalMusic";
 import { playHoverSound, playSelectSound } from "../utils/audio";
 
+let _setOpenFromOutside: ((open: boolean) => void) | null = null;
+
+export function openGlobalMusicOverlay() {
+  _setOpenFromOutside?.(true);
+}
+
 function isEditableElement(target: Element | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tagName = target.tagName.toLowerCase();
@@ -85,6 +91,14 @@ export function GlobalMusicOverlay() {
     seek,
   } = useGlobalMusic();
   const [open, setOpen] = useState(false);
+  const setOpenRef = useRef(setOpen);
+  setOpenRef.current = setOpen;
+  useEffect(() => {
+    _setOpenFromOutside = (value) => setOpenRef.current(value);
+    return () => {
+      _setOpenFromOutside = null;
+    };
+  }, []);
   const [isAddingTracks, setIsAddingTracks] = useState(false);
   const [showQueue, setShowQueue] = useState(true);
   const [volumeDraft, setVolumeDraft] = useState(() => Math.round(volume * 100));

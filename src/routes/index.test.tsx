@@ -110,6 +110,10 @@ vi.mock("../features/phash/components/PhashScanStatusPoller", () => ({
   PhashScanStatusPoller: () => null,
 }));
 
+vi.mock("../features/webVideo/components/WebsiteVideoScanStatusPoller", () => ({
+  WebsiteVideoScanStatusPoller: () => null,
+}));
+
 vi.mock("../services/db", () => ({
   db: {
     install: {
@@ -157,6 +161,7 @@ describe("Home route update menu", () => {
         selectPlaylistImportFile: vi.fn(),
         selectPlaylistExportPath: vi.fn(),
         selectPlaylistExportDirectory: vi.fn(),
+        selectWebsiteVideoCacheDirectory: vi.fn(),
         selectConverterVideoFile: vi.fn(),
         selectMusicFiles: vi.fn(),
         selectConverterFunscriptFile: vi.fn(),
@@ -257,5 +262,17 @@ describe("Home route update menu", () => {
     render(<Component />);
 
     expect(screen.queryByText(/cum loads extracted/i)).toBeNull();
+  });
+
+  it("replaces the main menu title while sfw mode is enabled", () => {
+    mocks.sfwModeEnabled = true;
+
+    const Component = (Route as unknown as { component: () => ReactElement }).component;
+    render(<Component />);
+
+    expect(screen.queryByRole("heading", { name: /fap land/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: /safe mode enabled/i })).toBeDefined();
+    expect(screen.queryByText(/party edition/i)).toBeNull();
+    expect(screen.getByText(/safe experience/i)).toBeDefined();
   });
 });

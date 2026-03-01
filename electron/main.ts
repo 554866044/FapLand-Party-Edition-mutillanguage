@@ -8,29 +8,24 @@ import {
   shell,
   type OpenDialogOptions,
 } from "electron";
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { createIPCHandler } from "trpc-electron/main";
 import { config as loadDotenv } from "dotenv";
 import { appRouter } from "./trpc/router";
 import { getNodeEnv } from "../src/zod/env";
-import {
-  SUPPORTED_VIDEO_EXTENSIONS,
-  getVideoContentTypeByExtension,
-  isVideoExtension,
-} from "../src/constants/videoFormats";
+import { SUPPORTED_VIDEO_EXTENSIONS } from "../src/constants/videoFormats";
 import { approveDialogPath } from "./services/dialogPathApproval";
 import { normalizeMultiplayerAuthCallback } from "./services/authCallback";
 import { ensureAppDatabaseReady } from "./services/db";
 import { scanInstallSources } from "./services/installer";
 import { proxyExternalRequest } from "./services/integrations";
 import { startContinuousPhashScan } from "./services/phashScanService";
+import { startContinuousWebsiteVideoScan } from "./services/webVideoScanService";
+import { createMediaResponse } from "./services/protocol/mediaResponse";
 import { initializeAppUpdater, subscribeToUpdateState } from "./services/updater";
 
-const OPENABLE_FILE_EXTENSIONS = new Set([".hero", ".round", ".fplay"]);
+const OPENABLE_FILE_EXTENSIONS = new Set([".hero", ".round", ".fplay", ".fpack"]);
 const pendingOpenedFiles: string[] = [];
 const pendingAuthCallbacks: string[] = [];
 let appOpenRendererReady = false;
@@ -139,7 +134,7 @@ function approveOpenedFilePath(filePath: string): void {
     return;
   }
 
-  if (ext === ".hero" || ext === ".round") {
+  if (ext === ".hero" || ext === ".round" || ext === ".fpack") {
     approveDialogPath("installSidecarFile", filePath);
   }
 }
@@ -212,21 +207,6 @@ app.on("open-url", (event, url) => {
   focusMainWindow();
 });
 
-function resolveMediaContentType(filePath: string): string {
-  const extension = path.extname(filePath).toLowerCase();
-  if (extension === ".funscript" || extension === ".json") return "application/json";
-
-  const mappedVideoType = getVideoContentTypeByExtension(extension);
-  if (mappedVideoType) return mappedVideoType;
-  if (isVideoExtension(extension)) {
-    // Chromium treats the app:// response as a media stream when we provide any video/*
-    // type, so use mp4 as a compatibility fallback for known-but-unmapped extensions.
-    return "video/mp4";
-  }
-
-  return "application/octet-stream";
-}
-
 function resolveRendererContentType(filePath: string): string {
   const extension = path.extname(filePath).toLowerCase();
 
@@ -269,110 +249,6 @@ function resolveRendererContentType(filePath: string): string {
     default:
       return "application/octet-stream";
   }
-}
-
-type ParsedByteRange = { start: number; end: number } | null | "invalid";
-
-function parseRangeHeader(rangeHeader: string | null, totalSize: number): ParsedByteRange {
-  if (!rangeHeader) return null;
-
-  const normalized = rangeHeader.trim();
-  if (!normalized.toLowerCase().startsWith("bytes=")) return "invalid";
-
-  const value = normalized.slice(6).split(",")[0]?.trim() ?? "";
-  const matched = value.match(/^(\d*)-(\d*)$/);
-  if (!matched) return "invalid";
-
-  const rawStart = matched[1] ?? "";
-  const rawEnd = matched[2] ?? "";
-  if (rawStart.length === 0 && rawEnd.length === 0) return "invalid";
-
-  if (rawStart.length === 0) {
-    const suffixLength = Number(rawEnd);
-    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return "invalid";
-    const safeSuffixLength = Math.floor(suffixLength);
-    const end = Math.max(0, totalSize - 1);
-    const start = Math.max(0, totalSize - safeSuffixLength);
-    return { start, end };
-  }
-
-  const start = Math.floor(Number(rawStart));
-  if (!Number.isFinite(start) || start < 0) return "invalid";
-
-  const parsedEnd = rawEnd.length > 0 ? Math.floor(Number(rawEnd)) : totalSize - 1;
-  if (!Number.isFinite(parsedEnd) || parsedEnd < 0) return "invalid";
-
-  if (start >= totalSize || start > parsedEnd) return "invalid";
-
-  const end = Math.min(parsedEnd, totalSize - 1);
-  return { start, end };
-}
-
-async function createMediaResponse(filePath: string, request: Request): Promise<Response> {
-  let fileStats;
-  try {
-    fileStats = await stat(filePath);
-  } catch {
-    return new Response("Not found", { status: 404 });
-  }
-
-  if (!fileStats.isFile()) {
-    return new Response("Not found", { status: 404 });
-  }
-
-  const totalSize = fileStats.size;
-  const range = parseRangeHeader(request.headers.get("range"), totalSize);
-  const contentType = resolveMediaContentType(filePath);
-
-  if (range === "invalid") {
-    return new Response(null, {
-      status: 416,
-      headers: {
-        "Accept-Ranges": "bytes",
-        "Content-Range": `bytes */${totalSize}`,
-      },
-    });
-  }
-
-  if (!range) {
-    const headers = new Headers({
-      "Accept-Ranges": "bytes",
-      "Content-Length": `${totalSize}`,
-      "Content-Type": contentType,
-    });
-
-    if (request.method === "HEAD") {
-      return new Response(null, { status: 200, headers });
-    }
-
-    const stream = createReadStream(filePath);
-    return new Response(Readable.toWeb(stream) as ReadableStream, {
-      status: 200,
-      headers,
-    });
-  }
-
-  const contentLength = Math.max(0, range.end - range.start + 1);
-  const headers = new Headers({
-    "Accept-Ranges": "bytes",
-    "Content-Length": `${contentLength}`,
-    "Content-Range": `bytes ${range.start}-${range.end}/${totalSize}`,
-    "Content-Type": contentType,
-  });
-
-  if (request.method === "HEAD") {
-    return new Response(null, { status: 206, headers });
-  }
-
-  const stream = createReadStream(filePath, {
-    start: range.start,
-    end: range.end,
-  });
-
-  return new Response(Readable.toWeb(stream) as ReadableStream, {
-    status: 206,
-    headers,
-  });
 }
 
 function resolveRendererPath(url: URL): string | null {
@@ -657,7 +533,7 @@ function registerDialogIpc() {
       title: "Import File",
       properties: ["openFile"],
       filters: [
-        { name: "F-Land Import Files", extensions: ["hero", "round", "fplay"] },
+        { name: "F-Land Import Files", extensions: ["hero", "round", "fplay", "fpack"] },
         { name: "All Files", extensions: ["*"] },
       ],
     };
@@ -750,6 +626,23 @@ function registerDialogIpc() {
     return directoryPath;
   });
 
+  ipcMain.handle("dialog:selectWebsiteVideoCacheDirectory", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose website video cache folder",
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
   ipcMain.handle("dialog:selectConverterVideoFile", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -835,6 +728,7 @@ app
       console.error("Startup install scan failed", error);
     });
     startContinuousPhashScan();
+    startContinuousWebsiteVideoScan();
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

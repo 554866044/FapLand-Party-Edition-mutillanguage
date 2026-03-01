@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import "./styles.css";
+import { InstallSidecarTrustModalHost } from "./components/InstallSidecarTrustModalHost";
 import { getRouter } from "./router";
 import { refreshStartupBooruMediaCache } from "./services/booru";
 import { handleMultiplayerAuthCallback } from "./services/multiplayer";
@@ -79,6 +80,7 @@ registerMultiplayerAuthCallbackHandler();
 
 createRoot(rootElement).render(
     <StrictMode>
+        <InstallSidecarTrustModalHost />
         <RouterProvider router={router} />
     </StrictMode>
 );

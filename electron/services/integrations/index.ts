@@ -1,8 +1,20 @@
 import { getDb } from "../db";
 import { eq, inArray, and } from "drizzle-orm";
 import { resource, round } from "../db/schema";
+import { toLocalMediaUri } from "../localMedia";
 import { generateRoundPreviewImageDataUri } from "../roundPreview";
+import { createMediaResponse } from "../protocol/mediaResponse";
+import { resolvePlayableVideoUri, toLocalVideoPath } from "../playableVideo";
 import { findBestSimilarPhashMatch, normalizePhashForSimilarity } from "../../../src/utils/phashSimilarity";
+import {
+  buildWebsiteVideoProxyUri,
+  createWebsiteVideoStreamResponse,
+  getCachedWebsiteVideoLocalPath,
+  isDirectRemoteMediaUri,
+  isWebsiteVideoCandidateUri,
+  resolveWebsiteVideoStream,
+  warmWebsiteVideoCache,
+} from "../webVideo";
 import {
   createEmptyIntegrationSyncStatus,
   createStashSource,
@@ -725,6 +737,10 @@ export function resolveMediaUri(uri: string, purpose: MediaPurpose): string {
     return provider.resolvePlayableUri(normalizedUri, source, purpose);
   }
 
+  if (purpose === "video" && isWebsiteVideoCandidateUri(normalizedUri)) {
+    return buildWebsiteVideoProxyUri(normalizedUri);
+  }
+
   return normalizedUri;
 }
 
@@ -794,13 +810,73 @@ function isTargetUrlAllowedForSource(targetUrl: string, source: ExternalSource):
   }
 }
 
+function buildForwardHeaders(request: Request, extraHeaders: Record<string, string> = {}): Headers {
+  const headers = new Headers();
+  for (const key of ["accept", "accept-encoding", "range", "user-agent"]) {
+    const value = request.headers.get(key);
+    if (value) {
+      headers.set(key, value);
+    }
+  }
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    headers.set(key, value);
+  }
+  return headers;
+}
+
+async function proxyRemoteMediaRequest(
+  targetUrl: string,
+  request: Request,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
+  const upstream = await fetch(targetUrl, {
+    method: request.method,
+    headers: buildForwardHeaders(request, extraHeaders),
+  });
+  return upstream;
+}
+
+async function createWebsiteVideoResponse(request: Request, parsedRequest: URL): Promise<Response> {
+  const target = normalizeNullableText(parsedRequest.searchParams.get("target"));
+  if (!target) {
+    return new Response("Missing target.", { status: 400 });
+  }
+
+  const cachedLocalPath = await getCachedWebsiteVideoLocalPath(target);
+  if (cachedLocalPath) {
+    const resolvedPlayable = await resolvePlayableVideoUri(toLocalMediaUri(cachedLocalPath));
+    const finalLocalPath = toLocalVideoPath(resolvedPlayable.videoUri);
+    if (!finalLocalPath) {
+      return new Response("Cached website video is not backed by a local playable file.", { status: 500 });
+    }
+    return createMediaResponse(finalLocalPath, request);
+  }
+
+  const cachePromise = warmWebsiteVideoCache(target);
+  if (cachePromise) {
+    void cachePromise.catch((error) => {
+      console.warn("Website video cache warm failed", error);
+    });
+  }
+
+  try {
+    const stream = await resolveWebsiteVideoStream(target);
+    if (stream.playbackStrategy === "remote" || isDirectRemoteMediaUri(stream.streamUrl)) {
+      return await proxyRemoteMediaRequest(stream.streamUrl, request, stream.headers);
+    }
+    if (request.method === "GET") {
+      return await createWebsiteVideoStreamResponse(target, request);
+    }
+    return await proxyRemoteMediaRequest(stream.streamUrl, request, stream.headers);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Website video proxy failed.";
+    return new Response(message, { status: 502 });
+  }
+}
+
 export async function proxyExternalRequest(request: Request): Promise<Response> {
   const parsedRequest = new URL(request.url);
   const providerSlug = parsedRequest.pathname.replace(/^\/+/, "").toLowerCase();
-
-  if (providerSlug !== "stash") {
-    return new Response("Unsupported external provider.", { status: 404 });
-  }
 
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Unsupported proxy method.", {
@@ -809,6 +885,14 @@ export async function proxyExternalRequest(request: Request): Promise<Response> 
         Allow: "GET, HEAD",
       },
     });
+  }
+
+  if (providerSlug === "web-url") {
+    return createWebsiteVideoResponse(request, parsedRequest);
+  }
+
+  if (providerSlug !== "stash") {
+    return new Response("Unsupported external provider.", { status: 404 });
   }
 
   const sourceId = normalizeNullableText(parsedRequest.searchParams.get("sourceId"));
